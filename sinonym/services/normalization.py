@@ -1,288 +1,33 @@
+"""
+Normalization service for Chinese name processing.
+
+This module provides sophisticated text normalization including Wade-Giles conversion,
+mixed script handling, and compound name splitting with cultural validation.
+"""
 from __future__ import annotations
 
-import csv
-import math
 import re
 import string
-import unicodedata
-from dataclasses import dataclass, replace
-from functools import cache, lru_cache
-from pathlib import Path
-
-import pypinyin
+from dataclasses import dataclass
+from functools import lru_cache
+from types import MappingProxyType
 
 from sinonym.chinese_names_data import (
-    CANTONESE_SURNAMES,
     COMPOUND_VARIANTS,
-    FORBIDDEN_PHONETIC_PATTERNS,
     HIGH_CONFIDENCE_ANCHORS,
     NON_WADE_GILES_SYLLABLE_RULES,
     ONE_LETTER_RULES,
     ROMANIZATION_EXCEPTIONS,
-    VALID_CHINESE_ONSETS,
     VALID_CHINESE_RIMES,
     WADE_GILES_SYLLABLE_RULES,
 )
-from sinonym.paths import DATA_PATH
-
-# ════════════════════════════════════════════════════════════════════════════════
-# COMPILED REGEX PATTERNS
-# ════════════════════════════════════════════════════════════════════════════════
-
-
-def _build_forbidden_patterns_regex():
-    """Pre-compile FORBIDDEN_PHONETIC_PATTERNS into a single regex for faster pattern matching."""
-    # Escape special regex characters and join with alternation
-    escaped_patterns = [re.escape(pattern) for pattern in FORBIDDEN_PHONETIC_PATTERNS]
-    # Sort by length (descending) to ensure longer patterns match first
-    escaped_patterns.sort(key=len, reverse=True)
-    return re.compile(f"({'|'.join(escaped_patterns)})")
-
-
-def _build_cjk_pattern():
-    """Build comprehensive CJK pattern including all extensions."""
-    # CJK Unicode ranges - covers all Chinese, Japanese, Korean characters
-    CJK_RANGES = (
-        (0x4E00, 0x9FFF),  # CJK Unified Ideographs
-        (0x3400, 0x4DBF),  # CJK Extension A
-        (0x20000, 0x2A6DF),  # CJK Extension B
-        (0x2A700, 0x2B73F),  # CJK Extension C
-        (0x2B740, 0x2B81F),  # CJK Extension D
-        (0x2B820, 0x2CEAF),  # CJK Extension E
-        (0x2CEB0, 0x2EBEF),  # CJK Extension F
-        (0x30000, 0x3134F),  # CJK Extension G
-    )
-
-    ranges = []
-    for start, end in CJK_RANGES:
-        if end <= 0xFFFF:
-            ranges.append(f"\\u{start:04X}-\\u{end:04X}")
-        else:
-            ranges.append(f"\\U{start:08X}-\\U{end:08X}")
-
-    return re.compile(f"[{''.join(ranges)}]")
-
-
-def _build_han_roman_splitter():
-    """Build han_roman_splitter pattern using comprehensive CJK ranges."""
-    # Extract the character class from the comprehensive CJK pattern
-    cjk_class = _COMPREHENSIVE_CJK_PATTERN.pattern[1:-1]  # Remove [ and ]
-    return re.compile(f"([{cjk_class}]+|[A-Za-z-]+)")
-
-
-def _build_wade_giles_regex():
-    """Build optimized regex for Wade-Giles conversions with O(1) lookup performance."""
-    # Define conversion patterns with their replacements
-    # Order matters: longest patterns first to avoid partial matches
-    patterns = [
-        # 4-character patterns
-        (r"shih", "shi"),
-        # 3-character patterns (aspirated) - must be before 2-char patterns
-        (r"ts'", "c"),
-        (r"tz'", "c"),
-        (r"ch'", "q"),
-        # 3-character patterns (non-aspirated)
-        (r"szu", "si"),
-        # 2-character patterns (aspirated) - must be before 1-char patterns
-        (r"k'", "k"),
-        (r"t'", "t"),
-        (r"p'", "p"),
-        # 2-character patterns (non-aspirated)
-        (r"hs", "x"),
-        (r"ts", "z"),
-        (r"tz", "z"),
-        # Special case: ch -> needs context-sensitive replacement
-        (r"ch(?=i|ia|ie|iu)", "j"),  # ch before i/ia/ie/iu -> j
-        (r"ch", "zh"),  # all other ch -> zh
-        # REMOVED: Broad k/t/p patterns that incorrectly convert non-Wade-Giles tokens
-        # These patterns were too broad and converted valid tokens like "szeto" -> "szedo"
-        # Wade-Giles aspirated consonants should use apostrophes (k', t', p')
-        # Unaspirated consonants in Wade-Giles should not be converted to voiced
-    ]
-
-    # Create the combined regex pattern
-    pattern_str = "|".join(f"({pattern})" for pattern, _ in patterns)
-    compiled_regex = re.compile(pattern_str)
-
-    # Create replacement mapping by group index
-    replacements = [replacement for _, replacement in patterns]
-
-    return compiled_regex, replacements
-
-
-def _build_suffix_regex():
-    """Build optimized regex for suffix conversions."""
-    # Suffix patterns ordered by length (longest first)
-    patterns = [
-        (r"ieh$", "ie"),  # 3 chars
-        (r"ueh$", "ue"),  # 3 chars
-        (r"ung$", "ong"),  # 3 chars
-        (r"ien$", "ian"),  # 3 chars - Wade-Giles ien → Pinyin ian
-        (r"ih$", "i"),  # 2 chars
-    ]
-
-    # Create the combined regex pattern
-    pattern_str = "|".join(f"({pattern})" for pattern, _ in patterns)
-    compiled_regex = re.compile(pattern_str)
-
-    # Create replacement mapping by group index
-    replacements = [replacement for _, replacement in patterns]
-
-    return compiled_regex, replacements
-
-
-# Pre-compiled patterns for performance
-_FORBIDDEN_PATTERNS_REGEX = _build_forbidden_patterns_regex()
-_COMPREHENSIVE_CJK_PATTERN = _build_cjk_pattern()
-_HAN_ROMAN_SPLITTER = _build_han_roman_splitter()
-_WADE_GILES_REGEX, _WADE_GILES_REPLACEMENTS = _build_wade_giles_regex()
-_SUFFIX_REGEX, _SUFFIX_REPLACEMENTS = _build_suffix_regex()
-
-# Clean pattern components
-_PARENTHETICALS_PATTERN = r"[（(][^)（）]*[)）]"
-_INITIALS_WITH_SPACE_PATTERN = r"(?P<initial_space>[A-Z])\.(?=\s)"
-_COMPOUND_INITIALS_PATTERN = r"(?P<compound_first>[A-Z])\.-(?P<compound_second>[A-Z])\."
-_INITIALS_WITH_HYPHEN_PATTERN = r"(?P<initial_hyphen>[A-Z])\.-(?=[A-Z])"
-_INVALID_CHARS_PATTERN = r"[_|=]"
-
-# Combined clean pattern (case-sensitive, pre-lowercasing handled in preprocessing)
-_CLEAN_PATTERN_COMBINED = (
-    f"{_PARENTHETICALS_PATTERN}|"
-    f"{_INITIALS_WITH_SPACE_PATTERN}|"
-    f"{_COMPOUND_INITIALS_PATTERN}|"
-    f"{_INITIALS_WITH_HYPHEN_PATTERN}|"
-    f"{_INVALID_CHARS_PATTERN}"
+from sinonym.patterns import (
+    SUFFIX_REGEX,
+    SUFFIX_REPLACEMENTS,
+    WADE_GILES_REGEX,
+    WADE_GILES_REPLACEMENTS,
 )
-
-
-# ════════════════════════════════════════════════════════════════════════════════
-# RESULT TYPES (Scala-friendly error handling)
-# ════════════════════════════════════════════════════════════════════════════════
-
-
-@dataclass(frozen=True)
-class ParseResult:
-    """Result of name parsing operation - Scala Either-like structure."""
-
-    success: bool
-    result: str | tuple[list[str], list[str]]
-    error_message: str | None = None
-
-    @classmethod
-    def success_with_name(cls, formatted_name: str) -> ParseResult:
-        return cls(success=True, result=formatted_name, error_message=None)
-
-    @classmethod
-    def success_with_parse(cls, surname_tokens: list[str], given_tokens: list[str]) -> ParseResult:
-        return cls(success=True, result=(surname_tokens, given_tokens), error_message=None)
-
-    @classmethod
-    def failure(cls, error_message: str) -> ParseResult:
-        return cls(success=False, result="", error_message=error_message)
-
-    def map(self, f) -> ParseResult:
-        """Functor map operation - Scala-like transformation"""
-        if self.success:
-            try:
-                return ParseResult.success_with_name(f(self.result))
-            except Exception as e:
-                return ParseResult.failure(str(e))
-        return self
-
-    def flat_map(self, f) -> ParseResult:
-        """Monadic flatMap operation - Scala-like chaining"""
-        if self.success:
-            try:
-                return f(self.result)
-            except Exception as e:
-                return ParseResult.failure(str(e))
-        return self
-
-
-@dataclass(frozen=True)
-class CacheInfo:
-    """Immutable cache information structure."""
-
-    cache_built: bool
-    cache_size: int
-    pickle_file_exists: bool
-    pickle_file_size: int | None = None
-    pickle_file_mtime: float | None = None
-
-
-# ════════════════════════════════════════════════════════════════════════════════
-# IMMUTABLE CONFIGURATION DATA
-# ════════════════════════════════════════════════════════════════════════════════
-
-
-@dataclass(frozen=True)
-class ChineseNameConfig:
-    """Immutable configuration containing all static data structures - Scala case class style."""
-
-    # Required data files
-    data_dir: str
-    required_files: tuple[str, ...]
-
-    # Precompiled regex patterns (immutable)
-    sep_pattern: re.Pattern[str]
-    cjk_pattern: re.Pattern[str]
-    digits_pattern: re.Pattern[str]
-    whitespace_pattern: re.Pattern[str]
-    camel_case_pattern: re.Pattern[str]
-    # Pre-compiled regex patterns for mixed-token processing
-    han_roman_splitter: re.Pattern[str]
-    ascii_alpha_pattern: re.Pattern[str]
-    clean_roman_pattern: re.Pattern[str]
-    camel_case_finder: re.Pattern[str]
-    clean_pattern: re.Pattern[str]
-    forbidden_patterns_regex: re.Pattern[str]
-
-    # Character translation table
-    hyphens_apostrophes_tr: dict[int, None]
-
-    # Pre-sorted Chinese onsets for phonetic validation (performance optimization)
-    sorted_chinese_onsets: tuple[str, ...]
-
-    # Log probability defaults
-    default_surname_logp: float
-    default_given_logp: float
-    compound_penalty: float
-
-    @classmethod
-    def create_default(cls) -> ChineseNameConfig:
-        """Factory method to create default configuration - Scala apply() equivalent."""
-        return cls(
-            data_dir=str(DATA_PATH),
-            required_files=("familyname_orcid.csv", "givenname_orcid.csv"),
-            sep_pattern=re.compile(r"[·‧.\u2011-\u2015﹘﹣－⁃₋•∙⋅˙ˑːˉˇ˘˚˛˜˝]+"),
-            cjk_pattern=_COMPREHENSIVE_CJK_PATTERN,
-            digits_pattern=re.compile(r"\d"),
-            whitespace_pattern=re.compile(r"\s+"),
-            camel_case_pattern=re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z][a-z]+|[A-Z]+(?=$)"),
-            # Pre-compiled regex patterns for mixed-token processing
-            han_roman_splitter=_HAN_ROMAN_SPLITTER,
-            ascii_alpha_pattern=re.compile(r"[A-Za-z]"),
-            clean_roman_pattern=re.compile(
-                r"[^A-Za-z\u00C0-\u00FF\u0100-\u017F-''']",
-            ),  # PRESERVE ASCII letters, Latin-1 Supplement (À-ÿ), Latin Extended-A (Ā-ſ), hyphens and apostrophes for romanization systems
-            camel_case_finder=re.compile(r"[A-Z][a-z]+"),
-            clean_pattern=re.compile(_CLEAN_PATTERN_COMBINED),
-            forbidden_patterns_regex=_FORBIDDEN_PATTERNS_REGEX,
-            hyphens_apostrophes_tr=str.maketrans("", "", "-‐‒–—―﹘﹣－⁃₋''''''''"),
-            sorted_chinese_onsets=tuple(sorted(VALID_CHINESE_ONSETS, key=len, reverse=True)),
-            default_surname_logp=-15.0,
-            default_given_logp=-15.0,
-            compound_penalty=0.1,
-        )
-
-    def with_log_probabilities(self, surname_logp: float, given_logp: float) -> ChineseNameConfig:
-        """Immutable update method for log probabilities."""
-        return replace(self, default_surname_logp=surname_logp, default_given_logp=given_logp)
-
-
-# ════════════════════════════════════════════════════════════════════════════════
-# NORMALIZATION SERVICE (Scala-compatible)
-# ════════════════════════════════════════════════════════════════════════════════
+from sinonym.types import ChineseNameConfig
 
 
 @dataclass(frozen=True)
@@ -323,8 +68,6 @@ class LazyNormalizationMap:
     @property
     def cache_view(self):
         """Get read-only view of current cache state."""
-        from types import MappingProxyType
-
         return MappingProxyType(self._cache)
 
 
@@ -347,12 +90,12 @@ class NormalizedInput:
 class NormalizationService:
     """Pure normalization service - Scala-compatible design."""
 
-    def __init__(self, config: ChineseNameConfig, cache_service: PinyinCacheService):
+    def __init__(self, config: ChineseNameConfig, cache_service):
         self._config = config
         self._cache_service = cache_service
-        self._data: NameDataStructures | None = None
+        self._data = None
 
-    def set_data_context(self, data: NameDataStructures) -> None:
+    def set_data_context(self, data) -> None:
         """Inject data context after initialization - breaks circular dependency."""
         self._data = data
 
@@ -746,11 +489,11 @@ class NormalizationService:
                 # Find which group matched (groups are 1-indexed)
                 for i, group in enumerate(match.groups(), 1):
                     if group is not None:
-                        return _WADE_GILES_REPLACEMENTS[i - 1]
+                        return WADE_GILES_REPLACEMENTS[i - 1]
                 return match.group(0)  # Fallback (should never happen)
 
             # Apply prefix conversions with single regex substitution
-            result = _WADE_GILES_REGEX.sub(wade_giles_replacer, token)
+            result = WADE_GILES_REGEX.sub(wade_giles_replacer, token)
 
         # Step 3: Suffix-level Wade-Giles conversions
         def suffix_replacer(match):
@@ -758,11 +501,11 @@ class NormalizationService:
             # Find which group matched (groups are 1-indexed)
             for i, group in enumerate(match.groups(), 1):
                 if group is not None:
-                    return _SUFFIX_REPLACEMENTS[i - 1]
+                    return SUFFIX_REPLACEMENTS[i - 1]
             return match.group(0)  # Fallback (should never happen)
 
         # Apply suffix conversions with single regex substitution
-        result = _SUFFIX_REGEX.sub(suffix_replacer, result)
+        result = SUFFIX_REGEX.sub(suffix_replacer, result)
 
         return result
 
@@ -999,314 +742,3 @@ class NormalizationService:
             return all(self.is_valid_given_name_token(token, normalized_cache) for token in given_tokens)
         # Use direct memoized calls instead of temporary cache
         return all(self.is_valid_given_name_token(token, None) for token in given_tokens)
-
-
-# ════════════════════════════════════════════════════════════════════════════════
-# CACHE MANAGEMENT SERVICE
-# ════════════════════════════════════════════════════════════════════════════════
-
-
-@cache  # one entry per unique Han character
-def _char_to_pinyin(ch: str) -> str:
-    return pypinyin.lazy_pinyin(ch, style=pypinyin.Style.NORMAL)[0]
-
-
-class PinyinCacheService:
-    """
-    * deterministic, thread‑safe, O(1) repeated look‑ups
-    """
-
-    def __init__(self, config: ChineseNameConfig):
-        self._config = config
-        self._warm_from_csv()
-
-    # ---------- public API ----------
-    def han_to_pinyin_fast(self, han_str: str) -> list[str]:
-        """Return pinyin for every character, memoising on first sight."""
-        return [_char_to_pinyin(c) for c in han_str]
-
-    # (optional) diagnostics you were using elsewhere
-    @property
-    def cache_size(self) -> int:
-        return _char_to_pinyin.cache_info().currsize
-
-    @property
-    def is_built(self) -> bool:
-        return True
-
-    # ---------- internal ----------
-    def _warm_from_csv(self) -> None:
-        """Seed the LRU cache with the two CSVs in data/ if present."""
-        for fname in ("familyname_orcid.csv", "givenname_orcid.csv"):
-            path: Path = Path(self._config.data_dir) / fname
-            if not path.exists():
-                continue
-
-            key = "surname" if "familyname" in fname else "character"
-            with path.open(encoding="utf-8") as f:
-                for row in csv.DictReader(f):
-                    for ch in row[key]:
-                        _char_to_pinyin(ch)  # warms the cache once
-
-
-# ════════════════════════════════════════════════════════════════════════════════
-# DATA INITIALIZATION SERVICE
-# ════════════════════════════════════════════════════════════════════════════════
-
-
-@dataclass(frozen=True)
-class NameDataStructures:
-    """Immutable container for all name-related data structures."""
-
-    # Core surname and given name sets
-    surnames: frozenset[str]
-    surnames_normalized: frozenset[str]
-    compound_surnames: frozenset[str]
-    compound_surnames_normalized: frozenset[str]
-    given_names: frozenset[str]
-    given_names_normalized: frozenset[str]
-
-    # Dynamically generated plausible components from givenname.csv
-    plausible_components: frozenset[str]
-
-    # Frequency and probability mappings
-    surname_frequencies: dict[str, float]
-    surname_log_probabilities: dict[str, float]
-    given_log_probabilities: dict[str, float]
-
-    # Pre-computed surname bonuses for cultural plausibility scoring
-    surname_bonus_map: dict[str, float]
-
-    # Compound surname mappings
-    compound_hyphen_map: dict[str, str]
-
-
-class DataInitializationService:
-    """Service to initialize all name data structures."""
-
-    def __init__(self, config: ChineseNameConfig, cache_service: PinyinCacheService, normalizer: NormalizationService):
-        self._config = config
-        self._cache_service = cache_service
-        self._normalizer = normalizer
-
-    def initialize_data_structures(self) -> NameDataStructures:
-        """Initialize all immutable data structures."""
-
-        # Build core surname data
-        surnames_raw, surname_frequencies = self._build_surname_data()
-        surnames = frozenset(self._normalizer.remove_spaces(s.lower()) for s in surnames_raw)
-        compound_surnames = frozenset(s.lower() for s in surnames_raw if " " in s)
-
-        # Build normalized versions
-        surnames_normalized = frozenset(self._normalizer.remove_spaces(self._normalizer.norm(s)) for s in surnames_raw)
-        compound_surnames_normalized = frozenset(self._normalizer.norm(s) for s in surnames_raw if " " in s)
-
-        # Build given name data and plausible components
-        given_names, given_log_probabilities, plausible_components = self._build_given_name_data()
-        given_names_normalized = given_names  # Already normalized from pinyin data
-
-        # Build compound surname mappings
-        compound_hyphen_map = self._build_compound_hyphen_map(compound_surnames)
-
-        # Build surname log probabilities
-        surname_log_probabilities = self._build_surname_log_probabilities(
-            surname_frequencies,
-            compound_surnames,
-            compound_hyphen_map,
-        )
-
-        # Pre-compute surname bonuses for cultural plausibility scoring (micro-optimization)
-        surname_bonus_map = self._build_surname_bonus_map(surname_frequencies)
-
-        return NameDataStructures(
-            surnames=surnames,
-            surnames_normalized=surnames_normalized,
-            compound_surnames=compound_surnames,
-            compound_surnames_normalized=compound_surnames_normalized,
-            given_names=given_names,
-            given_names_normalized=given_names_normalized,
-            plausible_components=plausible_components,
-            surname_frequencies=surname_frequencies,
-            surname_log_probabilities=surname_log_probabilities,
-            given_log_probabilities=given_log_probabilities,
-            surname_bonus_map=surname_bonus_map,
-            compound_hyphen_map=compound_hyphen_map,
-        )
-
-    def _is_plausible_chinese_syllable(self, component: str) -> bool:
-        """
-        Check if a component is a plausible Chinese syllable suitable for compound splitting.
-        Uses a more lenient approach than strict onset-rime decomposition to handle
-        romanization variations and valid Chinese syllables.
-        """
-        if not component or len(component) > 7:
-            return False
-
-        # Reject components with forbidden Western patterns
-        component_lower = component.lower()
-        if self._config.forbidden_patterns_regex.search(component_lower):
-            return False
-
-        # Accept if it's a known Chinese syllable (from the given names database)
-        # This handles cases like 'xue', 'yue', 'jue' which are valid Chinese syllables
-        # even if they don't decompose cleanly in the onset-rime system we're using
-        return True  # Since we're already filtering from given_names, they should be valid
-
-    def _build_surname_data(self) -> tuple[set[str], dict[str, float]]:
-        """Build surname sets and frequency data."""
-        surnames_raw = set()
-        surname_frequencies = {}
-
-        with (DATA_PATH / "familyname_orcid.csv").open(encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                han = row["surname"]
-                romanized = " ".join(self._cache_service.han_to_pinyin_fast(han)).title()
-                surnames_raw.update({romanized, self._normalizer.remove_spaces(romanized)})
-
-                # Store frequency data
-                ppm = float(row.get("ppm.1930_2008", 0))
-                freq_key = self._normalizer.remove_spaces(romanized.lower())
-                surname_frequencies[freq_key] = max(surname_frequencies.get(freq_key, 0), ppm)
-
-        # Add frequency alias: zeng should inherit ceng's frequency from Han character processing
-        if "ceng" in surname_frequencies:
-            surname_frequencies["zeng"] = surname_frequencies["ceng"]
-
-        # Add Cantonese surnames
-        for cant_surname, (mand_surname, han_char) in CANTONESE_SURNAMES.items():
-            surnames_raw.add(cant_surname.title())
-            # Use lowercase key to match the frequency mapping format
-            mand_key = mand_surname.lower()
-            if mand_key in surname_frequencies:
-                surname_frequencies[cant_surname] = max(
-                    surname_frequencies.get(cant_surname, 0),
-                    surname_frequencies[mand_key],
-                )
-
-        return surnames_raw, surname_frequencies
-
-    def _build_given_name_data(self) -> tuple[frozenset[str], dict[str, float], frozenset[str]]:
-        """Build given name data, log probabilities, and dynamically generate plausible components."""
-        given_names = set()
-        given_frequencies = {}
-        total_given_freq = 0
-
-        with (DATA_PATH / "givenname_orcid.csv").open(encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                pinyin = self._strip_tone(row["pinyin"])
-                given_names.add(pinyin)
-
-                ppm = float(row.get("name.ppm", 0))
-                if ppm > 0:
-                    given_frequencies[pinyin] = given_frequencies.get(pinyin, 0) + ppm
-                    total_given_freq += ppm
-
-        # Convert to log probabilities
-        given_log_probabilities = {}
-        for given_name, freq in given_frequencies.items():
-            prob = freq / total_given_freq if total_given_freq > 0 else 1e-15
-            given_log_probabilities[given_name] = math.log(prob)
-
-        # Generate plausible components dynamically from givenname_orcid.csv data
-        # This replaces the static PLAUSIBLE_COMPONENTS with real-world usage data
-
-        # Filter multi-syllable entries out of plausible_components
-        # They leak in via manual supplements; restrict to ≤7 letters & exactly one onset–rime split
-        # to avoid false "split-happy" behaviour with names like Weibian
-        filtered_components = set()
-
-        for component in given_names:
-            # Check length constraint
-            if len(component) > 7:
-                continue
-
-            # Check if component is actually usable for splitting
-            # Some entries from givenname.csv might not be suitable for compound splitting
-            # Use a more lenient approach: include if it passes basic phonetic validation
-            # rather than strict onset-rime decomposition
-
-            # Basic phonetic validation - check if it could plausibly be Chinese
-            if self._is_plausible_chinese_syllable(component):
-                filtered_components.add(component)
-
-        plausible_components = frozenset(filtered_components)
-
-        return frozenset(given_names), given_log_probabilities, plausible_components
-
-    def _build_compound_hyphen_map(self, compound_surnames: frozenset[str]) -> dict[str, str]:
-        """Build mapping for hyphenated compound surnames (stores lowercase keys only)."""
-        compound_hyphen_map = {}
-
-        for compound in compound_surnames:
-            if " " in compound:
-                parts = compound.split()
-                if len(parts) == 2:
-                    # Store only lowercase hyphenated form
-                    hyphen_form = f"{parts[0].lower()}-{parts[1].lower()}"
-                    # Store lowercase space form (will be title-cased on demand)
-                    space_form = f"{parts[0].lower()} {parts[1].lower()}"
-                    compound_hyphen_map[hyphen_form] = space_form
-
-        return compound_hyphen_map
-
-    def _build_surname_log_probabilities(
-        self,
-        surname_frequencies: dict[str, float],
-        compound_surnames: frozenset[str],
-        compound_hyphen_map: dict[str, str],
-    ) -> dict[str, float]:
-        """Build surname log probabilities including compound surnames."""
-        surname_log_probabilities = {}
-        total_surname_freq = sum(surname_frequencies.values())
-
-        # Base surname probabilities
-        for surname, freq in surname_frequencies.items():
-            if freq > 0:
-                prob = freq / total_surname_freq
-                surname_log_probabilities[surname] = math.log(prob)
-            else:
-                surname_log_probabilities[surname] = self._config.default_surname_logp
-
-        # Add compound surname probabilities
-        for compound_surname in compound_surnames:
-            parts = compound_surname.split()
-            if len(parts) == 2:
-                # Use reasonable fallback frequency for missing parts (1.0 instead of 1e-6)
-                freq1 = surname_frequencies.get(parts[0], 1.0)
-                freq2 = surname_frequencies.get(parts[1], 1.0)
-                compound_freq = math.sqrt(freq1 * freq2) * self._config.compound_penalty
-
-                # Apply minimum frequency floor to avoid extremely low scores
-                min_compound_freq = 0.1  # Reasonable floor for compound surnames
-                compound_freq = max(compound_freq, min_compound_freq)
-
-                surname_frequencies[compound_surname] = compound_freq
-                prob = compound_freq / total_surname_freq
-                surname_log_probabilities[compound_surname] = math.log(prob)
-
-        # Add frequency mappings for compound variants
-        for variant_compound, standard_compound in COMPOUND_VARIANTS.items():
-            if standard_compound in surname_log_probabilities:
-                surname_log_probabilities[variant_compound] = surname_log_probabilities[standard_compound]
-            if standard_compound in surname_frequencies:
-                surname_frequencies[variant_compound] = surname_frequencies[standard_compound]
-
-        return surname_log_probabilities
-
-    def _build_surname_bonus_map(self, surname_frequencies: dict[str, float]) -> dict[str, float]:
-        """Pre-compute surname bonuses for cultural plausibility scoring - performance optimization."""
-        surname_bonus_map = {}
-
-        for surname, freq in surname_frequencies.items():
-            # Pre-compute the log10(freq+1)*1.2 calculation for fast lookup
-            surname_bonus_map[surname] = math.log10(freq + 1) * 1.2
-
-        return surname_bonus_map
-
-    def _strip_tone(self, pinyin_str: str) -> str:
-        """Strip tone markers from pinyin string."""
-        normalized = unicodedata.normalize("NFKD", pinyin_str)
-        return self._config.digits_pattern.sub(
-            "",
-            "".join(c for c in normalized if not unicodedata.combining(c)),
-        ).lower()
