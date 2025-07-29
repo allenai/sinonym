@@ -84,7 +84,6 @@ CANTONESE_SURNAME_RULES = {
     "kong": "jiang",  # 江 - Cantonese surname
     "hsu": "xu",  # 许 - Cantonese surname
     "shum": "cen",  # 岑 - Cantonese surname
-    # "sze": "shi",        # Removed - keep in CANTONESE_SURNAMES only to avoid inconsistency
     "fong": "fang",  # 方 - Cantonese surname
     "choi": "cai",  # 蔡 - Cantonese surname
     "chiu": "zhao",  # 赵/邱 - Cantonese surname
@@ -453,7 +452,9 @@ _assert_no_intra_layer_dupes("ONE_LETTER_RULES", ONE_LETTER_RULES)
 
 # Validate the three main layers have no conflicts between them
 _assert_no_duplicate_keys(
-    ("EXCEPTIONS", ROMANIZATION_EXCEPTIONS), ("SYLLABLE_RULES", SYLLABLE_RULES), ("ONE_LETTER_RULES", ONE_LETTER_RULES),
+    ("EXCEPTIONS", ROMANIZATION_EXCEPTIONS),
+    ("SYLLABLE_RULES", SYLLABLE_RULES),
+    ("ONE_LETTER_RULES", ONE_LETTER_RULES),
 )
 
 
@@ -801,103 +802,109 @@ KOREAN_GIVEN_PATTERNS = frozenset(
 )
 
 # Korean-specific patterns: Distinctly Korean patterns with low ambiguity
-KOREAN_SPECIFIC_PATTERNS = frozenset({
-    "soo",      # 수 - distinctly Korean
-    "hyun",     # 현 - distinctly Korean
-    "hee",      # 희 - distinctly Korean
-    "young",    # 영 - distinctly Korean
-    "ram",      # 람 - distinctly Korean
-    "seok",     # 석 - distinctly Korean
-    "woo",      # 우 - distinctly Korean
-    "hoon",     # 훈 - distinctly Korean
-    "joon",     # 준 - distinctly Korean
-    "won",      # 원 - distinctly Korean
-    "sik",      # 식 - distinctly Korean
-    "tae",      # 태 - distinctly Korean
-    "jae",      # 재 - distinctly Korean
-    "kyung",    # 경 - distinctly Korean
-    "myung",    # 명 - distinctly Korean
-    "sub",      # 섭 - distinctly Korean
-    "sup",      # 숩 - distinctly Korean
-    "chul",     # 철 - distinctly Korean
-    "bora",     # 보라 - distinctly Korean
-    "boram",    # 보람 - distinctly Korean
-    "haneul",   # 하늘 - distinctly Korean
-    "areum",    # 아름 - distinctly Korean
-    "seul",     # 슬 - distinctly Korean
-    "seulgi",   # 슬기 - distinctly Korean
-    "byeol",    # 별 - distinctly Korean
-    "hana",     # 하나 - distinctly Korean
-    "nuri",     # 누리 - distinctly Korean
-    "kyu",      # 규 - distinctly Korean
-    "hye",      # 혜 - distinctly Korean
-    "su",       # 수 - distinctly Korean
-    "ae",       # 애 - distinctly Korean
-    "eun",      # 은 - distinctly Korean
-    "seong",    # 성 - distinctly Korean
-    "kyun",     # 균 - distinctly Korean
-    "bum",      # 범 - distinctly Korean
-    "ki",       # 기 - distinctly Korean
-    "woong",    # 웅 - distinctly Korean
-    "bo",       # 보 - distinctly Korean
-    "seung",    # 승 - distinctly Korean
-    "gi",       # 기 - distinctly Korean
-    "sol",      # 솔 - distinctly Korean
-    "bit",      # 빛 - distinctly Korean
-    "dal",      # 달 - distinctly Korean
-    "eum",      # 음 - distinctly Korean
-    "byul",     # 별 - distinctly Korean
-    "saem",     # 샘 - distinctly Korean
-    "nae",      # 내 - distinctly Korean
-    "rae",      # 래 - distinctly Korean
-    "wol",      # 월 - distinctly Korean
-    "seon",     # 선 - distinctly Korean
-    "hyeon",    # 현 - distinctly Korean
-    "gook",     # 국 - distinctly Korean
-    "seob",     # 섭 - distinctly Korean
-    "yeol",     # 열 - distinctly Korean
-})
+KOREAN_SPECIFIC_PATTERNS = frozenset(
+    {
+        "soo",  # 수 - distinctly Korean
+        "hyun",  # 현 - distinctly Korean
+        "hee",  # 희 - distinctly Korean
+        "young",  # 영 - distinctly Korean
+        "ram",  # 람 - distinctly Korean
+        "seok",  # 석 - distinctly Korean
+        "woo",  # 우 - distinctly Korean
+        "hoon",  # 훈 - distinctly Korean
+        "joon",  # 준 - distinctly Korean
+        "won",  # 원 - distinctly Korean
+        "sik",  # 식 - distinctly Korean
+        "tae",  # 태 - distinctly Korean
+        "jae",  # 재 - distinctly Korean
+        "kyung",  # 경 - distinctly Korean
+        "myung",  # 명 - distinctly Korean
+        "sub",  # 섭 - distinctly Korean
+        "sup",  # 숩 - distinctly Korean
+        "chul",  # 철 - distinctly Korean
+        "bora",  # 보라 - distinctly Korean
+        "boram",  # 보람 - distinctly Korean
+        "haneul",  # 하늘 - distinctly Korean
+        "areum",  # 아름 - distinctly Korean
+        "seul",  # 슬 - distinctly Korean
+        "seulgi",  # 슬기 - distinctly Korean
+        "byeol",  # 별 - distinctly Korean
+        "hana",  # 하나 - distinctly Korean
+        "nuri",  # 누리 - distinctly Korean
+        "kyu",  # 규 - distinctly Korean
+        "hye",  # 혜 - distinctly Korean
+        "su",  # 수 - distinctly Korean
+        "ae",  # 애 - distinctly Korean
+        "eun",  # 은 - distinctly Korean
+        "seong",  # 성 - distinctly Korean
+        "kyun",  # 균 - distinctly Korean
+        "bum",  # 범 - distinctly Korean
+        "ki",  # 기 - distinctly Korean
+        "woong",  # 웅 - distinctly Korean
+        "bo",  # 보 - distinctly Korean
+        "seung",  # 승 - distinctly Korean
+        "gi",  # 기 - distinctly Korean
+        "sol",  # 솔 - distinctly Korean
+        "bit",  # 빛 - distinctly Korean
+        "dal",  # 달 - distinctly Korean
+        "eum",  # 음 - distinctly Korean
+        "byul",  # 별 - distinctly Korean
+        "saem",  # 샘 - distinctly Korean
+        "nae",  # 내 - distinctly Korean
+        "rae",  # 래 - distinctly Korean
+        "wol",  # 월 - distinctly Korean
+        "seon",  # 선 - distinctly Korean
+        "hyeon",  # 현 - distinctly Korean
+        "gook",  # 국 - distinctly Korean
+        "seob",  # 섭 - distinctly Korean
+        "yeol",  # 열 - distinctly Korean
+    },
+)
 
 # Ambiguous patterns: Common in both Korean and Chinese
-KOREAN_AMBIGUOUS_PATTERNS = frozenset({
-    "min",      # 민/敏 - common in both
-    "jun",      # 준/君 - common in both
-    "jin",      # 진/金 - common in both
-    "ho",       # 호/浩 - common in both
-    "sung",     # 성/成 - common in both
-    "bin",      # 빈/彬 - common in both
-    "han",      # 한/韓 - common in both
-    "dong",     # 동/東 - common in both
-    "sang",     # 상/相 - common in both
-    "jung",     # 정/鄭 - common in both
-    "ji",       # 지/智 - common in both
-    "yung",     # 영/永 - common in both
-    "yun",      # 윤/允 - common in both
-})
+KOREAN_AMBIGUOUS_PATTERNS = frozenset(
+    {
+        "min",  # 민/敏 - common in both
+        "jun",  # 준/君 - common in both
+        "jin",  # 진/金 - common in both
+        "ho",  # 호/浩 - common in both
+        "sung",  # 성/成 - common in both
+        "bin",  # 빈/彬 - common in both
+        "han",  # 한/韓 - common in both
+        "dong",  # 동/東 - common in both
+        "sang",  # 상/相 - common in both
+        "jung",  # 정/鄭 - common in both
+        "ji",  # 지/智 - common in both
+        "yung",  # 영/永 - common in both
+        "yun",  # 윤/允 - common in both
+    },
+)
 
 # Korean name pairs: Common Korean given name combinations
-KOREAN_GIVEN_PAIRS = frozenset({
-    ("soo", "jin"),     # 수진 - very common Korean name
-    ("min", "jung"),    # 민정 - very common Korean name
-    ("ji", "min"),      # 지민 - very common Korean name
-    ("hoon", "ki"),     # 훈기 - Korean name pattern
-    ("young", "ho"),    # 영호 - Korean name pattern
-    ("hyun", "woo"),    # 현우 - Korean name pattern
-    ("seung", "hyun"),  # 승현 - Korean name pattern
-    ("min", "jae"),     # 민재 - Korean name pattern
-    ("jin", "woo"),     # 진우 - Korean name pattern
-    ("sung", "ho"),     # 성호 - Korean name pattern
-    ("tae", "hyun"),    # 태현 - Korean name pattern
-    ("dong", "hyun"),   # 동현 - Korean name pattern
-    ("sang", "woo"),    # 상우 - Korean name pattern
-    ("kyung", "ho"),    # 경호 - Korean name pattern
-    ("myung", "soo"),   # 명수 - Korean name pattern
-    ("jae", "hyun"),    # 재현 - Korean name pattern
-    ("won", "ho"),      # 원호 - Korean name pattern
-    ("bin", "na"),      # 빈나 - Korean name pattern
-    ("hye", "jin"),     # 혜진 - Korean name pattern
-    ("eun", "ji"),      # 은지 - Korean name pattern
-})
+KOREAN_GIVEN_PAIRS = frozenset(
+    {
+        ("soo", "jin"),  # 수진 - very common Korean name
+        ("min", "jung"),  # 민정 - very common Korean name
+        ("ji", "min"),  # 지민 - very common Korean name
+        ("hoon", "ki"),  # 훈기 - Korean name pattern
+        ("young", "ho"),  # 영호 - Korean name pattern
+        ("hyun", "woo"),  # 현우 - Korean name pattern
+        ("seung", "hyun"),  # 승현 - Korean name pattern
+        ("min", "jae"),  # 민재 - Korean name pattern
+        ("jin", "woo"),  # 진우 - Korean name pattern
+        ("sung", "ho"),  # 성호 - Korean name pattern
+        ("tae", "hyun"),  # 태현 - Korean name pattern
+        ("dong", "hyun"),  # 동현 - Korean name pattern
+        ("sang", "woo"),  # 상우 - Korean name pattern
+        ("kyung", "ho"),  # 경호 - Korean name pattern
+        ("myung", "soo"),  # 명수 - Korean name pattern
+        ("jae", "hyun"),  # 재현 - Korean name pattern
+        ("won", "ho"),  # 원호 - Korean name pattern
+        ("bin", "na"),  # 빈나 - Korean name pattern
+        ("hye", "jin"),  # 혜진 - Korean name pattern
+        ("eun", "ji"),  # 은지 - Korean name pattern
+    },
+)
 
 
 # Overlapping Korean surnames (exist in both Korean and Chinese)
@@ -1650,3 +1657,22 @@ WESTERN_NAMES = frozenset(
         "zoe",
     },
 )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PYPINYIN FREQUENCY ALIASES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Aliases for cases where pypinyin output differs from romanization system expectations
+# Format: (pypinyin_output, expected_romanization)
+PYPINYIN_FREQUENCY_ALIASES = [
+    ("ceng", "zeng"),  # 曾: pypinyin produces 'ceng' but romanization system expects 'zeng'
+    ("ruan", "yuan"),  # 阮: pypinyin produces 'ruan' but romanization system expects 'yuan'
+    ("qu", "ou"),      # 区: pypinyin produces 'qu' but romanization system expects 'ou'
+    ("gan", "jin"),    # 甘: pypinyin produces 'gan' but romanization system expects 'jin'
+    ("li", "lai"),     # 黎: pypinyin produces 'li' but romanization system expects 'lai'
+    ("mou", "miao"),   # 缪: pypinyin produces 'mou' but romanization system expects 'miao'
+    ("di", "zhai"),    # 翟: pypinyin produces 'di' but romanization system expects 'zhai'
+    ("mao", "mo"),     # 毛: pypinyin produces 'mao' but romanization system expects 'mo'
+    ("yin", "wen"),    # 尹: pypinyin produces 'yin' but romanization system expects 'wen'
+]

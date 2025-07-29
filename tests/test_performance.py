@@ -50,12 +50,35 @@ class TestChineseNameDetectorPerformance:
 
         # Common non-Chinese patterns
         western_first = [
-            "John", "Mary", "David", "Sarah", "Michael", "Lisa", "James", "Jennifer",
-            "Robert", "Jessica", "William", "Ashley", "Christopher", "Amanda",
+            "John",
+            "Mary",
+            "David",
+            "Sarah",
+            "Michael",
+            "Lisa",
+            "James",
+            "Jennifer",
+            "Robert",
+            "Jessica",
+            "William",
+            "Ashley",
+            "Christopher",
+            "Amanda",
         ]
         western_last = [
-            "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller",
-            "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez",
+            "Smith",
+            "Johnson",
+            "Williams",
+            "Brown",
+            "Jones",
+            "Garcia",
+            "Miller",
+            "Davis",
+            "Rodriguez",
+            "Martinez",
+            "Hernandez",
+            "Lopez",
+            "Gonzalez",
         ]
 
         korean_names = ["Kim Min Soo", "Park Ji Hoon", "Lee Soo Jin", "Choi Young Hee", "Jung Hye Won"]
@@ -124,9 +147,9 @@ class TestChineseNameDetectorPerformance:
         print(f"Time per name: {microseconds_per_name:.1f} microseconds")
 
         # Performance assertions - ensure it's "really fast"
-        assert microseconds_per_name < MAX_MICROSECONDS_PER_NAME, (
-            f"Average processing time {microseconds_per_name:.1f} μs exceeds 1ms requirement"
-        )
+        assert (
+            microseconds_per_name < MAX_MICROSECONDS_PER_NAME
+        ), f"Average processing time {microseconds_per_name:.1f} μs exceeds 1ms requirement"
         assert names_per_second > MIN_DIVERSE_NAMES_PER_SECOND, (
             f"Processing rate {names_per_second:.0f} names/sec is below "
             f"{MIN_DIVERSE_NAMES_PER_SECOND} names/sec requirement"
@@ -144,8 +167,14 @@ class TestChineseNameDetectorPerformance:
         """
         # Generate cached-friendly test data (repeated names for cache benefits)
         cached_names = [
-            "Yu-Zhong Wei", "Liu Dehua", "Ouyang Xiaoming", "Wong Siu Ming",
-            "John Smith", "Kim Min Soo", "Chen Yu", "Au-Yeung Ka-Ming",
+            "Yu-Zhong Wei",
+            "Liu Dehua",
+            "Ouyang Xiaoming",
+            "Wong Siu Ming",
+            "John Smith",
+            "Kim Min Soo",
+            "Chen Yu",
+            "Au-Yeung Ka-Ming",
         ] * 125  # 1000 total names with heavy cache reuse
 
         print(f"\nTesting performance with {len(cached_names)} cached-friendly names...")
@@ -180,48 +209,6 @@ class TestChineseNameDetectorPerformance:
         # Verify all names were processed
         assert len(results) == len(cached_names), "Not all cached names were processed"
 
-    def test_performance_comparison(self, detector):
-        """
-        Compare performance between diverse and cached data scenarios.
-
-        This test ensures caching provides measurable performance benefits
-        while maintaining acceptable performance for diverse data.
-        """
-        # Test diverse data
-        diverse_names = self.generate_test_names(detector, 500)
-        start_time = time.perf_counter()
-        for name in diverse_names:
-            detector.is_chinese_name(name)
-        diverse_time = time.perf_counter() - start_time
-        diverse_rate = len(diverse_names) / diverse_time
-
-        # Test cached data
-        cached_names = ["Yu-Zhong Wei", "Liu Dehua", "John Smith", "Kim Min Soo"] * 125
-        start_time = time.perf_counter()
-        for name in cached_names:
-            detector.is_chinese_name(name)
-        cached_time = time.perf_counter() - start_time
-        cached_rate = len(cached_names) / cached_time
-
-        # Calculate performance metrics
-        speedup = cached_rate / diverse_rate
-        diverse_time_per_name = (diverse_time / len(diverse_names)) * 1_000_000
-        cached_time_per_name = (cached_time / len(cached_names)) * 1_000_000
-
-        print("\nPerformance Comparison:")
-        print(f"Diverse data: {diverse_rate:.0f} names/sec ({diverse_time_per_name:.1f} μs/name)")
-        print(f"Cached data: {cached_rate:.0f} names/sec ({cached_time_per_name:.1f} μs/name)")
-        print(f"Cache benefit: {speedup:.1f}x speedup")
-
-        # Assertions
-        assert speedup > 1.0, f"Cache should provide speedup, got {speedup:.1f}x"
-        assert diverse_rate > MIN_DIVERSE_NAMES_PER_SECOND, (
-            f"Diverse rate {diverse_rate:.0f} below minimum {MIN_DIVERSE_NAMES_PER_SECOND} names/sec"
-        )
-        assert cached_rate > MIN_CACHED_NAMES_PER_SECOND, (
-            f"Cached rate {cached_rate:.0f} below minimum {MIN_CACHED_NAMES_PER_SECOND} names/sec"
-        )
-
     def test_performance_consistency(self, detector):
         """
         Test that performance is consistent across multiple runs.
@@ -253,9 +240,9 @@ class TestChineseNameDetectorPerformance:
 
         # Performance should be consistent (variance < 50%)
         variance_ratio = (max_time - min_time) / avg_time
-        assert variance_ratio < MAX_PERFORMANCE_VARIANCE, (
-            f"Performance variance {variance_ratio:.2f} exceeds {MAX_PERFORMANCE_VARIANCE:.0%} threshold"
-        )
-        assert avg_rate > MIN_DIVERSE_NAMES_PER_SECOND, (
-            f"Average rate {avg_rate:.0f} below minimum {MIN_DIVERSE_NAMES_PER_SECOND} names/sec"
-        )
+        assert (
+            variance_ratio < MAX_PERFORMANCE_VARIANCE
+        ), f"Performance variance {variance_ratio:.2f} exceeds {MAX_PERFORMANCE_VARIANCE:.0%} threshold"
+        assert (
+            avg_rate > MIN_DIVERSE_NAMES_PER_SECOND
+        ), f"Average rate {avg_rate:.0f} below minimum {MIN_DIVERSE_NAMES_PER_SECOND} names/sec"

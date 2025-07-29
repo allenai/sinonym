@@ -6,6 +6,8 @@ compound name splitting, and output standardization to "Given-Name Surname" form
 """
 from __future__ import annotations
 
+import unicodedata
+
 
 class NameFormattingService:
     """Service for formatting Chinese names into standardized output."""
@@ -99,12 +101,25 @@ class NameFormattingService:
         return f"{given_str} {surname_str}"
 
     def capitalize_name_part(self, part: str) -> str:
-        """Properly capitalize a name part, handling apostrophes correctly.
+        """Properly capitalize a name part, handling apostrophes and diacritics correctly.
 
         Standard .title() incorrectly capitalizes after apostrophes (ts'ai -> Ts'Ai).
-        This function only capitalizes the first letter: ts'ai -> Ts'ai.
+        This function:
+        1. Removes diacritical marks for consistent output
+        2. Only capitalizes the first letter: ts'ai -> Ts'ai
+        
+        Args:
+            part: The name part to capitalize (may contain diacritics)
+            
+        Returns:
+            Capitalized name part without diacritics
         """
         if not part:
             return part
-        return part[0].upper() + part[1:].lower()
+
+        # Normalize Unicode and remove diacritical marks
+        normalized = unicodedata.normalize("NFD", part)
+        without_diacritics = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+
+        return without_diacritics[0].upper() + without_diacritics[1:].lower()
 

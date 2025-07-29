@@ -4,10 +4,12 @@ Normalization service for Chinese name processing.
 This module provides sophisticated text normalization including Wade-Giles conversion,
 mixed script handling, and compound name splitting with cultural validation.
 """
+
 from __future__ import annotations
 
 import re
 import string
+import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from types import MappingProxyType
@@ -158,10 +160,13 @@ class NormalizationService:
         # Single pass for most cleaning operations
         raw = self._config.clean_pattern.sub(self._clean_replacement, raw)
 
+        # Apply OCR artifact cleanup
+        raw = self._fix_ocr_artifacts(raw)
+
         # Handle camelCase compound surnames (e.g., "AuYeung" -> "Au Yeung")
         tokens = raw.split()
 
-        # Check all tokens for camelCase compound surnames
+        # Check all tokens for compound surnames
         for i, token in enumerate(tokens):
             # Check if token is camelCase and could be a compound surname
             camel_parts = self._config.camel_case_finder.findall(token)
@@ -171,6 +176,19 @@ class NormalizationService:
                 if potential_compound in COMPOUND_VARIANTS:
                     # Replace with spaced version
                     tokens[i] = " ".join(camel_parts)
+            else:
+                # Check if the token (non-camelCase) is a known compound variant
+                # but ONLY if it's not already a recognized surname
+                token_lower = token.lower()
+                if token_lower in COMPOUND_VARIANTS and token_lower not in (
+                    self._data.surnames if self._data else set()
+                ):
+                    # Split the compound surname into its components
+                    target_compound = COMPOUND_VARIANTS[token_lower]
+                    compound_parts = target_compound.split()
+                    if len(compound_parts) == 2:
+                        # Title case the parts to match expected format
+                        tokens[i] = " ".join(part.title() for part in compound_parts)
 
         # Only apply concatenated name splitting if input has exactly 1 token
         # This preserves existing behavior for multi-token names
@@ -202,6 +220,40 @@ class NormalizationService:
 
         # Final cleanup
         return self._config.whitespace_pattern.sub(" ", raw).strip()
+
+    def _fix_ocr_artifacts(self, text: str) -> str:
+        """Fix common OCR artifacts in Chinese names."""
+        result = self._normalize_fullwidth_chars(text)
+        ocr_fixes = {
+            "п": "n",
+            "р": "p",
+            "о": "o",
+            "а": "a",
+            "е": "e",
+            "х": "x",
+            "с": "c",
+            "т": "t",
+            "и": "u",
+            "к": "k",
+            "м": "m",
+            "н": "h",
+        }
+        translation_table = str.maketrans(ocr_fixes)
+        return result.translate(translation_table)
+
+    def _normalize_fullwidth_chars(self, text: str) -> str:
+        """Normalize full-width characters to half-width and handle invisible Unicode characters."""
+        # Build translation table only once (as a static attribute)
+        if not hasattr(self, "_fullwidth_trans"):
+            # Map full-width ASCII (U+FF01-U+FF5E) to ASCII (0x21-0x7E)
+            fullwidth = {i: i - 0xFF01 + 0x21 for i in range(0xFF01, 0xFF5F)}
+            # Map ideographic space (U+3000) to ASCII space
+            fullwidth[0x3000] = 0x20
+            # Map invisible Unicode characters to ASCII space
+            fullwidth[0x200B] = 0x20  # Zero Width Space
+            fullwidth[0xFEFF] = 0x20  # Byte Order Mark / Zero Width No-Break Space
+            self._fullwidth_trans = str.maketrans(fullwidth)
+        return text.translate(self._fullwidth_trans)
 
     def _smart_split_concatenated(self, token: str) -> str:
         """
@@ -421,8 +473,12 @@ class NormalizationService:
         Memoized with LRU cache for performance (32K entries should handle
         most real-world workloads without memory pressure).
         """
-        # Step 1: Lowercase for consistent processing
-        low = token.lower()
+        # Step 1: Normalize Unicode and remove diacritical marks, then lowercase
+        # NFD decomposition separates base characters from combining diacritical marks
+        # Filter out Mn category (nonspacing marks) to remove accents/diacritics
+        normalized = unicodedata.normalize("NFD", token)
+        without_diacritics = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+        low = without_diacritics.lower()
 
         # Step 2: Apply non-Wade-Giles romanization precedence system (with apostrophes intact)
         # Check EXCEPTIONS first

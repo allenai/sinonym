@@ -5,6 +5,7 @@ This module provides sophisticated name parsing algorithms to identify
 surname/given name boundaries using probabilistic scoring and cultural
 validation patterns.
 """
+
 from __future__ import annotations
 
 import math
@@ -376,4 +377,3 @@ class NameParsingService:
                 score -= 1.5
 
         return score
-

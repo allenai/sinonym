@@ -304,6 +304,21 @@ class EthnicityClassificationService:
                     base_strength = 0.2
 
                 chinese_surname_strength += base_strength
+            else:
+                # NEW: Check if this could be a compound Chinese given name
+                split_result = self._normalizer.split_concat(clean_key_lower, normalized_cache)
+                if split_result and len(split_result) >= 2:
+                    # Check if all components are valid Chinese given name components
+                    all_chinese_components = True
+                    for component in split_result:
+                        comp_normalized = self._normalizer.norm(component)
+                        if comp_normalized not in self._data.given_names_normalized:
+                            all_chinese_components = False
+                            break
+
+                    if all_chinese_components:
+                        # Add modest boost for compound given names (helps cases like "Beining")
+                        chinese_surname_strength += 0.3
 
         return chinese_surname_strength
 

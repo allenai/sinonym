@@ -4,6 +4,7 @@ Data initialization service for Chinese name processing.
 This module handles loading and preprocessing of Chinese name databases,
 building frequency mappings, and creating immutable data structures.
 """
+
 from __future__ import annotations
 
 import csv
@@ -11,7 +12,7 @@ import math
 import unicodedata
 from dataclasses import dataclass
 
-from sinonym.chinese_names_data import CANTONESE_SURNAMES, COMPOUND_VARIANTS
+from sinonym.chinese_names_data import CANTONESE_SURNAMES, COMPOUND_VARIANTS, PYPINYIN_FREQUENCY_ALIASES
 from sinonym.paths import DATA_PATH
 from sinonym.types import ChineseNameConfig
 
@@ -59,9 +60,21 @@ class DataInitializationService:
         surnames = frozenset(self._normalizer.remove_spaces(s.lower()) for s in surnames_raw)
         compound_surnames = frozenset(s.lower() for s in surnames_raw if " " in s)
 
+        # Add all compound variants from COMPOUND_VARIANTS to ensure they're available
+        compound_surnames_with_variants = set(compound_surnames)
+        for variant_compound, standard_compound in COMPOUND_VARIANTS.items():
+            compound_surnames_with_variants.add(standard_compound.lower())
+        compound_surnames = frozenset(compound_surnames_with_variants)
+
         # Build normalized versions
         surnames_normalized = frozenset(self._normalizer.remove_spaces(self._normalizer.norm(s)) for s in surnames_raw)
         compound_surnames_normalized = frozenset(self._normalizer.norm(s) for s in surnames_raw if " " in s)
+
+        # Add normalized compound variants
+        compound_surnames_normalized_with_variants = set(compound_surnames_normalized)
+        for variant_compound, standard_compound in COMPOUND_VARIANTS.items():
+            compound_surnames_normalized_with_variants.add(self._normalizer.norm(standard_compound))
+        compound_surnames_normalized = frozenset(compound_surnames_normalized_with_variants)
 
         # Build given name data and plausible components
         given_names, given_log_probabilities, plausible_components = self._build_given_name_data()
@@ -130,9 +143,16 @@ class DataInitializationService:
                 freq_key = self._normalizer.remove_spaces(romanized.lower())
                 surname_frequencies[freq_key] = max(surname_frequencies.get(freq_key, 0), ppm)
 
-        # Add frequency alias: zeng should inherit ceng's frequency from Han character processing
-        if "ceng" in surname_frequencies:
-            surname_frequencies["zeng"] = surname_frequencies["ceng"]
+        # Add frequency aliases where pypinyin output differs from expected romanization
+        # These handle cases where Han characters produce different pinyin than the romanization system expects
+
+        for pypinyin_key, alias_key in PYPINYIN_FREQUENCY_ALIASES:
+            if pypinyin_key in surname_frequencies:
+                surname_frequencies[alias_key] = max(
+                    surname_frequencies.get(alias_key, 0),
+                    surname_frequencies[pypinyin_key],
+                )
+                surnames_raw.add(alias_key.title())
 
         # Add Cantonese surnames
         for cant_surname, (mand_surname, han_char) in CANTONESE_SURNAMES.items():
