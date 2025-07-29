@@ -9,9 +9,14 @@ validation patterns.
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.types import ParseResult
+from sinonym.utils.string_manipulation import StringManipulationUtils
+
+if TYPE_CHECKING:
+    from sinonym.services.normalization import CompoundMetadata
 
 
 class NameParsingService:
@@ -22,15 +27,20 @@ class NameParsingService:
         self._normalizer = normalizer
         self._data = data
 
-    def parse_name_order(self, order: list[str], normalized_cache: dict[str, str]) -> ParseResult:
+    def parse_name_order(
+        self,
+        order: list[str],
+        normalized_cache: dict[str, str],
+        compound_metadata: dict[str, CompoundMetadata],
+    ) -> ParseResult:
         """Parse using probabilistic system with fallback - pattern matching style."""
         # Try probabilistic parsing first
-        parse_result = self._best_parse(order, normalized_cache)
+        parse_result = self._best_parse(order, normalized_cache, compound_metadata)
 
         # Pattern match on result type (Scala-like)
         if parse_result.success and isinstance(parse_result.result, tuple):
             surname_tokens, given_tokens = parse_result.result
-            return ParseResult.success_with_parse(surname_tokens, given_tokens)
+            return ParseResult.success_with_parse(surname_tokens, given_tokens, parse_result.original_compound_surname)
 
         # Fallback parsing - try different surname positions
         fallback_attempts = [
@@ -58,7 +68,7 @@ class NameParsingService:
 
         if (
             len(surname_token) > 1  # Don't treat single letters as surnames
-            and self._normalizer.remove_spaces(normalized_surname) in self._data.surnames_normalized
+            and StringManipulationUtils.remove_spaces(normalized_surname) in self._data.surnames_normalized
         ):
             surname_tokens = [surname_token]
             given_tokens = order[given_slice]
@@ -75,7 +85,7 @@ class NameParsingService:
                     len(token) > 3
                     and (
                         self._normalizer.norm(token) in self._data.surnames
-                        or self._normalizer.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
+                        or StringManipulationUtils.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
                         in self._data.surnames_normalized
                     )
                     for token in order
@@ -90,22 +100,30 @@ class NameParsingService:
                     # This looks like a Western name where single letters are initials
                     return ParseResult.failure("Western name pattern detected")
 
-                return ParseResult.success_with_parse(surname_tokens, given_tokens)
+                return ParseResult.success_with_parse(surname_tokens, given_tokens, None)
 
         return ParseResult.failure("No valid surname found")
 
-    def _best_parse(self, tokens: list[str], normalized_cache: dict[str, str]) -> ParseResult:
+    def _best_parse(
+        self,
+        tokens: list[str],
+        normalized_cache: dict[str, str],
+        compound_metadata: dict[str, CompoundMetadata],
+    ) -> ParseResult:
         """Find the best parse using probabilistic scoring."""
         if len(tokens) < 2:
             return ParseResult.failure("needs at least 2 tokens")
 
-        parses = self._generate_all_parses(tokens, normalized_cache)
+        parses_with_format = self._generate_all_parses_with_format(
+            tokens, normalized_cache, compound_metadata,
+        )
+        parses = [(surname, given) for surname, given, _ in parses_with_format]
         if not parses:
             return ParseResult.failure("surname not recognised")
 
         # Score all parses
         scored_parses = []
-        for surname_tokens, given_tokens in parses:
+        for surname_tokens, given_tokens, original_compound_format in parses_with_format:
             score = self.calculate_parse_score(surname_tokens, given_tokens, tokens, normalized_cache)
 
             # Additional validation: reject parses where single letters are used as given names
@@ -118,7 +136,7 @@ class NameParsingService:
                 len(token) > 3
                 and (
                     self._normalizer.norm(token) in self._data.surnames
-                    or self._normalizer.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
+                    or StringManipulationUtils.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
                     in self._data.surnames_normalized
                 )
                 for token in tokens
@@ -134,7 +152,7 @@ class NameParsingService:
                 continue
 
             if score > float("-inf"):
-                scored_parses.append((surname_tokens, given_tokens, score))
+                scored_parses.append((surname_tokens, given_tokens, score, original_compound_format))
 
         if not scored_parses:
             return ParseResult.failure("no valid parse found")
@@ -148,100 +166,139 @@ class NameParsingService:
             best_parse_result = max(
                 best_parses,
                 key=lambda x: self._data.surname_frequencies.get(
-                    self._normalizer.remove_spaces(self._surname_key(x[0], normalized_cache)),
+                    StringManipulationUtils.remove_spaces(self._surname_key(x[0], normalized_cache)),
                     0,
                 ),
             )
         else:
             best_parse_result = best_parses[0]
 
-        return ParseResult.success_with_parse(best_parse_result[0], best_parse_result[1])
+        return ParseResult.success_with_parse(best_parse_result[0], best_parse_result[1], best_parse_result[3])
 
-    def _generate_all_parses(
+    def _generate_all_parses_with_format(
         self,
         tokens: list[str],
         normalized_cache: dict[str, str],
-    ) -> list[tuple[list[str], list[str]]]:
+        compound_metadata: dict[str, CompoundMetadata],
+    ) -> list[tuple[list[str], list[str], str | None]]:
         """Generate all possible (surname, given_name) parses for the tokens."""
         if len(tokens) < 2:
             return []
 
         parses = []
 
-        # 1. Check compound surnames (2-token surnames)
+        # 1. Check compound surnames using centralized metadata
         if len(tokens) >= 3:
-            if self._is_compound_surname(tokens, 0, normalized_cache):
-                parses.append((tokens[0:2], tokens[2:]))
-            if self._is_compound_surname(tokens, 1, normalized_cache):
-                parses.append((tokens[1:3], tokens[0:1]))
+            # Check first two tokens for compound
+            first_meta = compound_metadata.get(tokens[0])
+            second_meta = compound_metadata.get(tokens[1])
+            if (
+                first_meta
+                and first_meta.is_compound
+                and second_meta
+                and second_meta.is_compound
+                and first_meta.compound_target == second_meta.compound_target
+            ):
+                # This is a multi-token compound at the beginning
+                original_format = self._get_compound_original_format(first_meta, tokens[0:2])
+                parses.append((tokens[0:2], tokens[2:], original_format))
+
+            # Check second and third tokens for compound (surname in middle)
+            if len(tokens) >= 3:
+                second_meta = compound_metadata.get(tokens[1])
+                third_meta = compound_metadata.get(tokens[2])
+                if (
+                    second_meta
+                    and second_meta.is_compound
+                    and third_meta
+                    and third_meta.is_compound
+                    and second_meta.compound_target == third_meta.compound_target
+                ):
+                    # This is a multi-token compound in the middle
+                    original_format = self._get_compound_original_format(second_meta, tokens[1:3])
+                    parses.append((tokens[1:3], tokens[0:1], original_format))
 
         # 2. Single-token surnames - only at beginning or end (contiguous sequences only)
         # Surname-first pattern: surname + given_names
         # Check both original and normalized forms, but exclude single letters
         first_token = tokens[0]
         first_normalized = normalized_cache.get(first_token, self._normalizer.norm(first_token))
-        if len(first_token) > 1 and (  # Don't treat single letters as surnames
-            self._normalizer.norm(first_token) in self._data.surnames
-            or self._normalizer.remove_spaces(first_normalized) in self._data.surnames_normalized
-        ):
-            parses.append(([first_token], tokens[1:]))
+
+        # Check first token using centralized metadata
+        first_meta = compound_metadata.get(first_token)
+        if first_meta and first_meta.is_compound and first_meta.format_type in ["compact", "camelCase"]:
+            # This is a compact/camelCase compound surname (single token representing compound)
+            # Preserve original token structure instead of converting to compound_target
+            compound_parts = StringManipulationUtils.split_compound_token(first_token, first_meta)
+            original_format = self._get_compound_original_format(first_meta, [first_token])
+            parses.append((compound_parts, tokens[1:], original_format))
+        elif len(first_token) > 1:
+            # Check for regular single surnames
+            is_regular_surname = (
+                self._normalizer.norm(first_token) in self._data.surnames
+                or StringManipulationUtils.remove_spaces(first_normalized) in self._data.surnames_normalized
+            )
+            if is_regular_surname:
+                parses.append(([first_token], tokens[1:], None))
 
         # Surname-last pattern: given_names + surname
         if len(tokens) >= 2:
             last_token = tokens[-1]
             last_normalized = normalized_cache.get(last_token, self._normalizer.norm(last_token))
-            if len(last_token) > 1 and (  # Don't treat single letters as surnames
-                self._normalizer.norm(last_token) in self._data.surnames
-                or self._normalizer.remove_spaces(last_normalized) in self._data.surnames_normalized
-            ):
-                parses.append(([last_token], tokens[:-1]))
 
-        # 3. Fallback: Check for hyphenated compound surnames at beginning or end
+            # Check last token using centralized metadata
+            last_meta = compound_metadata.get(last_token)
+            if last_meta and last_meta.is_compound and last_meta.format_type in ["compact", "camelCase"]:
+                # This is a compact/camelCase compound surname (single token representing compound)
+                # Preserve original token structure instead of converting to compound_target
+                compound_parts = StringManipulationUtils.split_compound_token(last_token, last_meta)
+                original_format = self._get_compound_original_format(last_meta, [last_token])
+                parses.append((compound_parts, tokens[:-1], original_format))
+            elif len(last_token) > 1:
+                # Check for regular single surnames
+                is_regular_surname = (
+                    self._normalizer.norm(last_token) in self._data.surnames
+                    or StringManipulationUtils.remove_spaces(last_normalized) in self._data.surnames_normalized
+                )
+                if is_regular_surname:
+                    parses.append(([last_token], tokens[:-1], None))
+
+        # 3. Check for hyphenated compounds using centralized metadata
         # Beginning position
-        if "-" in tokens[0]:
-            lowercase_key = tokens[0].lower()  # Don't remove hyphens for compound_hyphen_map lookup
-            if lowercase_key in self._data.compound_hyphen_map:
-                space_form = self._data.compound_hyphen_map[lowercase_key]
-                # Title-case the compound parts for output
-                compound_parts = [part.title() for part in space_form.split()]
-                if len(compound_parts) == 2 and len(tokens) > 1:
-                    parses.append((compound_parts, tokens[1:]))
+        first_meta = compound_metadata.get(tokens[0])
+        if first_meta and first_meta.is_compound and first_meta.format_type == "hyphenated":
+            target_compound = first_meta.compound_target
+            compound_parts = [StringManipulationUtils.capitalize_name_part(part) for part in target_compound.split()]
+            if len(compound_parts) == 2 and len(tokens) > 1:
+                original_format = tokens[0]  # Keep the hyphenated format
+                parses.append((compound_parts, tokens[1:], original_format))
 
         # End position
-        if len(tokens) >= 2 and "-" in tokens[-1]:
-            lowercase_key = tokens[-1].lower()  # Don't remove hyphens for compound_hyphen_map lookup
-            if lowercase_key in self._data.compound_hyphen_map:
-                space_form = self._data.compound_hyphen_map[lowercase_key]
-                # Title-case the compound parts for output
-                compound_parts = [part.title() for part in space_form.split()]
+        if len(tokens) >= 2:
+            last_meta = compound_metadata.get(tokens[-1])
+            if last_meta and last_meta.is_compound and last_meta.format_type == "hyphenated":
+                target_compound = last_meta.compound_target
+                compound_parts = [StringManipulationUtils.capitalize_name_part(part) for part in target_compound.split()]
                 if len(compound_parts) == 2:
-                    parses.append((compound_parts, tokens[:-1]))
+                    original_format = tokens[-1]  # Keep the hyphenated format
+                    parses.append((compound_parts, tokens[:-1], original_format))
 
         return parses
 
-    def _is_compound_surname(self, tokens: list[str], start: int, normalized_cache: dict[str, str]) -> bool:
-        """Check if tokens starting at 'start' form a compound surname."""
-        if start + 1 >= len(tokens):
-            return False
+    def _get_compound_original_format(self, compound_meta: CompoundMetadata, tokens: list[str]) -> str | None:
+        """Get the original format for a compound surname from centralized metadata."""
+        if not compound_meta.is_compound:
+            return None
 
-        # Use cached normalized values
-        token1 = tokens[start]
-        token2 = tokens[start + 1]
-        keys = [
-            normalized_cache.get(token1, self._normalizer.norm(token1)),
-            normalized_cache.get(token2, self._normalizer.norm(token2)),
-        ]
-        compound_key = " ".join(keys)
-        compound_original = " ".join(t.lower() for t in [token1, token2])
+        # For single-token compounds (compact/camelCase), return the original token
+        if len(tokens) == 1:
+            return tokens[0].lower()
 
-        return (
-            compound_key in self._data.compound_surnames_normalized
-            or compound_original in self._data.compound_surnames_normalized
-            or (
-                compound_original in COMPOUND_VARIANTS
-                and COMPOUND_VARIANTS[compound_original] in self._data.compound_surnames_normalized
-            )
-        )
+        # For multi-token compounds (spaced), return the spaced format
+        if len(tokens) == 2:
+            return StringManipulationUtils.lowercase_join_with_spaces(tokens)
+
+        return None
 
     def calculate_parse_score(
         self,
@@ -259,7 +316,7 @@ class NameParsingService:
 
         # Handle compound surname mapping mismatches
         if surname_logp == self._config.default_surname_logp and len(surname_tokens) > 1:
-            original_compound = " ".join(t.lower() for t in surname_tokens)
+            original_compound = StringManipulationUtils.lowercase_join_with_spaces(surname_tokens)
             surname_logp = self._data.surname_log_probabilities.get(
                 original_compound,
                 self._config.default_surname_logp,
@@ -293,11 +350,12 @@ class NameParsingService:
             if original_key in self._data.surname_frequencies:
                 return original_key
             # Fall back to normalized form
-            return self._normalizer.remove_spaces(
+            return StringManipulationUtils.remove_spaces(
                 normalized_cache.get(surname_tokens[0], self._normalizer.norm(surname_tokens[0])),
             )
         # Compound surname - join with space
-        return " ".join(normalized_cache.get(t, self._normalizer.norm(t)) for t in surname_tokens)
+        normalized_tokens = [normalized_cache.get(t, self._normalizer.norm(t)) for t in surname_tokens]
+        return StringManipulationUtils.join_with_spaces(normalized_tokens)
 
     def _given_name_key(self, given_token: str, normalized_cache: dict[str, str]) -> str:
         """Convert given name token to lookup key, preferring original form when available."""
@@ -322,7 +380,7 @@ class NameParsingService:
         surname_key = self._surname_key(surname_tokens, normalized_cache)
 
         # Surname frequency bonus
-        surname_freq = self._data.surname_frequencies.get(self._normalizer.remove_spaces(surname_key), 0)
+        surname_freq = self._data.surname_frequencies.get(StringManipulationUtils.remove_spaces(surname_key), 0)
         if surname_freq == 0 and " " in surname_key:
             surname_freq = self._data.surname_frequencies.get(surname_key, 0)
 
@@ -333,10 +391,10 @@ class NameParsingService:
 
         # Compound surname validation
         if len(surname_tokens) == 2:
-            compound_original = " ".join(t.lower() for t in surname_tokens)
+            compound_original = StringManipulationUtils.lowercase_join_with_spaces(surname_tokens)
             is_valid_compound = (
                 surname_key in self._data.compound_surnames_normalized
-                or self._normalizer.remove_spaces(surname_key) in self._data.compound_surnames_normalized
+                or StringManipulationUtils.remove_spaces(surname_key) in self._data.compound_surnames_normalized
                 or (
                     compound_original in COMPOUND_VARIANTS
                     and COMPOUND_VARIANTS[compound_original] in self._data.compound_surnames_normalized
@@ -349,7 +407,9 @@ class NameParsingService:
             token = given_tokens[0]
             if len(token) > 6:
                 score -= 1.0
-            elif self._normalizer.split_concat(token, normalized_cache):
+            elif StringManipulationUtils.split_concatenated_name(
+                token, normalized_cache, self._data, self._normalizer, self._config,
+            ):
                 score += 0.5
         elif len(given_tokens) == 2:
             score += 1.0
@@ -366,13 +426,13 @@ class NameParsingService:
             key = normalized_cache.get(token, self._normalizer.norm(token))
             if (
                 key in self._data.given_names_normalized
-                and self._normalizer.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
+                and StringManipulationUtils.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
                 not in self._data.surnames_normalized
             ):
                 score -= 2.0
 
         for token in given_tokens:
-            key = self._normalizer.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
+            key = StringManipulationUtils.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
             if key in self._data.surnames and self._data.surname_frequencies.get(key, 0) > 1000:
                 score -= 1.5
 

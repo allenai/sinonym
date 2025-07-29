@@ -11,10 +11,14 @@ import csv
 import math
 import unicodedata
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import CANTONESE_SURNAMES, COMPOUND_VARIANTS, PYPINYIN_FREQUENCY_ALIASES
 from sinonym.paths import DATA_PATH
-from sinonym.types import ChineseNameConfig
+from sinonym.utils.string_manipulation import StringManipulationUtils
+
+if TYPE_CHECKING:
+    from sinonym.types import ChineseNameConfig
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,8 @@ class NameDataStructures:
 
     # Compound surname mappings
     compound_hyphen_map: dict[str, str]
+    # Maps normalized compound surnames back to their original input format
+    compound_original_format_map: dict[str, str]
 
 
 class DataInitializationService:
@@ -57,22 +63,24 @@ class DataInitializationService:
 
         # Build core surname data
         surnames_raw, surname_frequencies = self._build_surname_data()
-        surnames = frozenset(self._normalizer.remove_spaces(s.lower()) for s in surnames_raw)
+        surnames = frozenset(StringManipulationUtils.remove_spaces(s.lower()) for s in surnames_raw)
         compound_surnames = frozenset(s.lower() for s in surnames_raw if " " in s)
 
         # Add all compound variants from COMPOUND_VARIANTS to ensure they're available
         compound_surnames_with_variants = set(compound_surnames)
-        for variant_compound, standard_compound in COMPOUND_VARIANTS.items():
+        for standard_compound in COMPOUND_VARIANTS.values():
             compound_surnames_with_variants.add(standard_compound.lower())
         compound_surnames = frozenset(compound_surnames_with_variants)
 
         # Build normalized versions
-        surnames_normalized = frozenset(self._normalizer.remove_spaces(self._normalizer.norm(s)) for s in surnames_raw)
+        surnames_normalized = frozenset(
+            StringManipulationUtils.remove_spaces(self._normalizer.norm(s)) for s in surnames_raw
+        )
         compound_surnames_normalized = frozenset(self._normalizer.norm(s) for s in surnames_raw if " " in s)
 
         # Add normalized compound variants
         compound_surnames_normalized_with_variants = set(compound_surnames_normalized)
-        for variant_compound, standard_compound in COMPOUND_VARIANTS.items():
+        for standard_compound in COMPOUND_VARIANTS.values():
             compound_surnames_normalized_with_variants.add(self._normalizer.norm(standard_compound))
         compound_surnames_normalized = frozenset(compound_surnames_normalized_with_variants)
 
@@ -82,6 +90,7 @@ class DataInitializationService:
 
         # Build compound surname mappings
         compound_hyphen_map = self._build_compound_hyphen_map(compound_surnames)
+        compound_original_format_map = self._build_compound_original_format_map()
 
         # Build surname log probabilities
         surname_log_probabilities = self._build_surname_log_probabilities(
@@ -106,6 +115,7 @@ class DataInitializationService:
             given_log_probabilities=given_log_probabilities,
             surname_bonus_map=surname_bonus_map,
             compound_hyphen_map=compound_hyphen_map,
+            compound_original_format_map=compound_original_format_map,
         )
 
     def _is_plausible_chinese_syllable(self, component: str) -> bool:
@@ -136,11 +146,11 @@ class DataInitializationService:
             for row in csv.DictReader(f):
                 han = row["surname"]
                 romanized = " ".join(self._cache_service.han_to_pinyin_fast(han)).title()
-                surnames_raw.update({romanized, self._normalizer.remove_spaces(romanized)})
+                surnames_raw.update({romanized, StringManipulationUtils.remove_spaces(romanized)})
 
                 # Store frequency data
                 ppm = float(row.get("ppm.1930_2008", 0))
-                freq_key = self._normalizer.remove_spaces(romanized.lower())
+                freq_key = StringManipulationUtils.remove_spaces(romanized.lower())
                 surname_frequencies[freq_key] = max(surname_frequencies.get(freq_key, 0), ppm)
 
         # Add frequency aliases where pypinyin output differs from expected romanization
@@ -155,7 +165,7 @@ class DataInitializationService:
                 surnames_raw.add(alias_key.title())
 
         # Add Cantonese surnames
-        for cant_surname, (mand_surname, han_char) in CANTONESE_SURNAMES.items():
+        for cant_surname, (mand_surname, _han_char) in CANTONESE_SURNAMES.items():
             surnames_raw.add(cant_surname.title())
             # Use lowercase key to match the frequency mapping format
             mand_key = mand_surname.lower()
@@ -224,12 +234,36 @@ class DataInitializationService:
                 parts = compound.split()
                 if len(parts) == 2:
                     # Store only lowercase hyphenated form
-                    hyphen_form = f"{parts[0].lower()}-{parts[1].lower()}"
+                    lowercase_parts = [part.lower() for part in parts]
+                    hyphen_form = StringManipulationUtils.join_with_hyphens(lowercase_parts)
                     # Store lowercase space form (will be title-cased on demand)
-                    space_form = f"{parts[0].lower()} {parts[1].lower()}"
+                    space_form = StringManipulationUtils.join_with_spaces(lowercase_parts)
                     compound_hyphen_map[hyphen_form] = space_form
 
         return compound_hyphen_map
+
+    def _build_compound_original_format_map(self) -> dict[str, str]:
+        """Build mapping from normalized compound surnames to original format."""
+        compound_original_format_map = {}
+
+        # Create reverse mapping from COMPOUND_VARIANTS to preserve original format
+        # This maps the normalized spaced version back to the original compact form
+        for original_form, normalized_form in COMPOUND_VARIANTS.items():
+            # Store mapping from normalized form to original form
+            compound_original_format_map[normalized_form.lower()] = original_form.lower()
+
+            # Also create mapping from each component back to original when appropriate
+            # This handles cases where we parse "duan mu" but want to output "duanmu"
+            if " " in normalized_form:
+                parts = normalized_form.lower().split()
+                if len(parts) == 2:
+                    # Only add this mapping if the original form doesn't contain spaces
+                    # This preserves compound surnames like "duanmu" vs spaced forms like "au yeung"
+                    if " " not in original_form:
+                        joined_form = "".join(parts)
+                        compound_original_format_map[joined_form] = original_form.lower()
+
+        return compound_original_format_map
 
     def _build_surname_log_probabilities(
         self,

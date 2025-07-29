@@ -9,10 +9,12 @@ from __future__ import annotations
 import csv
 from functools import cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pypinyin
 
-from sinonym.types import ChineseNameConfig
+if TYPE_CHECKING:
+    from sinonym.types import ChineseNameConfig
 
 
 @cache  # one entry per unique Han character
@@ -39,9 +41,6 @@ class PinyinCacheService:
     def cache_size(self) -> int:
         return _char_to_pinyin.cache_info().currsize
 
-    @property
-    def is_built(self) -> bool:
-        return True
 
     # ---------- internal ----------
     def _warm_from_csv(self) -> None:

@@ -8,6 +8,7 @@ linguistic patterns and cultural markers.
 from __future__ import annotations
 
 from sinonym.chinese_names_data import (
+    COMPOUND_VARIANTS,
     JAPANESE_SURNAMES,
     KOREAN_AMBIGUOUS_PATTERNS,
     KOREAN_GIVEN_PAIRS,
@@ -21,6 +22,7 @@ from sinonym.chinese_names_data import (
     WESTERN_NAMES,
 )
 from sinonym.types import ParseResult
+from sinonym.utils.string_manipulation import StringManipulationUtils
 
 
 class EthnicityClassificationService:
@@ -66,13 +68,13 @@ class EthnicityClassificationService:
 
         # Check for Korean-only surnames (definitive Korean)
         for key in expanded_keys:
-            clean_key = self._normalizer.remove_spaces(key)
+            clean_key = StringManipulationUtils.remove_spaces(key)
             if clean_key in KOREAN_ONLY_SURNAMES:
                 return ParseResult.failure("Korean-only surname detected")
 
         # Check for Japanese surnames (definitive Japanese)
         for key in expanded_keys:
-            clean_key = self._normalizer.remove_spaces(key)
+            clean_key = StringManipulationUtils.remove_spaces(key)
             if clean_key in JAPANESE_SURNAMES:
                 return ParseResult.failure("Japanese surname detected")
 
@@ -83,7 +85,7 @@ class EthnicityClassificationService:
 
         # Check for Vietnamese-only surnames (definitive Vietnamese)
         for key in expanded_keys:
-            clean_key = self._normalizer.remove_spaces(key)
+            clean_key = StringManipulationUtils.remove_spaces(key)
             if clean_key in VIETNAMESE_ONLY_SURNAMES:
                 return ParseResult.failure("appears to be Vietnamese name")
 
@@ -96,7 +98,7 @@ class EthnicityClassificationService:
         # Use higher threshold if there's overlapping Chinese surname evidence
         has_overlapping_chinese_surname = False
         for token in tokens:
-            clean_token = self._normalizer.remove_spaces(token).lower()
+            clean_token = StringManipulationUtils.remove_spaces(token).lower()
             if clean_token in self._data.surnames and (
                 clean_token in OVERLAPPING_KOREAN_SURNAMES or clean_token in OVERLAPPING_VIETNAMESE_SURNAMES
             ):
@@ -131,7 +133,7 @@ class EthnicityClassificationService:
             return "none"
 
         first_token = tokens[0]
-        clean_first_token = self._normalizer.remove_spaces(first_token).lower()
+        clean_first_token = StringManipulationUtils.remove_spaces(first_token).lower()
 
         # Check for definitive surname types first
         if clean_first_token in KOREAN_ONLY_SURNAMES:
@@ -250,7 +252,7 @@ class EthnicityClassificationService:
         if vietnamese_surname_count >= 1 and vietnamese_given_count >= 1:
             # Check if any token is a Chinese surname (not just overlapping)
             has_chinese_surname = any(
-                self._normalizer.remove_spaces(key) in self._data.surnames for key in expanded_keys
+                StringManipulationUtils.remove_spaces(key) in self._data.surnames for key in expanded_keys
             )
 
             if not has_chinese_surname:
@@ -273,11 +275,11 @@ class EthnicityClassificationService:
             key_to_normalized[key] = normalized_cache.get(key, key)
 
         for key in expanded_keys:
-            clean_key = self._normalizer.remove_spaces(key)
+            clean_key = StringManipulationUtils.remove_spaces(key)
             clean_key_lower = clean_key.lower()
 
             # Check if this is a Chinese surname
-            normalized_key = self._normalizer.remove_spaces(key_to_normalized.get(key, key))
+            normalized_key = StringManipulationUtils.remove_spaces(key_to_normalized.get(key, key))
             is_chinese_surname = (
                 clean_key in self._data.surnames
                 or clean_key_lower in self._data.surnames
@@ -304,9 +306,22 @@ class EthnicityClassificationService:
                     base_strength = 0.2
 
                 chinese_surname_strength += base_strength
+            # Check for compact compound surnames in COMPOUND_VARIANTS
+            elif clean_key_lower in COMPOUND_VARIANTS:
+                # This is a compact compound surname - give it good strength
+                target_compound = COMPOUND_VARIANTS[clean_key_lower]
+                compound_parts = target_compound.split()
+
+                # Verify that the target compound parts are valid Chinese surnames
+                if len(compound_parts) == 2:
+                    part1, part2 = compound_parts
+                    if (part1 in self._data.surnames_normalized and
+                        part2 in self._data.surnames_normalized):
+                        # Both parts are valid Chinese surnames, give high confidence
+                        chinese_surname_strength += 1.0
             else:
                 # NEW: Check if this could be a compound Chinese given name
-                split_result = self._normalizer.split_concat(clean_key_lower, normalized_cache)
+                split_result = StringManipulationUtils.split_concatenated_name(clean_key_lower, normalized_cache, self._data, self._normalizer, self._config)
                 if split_result and len(split_result) >= 2:
                     # Check if all components are valid Chinese given name components
                     all_chinese_components = True

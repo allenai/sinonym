@@ -14,19 +14,19 @@ from sinonym.services.parsing import NameParsingService
 from sinonym.types import CacheInfo, ChineseNameConfig, ParseResult
 
 __all__ = [
-    # Services
-    "PinyinCacheService",
-    "DataInitializationService",
-    "EthnicityClassificationService",
-    "NameFormattingService",
-    "NameParsingService",
-    "NormalizationService",
-    # Data structures
-    "NameDataStructures",
-    "NormalizedInput",
-    "LazyNormalizationMap",
     # Types (re-exported for compatibility)
     "CacheInfo",
     "ChineseNameConfig",
+    "DataInitializationService",
+    "EthnicityClassificationService",
+    "LazyNormalizationMap",
+    # Data structures
+    "NameDataStructures",
+    "NameFormattingService",
+    "NameParsingService",
+    "NormalizationService",
+    "NormalizedInput",
     "ParseResult",
+    # Services
+    "PinyinCacheService",
 ]

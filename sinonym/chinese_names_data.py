@@ -425,7 +425,8 @@ def _assert_no_intra_layer_dupes(layer_name, layer_dict):
     seen = set()
     for key in layer_dict:
         if key in seen:
-            raise ValueError(f"Duplicate key in {layer_name}: {key}")
+            msg = f"Duplicate key in {layer_name}: {key}"
+            raise ValueError(msg)
         seen.add(key)
 
 
@@ -435,7 +436,8 @@ def _assert_no_duplicate_keys(*layers):
     for layer_name, layer in layers:
         duplicates = seen.intersection(layer.keys())
         if duplicates:
-            raise ValueError(f"Duplicate romanization keys found in {layer_name}: {duplicates}")
+            msg = f"Duplicate romanization keys found in {layer_name}: {duplicates}"
+            raise ValueError(msg)
         seen.update(layer.keys())
 
 
@@ -563,7 +565,7 @@ CANTONESE_SURNAMES = {
     "shing": ("cheng", "成"),  # Keep first mapping from previous duplicates
     "shek": ("shi", "石"),
     # Missing overlapping surnames that are legitimate Cantonese
-    "jung": ("zheng", "郑"),  # 鄭 - Cantonese Jung = Mandarin Zheng
+    "jung": ("zheng", "郑"),  # 鄭 - Cantonese Jung = Mandarin Zheng  # there's also "jung": ("zhong", "钟")???
     "han": ("han", "韩"),  # 韓 - Han surname
     "lim": ("lin", "林"),  # 林 - Cantonese Lim = Mandarin Lin
     "im": ("lin", "林"),  # 林 - Alternative romanization of Lim
@@ -579,7 +581,6 @@ CANTONESE_SURNAMES = {
     "suh": ("xu", "徐"),  # 徐 - Korean Suh = Mandarin Xu
     "son": ("sun", "孙"),  # 孙 - Korean Son = Mandarin Sun
     "kyeong": ("jing", "京"),  # 京 - Korean Kyeong = Mandarin Jing
-    # "jung": ("zhong", "钟"),  # 钟 - Korean Jung = Mandarin Zhong - DUPLICATE REMOVED (exists in OVERLAPPING_KOREAN_SURNAMES)
 }
 
 
@@ -597,7 +598,8 @@ def _check_surname_mapping_consistency():
             bad.append(f"{key}: SYLLABLE_RULES='{syllable_mapping}' vs CANTONESE_SURNAMES='{cantonese_mandarin}'")
 
     if bad:
-        raise ValueError(f"Inconsistent surname mappings found: {bad}")
+        msg = f"Inconsistent surname mappings found: {bad}"
+        raise ValueError(msg)
 
 
 _check_surname_mapping_consistency()
@@ -606,6 +608,7 @@ _check_surname_mapping_consistency()
 COMPOUND_VARIANTS = {
     # Major Cantonese compound surnames
     "au yeung": "ou yang",  # 欧阳 - very common Hong Kong surname
+    "auyeung": "ou yang",  # 欧阳 - compact form of au yeung
     "szeto": "si tu",  # 司徒 - very common Cantonese compound
     "sima": "si ma",  # 司马
     "cheung sun": "zhang sun",  # 张孙
@@ -688,36 +691,25 @@ KOREAN_ONLY_SURNAMES = frozenset(
         "park",
         "bark",
         "bag",
-        # "choi" removed - it's a Cantonese surname (蔡) that overlaps with Korean, belongs in OVERLAPPING_KOREAN_SURNAMES
-        # "kang" removed - it's a Chinese surname (康) that overlaps with Korean, belongs in OVERLAPPING_KOREAN_SURNAMES
-        # "gong" removed - it's a Chinese surname (龚/宫/公) that overlaps with Korean, belongs in OVERLAPPING_KOREAN_SURNAMES
         "yoon",
-        # "jang" removed - it's a Chinese surname (张/蒋) that overlaps with Korean, belongs in OVERLAPPING_KOREAN_SURNAMES
         "seo",
-        # "shin" removed - it's a Chinese surname (申/信) that overlaps with Korean, belongs in OVERLAPPING_KOREAN_SURNAMES
         "kwon",
         "gwon",
         "hwang",
         "ahn",
         "yoo",
         "jeon",
-        # "moon" removed - it's a Chinese surname (文/门) that overlaps with Korean, belongs in OVERLAPPING_KOREAN_SURNAMES
         "baek",
         "heo",
         "nam",
         "shim",
         "noh",
-        # "ha" removed - it's a Chinese surname (哈/夏) that overlaps with Korean, belongs in OVERLAPPING_KOREAN_SURNAMES
         "joo",
         "bae",
         "ryu",
         "ku",
         "won",
         "ryoo",
-        # "koo" removed - it's a Chinese surname (古/顾) that overlaps with Korean, belongs in OVERLAPPING_KOREAN_SURNAMES
-        # "cha" removed - it's a Chinese surname (查/茶) that overlaps with Korean, belongs in OVERLAPPING_KOREAN_SURNAMES
-        # "suh" removed - it's a Chinese surname (徐) that overlaps with Korean, belongs in OVERLAPPING_KOREAN_SURNAMES
-        # "son" removed - it's a Chinese surname (孙) that overlaps with Korean, belongs in OVERLAPPING_KOREAN_SURNAMES
         "yeo",
         "pyo",
         "oh",
@@ -1668,11 +1660,11 @@ WESTERN_NAMES = frozenset(
 PYPINYIN_FREQUENCY_ALIASES = [
     ("ceng", "zeng"),  # 曾: pypinyin produces 'ceng' but romanization system expects 'zeng'
     ("ruan", "yuan"),  # 阮: pypinyin produces 'ruan' but romanization system expects 'yuan'
-    ("qu", "ou"),      # 区: pypinyin produces 'qu' but romanization system expects 'ou'
-    ("gan", "jin"),    # 甘: pypinyin produces 'gan' but romanization system expects 'jin'
-    ("li", "lai"),     # 黎: pypinyin produces 'li' but romanization system expects 'lai'
-    ("mou", "miao"),   # 缪: pypinyin produces 'mou' but romanization system expects 'miao'
-    ("di", "zhai"),    # 翟: pypinyin produces 'di' but romanization system expects 'zhai'
-    ("mao", "mo"),     # 毛: pypinyin produces 'mao' but romanization system expects 'mo'
-    ("yin", "wen"),    # 尹: pypinyin produces 'yin' but romanization system expects 'wen'
+    ("qu", "ou"),  # 区: pypinyin produces 'qu' but romanization system expects 'ou'
+    ("gan", "jin"),  # 甘: pypinyin produces 'gan' but romanization system expects 'jin'
+    ("li", "lai"),  # 黎: pypinyin produces 'li' but romanization system expects 'lai'
+    ("mou", "miao"),  # 缪: pypinyin produces 'mou' but romanization system expects 'miao'
+    ("di", "zhai"),  # 翟: pypinyin produces 'di' but romanization system expects 'zhai'
+    ("mao", "mo"),  # 毛: pypinyin produces 'mao' but romanization system expects 'mo'
+    ("yin", "wen"),  # 尹: pypinyin produces 'yin' but romanization system expects 'wen'
 ]

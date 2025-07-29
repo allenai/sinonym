@@ -16,24 +16,26 @@ class ParseResult:
     success: bool
     result: str | tuple[list[str], list[str]]
     error_message: str | None = None
+    # Original compound surname format (preserves input format like "Duanmu" vs "Duan-Mu")
+    original_compound_surname: str | None = None
 
     @classmethod
-    def success_with_name(cls, formatted_name: str) -> ParseResult:
-        return cls(success=True, result=formatted_name, error_message=None)
+    def success_with_name(cls, formatted_name: str, original_compound_surname: str | None = None) -> ParseResult:
+        return cls(success=True, result=formatted_name, error_message=None, original_compound_surname=original_compound_surname)
 
     @classmethod
-    def success_with_parse(cls, surname_tokens: list[str], given_tokens: list[str]) -> ParseResult:
-        return cls(success=True, result=(surname_tokens, given_tokens), error_message=None)
+    def success_with_parse(cls, surname_tokens: list[str], given_tokens: list[str], original_compound_surname: str | None = None) -> ParseResult:
+        return cls(success=True, result=(surname_tokens, given_tokens), error_message=None, original_compound_surname=original_compound_surname)
 
     @classmethod
     def failure(cls, error_message: str) -> ParseResult:
-        return cls(success=False, result="", error_message=error_message)
+        return cls(success=False, result="", error_message=error_message, original_compound_surname=None)
 
     def map(self, f) -> ParseResult:
         """Functor map operation - Scala-like transformation"""
         if self.success:
             try:
-                return ParseResult.success_with_name(f(self.result))
+                return ParseResult.success_with_name(f(self.result), self.original_compound_surname)
             except Exception as e:
                 return ParseResult.failure(str(e))
         return self
@@ -42,7 +44,11 @@ class ParseResult:
         """Monadic flatMap operation - Scala-like chaining"""
         if self.success:
             try:
-                return f(self.result)
+                result = f(self.result)
+                # Preserve the original compound surname if the result doesn't already have one
+                if result.success and result.original_compound_surname is None:
+                    return ParseResult(result.success, result.result, result.error_message, self.original_compound_surname)
+                return result
             except Exception as e:
                 return ParseResult.failure(str(e))
         return self

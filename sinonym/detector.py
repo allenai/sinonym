@@ -237,10 +237,6 @@ class ChineseNameDetector:
         """Clear the pinyin cache."""
         self._cache_service.clear_cache()
 
-    def _remove_spaces(self, text: str) -> str:
-        """Cache frequently used space removal operation - delegate to normalizer."""
-        return self._normalizer.remove_spaces(text)
-
     def is_chinese_name(self, raw_name: str) -> ParseResult:
         """
         Main API method: Detect if a name is Chinese and normalize it.
@@ -265,21 +261,33 @@ class ChineseNameDetector:
             return ParseResult.failure("needs at least 2 Roman tokens")
 
         # Check for non-Chinese ethnicity (optimized single-pass)
-        non_chinese_result = self._ethnicity_service.classify_ethnicity(normalized_input.roman_tokens, normalized_input.norm_map)
+        non_chinese_result = self._ethnicity_service.classify_ethnicity(
+            normalized_input.roman_tokens, normalized_input.norm_map,
+        )
         if non_chinese_result.success is False:
             return non_chinese_result
 
         # Try parsing in both orders
+        # TODO: add support for processing MULTIPLE raw_names. then compute the most likely parse result assuming that ALL of the chinese names in the input list are from the same person
+        # have the same order
         for order in (normalized_input.roman_tokens, normalized_input.roman_tokens[::-1]):
-            parse_result = self._parsing_service.parse_name_order(list(order), normalized_input.norm_map)
+            parse_result = self._parsing_service.parse_name_order(
+                list(order),
+                normalized_input.norm_map,
+                normalized_input.compound_metadata,
+            )
             if parse_result.success:
                 surname_tokens, given_tokens = parse_result.result
                 try:
-                    formatted_name = self._formatting_service.format_name_output(surname_tokens, given_tokens, normalized_input.norm_map)
+                    formatted_name = self._formatting_service.format_name_output(
+                        surname_tokens,
+                        given_tokens,
+                        normalized_input.norm_map,
+                        parse_result.original_compound_surname,
+                        normalized_input.compound_metadata,
+                    )
                     return ParseResult.success_with_name(formatted_name)
                 except ValueError as e:
                     return ParseResult.failure(str(e))
 
         return ParseResult.failure("name not recognised as Chinese")
-
-
