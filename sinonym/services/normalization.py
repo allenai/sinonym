@@ -126,23 +126,26 @@ class NormalizationService:
             if len(parts) == 2 and all(parts):  # Exactly 2 non-empty parts
                 cleaned = StringManipulationUtils.join_with_spaces(parts[::-1])  # Reverse order: "Last, First" -> "First Last"
 
-        # Phase 3: Tokenize on separators/whitespace and filter out invalid tokens
+        # Phase 3: Detect all-Chinese input for special processing
+        is_all_chinese = self._text_preprocessor.is_all_chinese_input(cleaned)
+
+        # Phase 4: Tokenize on separators/whitespace and filter out invalid tokens
         raw_tokens = self._config.sep_pattern.sub(" ", cleaned).split()
         tokens = tuple(t for t in raw_tokens if t and not all(c in string.punctuation for c in t))
 
         if not tokens:
             return NormalizedInput.empty(raw_name)
 
-        # Phase 4: Process mixed Han/Roman tokens
-        roman_tokens = tuple(self._process_mixed_tokens(list(tokens)))
+        # Phase 5: Process mixed Han/Roman tokens (enhanced for all-Chinese inputs)
+        roman_tokens = tuple(self._process_mixed_tokens(list(tokens), is_all_chinese))
 
         if not roman_tokens:
             return NormalizedInput.empty(raw_name)
 
-        # Phase 5: Create lazy normalization map (computed on-demand)
+        # Phase 6: Create lazy normalization map (computed on-demand)
         norm_map = LazyNormalizationMap(roman_tokens, self)
 
-        # Phase 6: Generate compound metadata for each token (centralized detection)
+        # Phase 7: Generate compound metadata for each token (centralized detection)
         compound_metadata = self._compound_detector.generate_compound_metadata(roman_tokens, self._data)
 
         return NormalizedInput(
@@ -154,8 +157,8 @@ class NormalizationService:
             compound_metadata=compound_metadata,
         )
 
-    def _process_mixed_tokens(self, tokens: list[str]) -> list[str]:
-        """Extract existing mixed token processing logic."""
+    def _process_mixed_tokens(self, tokens: list[str], is_all_chinese: bool = False) -> list[str]:
+        """Extract existing mixed token processing logic with enhanced all-Chinese support."""
         mix = []
         for token in tokens:
             if self._config.cjk_pattern.search(token) and self._config.ascii_alpha_pattern.search(token):
@@ -176,9 +179,16 @@ class NormalizationService:
 
         for token in mix:
             if self._config.cjk_pattern.search(token):
-                # Convert Han to pinyin
-                pinyin_tokens = self._cache_service.han_to_pinyin_fast(token)
-                han_tokens.extend(pinyin_tokens)
+                # Convert Han to pinyin with enhanced processing for all-Chinese inputs
+                if is_all_chinese and len(token) > 1:
+                    # For all-Chinese inputs, process each character separately
+                    # This helps with surname/given name boundary detection
+                    pinyin_tokens = self._cache_service.han_to_pinyin_fast(token)
+                    han_tokens.extend(pinyin_tokens)
+                else:
+                    # Standard processing for mixed inputs
+                    pinyin_tokens = self._cache_service.han_to_pinyin_fast(token)
+                    han_tokens.extend(pinyin_tokens)
             else:
                 # Clean Roman token
                 clean_token = self._config.clean_roman_pattern.sub("", token)

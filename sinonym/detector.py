@@ -252,6 +252,10 @@ class ChineseNameDetector:
         if all(c in string.punctuation + string.whitespace for c in raw_name):
             return ParseResult.failure("name contains only punctuation/whitespace")
 
+        # Early rejection for non-Chinese scripts
+        if self._normalizer._text_preprocessor.contains_non_chinese_scripts(raw_name):
+            return ParseResult.failure("contains non-Chinese characters")
+
         self._ensure_initialized()
 
         # Use new normalization service for cleaner pipeline
@@ -260,34 +264,91 @@ class ChineseNameDetector:
         if len(normalized_input.roman_tokens) < 2:
             return ParseResult.failure("needs at least 2 Roman tokens")
 
-        # Check for non-Chinese ethnicity (optimized single-pass)
+        # Check if this is an all-Chinese input first
+        is_all_chinese = self._normalizer._text_preprocessor.is_all_chinese_input(raw_name)
+
+        # Check for non-Chinese ethnicity using normalized tokens (consistent for all inputs)
         non_chinese_result = self._ethnicity_service.classify_ethnicity(
-            normalized_input.roman_tokens, normalized_input.norm_map,
+            normalized_input.roman_tokens, normalized_input.norm_map, raw_name,
         )
+
         if non_chinese_result.success is False:
             return non_chinese_result
 
-        # Try parsing in both orders
-        # TODO: add support for processing MULTIPLE raw_names. then compute the most likely parse result assuming that ALL of the chinese names in the input list are from the same person
-        # have the same order
-        for order in (normalized_input.roman_tokens, normalized_input.roman_tokens[::-1]):
-            parse_result = self._parsing_service.parse_name_order(
-                list(order),
-                normalized_input.norm_map,
-                normalized_input.compound_metadata,
+        # Try parsing in both orders - for all-Chinese inputs, choose best scoring parse
+
+        if is_all_chinese and len(normalized_input.roman_tokens) == 2:
+            # For all-Chinese 2-token inputs, manually create both parse candidates
+            tokens = list(normalized_input.roman_tokens)
+            token1, token2 = tokens[0], tokens[1]
+
+            # Check if both tokens can be surnames
+            token1_norm = normalized_input.norm_map.get(token1, self._normalizer.norm(token1))
+            token2_norm = normalized_input.norm_map.get(token2, self._normalizer.norm(token2))
+
+            token1_is_surname = (
+                self._normalizer.norm(token1) in self._data.surnames or
+                token1_norm in self._data.surnames_normalized
             )
-            if parse_result.success:
-                surname_tokens, given_tokens = parse_result.result
+            token2_is_surname = (
+                self._normalizer.norm(token2) in self._data.surnames or
+                token2_norm in self._data.surnames_normalized
+            )
+
+            best_result = None
+            best_score = float("-inf")
+
+            # Candidate 1: surname-first pattern (token1=surname, token2=given)
+            if token1_is_surname:
+                score1 = self._parsing_service.calculate_parse_score(
+                    [token1], [token2], tokens, normalized_input.norm_map, is_all_chinese,
+                )
+                if score1 > best_score:
+                    best_score = score1
+                    best_result = ([token1], [token2])
+
+            # Candidate 2: surname-last pattern (token2=surname, token1=given)
+            if token2_is_surname:
+                score2 = self._parsing_service.calculate_parse_score(
+                    [token2], [token1], tokens, normalized_input.norm_map, is_all_chinese,
+                )
+                if score2 > best_score:
+                    best_score = score2
+                    best_result = ([token2], [token1])
+
+            if best_result:
+                surname_tokens, given_tokens = best_result
                 try:
                     formatted_name = self._formatting_service.format_name_output(
                         surname_tokens,
                         given_tokens,
                         normalized_input.norm_map,
-                        parse_result.original_compound_surname,
+                        None,  # No compound surname format for simple cases
                         normalized_input.compound_metadata,
                     )
                     return ParseResult.success_with_name(formatted_name)
                 except ValueError as e:
                     return ParseResult.failure(str(e))
+        else:
+            # Original logic for non-all-Chinese or multi-token inputs
+            for order in (normalized_input.roman_tokens, normalized_input.roman_tokens[::-1]):
+                parse_result = self._parsing_service.parse_name_order(
+                    list(order),
+                    normalized_input.norm_map,
+                    normalized_input.compound_metadata,
+                )
+                if parse_result.success:
+                    surname_tokens, given_tokens = parse_result.result
+                    try:
+                        formatted_name = self._formatting_service.format_name_output(
+                            surname_tokens,
+                            given_tokens,
+                            normalized_input.norm_map,
+                            parse_result.original_compound_surname,
+                            normalized_input.compound_metadata,
+                        )
+                        return ParseResult.success_with_name(formatted_name)
+                    except ValueError as e:
+                        return ParseResult.failure(str(e))
 
         return ParseResult.failure("name not recognised as Chinese")

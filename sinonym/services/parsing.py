@@ -74,7 +74,7 @@ class NameParsingService:
             given_tokens = order[given_slice]
             if given_tokens:
                 # Check if this parse would have a reasonable score
-                score = self.calculate_parse_score(surname_tokens, given_tokens, order, normalized_cache)
+                score = self.calculate_parse_score(surname_tokens, given_tokens, order, normalized_cache, False)
 
                 # Western name detection pattern
                 has_single_letter_given = any(len(token) == 1 for token in given_tokens)
@@ -124,7 +124,7 @@ class NameParsingService:
         # Score all parses
         scored_parses = []
         for surname_tokens, given_tokens, original_compound_format in parses_with_format:
-            score = self.calculate_parse_score(surname_tokens, given_tokens, tokens, normalized_cache)
+            score = self.calculate_parse_score(surname_tokens, given_tokens, tokens, normalized_cache, False, original_compound_format)
 
             # Additional validation: reject parses where single letters are used as given names
             # when there are multi-syllable alternatives available (likely Western names)
@@ -306,6 +306,8 @@ class NameParsingService:
         given_tokens: list[str],
         tokens: list[str],
         normalized_cache: dict[str, str],
+        is_all_chinese: bool = False,
+        original_compound_format: str | None = None,
     ) -> float:
         """Calculate unified score for a parse candidate."""
         if not given_tokens:
@@ -316,11 +318,20 @@ class NameParsingService:
 
         # Handle compound surname mapping mismatches
         if surname_logp == self._config.default_surname_logp and len(surname_tokens) > 1:
-            original_compound = StringManipulationUtils.lowercase_join_with_spaces(surname_tokens)
-            surname_logp = self._data.surname_log_probabilities.get(
-                original_compound,
-                self._config.default_surname_logp,
-            )
+            # First try using original compound format if available (e.g., "szeto" -> "si tu")
+            if original_compound_format and original_compound_format.lower() in COMPOUND_VARIANTS:
+                compound_target = COMPOUND_VARIANTS[original_compound_format.lower()]
+                surname_logp = self._data.surname_log_probabilities.get(
+                    compound_target,
+                    self._config.default_surname_logp,
+                )
+            else:
+                # Fallback to old behavior
+                original_compound = StringManipulationUtils.lowercase_join_with_spaces(surname_tokens)
+                surname_logp = self._data.surname_log_probabilities.get(
+                    original_compound,
+                    self._config.default_surname_logp,
+                )
 
         given_logp_sum = sum(
             self._data.given_log_probabilities.get(
@@ -340,7 +351,20 @@ class NameParsingService:
 
         cultural_score = self._cultural_plausibility_score(surname_tokens, given_tokens, normalized_cache)
 
-        return surname_logp + given_logp_sum + validation_penalty + compound_given_bonus + cultural_score
+        # Bonus for surname-first pattern in all-Chinese inputs
+        surname_first_bonus = 0.0
+        if is_all_chinese and len(tokens) == 2:
+            # Check if this parse follows surname-first pattern (surname is the first token)
+            if (
+                len(surname_tokens) == 1
+                and surname_tokens[0] == tokens[0]
+                and len(given_tokens) == 1
+                and given_tokens[0] == tokens[1]
+            ):
+                # This follows the traditional Chinese surname-first order
+                surname_first_bonus = 2.0  # Strong bonus for correct Chinese order
+
+        return surname_logp + given_logp_sum + validation_penalty + compound_given_bonus + cultural_score + surname_first_bonus
 
     def _surname_key(self, surname_tokens: list[str], normalized_cache: dict[str, str]) -> str:
         """Convert surname tokens to lookup key, preferring original form when available."""

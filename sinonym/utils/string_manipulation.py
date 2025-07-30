@@ -532,7 +532,7 @@ class StringManipulationUtils:
             # Create proper camelCase: first part capitalized, second part capitalized, no separator
             if len(surname_tokens) == 2:
                 return StringManipulationUtils.capitalize_name_part(
-                    surname_tokens[0]
+                    surname_tokens[0],
                 ) + StringManipulationUtils.capitalize_name_part(surname_tokens[1])
             # Fallback for unexpected cases
             return "".join(StringManipulationUtils.capitalize_name_part(token) for token in surname_tokens)

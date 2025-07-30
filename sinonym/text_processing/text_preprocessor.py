@@ -132,3 +132,60 @@ class TextPreprocessor:
         if text.istitle():
             return "title"
         return "mixed"
+
+    def is_all_chinese_input(self, text: str) -> bool:
+        """
+        Detect if input consists entirely of Chinese characters.
+        
+        This helps identify names like "张伟明" that need special processing
+        for surname/given name boundary detection.
+        """
+        if not text or not text.strip():
+            return False
+
+        # Remove whitespace and punctuation for analysis
+        cleaned = self._config.sep_pattern.sub("", text.strip())
+
+        # Must have content after cleaning
+        if not cleaned:
+            return False
+
+        # Check if all remaining characters are CJK
+        return all(self._config.cjk_pattern.search(char) for char in cleaned)
+
+    def contains_non_chinese_scripts(self, text: str) -> bool:
+        """
+        Detect if text contains Korean, Japanese, or Vietnamese-specific characters.
+        
+        Uses conservative detection to avoid false positives with Chinese Pinyin:
+        - Korean: Hangul characters (completely distinct from Chinese)
+        - Japanese: Hiragana/Katakana characters (completely distinct from Chinese)  
+        - Vietnamese: Only uniquely Vietnamese diacritics (like Đ/đ, ă, ơ, ư)
+        
+        Returns True if non-Chinese scripts are detected.
+        """
+        if not text:
+            return False
+
+        # Vietnamese-specific characters (conservative list to avoid Pinyin overlap)
+        vietnamese_specific = "ĐđăâêôơưĂÂÊÔƠƯ"
+
+        for char in text:
+            char_code = ord(char)
+
+            # Korean Hangul ranges
+            if (0x1100 <= char_code <= 0x11FF or    # Hangul Jamo
+                0x3130 <= char_code <= 0x318F or    # Hangul Compatibility Jamo
+                0xAC00 <= char_code <= 0xD7AF):     # Hangul Syllables
+                return True
+
+            # Japanese Hiragana and Katakana ranges
+            if (0x3040 <= char_code <= 0x309F or    # Hiragana
+                0x30A0 <= char_code <= 0x30FF):     # Katakana
+                return True
+
+            # Vietnamese-specific characters only
+            if char in vietnamese_specific:
+                return True
+
+        return False

@@ -5,6 +5,7 @@ This module provides sophisticated ethnicity classification to distinguish
 Chinese names from Korean, Vietnamese, Japanese, and Western names using
 linguistic patterns and cultural markers.
 """
+
 from __future__ import annotations
 
 from sinonym.chinese_names_data import (
@@ -21,6 +22,7 @@ from sinonym.chinese_names_data import (
     VIETNAMESE_ONLY_SURNAMES,
     WESTERN_NAMES,
 )
+from sinonym.services.ml_japanese_classifier import create_ml_japanese_classifier
 from sinonym.types import ParseResult
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
@@ -32,17 +34,36 @@ class EthnicityClassificationService:
         self._config = config
         self._normalizer = normalizer
         self._data = data
+        # Initialize ML Japanese classifier
+        self._ml_classifier = create_ml_japanese_classifier(confidence_threshold=0.8)
 
-    def classify_ethnicity(self, tokens: tuple[str, ...], normalized_cache: dict[str, str]) -> ParseResult:
+    def classify_ethnicity(self, tokens: tuple[str, ...], normalized_cache: dict[str, str], original_text: str = "") -> ParseResult:
         """
         Three-tier Chinese vs non-Chinese classification system.
 
-        Tier 1: Definitive Evidence (High Confidence)
+        ML Enhancement: For all-Chinese character inputs, use ML classifier first
+        Tier 1: Definitive Evidence (High Confidence)  
         Tier 2: Cultural Context (Medium Confidence)
         Tier 3: Chinese Default (Low Confidence)
         """
         if not tokens:
             return ParseResult.success_with_name("")
+
+        # =================================================================
+        # ML ENHANCEMENT: All-Chinese Character Japanese Detection
+        # =================================================================
+
+        # Check if this is an all-Chinese character input that could be Japanese
+        if (original_text and
+            self._normalizer._text_preprocessor.is_all_chinese_input(original_text) and
+            self._ml_classifier.is_available()):
+
+            # Use ML classifier to check for Japanese names in Chinese characters
+            ml_result = self._ml_classifier.classify_all_chinese_name(original_text)
+
+            # If ML classifier confidently identifies it as Japanese, reject it
+            if ml_result.success is False and "japanese" in ml_result.error_message:
+                return ParseResult.failure("Japanese name detected by ML classifier")
 
         # Prepare expanded keys for pattern matching
         expanded_tokens = []
@@ -73,6 +94,7 @@ class EthnicityClassificationService:
                 return ParseResult.failure("Korean-only surname detected")
 
         # Check for Japanese surnames (definitive Japanese)
+        # high precision, low recall
         for key in expanded_keys:
             clean_key = StringManipulationUtils.remove_spaces(key)
             if clean_key in JAPANESE_SURNAMES:
@@ -315,13 +337,14 @@ class EthnicityClassificationService:
                 # Verify that the target compound parts are valid Chinese surnames
                 if len(compound_parts) == 2:
                     part1, part2 = compound_parts
-                    if (part1 in self._data.surnames_normalized and
-                        part2 in self._data.surnames_normalized):
+                    if part1 in self._data.surnames_normalized and part2 in self._data.surnames_normalized:
                         # Both parts are valid Chinese surnames, give high confidence
                         chinese_surname_strength += 1.0
             else:
                 # NEW: Check if this could be a compound Chinese given name
-                split_result = StringManipulationUtils.split_concatenated_name(clean_key_lower, normalized_cache, self._data, self._normalizer, self._config)
+                split_result = StringManipulationUtils.split_concatenated_name(
+                    clean_key_lower, normalized_cache, self._data, self._normalizer, self._config,
+                )
                 if split_result and len(split_result) >= 2:
                     # Check if all components are valid Chinese given name components
                     all_chinese_components = True
@@ -336,4 +359,3 @@ class EthnicityClassificationService:
                         chinese_surname_strength += 0.3
 
         return chinese_surname_strength
-

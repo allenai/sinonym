@@ -25,7 +25,12 @@ classifiers = [
 ]
 keywords = ["chinese", "names", "nlp", "romanization", "pinyin"]
 dependencies = [
+    "joblib>=1.5.1",
+    "numpy>=2.2.6",
     "pypinyin>=0.44.0",
+    "requests>=2.32.4",
+    "scikit-learn>=1.7.1",
+    "scipy>=1.15.3",
 ]
 
 [project.optional-dependencies]
