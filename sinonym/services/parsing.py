@@ -408,6 +408,21 @@ class NameParsingService:
         if surname_freq == 0 and " " in surname_key:
             surname_freq = self._data.surname_frequencies.get(surname_key, 0)
 
+        # Cross-semantic frequency capping to prevent given names from inheriting
+        # high surname frequencies through normalization (e.g., 'fai' → 'hui')
+        if len(surname_tokens) == 1 and surname_freq > 10000:
+            original_token = surname_tokens[0].lower()
+            normalized_token = StringManipulationUtils.remove_spaces(surname_key).lower()
+
+            # Check if this is cross-semantic inheritance: original not a surname, normalized is
+            original_is_surname = (
+                original_token in self._data.surnames or
+                original_token in self._data.surname_frequencies
+            )
+            if not original_is_surname and original_token != normalized_token:
+                # Cap high-frequency cross-semantic inheritance to level playing field
+                surname_freq = min(surname_freq, 1000)
+
         if surname_freq > 0:
             score += min(5.0, math.log10(surname_freq + 1) * 1.2)
         else:

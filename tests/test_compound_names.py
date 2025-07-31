@@ -149,6 +149,30 @@ CHINESE_NAME_TEST_CASES = [
     ("Wong Kit", (True, "Kit Wong")),
     ("Szeto Wai Kin", (True, "Wai-Kin Szeto")),  # Keep Szeto, not Si Tu
     ("Lau Suk Yan", (True, "Suk-Yan Lau")),  # Keep Lau, not Liu
+
+    # Cross-semantic frequency inheritance regression tests
+    # These test cases ensure that given name tokens don't inherit problematic
+    # surname frequencies through phonetic normalization (e.g., 'fai' → 'hui')
+    ("Leung Wai Fai", (True, "Wai-Fai Leung")),  # 'fai' → 'hui' cross-semantic mapping
+    ("Cheng Ka Fai", (True, "Ka-Fai Cheng")),  # Different surname with 'fai'
+    ("Lam Siu Fai", (True, "Siu-Fai Lam")),  # Cantonese pattern with 'fai'
+    ("Tang Wai Fai", (True, "Wai-Fai Tang")),  # Another surname with 'fai'
+    ("Ho Ka Fai", (True, "Ka-Fai Ho")),  # Short surname with 'fai'
+    ("Liu Ka Man", (True, "Ka-Man Liu")),  # 'man' → 'wen' cross-semantic mapping
+    ("Zhao Wai Man", (True, "Wai-Man Zhao")),  # Different surname with 'man'
+    ("Xu Siu Man", (True, "Siu-Man Xu")),  # Mandarin surname with Cantonese given name
+    ("Chen Ka Hei", (True, "Ka-Hei Chen")),  # 'hei' → 'xi' cross-semantic mapping
+    ("Wu Wai Hei", (True, "Wai-Hei Wu")),  # Different surname with 'hei'
+    ("Yang Ka Mang", (True, "Ka-Mang Yang")),  # 'mang' → 'meng' cross-semantic mapping
+    ("Zhou Wai Mang", (True, "Wai-Mang Zhou")),  # Different surname with 'mang'
+    ("Guo Siu Mang", (True, "Siu-Mang Guo")),  # Another pattern with 'mang'
+    ("Wang Ka Hui", (True, "Ka-Hui Wang")),  # Control: 'hui' as legitimate given name (wang freq > hui)
+    ("Sun Wei Wen", (True, "Wei-Wen Sun")),  # Control: 'wen' as legitimate given name
+    ("Ma Xiao Xi", (True, "Xiao-Xi Ma")),  # Control: 'xi' as legitimate given name
+
+    # Given-name-first patterns (real people with these name structures)
+    ("Ka Lin Hui", (True, "Ka-Lin Hui")),  # Given-name-first: given="Ka Lin", surname="Hui"
+    ("Shih-Hui Lin", (True, "Shih-Hui Lin")),  # Wade-Giles given-name-first: given="Shih-Hui", surname="Lin"
 ]
 
 

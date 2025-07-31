@@ -34,7 +34,6 @@ ROMANIZATION_EXCEPTIONS = {
     "ming": "ming",  # 明 - already correct
     "ning": "ning",  # 宁 - already correct
     "peng": "peng",  # 彭 - already correct
-    "shih": "shih",  # 石 - alternative spelling
     "shun": "shun",  # 顺 - already correct
     "wang": "wang",  # 王 - already correct (but see Cantonese "wong")
     "wu": "wu",  # 吴/武 - already correct
@@ -314,6 +313,7 @@ WADE_GILES_SYLLABLE_RULES = {
     "lü": "lu",  # Wade-Giles lü -> Pinyin lu (吕/绿/律)
     "lüe": "lue",  # Wade-Giles lüe -> Pinyin lue (略)
     "nü": "nu",  # Wade-Giles nü -> Pinyin nu (女)
+    "shih": "shi",  # Wade-Giles shih -> Pinyin shi (石/时/十)
     "kuan": "guan",  # For Shang-kuan -> Shang-guan (上官)
     "pa": "ba",
     "po": "bo",
@@ -681,6 +681,189 @@ COMPOUND_VARIANTS = {
     "tangtai": "tang tai",  # 唐太 rare
 }
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# PYPINYIN FREQUENCY ALIASES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Aliases for cases where pypinyin output differs from romanization system expectations
+# Format: (pypinyin_output, expected_romanization)
+PYPINYIN_FREQUENCY_ALIASES = [
+    ("ceng", "zeng"),  # 曾: pypinyin produces 'ceng' but romanization system expects 'zeng'
+    ("ruan", "yuan"),  # 阮: pypinyin produces 'ruan' but romanization system expects 'yuan'
+    ("qu", "ou"),  # 区: pypinyin produces 'qu' but romanization system expects 'ou'
+    ("gan", "jin"),  # 甘: pypinyin produces 'gan' but romanization system expects 'jin'
+    ("li", "lai"),  # 黎: pypinyin produces 'li' but romanization system expects 'lai'
+    ("mou", "miao"),  # 缪: pypinyin produces 'mou' but romanization system expects 'miao'
+    ("di", "zhai"),  # 翟: pypinyin produces 'di' but romanization system expects 'zhai'
+    ("mao", "mo"),  # 毛: pypinyin produces 'mao' but romanization system expects 'mo'
+    ("yin", "wen"),  # 尹: pypinyin produces 'yin' but romanization system expects 'wen'
+]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CHINESE PHONETIC VALIDATION (for rejecting Western names)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Valid Chinese syllable onsets (initial consonants/consonant clusters)
+VALID_CHINESE_ONSETS = frozenset(
+    {
+        "",  # vowel-initial syllables (a, e, o, etc.)
+        "b",
+        "p",
+        "m",
+        "f",  # labials
+        "d",
+        "t",
+        "n",
+        "l",  # dentals/alveolars
+        "g",
+        "k",
+        "h",  # velars
+        "j",
+        "q",
+        "x",  # palatals
+        "zh",
+        "ch",
+        "sh",
+        "r",  # retroflexes
+        "z",
+        "c",
+        "s",  # sibilants
+        "y",
+        "w",  # semivowels
+    },
+)
+
+# Valid Chinese syllable rimes (vowels + optional final consonants)
+VALID_CHINESE_RIMES = frozenset(
+    {
+        # Simple vowels
+        "a",
+        "e",
+        "i",
+        "o",
+        "u",
+        "ü",
+        # Diphthongs
+        "ai",
+        "ei",
+        "ao",
+        "ou",
+        "ia",
+        "ie",
+        "iao",
+        "iu",
+        "ua",
+        "ui",
+        "uo",
+        "üe",
+        # Vowel + nasal
+        "an",
+        "en",
+        "in",
+        "un",
+        "ün",
+        "ian",
+        "uan",
+        "üan",
+        # Vowel + ng
+        "ang",
+        "eng",
+        "ing",
+        "ong",
+        "iang",
+        "uang",
+        "iong",
+        # Special
+        "er",  # standalone r-colored vowel
+        # Common Cantonese patterns
+        "uk",
+        "ok",
+        "ik",
+        "ak",
+        "ek",  # Cantonese final -k sounds
+        "oi",
+        "au",
+        "eu",  # Additional Cantonese rimes (choi, lau, leung->eu)
+        "ee",  # Cantonese rime (chee, lee, etc.)
+        "eek",  # Cantonese rime with -k ending
+    },
+)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TIERED CONFIDENCE SETS FOR GIVEN NAME SPLITTING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Tier 1: High-Confidence Anchors. A small set of the ~60 most common and
+# statistically significant given name syllables. Their presence is a strong
+# signal that a split is legitimate.
+HIGH_CONFIDENCE_ANCHORS = frozenset(
+    {
+        "wei",
+        "jing",
+        "li",
+        "ming",
+        "hui",
+        "yan",
+        "yu",
+        "xiao",
+        "jun",
+        "hong",
+        "hua",
+        "jie",
+        "ping",
+        "fang",
+        "ying",
+        "lan",
+        "na",
+        "qiang",
+        "min",
+        "lin",
+        "bin",
+        "bo",
+        "chen",
+        "cheng",
+        "chun",
+        "dan",
+        "dong",
+        "feng",
+        "gang",
+        "guo",
+        "hai",
+        "hao",
+        "jian",
+        "jia",
+        "jin",
+        "kai",
+        "kun",
+        "lei",
+        "liang",
+        "ling",
+        "long",
+        "mei",
+        "peng",
+        "qing",
+        "rong",
+        "rui",
+        "shan",
+        "sheng",
+        "tao",
+        "ting",
+        "wen",
+        "xiang",
+        "xin",
+        "xiu",
+        "xue",
+        "yang",
+        "yi",
+        "yong",
+        "zhen",
+        "zhi",
+        "zhong",
+        "zhu",
+    },
+)
 
 # ───────── Ethnicity discrimination data ─────────
 # Korean-only surnames (excluding those that overlap with Chinese)
@@ -1069,96 +1252,6 @@ VIETNAMESE_GIVEN_PATTERNS = frozenset(
 )
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CHINESE PHONETIC VALIDATION (for rejecting Western names)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Valid Chinese syllable onsets (initial consonants/consonant clusters)
-VALID_CHINESE_ONSETS = frozenset(
-    {
-        "",  # vowel-initial syllables (a, e, o, etc.)
-        "b",
-        "p",
-        "m",
-        "f",  # labials
-        "d",
-        "t",
-        "n",
-        "l",  # dentals/alveolars
-        "g",
-        "k",
-        "h",  # velars
-        "j",
-        "q",
-        "x",  # palatals
-        "zh",
-        "ch",
-        "sh",
-        "r",  # retroflexes
-        "z",
-        "c",
-        "s",  # sibilants
-        "y",
-        "w",  # semivowels
-    },
-)
-
-# Valid Chinese syllable rimes (vowels + optional final consonants)
-VALID_CHINESE_RIMES = frozenset(
-    {
-        # Simple vowels
-        "a",
-        "e",
-        "i",
-        "o",
-        "u",
-        "ü",
-        # Diphthongs
-        "ai",
-        "ei",
-        "ao",
-        "ou",
-        "ia",
-        "ie",
-        "iao",
-        "iu",
-        "ua",
-        "ui",
-        "uo",
-        "üe",
-        # Vowel + nasal
-        "an",
-        "en",
-        "in",
-        "un",
-        "ün",
-        "ian",
-        "uan",
-        "üan",
-        # Vowel + ng
-        "ang",
-        "eng",
-        "ing",
-        "ong",
-        "iang",
-        "uang",
-        "iong",
-        # Special
-        "er",  # standalone r-colored vowel
-        # Common Cantonese patterns
-        "uk",
-        "ok",
-        "ik",
-        "ak",
-        "ek",  # Cantonese final -k sounds
-        "oi",
-        "au",
-        "eu",  # Additional Cantonese rimes (choi, lau, leung->eu)
-        "ee",  # Cantonese rime (chee, lee, etc.)
-        "eek",  # Cantonese rime with -k ending
-    },
-)
-
 # Forbidden consonant patterns that indicate Western names
 FORBIDDEN_PHONETIC_PATTERNS = frozenset(
     {
@@ -1247,80 +1340,6 @@ FORBIDDEN_PHONETIC_PATTERNS = frozenset(
         # Instead, we check for Western name endings more precisely
         "tion",  # Action, Nation (though these are unlikely in names)
         "sion",  # Version, Mission (though these are unlikely in names)
-    },
-)
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TIERED CONFIDENCE SETS FOR GIVEN NAME SPLITTING
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Tier 1: High-Confidence Anchors. A small set of the ~60 most common and
-# statistically significant given name syllables. Their presence is a strong
-# signal that a split is legitimate.
-HIGH_CONFIDENCE_ANCHORS = frozenset(
-    {
-        "wei",
-        "jing",
-        "li",
-        "ming",
-        "hui",
-        "yan",
-        "yu",
-        "xiao",
-        "jun",
-        "hong",
-        "hua",
-        "jie",
-        "ping",
-        "fang",
-        "ying",
-        "lan",
-        "na",
-        "qiang",
-        "min",
-        "lin",
-        "bin",
-        "bo",
-        "chen",
-        "cheng",
-        "chun",
-        "dan",
-        "dong",
-        "feng",
-        "gang",
-        "guo",
-        "hai",
-        "hao",
-        "jian",
-        "jia",
-        "jin",
-        "kai",
-        "kun",
-        "lei",
-        "liang",
-        "ling",
-        "long",
-        "mei",
-        "peng",
-        "qing",
-        "rong",
-        "rui",
-        "shan",
-        "sheng",
-        "tao",
-        "ting",
-        "wen",
-        "xiang",
-        "xin",
-        "xiu",
-        "xue",
-        "yang",
-        "yi",
-        "yong",
-        "zhen",
-        "zhi",
-        "zhong",
-        "zhu",
     },
 )
 
@@ -1649,22 +1668,3 @@ WESTERN_NAMES = frozenset(
         "zoe",
     },
 )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# PYPINYIN FREQUENCY ALIASES
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Aliases for cases where pypinyin output differs from romanization system expectations
-# Format: (pypinyin_output, expected_romanization)
-PYPINYIN_FREQUENCY_ALIASES = [
-    ("ceng", "zeng"),  # 曾: pypinyin produces 'ceng' but romanization system expects 'zeng'
-    ("ruan", "yuan"),  # 阮: pypinyin produces 'ruan' but romanization system expects 'yuan'
-    ("qu", "ou"),  # 区: pypinyin produces 'qu' but romanization system expects 'ou'
-    ("gan", "jin"),  # 甘: pypinyin produces 'gan' but romanization system expects 'jin'
-    ("li", "lai"),  # 黎: pypinyin produces 'li' but romanization system expects 'lai'
-    ("mou", "miao"),  # 缪: pypinyin produces 'mou' but romanization system expects 'miao'
-    ("di", "zhai"),  # 翟: pypinyin produces 'di' but romanization system expects 'zhai'
-    ("mao", "mo"),  # 毛: pypinyin produces 'mao' but romanization system expects 'mo'
-    ("yin", "wen"),  # 尹: pypinyin produces 'yin' but romanization system expects 'wen'
-]

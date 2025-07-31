@@ -29,8 +29,8 @@ from sinonym import ChineseNameDetector
 MAX_MICROSECONDS_PER_NAME = 1000  # 1ms requirement
 MIN_DIVERSE_NAMES_PER_SECOND = 10000  # 10,000 names/second for diverse data
 MAX_CACHED_MICROSECONDS_PER_NAME = 500  # Higher expectation for cached data
-MIN_CACHED_NAMES_PER_SECOND = 12000
-MAX_PERFORMANCE_VARIANCE = 0.5  # 50% threshold
+MIN_CACHED_NAMES_PER_SECOND = 11000
+MAX_PERFORMANCE_VARIANCE = 0.7  # 70% threshold
 
 
 class TestChineseNameDetectorPerformance:

@@ -9,14 +9,9 @@ The training is already done. This is just here for reference and to ensure
 the model can be retrained if needed.
 """
 
-import sys
-from pathlib import Path
-
-# Add the parent directory to path to import sinonym
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 import random
 import unicodedata
+from pathlib import Path
 
 import joblib
 import requests
@@ -81,7 +76,7 @@ def build_pipeline() -> Pipeline:
         [
             ("chars", char_vectorizer),
             ("flags", flags),
-        ]
+        ],
     )
 
     clf = LogisticRegression(
@@ -139,7 +134,7 @@ def main():
         print(f"{name:10} → {pred.upper()} (confidence: {confidence:.3f})")
 
     # Save model to data directory
-    model_path = DATA_PATH / "chinese_japanese_classifier.joblib"
+    model_path = Path(DATA_PATH) / "chinese_japanese_classifier.joblib"
     print(f"\nSaving model to {model_path}...")
     joblib.dump(pipeline, model_path)
 
