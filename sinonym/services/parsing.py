@@ -85,7 +85,9 @@ class NameParsingService:
                     len(token) > 3
                     and (
                         self._normalizer.norm(token) in self._data.surnames
-                        or StringManipulationUtils.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
+                        or StringManipulationUtils.remove_spaces(
+                            normalized_cache.get(token, self._normalizer.norm(token)),
+                        )
                         in self._data.surnames_normalized
                     )
                     for token in order
@@ -115,7 +117,9 @@ class NameParsingService:
             return ParseResult.failure("needs at least 2 tokens")
 
         parses_with_format = self._generate_all_parses_with_format(
-            tokens, normalized_cache, compound_metadata,
+            tokens,
+            normalized_cache,
+            compound_metadata,
         )
         parses = [(surname, given) for surname, given, _ in parses_with_format]
         if not parses:
@@ -124,7 +128,14 @@ class NameParsingService:
         # Score all parses
         scored_parses = []
         for surname_tokens, given_tokens, original_compound_format in parses_with_format:
-            score = self.calculate_parse_score(surname_tokens, given_tokens, tokens, normalized_cache, False, original_compound_format)
+            score = self.calculate_parse_score(
+                surname_tokens,
+                given_tokens,
+                tokens,
+                normalized_cache,
+                False,
+                original_compound_format,
+            )
 
             # Additional validation: reject parses where single letters are used as given names
             # when there are multi-syllable alternatives available (likely Western names)
@@ -157,21 +168,8 @@ class NameParsingService:
         if not scored_parses:
             return ParseResult.failure("no valid parse found")
 
-        # Find best score and handle ties
-        best_score = max(scored_parses, key=lambda x: x[2])[2]
-        best_parses = [p for p in scored_parses if abs(p[2] - best_score) <= 0.1]
-
-        if len(best_parses) > 1:
-            # Tie-break with surname frequency
-            best_parse_result = max(
-                best_parses,
-                key=lambda x: self._data.surname_frequencies.get(
-                    StringManipulationUtils.remove_spaces(self._surname_key(x[0], normalized_cache)),
-                    0,
-                ),
-            )
-        else:
-            best_parse_result = best_parses[0]
+        # Find best scoring parse
+        best_parse_result = max(scored_parses, key=lambda x: x[2])
 
         return ParseResult.success_with_parse(best_parse_result[0], best_parse_result[1], best_parse_result[3])
 
@@ -278,7 +276,9 @@ class NameParsingService:
             last_meta = compound_metadata.get(tokens[-1])
             if last_meta and last_meta.is_compound and last_meta.format_type == "hyphenated":
                 target_compound = last_meta.compound_target
-                compound_parts = [StringManipulationUtils.capitalize_name_part(part) for part in target_compound.split()]
+                compound_parts = [
+                    StringManipulationUtils.capitalize_name_part(part) for part in target_compound.split()
+                ]
                 if len(compound_parts) == 2:
                     original_format = tokens[-1]  # Keep the hyphenated format
                     parses.append((compound_parts, tokens[:-1], original_format))
@@ -364,7 +364,65 @@ class NameParsingService:
                 # This follows the traditional Chinese surname-first order
                 surname_first_bonus = 2.0  # Strong bonus for correct Chinese order
 
-        return surname_logp + given_logp_sum + validation_penalty + compound_given_bonus + cultural_score + surname_first_bonus
+        # Order preservation bonus for ambiguous romanized cases
+        order_preservation_bonus = 0.0
+        if not is_all_chinese and len(tokens) == 2 and len(surname_tokens) == 1 and len(given_tokens) == 1:
+            # Check if this parse maintains the original given-surname order (given first, surname last)
+            if given_tokens[0] == tokens[0] and surname_tokens[0] == tokens[1]:
+                # This maintains the original order - check if case is ambiguous
+                if self._is_ambiguous_case(surname_tokens[0], given_tokens[0], normalized_cache):
+                    order_preservation_bonus = 1.5  # Moderate bonus for preserving original order in ambiguous cases
+
+        return (
+            surname_logp
+            + given_logp_sum
+            + validation_penalty
+            + compound_given_bonus
+            + cultural_score
+            + surname_first_bonus  # all-chinese only
+            + order_preservation_bonus
+        )
+
+    def _is_ambiguous_case(self, surname_token: str, given_token: str, normalized_cache: dict[str, str]) -> bool:
+        """
+        Determine if a case is ambiguous enough to warrant order preservation.
+
+        A case is considered ambiguous when:
+        1. Both tokens are valid as surnames AND given names
+        2. Surname frequencies are similar (ratio < 3x)
+        """
+        # Get normalized forms
+        surname_norm = normalized_cache.get(surname_token, self._normalizer.norm(surname_token))
+        given_norm = normalized_cache.get(given_token, self._normalizer.norm(given_token))
+
+        # Check if both can be surnames
+        surname_is_surname = (
+            self._normalizer.norm(surname_token) in self._data.surnames
+            or surname_norm in self._data.surnames_normalized
+        )
+        given_is_surname = (
+            self._normalizer.norm(given_token) in self._data.surnames or given_norm in self._data.surnames_normalized
+        )
+
+        if not (surname_is_surname and given_is_surname):
+            return False  # Not ambiguous if one clearly can't be a surname
+
+        # Check if both can be given names
+        surname_is_given = surname_norm in self._data.given_names_normalized
+        given_is_given = given_norm in self._data.given_names_normalized
+
+        if not (surname_is_given and given_is_given):
+            return False  # Not ambiguous if one clearly can't be a given name
+
+        # Check frequency similarity - ambiguous if frequencies are similar
+        surname_freq = self._data.surname_frequencies.get(surname_norm, 0)
+        given_freq = self._data.surname_frequencies.get(given_norm, 0)
+
+        if surname_freq == 0 or given_freq == 0:
+            return True  # Ambiguous if we lack frequency data for either
+
+        freq_ratio = max(surname_freq, given_freq) / min(surname_freq, given_freq)
+        return freq_ratio < 1.0  # Ambiguous if frequencies are within 10x of each other
 
     def _surname_key(self, surname_tokens: list[str], normalized_cache: dict[str, str]) -> str:
         """Convert surname tokens to lookup key, preferring original form when available."""
@@ -416,15 +474,14 @@ class NameParsingService:
 
             # Check if this is cross-semantic inheritance: original not a surname, normalized is
             original_is_surname = (
-                original_token in self._data.surnames or
-                original_token in self._data.surname_frequencies
+                original_token in self._data.surnames or original_token in self._data.surname_frequencies
             )
             if not original_is_surname and original_token != normalized_token:
                 # Cap high-frequency cross-semantic inheritance to level playing field
                 surname_freq = min(surname_freq, 1000)
 
         if surname_freq > 0:
-            score += min(5.0, math.log10(surname_freq + 1) * 1.2)
+            score += min(5.0, math.log10(surname_freq + 1) * 1.4)
         else:
             score -= 3.0
 
@@ -441,35 +498,7 @@ class NameParsingService:
             )
             score += 5.0 if is_valid_compound else -2.0
 
-        # Given name structure scoring
-        if len(given_tokens) == 1:
-            token = given_tokens[0]
-            if len(token) > 6:
-                score -= 1.0
-            elif StringManipulationUtils.split_concatenated_name(
-                token, normalized_cache, self._data, self._normalizer, self._config,
-            ):
-                score += 0.5
-        elif len(given_tokens) == 2:
-            score += 1.0
-            if all(
-                normalized_cache.get(t, self._normalizer.norm(t)) in self._data.given_names_normalized
-                for t in given_tokens
-            ):
-                score += 1.5
-        elif len(given_tokens) > 2:
-            score -= 1.5
-
-        # Avoid role confusion
-        for token in surname_tokens:
-            key = normalized_cache.get(token, self._normalizer.norm(token))
-            if (
-                key in self._data.given_names_normalized
-                and StringManipulationUtils.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
-                not in self._data.surnames_normalized
-            ):
-                score -= 2.0
-
+        # Avoid role confusion - given names should not be common surnames
         for token in given_tokens:
             key = StringManipulationUtils.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
             if key in self._data.surnames and self._data.surname_frequencies.get(key, 0) > 1000:

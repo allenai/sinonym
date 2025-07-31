@@ -41,9 +41,6 @@ class NameDataStructures:
     surname_log_probabilities: dict[str, float]
     given_log_probabilities: dict[str, float]
 
-    # Pre-computed surname bonuses for cultural plausibility scoring
-    surname_bonus_map: dict[str, float]
-
     # Compound surname mappings
     compound_hyphen_map: dict[str, str]
     # Maps normalized compound surnames back to their original input format
@@ -99,9 +96,6 @@ class DataInitializationService:
             compound_hyphen_map,
         )
 
-        # Pre-compute surname bonuses for cultural plausibility scoring (micro-optimization)
-        surname_bonus_map = self._build_surname_bonus_map(surname_frequencies)
-
         return NameDataStructures(
             surnames=surnames,
             surnames_normalized=surnames_normalized,
@@ -113,7 +107,6 @@ class DataInitializationService:
             surname_frequencies=surname_frequencies,
             surname_log_probabilities=surname_log_probabilities,
             given_log_probabilities=given_log_probabilities,
-            surname_bonus_map=surname_bonus_map,
             compound_hyphen_map=compound_hyphen_map,
             compound_original_format_map=compound_original_format_map,
         )
@@ -149,7 +142,7 @@ class DataInitializationService:
                 surnames_raw.update({romanized, StringManipulationUtils.remove_spaces(romanized)})
 
                 # Store frequency data
-                ppm = float(row.get("ppm.1930_2008", 0))
+                ppm = float(row.get("ppm", 0))
                 freq_key = StringManipulationUtils.remove_spaces(romanized.lower())
                 surname_frequencies[freq_key] = max(surname_frequencies.get(freq_key, 0), ppm)
 
@@ -188,9 +181,9 @@ class DataInitializationService:
                 pinyin = self._strip_tone(row["pinyin"])
                 given_names.add(pinyin)
 
-                ppm = float(row.get("name.ppm", 0))
+                ppm = float(row.get("ppm", 0))
                 if ppm > 0:
-                    given_frequencies[pinyin] = given_frequencies.get(pinyin, 0) + ppm
+                    given_frequencies[pinyin] = max(given_frequencies.get(pinyin, 0), ppm)
                     total_given_freq += ppm
 
         # Convert to log probabilities
@@ -308,16 +301,6 @@ class DataInitializationService:
                 surname_frequencies[variant_compound] = surname_frequencies[standard_compound]
 
         return surname_log_probabilities
-
-    def _build_surname_bonus_map(self, surname_frequencies: dict[str, float]) -> dict[str, float]:
-        """Pre-compute surname bonuses for cultural plausibility scoring - performance optimization."""
-        surname_bonus_map = {}
-
-        for surname, freq in surname_frequencies.items():
-            # Pre-compute the log10(freq+1)*1.2 calculation for fast lookup
-            surname_bonus_map[surname] = math.log10(freq + 1) * 1.2
-
-        return surname_bonus_map
 
     def _strip_tone(self, pinyin_str: str) -> str:
         """Strip tone markers from pinyin string."""

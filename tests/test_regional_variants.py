@@ -66,11 +66,6 @@ CHINESE_NAME_TEST_CASES = [
     # Taiwanese / Wade-Giles / Older Forms
     ("Chiang Kai Shek", (True, "Kai-Shek Chiang")),  # Keep as-is if not recognized
     ("Hsu Wen Hsiung", (True, "Wen-Hsiung Hsu")),  # Keep as-is if not recognized
-    # TODO: Add Wade-Giles romanization support for these cases:
-    # ("Yeh Ming-hsun", (True, "Ming-Xun Ye")),  # FAILS: not recognized as Chinese
-    # ("Chou En-lai", (True, "En-Lai Chou")),  # FAILS: Wade-Giles conversion needed
-    # ("Tsiang Tingfu", (True, "Ting-Fu Tsiang")),  # FAILS: Wade-Giles conversion needed
-    # ("Yü Ying-shih", (True, "Ying-Shi Yu")),  # FAILS: ü handling needed
     # Mixed Cantonese patterns with overlapping surnames    # Singapore/Malaysian Chinese variants
     ("Teo Chee Hean", (True, "Chee-Hean Teo")),
     ("Goh Chok Tong", (True, "Chok-Tong Goh")),
@@ -85,6 +80,10 @@ CHINESE_NAME_TEST_CASES = [
     ("T'ang Li", (True, "T'ang Li")),  # Full-width apostrophe: preserves Wade-Giles form
     ("P'eng Yu", (True, "Yu P'eng")),  # Full-width apostrophe: preserves Wade-Giles form
     ("Ts'ao Ts'ai", (True, "Ts'ai Ts'ao")),  # Mixed ASCII and full-width apostrophes
+    ("Yeh Ming-hsun", (True, "Ming-Hsun Yeh")),  # FAILS
+    ("Chou En-lai", (True, "En-Lai Chou")),  # FAILS
+    ("Tsiang Tingfu", (True, "Ting-Fu Tsiang")),  # FAILS
+    ("Yü Ying-shih", (True, "Ying-Shih Yu")),  # FAILS
 ]
 
 

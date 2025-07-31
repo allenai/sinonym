@@ -72,24 +72,21 @@ CHINESE_NAME_TEST_CASES = [
     # ("Prof. Huang Yi Xuan - Shanghai Jiao Tong Univ.", (True, "Yi-Xuan Huang")),  # FAILS: title and affiliation
     # ("Dr. Chen Yu, School of EE, ZJU", (True, "Yu Chen")),  # FAILS: title and affiliation
     # ("MR. WANG DAWEI", (True, "Da-Wei Wang")),  # FAILS: title prefix
-    # TODO: Add support for footnote markers (these currently fail):
     # --- Footnote Markers & Superscripts ---
-    # ("Zhang Wei¹", (True, "Wei Zhang")),  # FAILS: footnote marker
-    # ("Lee Jun Fan²*", (True, "Jun-Fan Li")),  # FAILS: footnote and asterisk
-    # ("Szeeto Wai Kin†", (True, "Wai-Kin Szeto")),  # FAILS: dagger symbol
-    # ("Hu Bing‡ et al.", (True, "Bing Hu")),  # FAILS: double dagger and "et al."
-    # TODO: Add support for punctuation noise (these currently fail):
+    ("Zhang Wei¹", (True, "Wei Zhang")),  # FAILS: footnote marker
+    ("Lee Jun Fan²*", (True, "Jun-Fan Li")),  # FAILS: footnote and asterisk
+    ("Szeeto Wai Kin†", (True, "Wai-Kin Szeto")),  # FAILS: dagger symbol
+    ("Hu Bing‡ et al.", (True, "Bing Hu")),  # FAILS: double dagger and "et al."
     # --- Extra Punctuation Noise from OCR ---
-    # ("Zhang...Wei", (True, "Wei Zhang")),  # FAILS: multiple dots
-    # ("Li?? Xiaoming!", (True, "Xiao-Ming Li")),  # FAILS: question marks and exclamation
-    # ("Wang Da Wei;", (True, "Da-Wei Wang")),  # FAILS: semicolon
-    # ("Chen, Mei-Ling...", (True, "Mei-Ling Chen")),  # FAILS: trailing dots
-    # TODO: Add support for rare romanization systems:
+    ("Zhang...Wei", (True, "Wei Zhang")),  # FAILS: multiple dots
+    ("Li?? Xiaoming!", (True, "Xiao-Ming Li")),  # FAILS: question marks and exclamation
+    ("Wang Da Wei;", (True, "Da-Wei Wang")),  # FAILS: semicolon
+    ("Chen, Mei-Ling...", (True, "Mei-Ling Chen")),  # FAILS: trailing dots
     # --- Rare Romanization Systems (e.g., Gwoyeu Romatzyh, Yale) ---
-    # ("Chiang Kai-shek", (True, "Kai-shek Chiang")),  # FAILS: Wade-Giles conversion needed
-    # ("Chou En-lai", (True, "En-Lai Chou")),  # FAILS: Wade-Giles conversion needed
-    # ("Tsiang Tingfu", (True, "Ting-Fu Tsiang")),  # FAILS: Wade-Giles conversion needed
-    # ("Yü Ying-shih", (True, "Ying-Shi Yu")),  # FAILS: ü handling needed
+    ("Chiang Kai-shek", (True, "Kai-shek Chiang")),  # FAILS: Wade-Giles conversion needed
+    ("Chou En-lai", (True, "En-Lai Chou")),  # FAILS: Wade-Giles conversion needed
+    ("Tsiang Tingfu", (True, "Ting-Fu Tsiang")),  # FAILS: Wade-Giles conversion needed
+    ("Yü Ying-shih", (True, "Ying-Shi Yu")),  # FAILS: ü handling needed
 ]
 
 
