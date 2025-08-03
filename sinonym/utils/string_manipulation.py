@@ -81,9 +81,24 @@ class StringManipulationUtils:
         return norm_a, norm_b
 
     @staticmethod
-    def _is_valid_component_pair(norm_a: str, norm_b: str, data_context) -> bool:
-        """Check if both normalized parts are valid plausible components."""
-        return norm_a in data_context.plausible_components and norm_b in data_context.plausible_components
+    def _is_valid_component_pair(norm_a: str, norm_b: str, data_context, orig_a: str = None, orig_b: str = None) -> bool:
+        """Check if both parts are valid plausible components.
+        
+        Tries both original and normalized forms to handle cases where
+        normalization changes valid components (e.g., kun -> gun).
+        """
+        # First try normalized forms
+        if norm_a in data_context.plausible_components and norm_b in data_context.plausible_components:
+            return True
+
+        # If we have original forms, try those too
+        if orig_a and orig_b:
+            orig_a_lower = orig_a.lower()
+            orig_b_lower = orig_b.lower()
+            if orig_a_lower in data_context.plausible_components and orig_b_lower in data_context.plausible_components:
+                return True
+
+        return False
 
     @staticmethod
     def _should_skip_splitting(token: str, normalized_cache: dict[str, str] | None, normalizer, data_context) -> bool:
@@ -188,7 +203,7 @@ class StringManipulationUtils:
                 else:
                     norm_syllable = normalizer.norm(first_half)
                 # For repeated syllables, we only need to check if one is valid (they're the same)
-                if norm_syllable in data_context.plausible_components:
+                if norm_syllable in data_context.plausible_components or first_half.lower() in data_context.plausible_components:
                     return [first_half, second_half]
 
         # Check for forbidden phonetic patterns
@@ -204,8 +219,8 @@ class StringManipulationUtils:
             else:
                 norm_a = normalizer.norm(a)
                 norm_b = normalizer.norm(b)
-            # Inline component validation for performance
-            if norm_a in data_context.plausible_components and norm_b in data_context.plausible_components:
+            # Component validation with fallback to original forms
+            if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
                 return [a, b]
 
         # Pattern 3: CamelCase detection (e.g., "MingHua" → ["Ming", "Hua"])
@@ -219,7 +234,7 @@ class StringManipulationUtils:
                 norm_a = normalizer.norm(camel[0])
                 norm_b = normalizer.norm(camel[1])
             # Inline component validation for performance
-            if norm_a in data_context.plausible_components and norm_b in data_context.plausible_components:
+            if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, camel[0], camel[1]):
                 return camel
 
         # ================================================================
@@ -243,8 +258,8 @@ class StringManipulationUtils:
                 norm_a = normalizer.norm(a)
                 norm_b = normalizer.norm(b)
 
-            # Both halves must be known plausible syllables (inline for performance)
-            if not (norm_a in plausible_components and norm_b in plausible_components):
+            # Both halves must be known plausible syllables (check both original and normalized forms)
+            if not StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
                 continue
 
             # Cultural plausibility check (initial screening) - inline for performance

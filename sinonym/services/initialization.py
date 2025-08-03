@@ -11,6 +11,7 @@ import csv
 import math
 import unicodedata
 from dataclasses import dataclass
+from functools import cache
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import CANTONESE_SURNAMES, COMPOUND_VARIANTS, PYPINYIN_FREQUENCY_ALIASES
@@ -41,6 +42,9 @@ class NameDataStructures:
     surname_log_probabilities: dict[str, float]
     given_log_probabilities: dict[str, float]
 
+    # Pre-computed percentile ranks for ML features (0-1 scale)
+    surname_percentile_ranks: dict[str, float]
+
     # Compound surname mappings
     compound_hyphen_map: dict[str, str]
     # Maps normalized compound surnames back to their original input format
@@ -54,6 +58,17 @@ class DataInitializationService:
         self._config = config
         self._cache_service = cache_service
         self._normalizer = normalizer
+
+        # Memoized Pinyin conversion for performance
+        @cache
+        def _pinyin_clean(han: str) -> str:
+            """Cached Pinyin conversion with tone removal."""
+            lst = cache_service.han_to_pinyin_fast(han)
+            if not lst:
+                return ""
+            return "".join(c for c in lst[0].lower() if not c.isdigit())
+
+        self._pinyin_clean = _pinyin_clean
 
     def initialize_data_structures(self) -> NameDataStructures:
         """Initialize all immutable data structures."""
@@ -96,6 +111,9 @@ class DataInitializationService:
             compound_hyphen_map,
         )
 
+        # Build pre-computed percentile ranks for ML features
+        surname_percentile_ranks = self._build_percentile_ranks(surname_frequencies)
+
         return NameDataStructures(
             surnames=surnames,
             surnames_normalized=surnames_normalized,
@@ -107,6 +125,7 @@ class DataInitializationService:
             surname_frequencies=surname_frequencies,
             surname_log_probabilities=surname_log_probabilities,
             given_log_probabilities=given_log_probabilities,
+            surname_percentile_ranks=surname_percentile_ranks,
             compound_hyphen_map=compound_hyphen_map,
             compound_original_format_map=compound_original_format_map,
         )
@@ -138,11 +157,20 @@ class DataInitializationService:
         with (DATA_PATH / "familyname_orcid.csv").open(encoding="utf-8") as f:
             for row in csv.DictReader(f):
                 han = row["surname"]
-                romanized = " ".join(self._cache_service.han_to_pinyin_fast(han)).title()
-                surnames_raw.update({romanized, StringManipulationUtils.remove_spaces(romanized)})
+                pinyin_list = self._cache_service.han_to_pinyin_fast(han)
+                if pinyin_list:
+                    romanized = " ".join(pinyin_list).title()
+                    surnames_raw.update({romanized, StringManipulationUtils.remove_spaces(romanized)})
+                else:
+                    continue
 
-                # Store frequency data
+                # Store frequency data for both Chinese characters and romanized forms
                 ppm = float(row.get("ppm", 0))
+
+                # Store frequency for Chinese characters (original)
+                surname_frequencies[han] = max(surname_frequencies.get(han, 0), ppm)
+
+                # Store frequency for romanized form (existing behavior)
                 freq_key = StringManipulationUtils.remove_spaces(romanized.lower())
                 surname_frequencies[freq_key] = max(surname_frequencies.get(freq_key, 0), ppm)
 
@@ -178,15 +206,23 @@ class DataInitializationService:
 
         with (DATA_PATH / "givenname_orcid.csv").open(encoding="utf-8") as f:
             for row in csv.DictReader(f):
-                pinyin = self._strip_tone(row["pinyin"])
+                han_char = row["character"]
+                # Strip tone markers from pinyin string
+                normalized = unicodedata.normalize("NFKD", row["pinyin"])
+                pinyin = self._config.digits_pattern.sub(
+                    "",
+                    "".join(c for c in normalized if not unicodedata.combining(c)),
+                ).lower()
                 given_names.add(pinyin)
 
                 ppm = float(row.get("ppm", 0))
                 if ppm > 0:
+                    # Store frequency for both Chinese character and pinyin
+                    given_frequencies[han_char] = max(given_frequencies.get(han_char, 0), ppm)
                     given_frequencies[pinyin] = max(given_frequencies.get(pinyin, 0), ppm)
                     total_given_freq += ppm
 
-        # Convert to log probabilities
+        # Convert to log probabilities for both Chinese characters and pinyin
         given_log_probabilities = {}
         for given_name, freq in given_frequencies.items():
             prob = freq / total_given_freq if total_given_freq > 0 else 1e-15
@@ -302,10 +338,17 @@ class DataInitializationService:
 
         return surname_log_probabilities
 
-    def _strip_tone(self, pinyin_str: str) -> str:
-        """Strip tone markers from pinyin string."""
-        normalized = unicodedata.normalize("NFKD", pinyin_str)
-        return self._config.digits_pattern.sub(
-            "",
-            "".join(c for c in normalized if not unicodedata.combining(c)),
-        ).lower()
+    def _percentiles(self, vals: dict[str, float]) -> dict[str, float]:
+        """Compute percentile ranks in O(n log n) time."""
+        # Sort once by frequency (ascending - low to high)
+        items = sorted(vals.items(), key=lambda kv: kv[1])
+        n = len(items)
+        out = {}
+        for rank, (k, _) in enumerate(items):  # rank 0 = rarest
+            out[k] = rank / (n - 1) if n > 1 else 0.0  # 0-1 scale
+        return out
+
+    def _build_percentile_ranks(self, surname_frequencies: dict[str, float]) -> dict[str, float]:
+        """Build pre-computed percentile ranks for ML features (0-1 scale)."""
+        return self._percentiles(surname_frequencies)
+

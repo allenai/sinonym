@@ -186,12 +186,13 @@ from sinonym.services import (
 class ChineseNameDetector:
     """Main Chinese name detection and normalization service."""
 
-    def __init__(self, config: ChineseNameConfig | None = None):
+    def __init__(self, config: ChineseNameConfig | None = None, weights: list[float] | None = None):
         self._config = config or ChineseNameConfig.create_default()
         self._cache_service = PinyinCacheService(self._config)
         self._normalizer = NormalizationService(self._config, self._cache_service)
         self._data_service = DataInitializationService(self._config, self._cache_service, self._normalizer)
         self._data: NameDataStructures | None = None
+        self._weights = weights  # Store weights to pass to parsing service
 
         # Service instances (initialized after data loading)
         self._ethnicity_service: EthnicityClassificationService | None = None
@@ -216,7 +217,12 @@ class ChineseNameDetector:
         """Initialize service instances with data context."""
         if self._data is not None:
             self._ethnicity_service = EthnicityClassificationService(self._config, self._normalizer, self._data)
-            self._parsing_service = NameParsingService(self._config, self._normalizer, self._data)
+            self._parsing_service = NameParsingService(
+                self._config,
+                self._normalizer,
+                self._data,
+                weights=self._weights,
+            )
             self._formatting_service = NameFormattingService(self._config, self._normalizer, self._data)
 
     def _ensure_initialized(self) -> None:
@@ -269,7 +275,9 @@ class ChineseNameDetector:
 
         # Check for non-Chinese ethnicity using normalized tokens (consistent for all inputs)
         non_chinese_result = self._ethnicity_service.classify_ethnicity(
-            normalized_input.roman_tokens, normalized_input.norm_map, raw_name,
+            normalized_input.roman_tokens,
+            normalized_input.norm_map,
+            raw_name,
         )
 
         if non_chinese_result.success is False:
@@ -287,33 +295,46 @@ class ChineseNameDetector:
             token2_norm = normalized_input.norm_map.get(token2, self._normalizer.norm(token2))
 
             token1_is_surname = (
-                self._normalizer.norm(token1) in self._data.surnames or
-                token1_norm in self._data.surnames_normalized
+                self._normalizer.norm(token1) in self._data.surnames or token1_norm in self._data.surnames_normalized
             )
             token2_is_surname = (
-                self._normalizer.norm(token2) in self._data.surnames or
-                token2_norm in self._data.surnames_normalized
+                self._normalizer.norm(token2) in self._data.surnames or token2_norm in self._data.surnames_normalized
             )
 
             best_result = None
             best_score = float("-inf")
+            best_format_alignment = 0.0
 
             # Candidate 1: surname-first pattern (token1=surname, token2=given)
             if token1_is_surname:
                 score1 = self._parsing_service.calculate_parse_score(
-                    [token1], [token2], tokens, normalized_input.norm_map, is_all_chinese,
+                    [token1],
+                    [token2],
+                    tokens,
+                    normalized_input.norm_map,
+                    is_all_chinese,
                 )
-                if score1 > best_score:
+                format_alignment1 = self._parsing_service._calculate_format_alignment_bonus([token1], [token2], tokens)
+
+                if score1 > best_score or (score1 == best_score and format_alignment1 > best_format_alignment):
                     best_score = score1
+                    best_format_alignment = format_alignment1
                     best_result = ([token1], [token2])
 
             # Candidate 2: surname-last pattern (token2=surname, token1=given)
             if token2_is_surname:
                 score2 = self._parsing_service.calculate_parse_score(
-                    [token2], [token1], tokens, normalized_input.norm_map, is_all_chinese,
+                    [token2],
+                    [token1],
+                    tokens,
+                    normalized_input.norm_map,
+                    is_all_chinese,
                 )
-                if score2 > best_score:
+                format_alignment2 = self._parsing_service._calculate_format_alignment_bonus([token2], [token1], tokens)
+
+                if score2 > best_score or (score2 == best_score and format_alignment2 > best_format_alignment):
                     best_score = score2
+                    best_format_alignment = format_alignment2
                     best_result = ([token2], [token1])
 
             if best_result:

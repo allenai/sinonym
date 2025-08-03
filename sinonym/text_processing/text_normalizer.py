@@ -68,11 +68,8 @@ class TextNormalizer:
         # Step 3: Apply Wade-Giles conversions BEFORE removing apostrophes
         wade_giles_result = self._apply_unified_wade_giles(low)
 
-        # Step 4: Apply non-Wade-Giles syllable rules to Wade-Giles conversion results
-        mapped_result = NON_WADE_GILES_SYLLABLE_RULES.get(wade_giles_result)
-        if mapped_result:
-            wade_giles_result = mapped_result
-        elif wade_giles_result == "qen":
+        # Step 4: Handle special Wade-Giles cases only
+        if wade_giles_result == "qen":
             wade_giles_result = "chen"
 
         # Step 5: Remove apostrophes and hyphens from the final result

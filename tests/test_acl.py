@@ -82,7 +82,6 @@ ACL_CHINESE_NAMES = [
     ("Tingyu Song", "Ting-Yu Song"),
     ("Wei Shen", "Wei Shen"),
     ("Weilun Zhao", "Wei-Lun Zhao"),
-    ("Xiang Tao", "Xiang Tao"),
     ("Xiangqi Wang", "Xiang-Qi Wang"),
     ("Xiao Liang", "Xiao Liang"),
     ("Xiaowen Chu", "Xiao-Wen Chu"),

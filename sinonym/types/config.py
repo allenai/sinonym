@@ -4,6 +4,7 @@ Configuration types for Chinese name processing.
 This module contains immutable configuration classes that hold all static
 data structures and patterns used by the Chinese name detection system.
 """
+
 from __future__ import annotations
 
 import re

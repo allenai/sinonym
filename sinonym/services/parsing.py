@@ -8,7 +8,6 @@ validation patterns.
 
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
@@ -22,10 +21,28 @@ if TYPE_CHECKING:
 class NameParsingService:
     """Service for parsing Chinese names into surname and given name components."""
 
-    def __init__(self, config, normalizer, data):
+    def __init__(self, config, normalizer, data, weights: list[float] | None = None):
         self._config = config
         self._normalizer = normalizer
         self._data = data
+
+        # Weight parameters - can be overridden
+        if weights and len(weights) == 8:
+            self._weights = weights
+        else:
+            # Default weights (optimized 8-feature system - 115 failures)
+            # Removed given name comparative features as they don't improve performance
+            self._weights = [
+                0.465,      # surname_logp
+                0.395,      # given_logp_sum
+                -0.888,     # surname_rank_bonus
+                1.348,      # compound_given_bonus
+                1.102,      # order_preservation_bonus
+                0.425,      # surname_first_bonus
+                -0.042,     # surname_freq_log_ratio (log-based comparative feature)
+                -0.873,     # surname_rank_difference (comparative feature)
+            ]
+
 
     def parse_name_order(
         self,
@@ -33,7 +50,7 @@ class NameParsingService:
         normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
     ) -> ParseResult:
-        """Parse using probabilistic system with fallback - pattern matching style."""
+        """Parse using rule-based system with fallback - pattern matching style."""
         # Try probabilistic parsing first
         parse_result = self._best_parse(order, normalized_cache, compound_metadata)
 
@@ -168,10 +185,23 @@ class NameParsingService:
         if not scored_parses:
             return ParseResult.failure("no valid parse found")
 
-        # Find best scoring parse
-        best_parse_result = max(scored_parses, key=lambda x: x[2])
+        # Find best scoring parse with deterministic tie-breaking
+        # Sort by: (1) score descending, (2) format alignment descending, (3) deterministic secondary key
+        def parse_sort_key(parse_data):
+            surname_tokens, given_tokens, score, original_compound_format = parse_data
+
+            # Calculate format alignment bonus for tie-breaking
+            format_alignment = self._calculate_format_alignment_bonus(surname_tokens, given_tokens, tokens)
+
+            # Deterministic secondary key (string representation for consistent ordering)
+            secondary_key = f"{surname_tokens}|{given_tokens}"
+
+            return (score, format_alignment, secondary_key)
+
+        best_parse_result = max(scored_parses, key=parse_sort_key)
 
         return ParseResult.success_with_parse(best_parse_result[0], best_parse_result[1], best_parse_result[3])
+
 
     def _generate_all_parses_with_format(
         self,
@@ -341,15 +371,11 @@ class NameParsingService:
             for g_token in given_tokens
         )
 
-        validation_penalty = 0.0 if self._normalizer.validate_given_tokens(given_tokens, normalized_cache) else -3.0
-
         compound_given_bonus = 0.0
         if len(given_tokens) == 2 and all(
             normalized_cache.get(t, self._normalizer.norm(t)) in self._data.given_names_normalized for t in given_tokens
         ):
-            compound_given_bonus = 0.8
-
-        cultural_score = self._cultural_plausibility_score(surname_tokens, given_tokens, normalized_cache)
+            compound_given_bonus = 1.0
 
         # Bonus for surname-first pattern in all-Chinese inputs
         surname_first_bonus = 0.0
@@ -362,7 +388,7 @@ class NameParsingService:
                 and given_tokens[0] == tokens[1]
             ):
                 # This follows the traditional Chinese surname-first order
-                surname_first_bonus = 2.0  # Strong bonus for correct Chinese order
+                surname_first_bonus = 1.0  # Strong bonus for correct Chinese order
 
         # Order preservation bonus for ambiguous romanized cases
         order_preservation_bonus = 0.0
@@ -371,17 +397,46 @@ class NameParsingService:
             if given_tokens[0] == tokens[0] and surname_tokens[0] == tokens[1]:
                 # This maintains the original order - check if case is ambiguous
                 if self._is_ambiguous_case(surname_tokens[0], given_tokens[0], normalized_cache):
-                    order_preservation_bonus = 1.5  # Moderate bonus for preserving original order in ambiguous cases
+                    order_preservation_bonus = 1.0  # Strong bonus for preserving original order in ambiguous cases
 
-        return (
-            surname_logp
-            + given_logp_sum
-            + validation_penalty
-            + compound_given_bonus
-            + cultural_score
-            + surname_first_bonus  # all-chinese only
-            + order_preservation_bonus
+        # Percentile rank-based scoring for surnames only
+        surname_rank_bonus = 0.0
+        if surname_tokens and surname_key in self._data.surname_percentile_ranks:
+            surname_rank_bonus = self._data.surname_percentile_ranks[surname_key]
+
+        # NEW: Comparative features - scaled and balanced approach
+        surname_freq_log_ratio = 0.0
+        surname_rank_difference = 0.0
+
+        if len(surname_tokens) == 1 and len(given_tokens) == 1:
+            # Get the alternative key
+            given_as_surname_key = self._surname_key(given_tokens, normalized_cache)
+
+            # SURNAME comparative features
+            # Calculate log frequency ratio to keep values in reasonable range
+            import math
+            my_surname_freq = self._data.surname_frequencies.get(surname_key, 0.001)  # Small default
+            alt_surname_freq = self._data.surname_frequencies.get(given_as_surname_key, 0.001)
+            surname_freq_log_ratio = math.log(my_surname_freq / alt_surname_freq) if alt_surname_freq > 0 else 0.0
+
+            # Calculate rank difference: my_surname_rank - alternative_surname_rank
+            my_surname_rank = self._data.surname_percentile_ranks.get(surname_key, 0.0)
+            alt_surname_rank = self._data.surname_percentile_ranks.get(given_as_surname_key, 0.0)
+            surname_rank_difference = my_surname_rank - alt_surname_rank
+
+
+        total_score = (
+            surname_logp * self._weights[0]  # Surname frequency weight
+            + given_logp_sum * self._weights[1]  # Given name frequency weight
+            + surname_rank_bonus * self._weights[2]  # Surname rank bonus weight
+            + compound_given_bonus * self._weights[3]  # Compound given bonus weight
+            + order_preservation_bonus * self._weights[4]  # Order preservation weight
+            + surname_first_bonus * self._weights[5]  # Surname first bonus weight
+            + surname_freq_log_ratio * self._weights[6]  # Surname frequency log ratio weight
+            + surname_rank_difference * self._weights[7]  # Surname rank difference weight
         )
+
+        return total_score
 
     def _is_ambiguous_case(self, surname_token: str, given_token: str, normalized_cache: dict[str, str]) -> bool:
         """
@@ -422,25 +477,37 @@ class NameParsingService:
             return True  # Ambiguous if we lack frequency data for either
 
         freq_ratio = max(surname_freq, given_freq) / min(surname_freq, given_freq)
-        return freq_ratio < 1.0  # Ambiguous if frequencies are within 10x of each other
+        return freq_ratio < 5.0  # Ambiguous if frequencies are within 5x of each other
 
     def _surname_key(self, surname_tokens: list[str], normalized_cache: dict[str, str]) -> str:
-        """Convert surname tokens to lookup key, preferring original form when available."""
+        """Convert surname tokens to lookup key, preferring Chinese characters when available."""
         if len(surname_tokens) == 1:
+            token = surname_tokens[0]
+
+            # If token contains Chinese characters, try Chinese character lookup first
+            if any(self._config.cjk_pattern.search(char) for char in token):
+                if token in self._data.surname_frequencies:
+                    return token
+
             # Try original form first (more likely to preserve correct romanization)
-            original_key = self._normalizer.norm(surname_tokens[0])
+            original_key = self._normalizer.norm(token)
             if original_key in self._data.surname_frequencies:
                 return original_key
             # Fall back to normalized form
             return StringManipulationUtils.remove_spaces(
-                normalized_cache.get(surname_tokens[0], self._normalizer.norm(surname_tokens[0])),
+                normalized_cache.get(token, self._normalizer.norm(token)),
             )
         # Compound surname - join with space
         normalized_tokens = [normalized_cache.get(t, self._normalizer.norm(t)) for t in surname_tokens]
         return StringManipulationUtils.join_with_spaces(normalized_tokens)
 
     def _given_name_key(self, given_token: str, normalized_cache: dict[str, str]) -> str:
-        """Convert given name token to lookup key, preferring original form when available."""
+        """Convert given name token to lookup key, preferring Chinese characters when available."""
+        # If token contains Chinese characters, try Chinese character lookup first
+        if any(self._config.cjk_pattern.search(char) for char in given_token):
+            if given_token in self._data.given_log_probabilities:
+                return given_token
+
         # Try original form first (more likely to preserve correct romanization)
         original_key = self._normalizer.norm(given_token)
         if original_key in self._data.given_log_probabilities:
@@ -448,60 +515,28 @@ class NameParsingService:
         # Fall back to normalized form
         return self._normalizer.norm(normalized_cache.get(given_token, self._normalizer.norm(given_token)))
 
-    def _cultural_plausibility_score(
+    def _calculate_format_alignment_bonus(
         self,
         surname_tokens: list[str],
         given_tokens: list[str],
-        normalized_cache: dict[str, str],
+        original_tokens: list[str],
     ) -> float:
-        """Calculate cultural plausibility score for a Chinese name parse."""
-        if not surname_tokens or not given_tokens:
-            return -10.0
+        """
+        Calculate a small bonus for parses that align with the original input format.
+        This is used purely for deterministic tie-breaking when scores are identical.
+        """
+        if len(original_tokens) != 2 or len(surname_tokens) != 1 or len(given_tokens) != 1:
+            return 0.0  # Only apply to simple 2-token cases
 
-        score = 0.0
-        surname_key = self._surname_key(surname_tokens, normalized_cache)
+        surname_token = surname_tokens[0]
+        given_token = given_tokens[0]
 
-        # Surname frequency bonus
-        surname_freq = self._data.surname_frequencies.get(StringManipulationUtils.remove_spaces(surname_key), 0)
-        if surname_freq == 0 and " " in surname_key:
-            surname_freq = self._data.surname_frequencies.get(surname_key, 0)
-
-        # Cross-semantic frequency capping to prevent given names from inheriting
-        # high surname frequencies through normalization (e.g., 'fai' → 'hui')
-        if len(surname_tokens) == 1 and surname_freq > 10000:
-            original_token = surname_tokens[0].lower()
-            normalized_token = StringManipulationUtils.remove_spaces(surname_key).lower()
-
-            # Check if this is cross-semantic inheritance: original not a surname, normalized is
-            original_is_surname = (
-                original_token in self._data.surnames or original_token in self._data.surname_frequencies
-            )
-            if not original_is_surname and original_token != normalized_token:
-                # Cap high-frequency cross-semantic inheritance to level playing field
-                surname_freq = min(surname_freq, 1000)
-
-        if surname_freq > 0:
-            score += min(5.0, math.log10(surname_freq + 1) * 1.4)
-        else:
-            score -= 3.0
-
-        # Compound surname validation
-        if len(surname_tokens) == 2:
-            compound_original = StringManipulationUtils.lowercase_join_with_spaces(surname_tokens)
-            is_valid_compound = (
-                surname_key in self._data.compound_surnames_normalized
-                or StringManipulationUtils.remove_spaces(surname_key) in self._data.compound_surnames_normalized
-                or (
-                    compound_original in COMPOUND_VARIANTS
-                    and COMPOUND_VARIANTS[compound_original] in self._data.compound_surnames_normalized
-                )
-            )
-            score += 5.0 if is_valid_compound else -2.0
-
-        # Avoid role confusion - given names should not be common surnames
-        for token in given_tokens:
-            key = StringManipulationUtils.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
-            if key in self._data.surnames and self._data.surname_frequencies.get(key, 0) > 1000:
-                score -= 1.5
-
-        return score
+        # Check which parse preserves the original token order
+        if given_token == original_tokens[0] and surname_token == original_tokens[1]:
+            # This parse maintains given-surname order (Western style)
+            return 0.001  # Small bonus for format alignment
+        if surname_token == original_tokens[0] and given_token == original_tokens[1]:
+            # This parse maintains surname-given order (Chinese style)
+            return 0.001  # Small bonus for format alignment
+        # This parse changes the token order
+        return 0.0

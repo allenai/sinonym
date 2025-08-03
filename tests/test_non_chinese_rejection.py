@@ -20,303 +20,255 @@ from sinonym import ChineseNameDetector
 
 # Non-Chinese names that should return False (failure reason varies)
 NON_CHINESE_TEST_CASES = [
-    "Bruce Lee",
-    "John Smith",
-    "Maria Garcia",
-    "Kim Min Soo",
-    "Nguyen Van Anh",
-    "Le Mai Anh",
-    "Tran Thi Lan",
-    "Pham Minh Tuan",
-    "Sunil Gupta",
-    "Sergey Feldman",
+    ("Bruce Lee", (False, "should_be_rejected")),
+    ("John Smith", (False, "should_be_rejected")),
+    ("Maria Garcia", (False, "should_be_rejected")),
+    ("Kim Min Soo", (False, "should_be_rejected")),
+    ("Nguyen Van Anh", (False, "should_be_rejected")),
+    ("Le Mai Anh", (False, "should_be_rejected")),
+    ("Tran Thi Lan", (False, "should_be_rejected")),
+    ("Pham Minh Tuan", (False, "should_be_rejected")),
+    ("Sunil Gupta", (False, "should_be_rejected")),
+    ("Sergey Feldman", (False, "should_be_rejected")),
 
     # Korean false positive tests
-    "Park Min Jung",
-    "Lee Bo-ram",
-    "Kim Min-jun",  # Hyphenated Korean name
-    "Park Hye-jin",
-    "Choi Seung-hyun",
-    "Jung Hoon-ki",
-    "Lee Seul-gi",
-    "Yoon Soo-bin",
-    "Han Ji-min",
-    "Lim Young-woong",
+    ("Park Min Jung", (False, "should_be_rejected")),
+    ("Lee Bo-ram", (False, "should_be_rejected")),
+    ("Kim Min-jun", (False, "should_be_rejected")),  # Hyphenated Korean name
+    ("Park Hye-jin", (False, "should_be_rejected")),
+    ("Choi Seung-hyun", (False, "should_be_rejected")),
+    ("Jung Hoon-ki", (False, "should_be_rejected")),
+    ("Lee Seul-gi", (False, "should_be_rejected")),
+    ("Yoon Soo-bin", (False, "should_be_rejected")),
+    ("Han Ji-min", (False, "should_be_rejected")),
+    ("Lim Young-woong", (False, "should_be_rejected")),
 
     # Non-hyphenated Korean names (should be caught by enhanced Korean detection)
-    "Kim Minjun",  # Should be caught by multi-syllable Korean pattern detection
-    "Park Hyejin",  # Should be caught by multi-syllable Korean pattern detection
-    "Lim Soo Jin",  # Should be caught by multiple Korean given name patterns
-    "Yoon Soojin",  # Should be caught by multi-syllable Korean pattern detection
-    "Choi Seunghyun",  # Should be caught by multi-syllable Korean pattern detection
+    ("Kim Minjun", (False, "should_be_rejected")),  # Should be caught by multi-syllable Korean pattern detection
+    ("Park Hyejin", (False, "should_be_rejected")),  # Should be caught by multi-syllable Korean pattern detection
+    ("Lim Soo Jin", (False, "should_be_rejected")),  # Should be caught by multiple Korean given name patterns
+    ("Yoon Soojin", (False, "should_be_rejected")),  # Should be caught by multi-syllable Korean pattern detection
+    ("Choi Seunghyun", (False, "should_be_rejected")),  # Should be caught by multi-syllable Korean pattern detection
 
     # Vietnamese false positive tests
-    "Nguyen An He",  # Should be caught by Vietnamese-only surname "nguyen"
-    "Hoang Thu Mai",  # Should be caught by Vietnamese structural patterns
-    "Le Thi Lan",  # Should be caught by Vietnamese "Thi" middle name pattern
-    "Pham Van Duc",  # Should be caught by Vietnamese structural patterns
-    "Tran Minh Tuan",  # Should be caught by Vietnamese structural patterns
-    "Vo Thanh Son",  # Should be caught by Vietnamese structural patterns
-    "Truong Minh Duc",  # Should be caught by Vietnamese-only surname "truong"
-    "Trinh Thi Lan",  # Should be caught by Vietnamese-only surname "trinh" + "Thi" pattern
-    "Dinh Van Duc",  # Should be caught by Vietnamese-only surname "dinh"
-    "Nguyen Thi Mai",  # Should be caught by Vietnamese-only surname + "Thi" pattern
+    ("Nguyen An He", (False, "should_be_rejected")),  # Should be caught by Vietnamese-only surname "nguyen"
+    ("Hoang Thu Mai", (False, "should_be_rejected")),  # Should be caught by Vietnamese structural patterns
+    ("Le Thi Lan", (False, "should_be_rejected")),  # Should be caught by Vietnamese "Thi" middle name pattern
+    ("Pham Van Duc", (False, "should_be_rejected")),  # Should be caught by Vietnamese structural patterns
+    ("Tran Minh Tuan", (False, "should_be_rejected")),  # Should be caught by Vietnamese structural patterns
+    ("Vo Thanh Son", (False, "should_be_rejected")),  # Should be caught by Vietnamese structural patterns
+    ("Truong Minh Duc", (False, "should_be_rejected")),  # Should be caught by Vietnamese-only surname "truong"
+    ("Trinh Thi Lan", (False, "should_be_rejected")),  # Should be caught by Vietnamese-only surname "trinh" + "Thi" pattern
+    ("Dinh Van Duc", (False, "should_be_rejected")),  # Should be caught by Vietnamese-only surname "dinh"
+    ("Nguyen Thi Mai", (False, "should_be_rejected")),  # Should be caught by Vietnamese-only surname + "Thi" pattern
 
     # Overlapping surname differentiation tests
-    "Lim Hye-jin",
+    ("Lim Hye-jin", (False, "should_be_rejected")),
 
     # Western names with initials
-    "De Pace A",
-    "A. Rubin",
-    "E. Moulin",
+    ("De Pace A", (False, "should_be_rejected")),
+    ("A. Rubin", (False, "should_be_rejected")),
+    ("E. Moulin", (False, "should_be_rejected")),
 
     # Session fixes - Western names with forbidden phonetic patterns
-    "Julian Lee",  # Contains "ian" pattern - should be blocked by cultural validation
-    "Christian Wong",  # Contains "ian" pattern
-    "Adrian Liu",  # Contains "ian" pattern
-    "Adrian Chen",  # Contains "ian" pattern - should be blocked by cultural validation
-    "Brian Chen",  # Contains "br" + "ian" patterns
+    ("Julian Lee", (False, "should_be_rejected")),  # Contains "ian" pattern - should be blocked by cultural validation
+    ("Christian Wong", (False, "should_be_rejected")),  # Contains "ian" pattern
+    ("Adrian Liu", (False, "should_be_rejected")),  # Contains "ian" pattern
+    ("Adrian Chen", (False, "should_be_rejected")),  # Contains "ian" pattern - should be blocked by cultural validation
+    ("Brian Chen", (False, "should_be_rejected")),  # Contains "br" + "ian" patterns
 
     # Additional Western names ending in "-ian" that should be rejected
-    "Julian Smith",
-    "Adrian Brown",
-    "Christian Jones",
-    "Vivian White",
-    "Fabian Garcia",
-    "Damian Miller",
+    ("Julian Smith", (False, "should_be_rejected")),
+    ("Adrian Brown", (False, "should_be_rejected")),
+    ("Christian Jones", (False, "should_be_rejected")),
+    ("Vivian White", (False, "should_be_rejected")),
+    ("Fabian Garcia", (False, "should_be_rejected")),
+    ("Damian Miller", (False, "should_be_rejected")),
 
     # Western names with forbidden patterns that should remain blocked
-    "Gloria Martinez",  # Contains "gl" pattern - should be blocked
-    "Glenn Johnson",  # Contains "gl" pattern - should be blocked
-    "Gloria Chen",  # Western name with Chinese surname - should be blocked
-    "Clara Wong",  # Contains "cl" pattern - should be blocked
-    "Frank Liu",  # Contains "fr" pattern - should be blocked
+    ("Gloria Martinez", (False, "should_be_rejected")),  # Contains "gl" pattern - should be blocked
+    ("Glenn Johnson", (False, "should_be_rejected")),  # Contains "gl" pattern - should be blocked
+    ("Gloria Chen", (False, "should_be_rejected")),  # Western name with Chinese surname - should be blocked
+    ("Clara Wong", (False, "should_be_rejected")),  # Contains "cl" pattern - should be blocked
+    ("Frank Liu", (False, "should_be_rejected")),  # Contains "fr" pattern - should be blocked
 
     # Session fixes - Korean names (overlapping surnames + Korean given names)
-    "Ho-Young Lee",  # Contains "young" Korean pattern
+    ("Ho-Young Lee", (False, "should_be_rejected")),  # Contains "young" Korean pattern
 
     # Comprehensive Western name pattern fixes - names ending in -ian
-    "Sebastian Davis",  # sebastian + -ian pattern
-    "Damian Wilson",  # damian + -ian pattern
-    "Brian Johnson",  # brian + -ian pattern
-    "Ryan Thompson",  # ryan + -ian pattern
+    ("Sebastian Davis", (False, "should_be_rejected")),  # sebastian + -ian pattern
+    ("Damian Wilson", (False, "should_be_rejected")),  # damian + -ian pattern
+    ("Brian Johnson", (False, "should_be_rejected")),  # brian + -ian pattern
+    ("Ryan Thompson", (False, "should_be_rejected")),  # ryan + -ian pattern
 
     # Western names ending in -an
-    "Alan Wilson",  # alan + -an pattern with specific prefix rule
-    "Susan Davis",  # susan + -an pattern with specific prefix rule
-    "Urban Miller",  # urban + -an pattern
-    "Logan Brown",  # logan + -an pattern
-    "Jordan Smith",  # jordan + -an pattern
-    "Morgan Jones",  # morgan + -an pattern
-    "Megan Anderson",  # megan + -an pattern
+    ("Alan Wilson", (False, "should_be_rejected")),  # alan + -an pattern with specific prefix rule
+    ("Susan Davis", (False, "should_be_rejected")),  # susan + -an pattern with specific prefix rule
+    ("Urban Miller", (False, "should_be_rejected")),  # urban + -an pattern
+    ("Logan Brown", (False, "should_be_rejected")),  # logan + -an pattern
+    ("Jordan Smith", (False, "should_be_rejected")),  # jordan + -an pattern
+    ("Morgan Jones", (False, "should_be_rejected")),  # morgan + -an pattern
+    ("Megan Anderson", (False, "should_be_rejected")),  # megan + -an pattern
 
     # Western names ending in -ana
-    "Ana Martinez",  # ana + -ana pattern
-    "Dana Wilson",  # dana + -ana pattern
-    "Diana Johnson",  # diana + -ana pattern
-    "Lana Thompson",  # lana + -ana pattern
+    ("Ana Martinez", (False, "should_be_rejected")),
+    ("Dana Wilson", (False, "should_be_rejected")),
+    ("Diana Johnson", (False, "should_be_rejected")),
+    ("Lana Thompson", (False, "should_be_rejected")),
 
     # Western names ending in -na
-    "Tina Anderson",  # tina + -na pattern
-    "Nina Davis",  # nina + -na pattern
-    "Anna Thompson",  # anna + -na pattern
-    "Gina Wilson",  # gina + -na pattern
-    "Vera Martinez",  # vera + -na pattern
-    "Sara Johnson",  # sara + -na pattern
-    "Mira Brown",  # mira + -na pattern
-    "Nora Smith",  # nora + -na pattern
-    "Hanna Jones",  # hanna + -na pattern
-    "Sina Miller",  # sina + -na pattern
-    "Kina Davis",  # kina + -na pattern
+    ("Tina Anderson", (False, "should_be_rejected")),
+    ("Nina Davis", (False, "should_be_rejected")),
+    ("Anna Thompson", (False, "should_be_rejected")),
+    ("Gina Wilson", (False, "should_be_rejected")),
+    ("Vera Martinez", (False, "should_be_rejected")),
+    ("Sara Johnson", (False, "should_be_rejected")),
+    ("Mira Brown", (False, "should_be_rejected")),
+    ("Nora Smith", (False, "should_be_rejected")),
+    ("Hanna Jones", (False, "should_be_rejected")),
+    ("Sina Miller", (False, "should_be_rejected")),
+    ("Kina Davis", (False, "should_be_rejected")),
 
     # Western names ending in -ta
-    "Rita Wilson",  # rita + -ta pattern
-    "Beta Johnson",  # beta + -ta pattern (technical name)
-    "Meta Thompson",  # meta + -ta pattern (technical name)
-    "Delta Brown",  # delta + -ta pattern (technical name)
+    ("Rita Wilson", (False, "should_be_rejected")),
+    ("Beta Johnson", (False, "should_be_rejected")),
+    ("Meta Thompson", (False, "should_be_rejected")),
+    ("Delta Brown", (False, "should_be_rejected")),
 
     # Western names ending in -ena
-    "Dena Smith",  # dena + -ena pattern
-    "Lena Jones",  # lena + -ena pattern
-    "Rena Martinez",  # rena + -ena pattern
-    "Sena Anderson",  # sena + -ena pattern
+    ("Dena Smith", (False, "should_be_rejected")),
+    ("Lena Jones", (False, "should_be_rejected")),
+    ("Rena Martinez", (False, "should_be_rejected")),
+    ("Sena Anderson", (False, "should_be_rejected")),
 
     # Western names ending in -ne
-    "Anne Wilson",  # anne + -ne pattern
-    "Diane Davis",  # diane + -ne pattern
-    "June Johnson",  # june + -ne pattern
-    "Wayne Thompson",  # wayne + -ne pattern
+    ("Anne Wilson", (False, "should_be_rejected")),
+    ("Diane Davis", (False, "should_be_rejected")),
+    ("June Johnson", (False, "should_be_rejected")),
+    ("Wayne Thompson", (False, "should_be_rejected")),
 
     # Western names ending in -ina
-    "Zina Brown",  # zina + -ina pattern
+    ("Zina Brown", (False, "should_be_rejected")),
 
     # Western names ending in -nna
-    "Channa Smith",  # channa + -nna pattern
-    "Jenna Jones",  # jenna + -nna pattern
+    ("Channa Smith", (False, "should_be_rejected")),
+    ("Jenna Jones", (False, "should_be_rejected")),
 
     # Western names ending in -ie
-    "Genie Martinez",  # genie + -ie pattern
-    "Julie Anderson",  # julie + -ie pattern
+    ("Genie Martinez", (False, "should_be_rejected")),
+    ("Julie Anderson", (False, "should_be_rejected")),
 
     # Individual Western names that don't fit suffix patterns
-    "Milan Rodriguez",  # milan individual pattern
-    "Liam Garcia",  # liam individual pattern
-    "Adam Wilson",  # adam individual pattern
-    "Noah Davis",  # noah individual pattern
-    "Dean Johnson",  # dean individual pattern
-    "Sean Thompson",  # sean individual pattern
-    "Juan Brown",  # juan individual pattern
-    "Ivan Smith",  # ivan individual pattern
-    "Ethan Jones",  # ethan individual pattern
-    "Duncan Martinez",  # duncan individual pattern
-    "Leon Anderson",  # leon individual pattern
-    "Sage Wilson",  # sage individual pattern
-    "Karen Davis",  # karen individual pattern
-    "Lisa Johnson",  # lisa individual pattern
-    "Linda Thompson",  # linda individual pattern
-    "Kate Brown",  # kate individual pattern
-    "Mike Smith",  # mike individual pattern
-    "Eli Jones",  # eli individual pattern
-    "Wade Martinez",  # wade individual pattern
-    "Heidi Anderson",  # heidi individual pattern
+    ("Milan Rodriguez", (False, "should_be_rejected")),
+    ("Liam Garcia", (False, "should_be_rejected")),
+    ("Adam Wilson", (False, "should_be_rejected")),
+    ("Noah Davis", (False, "should_be_rejected")),
+    ("Dean Johnson", (False, "should_be_rejected")),
+    ("Sean Thompson", (False, "should_be_rejected")),
+    ("Juan Brown", (False, "should_be_rejected")),
+    ("Ivan Smith", (False, "should_be_rejected")),
+    ("Ethan Jones", (False, "should_be_rejected")),
+    ("Duncan Martinez", (False, "should_be_rejected")),
+    ("Leon Anderson", (False, "should_be_rejected")),
+    ("Sage Wilson", (False, "should_be_rejected")),
+    ("Karen Davis", (False, "should_be_rejected")),
+    ("Lisa Johnson", (False, "should_be_rejected")),
+    ("Linda Thompson", (False, "should_be_rejected")),
+    ("Kate Brown", (False, "should_be_rejected")),
+    ("Mike Smith", (False, "should_be_rejected")),
+    ("Eli Jones", (False, "should_be_rejected")),
+    ("Wade Martinez", (False, "should_be_rejected")),
+    ("Heidi Anderson", (False, "should_be_rejected")),
 
     # Comma-separated non-Chinese names (should still be rejected)
-    "Smith, John",
-    "Garcia, Maria",
-    "Johnson, Brian",
-    "Brown, Adrian",
-    "Soo, Kim Min",  # Korean name in comma format
-    "Anh, Nguyen Van",  # Vietnamese name in comma format
-    "Martinez, Gloria",  # Western name with forbidden "gl" pattern
+    ("Smith, John", (False, "should_be_rejected")),
+    ("Garcia, Maria", (False, "should_be_rejected")),
+    ("Johnson, Brian", (False, "should_be_rejected")),
+    ("Brown, Adrian", (False, "should_be_rejected")),
+    ("Soo, Kim Min", (False, "should_be_rejected")),  # Korean name in comma format
+    ("Anh, Nguyen Van", (False, "should_be_rejected")),  # Vietnamese name in comma format
+    ("Martinez, Gloria", (False, "should_be_rejected")),  # Western name with forbidden "gl" pattern
 
     # Korean names with overlapping surnames (should still be rejected due to Korean given names)
-    "Gong Min-soo",  # Overlapping surname + Korean given name patterns
-    "Kang Young-ho",  # Overlapping surname + Korean given name patterns
-    "An Bo-ram",  # Overlapping surname + Korean given name patterns
-    "Koo Hye-jin",  # Overlapping surname + Korean given name patterns
-    "Ha Min-jun",  # Overlapping surname + Korean given name patterns
+    ("Gong Min-soo", (False, "should_be_rejected")),
+    ("Kang Young-ho", (False, "should_be_rejected")),
+    ("An Bo-ram", (False, "should_be_rejected")),
+    ("Koo Hye-jin", (False, "should_be_rejected")),
+    ("Ha Min-jun", (False, "should_be_rejected")),
 
     # Western names with specific "ew" patterns (should still be blocked after pattern refinement)
-    "Andrew Smith",  # Contains "drew" pattern
-    "Matthew Johnson",  # Contains "thew" pattern
-    "Drew Wilson",  # Contains "drew" pattern
-    "Stewart Jones",  # Contains "stew" pattern
-    "Newton Miller",  # Contains "newt" pattern
-    "Hewitt Davis",  # Contains "witt" pattern
-    "Newell Garcia",  # Contains "well" pattern
-    "Powell Martinez",  # Contains "owell" pattern
-    "Andrew Chen",  # Western first name + Chinese surname (should be blocked)
-    "Matthew Li",  # Western first name + Chinese surname (should be blocked)
+    ("Andrew Smith", (False, "should_be_rejected")),
+    ("Matthew Johnson", (False, "should_be_rejected")),
+    ("Drew Wilson", (False, "should_be_rejected")),
+    ("Stewart Jones", (False, "should_be_rejected")),
+    ("Newton Miller", (False, "should_be_rejected")),
+    ("Hewitt Davis", (False, "should_be_rejected")),
+    ("Newell Garcia", (False, "should_be_rejected")),
+    ("Powell Martinez", (False, "should_be_rejected")),
+    ("Andrew Chen", (False, "should_be_rejected")),
+    ("Matthew Li", (False, "should_be_rejected")),
 
-    # Concatenated Western names that should be rejected (fixed in this session)
-    "BrownPaul",  # Western CamelCase should be rejected
-    "FurukawaKoichi",  # Japanese CamelCase should be rejected
-    "SmithJohn",  # Western CamelCase should be rejected
-    "JohnsonMike",  # Western CamelCase should be rejected
+    # Concatenated Western names that should be rejected
+    ("BrownPaul", (False, "should_be_rejected")),
+    ("FurukawaKoichi", (False, "should_be_rejected")),
+    ("SmithJohn", (False, "should_be_rejected")),
+    ("JohnsonMike", (False, "should_be_rejected")),
 
-    # Mixed parenthetical cases that should be rejected (Western names in parentheses)
-    "Zhang（Andrew）Smith",  # Mixed with Western name
-    "李（Peter）Johnson",  # Mixed with Western surname
+    # Mixed parenthetical cases that should be rejected
+    ("Zhang（Andrew）Smith", (False, "should_be_rejected")),
+    ("李（Peter）Johnson", (False, "should_be_rejected")),
 
-    # ═══════════════════════════════════════════════════════════════════════════════
-    # ADDITIONAL NON-CHINESE TEST CASES
-    # ═══════════════════════════════════════════════════════════════════════════════
-    # Extended coverage for various non-Chinese names that should be properly rejected
+    # Additional non-Chinese names
+    ("Alexander Wang", (False, "should_be_rejected")),
+    ("Michelle Zhang", (False, "should_be_rejected")),
+    ("Bruce Lee Jun Fan", (False, "should_be_rejected")),
+    ("Leslie Cheung Kwok Wing", (False, "should_be_rejected")),
 
-    # --- Ambiguous Ordering (Should Be Rejected) ---
-    "Alexander Wang",  # Western given name → skip
-    "Michelle Zhang",  # Western given name
-    "Bruce Lee Jun Fan",  # Mixed Western/Chinese
-    "Leslie Cheung Kwok Wing",  # Mixed Western/Chinese
+    # Additional Vietnamese Names
+    ("Nguyen Van Hai", (False, "should_be_rejected")),
+    ("Tran Thi Bich Hang", (False, "should_be_rejected")),
+    ("Le Duy Anh", (False, "should_be_rejected")),
+    ("Pham Tuan Dat", (False, "should_be_rejected")),
 
-    # --- Additional Vietnamese Names ---
-    "Nguyen Van Hai",
-    "Tran Thi Bich Hang",
-    "Le Duy Anh",
-    "Pham Tuan Dat",
+    # Additional Korean Names
+    ("Kim Min Jung", (False, "should_be_rejected")),
+    ("Lee Joon Ho", (False, "should_be_rejected")),
+    ("Park Ji Hoon", (False, "should_be_rejected")),
+    ("Choi Soo Ahn", (False, "should_be_rejected")),
+    ("Jeong Yuna", (False, "should_be_rejected")),
+    ("Hwang Byung Chul", (False, "should_be_rejected")),
+    ("Kang Daniel", (False, "should_be_rejected")),
 
-    # --- Additional Korean Names ---
-    "Kim Min Jung",
-    "Lee Joon Ho",
-    "Park Ji Hoon",
-    "Choi Soo Ahn",
-    "Jeong Yuna",
-    "Hwang Byung Chul",
-    "Kang Daniel",
+    # Japanese Names
+    ("Sato Taro", (False, "should_be_rejected")),
+    ("Tanaka Hanako", (False, "should_be_rejected")),
+    ("Yamamoto Ken", (False, "should_be_rejected")),
+    ("Watanabe Aiko", (False, "should_be_rejected")),
 
-    # --- Japanese Names ---
-    "Sato Taro",
-    "Tanaka Hanako",
-    "Yamamoto Ken",
-    "Watanabe Aiko",
+    # Other Western Names
+    ("Mohammed Ali", (False, "should_be_rejected")),
 
-    # --- Other Western Names ---
-    "Mohammed Ali",
+    # Korean-style Given Name But Chinese Author (Borderline)
+    ("Kim Jong Il", (False, "should_be_rejected")),
+    ("Ryu Seung Hee", (False, "should_be_rejected")),
+    ("Woo Suk Hwan", (False, "should_be_rejected")),
 
-    # --- Korean-style Given Name But Chinese Author (Borderline) ---
-    "Kim Jong Il",  # North Korean leader → not Chinese
-    "Ryu Seung Hee",  # Korean name pattern
-    "Woo Suk Hwan",
+    # Japanese On'yomi Readings That Look Chinese
+    ("Kato Koichi", (False, "should_be_rejected")),
+    ("Honda Masaru", (False, "should_be_rejected")),
+    ("Fujiwara Tetsuya", (False, "should_be_rejected")),
 
-    # --- Japanese On'yomi Readings That Look Chinese ---
-    "Kato Koichi",  # Japanese academic
-    "Honda Masaru",
-    "Fujiwara Tetsuya",
-
-    # --- Historical Korean/Vietnamese Names in Chinese Characters (COMMENTED OUT) ---
-    #
-    # These test cases represent Korean names in Hanja and Vietnamese names in Chu Nom.
-    # While technically "incorrect" classifications, these represent extremely low real-world risk:
-    #
-    # MODERN KOREAN NAMES: Almost exclusively written in Hangul (한글) since mid-20th century.
-    # - Hanja usage is now limited to formal documents, historical contexts, or academic settings
-    # - Any Korean name input would realistically be "김민수" (Hangul) not "金民秀" (Hanja)
-    # - Our script detection properly catches and rejects Hangul characters
-    #
-    # MODERN VIETNAMESE NAMES: Use Latin alphabet with diacritics since French colonial period.
-    # - Chu Nom (Vietnamese Chinese characters) fell out of use in early 20th century
-    # - Any Vietnamese name input would realistically be "Nguyễn Văn Hải" not "阮文海" (Chu Nom)
-    # - Our script detection properly catches Vietnamese-specific diacritics
-    #
-    # RISK ASSESSMENT: In a modern name processing system, encountering Korean Hanja or
-    # Vietnamese Chu Nom is extremely unlikely. The cultural context that would require
-    # distinguishing these from Chinese names (historical documents, academic research)
-    # would likely need specialized handling anyway.
-    #
-    # Therefore, accepting these rare edge cases as Chinese names is a reasonable tradeoff
-    # for maintaining system simplicity and avoiding complex cultural pattern matching.
-
-    # "金민秀",  # Kim Min-soo in Hanja (historical Korean)
-    # "李俊昊",  # Lee Joon-ho in Hanja (historical Korean)
-    # "朴智勳",  # Park Ji-hoon in Hanja (historical Korean)
-    # "崔秀安",  # Choi Soo-ahn in Hanja (historical Korean)
-    # "鄭允雅",  # Jeong Yuna in Hanja (historical Korean)
-    # "黃炳哲",  # Hwang Byung-chul in Hanja (historical Korean)
-    # "姜丹尼爾",  # Kang Daniel in Hanja (historical Korean)
-    # "孫興慜",  # Son Heung-min in Hanja (historical Korean)
-    # "金正日",  # Kim Jong-il in Hanja (historical Korean)
-    # "柳承協",  # Ryu Seung-hyup in Hanja (historical Korean)
-    #
-    # "阮文海",  # Nguyen Van Hai in Chu Nom (historical Vietnamese)
-    # "陳氏碧恆",  # Tran Thi Bich Hang in Chu Nom (historical Vietnamese)
-    # "黎維英",  # Le Duy Anh in Chu Nom (historical Vietnamese)
-    # "范俊達",  # Pham Tuan Dat in Chu Nom (historical Vietnamese)
-    # "黎太宗",  # Le Thai To in Chu Nom (historical Vietnamese emperor)
-    # "胡志明",  # Ho Chi Minh in Chu Nom (historical Vietnamese)
-    # "武元甲",  # Vo Nguyen Giap in Chu Nom (historical Vietnamese)
-    # "阮愛國",  # Nguyen Ai Quoc in Chu Nom (historical Vietnamese)
-
-    # --- All-Chinese Character Japanese Names (should be rejected) ---
-    "佐藤太郎",  # Sato Taro in Kanji
-    "田中花子",  # Tanaka Hanako in Kanji
-    "山本健",  # Yamamoto Ken in Kanji
-    "渡邊愛子",  # Watanabe Aiko in Kanji
-    "加藤浩一",  # Kato Koichi in Kanji
-    "本田勝",  # Honda Masaru in Kanji
-    "藤原哲也",  # Fujiwara Tetsuya in Kanji
-    "鈴木一郎",  # Suzuki Ichiro in Kanji
-    "高橋美咲",  # Takahashi Misaki in Kanji
-    "伊藤博文",  # Ito Hirobumi (historical figure) in Kanji
+    # All-Chinese Character Japanese Names (should be rejected)
+    ("佐藤太郎", (False, "should_be_rejected")),  # Sato Taro in Kanji
+    ("田中花子", (False, "should_be_rejected")),  # Tanaka Hanako in Kanji
+    ("山本健", (False, "should_be_rejected")),  # Yamamoto Ken in Kanji
+    ("渡邊愛子", (False, "should_be_rejected")),  # Watanabe Aiko in Kanji
+    ("加藤浩一", (False, "should_be_rejected")),  # Kato Koichi in Kanji
+    ("本田勝", (False, "should_be_rejected")),  # Honda Masaru in Kanji
+    ("藤原哲也", (False, "should_be_rejected")),  # Fujiwara Tetsuya in Kanji
+    ("鈴木一郎", (False, "should_be_rejected")),  # Suzuki Ichiro in Kanji
+    ("高橋美咲", (False, "should_be_rejected")),  # Takahashi Misaki in Kanji
+    ("伊藤博文", (False, "should_be_rejected")),  # Ito Hirobumi (historical figure) in Kanji
 ]
 
 
@@ -327,13 +279,18 @@ def test_non_chinese_rejection():
     passed = 0
     failed = 0
 
-    for input_name in NON_CHINESE_TEST_CASES:
+    for input_name, expected_result in NON_CHINESE_TEST_CASES:
         result = detector.is_chinese_name(input_name)
-        if result.success is False:
+
+        # Extract expected success status from tuple
+        expected_success, _ = expected_result
+
+        if result.success == expected_success:
             passed += 1
         else:
             failed += 1
-            print(f"FAILED: '{input_name}': expected False, got {result.success}")
+            actual = result.result if result.success else f"ERROR: {result.error_message}"
+            print(f"FAILED: '{input_name}': expected {expected_result}, got ({result.success}, '{actual}')")
 
     assert failed == 0, f"Non-Chinese rejection tests: {failed} failures out of {len(NON_CHINESE_TEST_CASES)} tests"
     print(f"Non-Chinese rejection tests: {passed} passed, {failed} failed")

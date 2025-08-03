@@ -10,6 +10,15 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class ParsedName:
+    """Parsed name with surname and given name components."""
+    surname: str
+    given_name: str
+    surname_tokens: list[str]
+    given_tokens: list[str]
+
+
+@dataclass(frozen=True)
 class ParseResult:
     """Result of name parsing operation - Scala Either-like structure."""
 

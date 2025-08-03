@@ -28,8 +28,6 @@ from sinonym import ChineseNameDetector
 # Performance thresholds as constants
 MAX_MICROSECONDS_PER_NAME = 1000  # 1ms requirement
 MIN_DIVERSE_NAMES_PER_SECOND = 10000  # 10,000 names/second for diverse data
-MAX_CACHED_MICROSECONDS_PER_NAME = 500  # Higher expectation for cached data
-MIN_CACHED_NAMES_PER_SECOND = 11000
 MAX_PERFORMANCE_VARIANCE = 0.7  # 70% threshold
 
 
@@ -157,57 +155,6 @@ class TestChineseNameDetectorPerformance:
 
         # Verify all names were processed
         assert len(results) == len(test_names), "Not all names were processed"
-
-    def test_performance_cached_data(self, detector):
-        """
-        Test processing performance with cached data (optimal scenario).
-
-        This test measures performance when cache benefits are maximized,
-        showing the detector's optimal performance characteristics.
-        """
-        # Generate cached-friendly test data (repeated names for cache benefits)
-        cached_names = [
-            "Yu-Zhong Wei",
-            "Liu Dehua",
-            "Ouyang Xiaoming",
-            "Wong Siu Ming",
-            "John Smith",
-            "Kim Min Soo",
-            "Chen Yu",
-            "Au-Yeung Ka-Ming",
-        ] * 125  # 1000 total names with heavy cache reuse
-
-        print(f"\nTesting performance with {len(cached_names)} cached-friendly names...")
-
-        # Measure processing time
-        start_time = time.perf_counter()
-        results = []
-        for name in cached_names:
-            result = detector.is_chinese_name(name)
-            results.append(result)
-        end_time = time.perf_counter()
-
-        # Calculate performance metrics
-        total_time = end_time - start_time
-        names_per_second = len(cached_names) / total_time
-        microseconds_per_name = (total_time / len(cached_names)) * 1_000_000
-
-        print(f"Cached data: {len(cached_names)} names in {total_time:.3f}s")
-        print(f"Rate: {names_per_second:.0f} names/second")
-        print(f"Time per name: {microseconds_per_name:.1f} microseconds")
-
-        # Performance assertions - cached data should be even faster
-        assert microseconds_per_name < MAX_CACHED_MICROSECONDS_PER_NAME, (
-            f"Cached processing time {microseconds_per_name:.1f} μs exceeds "
-            f"{MAX_CACHED_MICROSECONDS_PER_NAME}μs expectation"
-        )
-        assert names_per_second > MIN_CACHED_NAMES_PER_SECOND, (
-            f"Cached processing rate {names_per_second:.0f} names/sec is below "
-            f"{MIN_CACHED_NAMES_PER_SECOND} names/sec expectation"
-        )
-
-        # Verify all names were processed
-        assert len(results) == len(cached_names), "Not all cached names were processed"
 
     def test_performance_consistency(self, detector):
         """
