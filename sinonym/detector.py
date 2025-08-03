@@ -166,6 +166,7 @@ import logging
 import string
 
 from sinonym.services import (
+    BatchAnalysisService,
     CacheInfo,
     ChineseNameConfig,
     DataInitializationService,
@@ -177,6 +178,7 @@ from sinonym.services import (
     ParseResult,
     PinyinCacheService,
 )
+from sinonym.types import BatchFormatPattern, BatchParseResult
 
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CHINESE NAME DETECTOR CLASS
@@ -198,6 +200,7 @@ class ChineseNameDetector:
         self._ethnicity_service: EthnicityClassificationService | None = None
         self._parsing_service: NameParsingService | None = None
         self._formatting_service: NameFormattingService | None = None
+        self._batch_analysis_service: BatchAnalysisService | None = None
 
         # Initialize data structures
         self._initialize()
@@ -224,6 +227,7 @@ class ChineseNameDetector:
                 weights=self._weights,
             )
             self._formatting_service = NameFormattingService(self._config, self._normalizer, self._data)
+            self._batch_analysis_service = BatchAnalysisService(self._parsing_service)
 
     def _ensure_initialized(self) -> None:
         """Ensure data is initialized (lazy initialization)."""
@@ -373,3 +377,169 @@ class ChineseNameDetector:
                         return ParseResult.failure(str(e))
 
         return ParseResult.failure("name not recognised as Chinese")
+
+    def analyze_name_batch(
+        self,
+        names: list[str],
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+    ) -> BatchParseResult:
+        """
+        Analyze a batch of names with format pattern detection.
+        
+        This method processes multiple names together, detects the dominant
+        formatting pattern (surname-first vs given-first), and applies it
+        consistently to improve accuracy for ambiguous cases.
+        
+        Args:
+            names: List of raw name strings to analyze
+            format_threshold: Minimum percentage (0.0-1.0) required for format detection
+            minimum_batch_size: Minimum number of names required for batch processing
+            
+        Returns:
+            BatchParseResult containing individual results, format pattern, and improvements
+            
+        Example:
+            # Academic author list (surname-first pattern)
+            names = ["Zhang Wei", "Li Ming", "Bei Yu", "Wang Xiaoli"]
+            result = detector.analyze_name_batch(names)
+            # "Bei Yu" will be correctly parsed as "Bei Yu" due to batch context
+        """
+        self._ensure_initialized()
+
+        if self._batch_analysis_service is None:
+            # Fallback to individual processing if batch service not available
+            individual_results = [self.is_chinese_name(name) for name in names]
+            return self._create_fallback_batch_result(names, individual_results)
+
+        # Configure threshold for this analysis
+        original_threshold = self._batch_analysis_service._format_threshold
+        self._batch_analysis_service._format_threshold = format_threshold
+
+        try:
+            return self._batch_analysis_service.analyze_name_batch(
+                names,
+                self._normalizer,
+                self._data,
+                self._formatting_service,
+                minimum_batch_size,
+            )
+        finally:
+            # Restore original threshold
+            self._batch_analysis_service._format_threshold = original_threshold
+
+    def detect_batch_format(
+        self,
+        names: list[str],
+        format_threshold: float = 0.55,
+    ) -> BatchFormatPattern:
+        """
+        Detect the format pattern of a batch without full processing.
+        
+        This is useful for understanding the formatting consistency of a
+        name list before deciding whether to apply batch processing.
+        
+        Args:
+            names: List of raw name strings to analyze
+            format_threshold: Minimum percentage (0.0-1.0) required for format detection
+            
+        Returns:
+            BatchFormatPattern indicating the dominant format and confidence
+            
+        Example:
+            pattern = detector.detect_batch_format(["Zhang Wei", "Li Ming", "Wang Xiaoli"])
+            if pattern.threshold_met:
+                print(f"Detected {pattern.dominant_format} with {pattern.confidence:.1%} confidence")
+        """
+        self._ensure_initialized()
+
+        if self._batch_analysis_service is None:
+            # Return a fallback pattern indicating mixed format
+            from sinonym.types import NameFormat
+            return BatchFormatPattern(
+                dominant_format=NameFormat.MIXED,
+                confidence=0.0,
+                surname_first_count=0,
+                given_first_count=0,
+                total_count=len(names),
+                threshold_met=False,
+            )
+
+        # Configure threshold for this analysis
+        original_threshold = self._batch_analysis_service._format_threshold
+        self._batch_analysis_service._format_threshold = format_threshold
+
+        try:
+            return self._batch_analysis_service.detect_batch_format(
+                names,
+                self._normalizer,
+                self._data,
+            )
+        finally:
+            # Restore original threshold
+            self._batch_analysis_service._format_threshold = original_threshold
+
+    def process_name_batch(
+        self,
+        names: list[str],
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+    ) -> list[ParseResult]:
+        """
+        Process a batch of names and return just the parse results.
+        
+        This is a convenience method that returns only the ParseResult list
+        from batch analysis, similar to calling is_chinese_name() on each name
+        but with batch format detection applied.
+        
+        Args:
+            names: List of raw name strings to process
+            format_threshold: Minimum percentage (0.0-1.0) required for format detection
+            minimum_batch_size: Minimum number of names required for batch processing
+            
+        Returns:
+            List of ParseResult objects, one for each input name
+            
+        Example:
+            names = ["Zhang Wei", "Li Ming", "Bei Yu"]
+            results = detector.process_name_batch(names)
+            for result in results:
+                if result.success:
+                    print(f"Formatted: {result.result}")
+        """
+        batch_result = self.analyze_name_batch(names, format_threshold, minimum_batch_size)
+        return batch_result.results
+
+    def _create_fallback_batch_result(self, names: list[str], individual_results: list[ParseResult]) -> BatchParseResult:
+        """Create a fallback BatchParseResult when batch analysis is not available."""
+        from sinonym.types import BatchFormatPattern, IndividualAnalysis, NameFormat
+
+        # Create dummy format pattern
+        format_pattern = BatchFormatPattern(
+            dominant_format=NameFormat.MIXED,
+            confidence=0.0,
+            surname_first_count=0,
+            given_first_count=0,
+            total_count=len(names),
+            threshold_met=False,
+        )
+
+        # Create dummy individual analyses
+        individual_analyses = []
+        for name in names:
+            individual_analyses.append(
+                IndividualAnalysis(
+                    raw_name=name,
+                    candidates=[],
+                    best_candidate=None,
+                    confidence=0.0,
+                ),
+            )
+
+        return BatchParseResult(
+            names=names,
+            results=individual_results,
+            format_pattern=format_pattern,
+            individual_analyses=individual_analyses,
+            improvements=[],
+        )

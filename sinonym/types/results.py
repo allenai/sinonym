@@ -7,6 +7,7 @@ and immutable data structures.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
 
 @dataclass(frozen=True)
@@ -72,3 +73,50 @@ class CacheInfo:
     pickle_file_exists: bool
     pickle_file_size: int | None = None
     pickle_file_mtime: float | None = None
+
+
+class NameFormat(Enum):
+    """Name format enumeration for batch processing."""
+    SURNAME_FIRST = "surname_first"  # Chinese style: "Zhang Wei"
+    GIVEN_FIRST = "given_first"      # Western style: "Wei Zhang"
+    MIXED = "mixed"                  # No clear pattern
+
+
+@dataclass(frozen=True)
+class ParseCandidate:
+    """Individual parse candidate with scoring details."""
+    surname_tokens: list[str]
+    given_tokens: list[str]
+    score: float
+    format: NameFormat
+    original_compound_format: str | None = None
+
+
+@dataclass(frozen=True)
+class IndividualAnalysis:
+    """Detailed analysis of a single name with all candidates."""
+    raw_name: str
+    candidates: list[ParseCandidate]
+    best_candidate: ParseCandidate | None
+    confidence: float  # Confidence in best candidate
+
+
+@dataclass(frozen=True)
+class BatchFormatPattern:
+    """Detected formatting pattern for a batch of names."""
+    dominant_format: NameFormat
+    confidence: float  # Percentage of names following dominant format
+    surname_first_count: int
+    given_first_count: int
+    total_count: int
+    threshold_met: bool  # Whether confidence >= threshold (e.g., 67%)
+
+
+@dataclass(frozen=True)
+class BatchParseResult:
+    """Complete batch processing result."""
+    names: list[str]
+    results: list[ParseResult]
+    format_pattern: BatchFormatPattern
+    individual_analyses: list[IndividualAnalysis]
+    improvements: list[int]  # Indices of names improved by batch processing

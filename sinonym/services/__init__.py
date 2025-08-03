@@ -5,6 +5,7 @@ This package contains all service classes used by the Chinese name
 detection system, organized by domain responsibility.
 """
 
+from sinonym.services.batch_analysis import BatchAnalysisService
 from sinonym.services.cache import PinyinCacheService
 from sinonym.services.ethnicity import EthnicityClassificationService
 from sinonym.services.formatting import NameFormattingService
@@ -15,6 +16,8 @@ from sinonym.services.parsing import NameParsingService
 from sinonym.types import CacheInfo, ChineseNameConfig, ParseResult
 
 __all__ = [
+    # Batch Services
+    "BatchAnalysisService",
     # Types (re-exported for compatibility)
     "CacheInfo",
     "ChineseNameConfig",
