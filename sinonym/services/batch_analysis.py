@@ -144,7 +144,7 @@ class BatchAnalysisService:
         normalized_input = normalizer.apply(name)
         tokens = list(normalized_input.roman_tokens)
 
-        if len(tokens) < 2:
+        if len(tokens) < self._parsing_service._config.min_tokens_required:
             return [], None
 
         # Generate all possible parses

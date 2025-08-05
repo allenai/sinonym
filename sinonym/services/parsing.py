@@ -113,7 +113,7 @@ class NameParsingService:
                 if (
                     has_single_letter_given
                     and has_multi_syllable_tokens
-                    and score < -25.0
+                    and score < self._config.poor_score_threshold
                     and not has_chinese_surname_in_tokens
                 ):
                     # This looks like a Western name where single letters are initials
@@ -130,8 +130,8 @@ class NameParsingService:
         compound_metadata: dict[str, CompoundMetadata],
     ) -> ParseResult:
         """Find the best parse using probabilistic scoring."""
-        if len(tokens) < 2:
-            return ParseResult.failure("needs at least 2 tokens")
+        if len(tokens) < self._config.min_tokens_required:
+            return ParseResult.failure(f"needs at least {self._config.min_tokens_required} tokens")
 
         parses_with_format = self._generate_all_parses_with_format(
             tokens,
@@ -173,7 +173,7 @@ class NameParsingService:
             if (
                 has_single_letter_given
                 and has_multi_syllable_tokens
-                and score < -25.0
+                and score < self._config.poor_score_threshold
                 and not has_chinese_surname_in_tokens
             ):
                 # This looks like a Western name where single letters are initials

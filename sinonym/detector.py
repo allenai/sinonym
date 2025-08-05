@@ -256,7 +256,7 @@ class ChineseNameDetector:
         - success=False, error_message=reason if not Chinese name
         """
         # Input validation
-        if not raw_name or len(raw_name) > 100:  # Reasonable name length limit
+        if not raw_name or len(raw_name) > self._config.max_name_length:
             return ParseResult.failure("invalid input length")
 
         if all(c in string.punctuation + string.whitespace for c in raw_name):
@@ -271,8 +271,8 @@ class ChineseNameDetector:
         # Use new normalization service for cleaner pipeline
         normalized_input = self._normalizer.apply(raw_name)
 
-        if len(normalized_input.roman_tokens) < 2:
-            return ParseResult.failure("needs at least 2 Roman tokens")
+        if len(normalized_input.roman_tokens) < self._config.min_tokens_required:
+            return ParseResult.failure(f"needs at least {self._config.min_tokens_required} Roman tokens")
 
         # Check if this is an all-Chinese input first
         is_all_chinese = self._normalizer._text_preprocessor.is_all_chinese_input(raw_name)
@@ -289,7 +289,7 @@ class ChineseNameDetector:
 
         # Try parsing in both orders - for all-Chinese inputs, choose best scoring parse
 
-        if is_all_chinese and len(normalized_input.roman_tokens) == 2:
+        if is_all_chinese and len(normalized_input.roman_tokens) == self._config.min_tokens_required:
             # For all-Chinese 2-token inputs, manually create both parse candidates
             tokens = list(normalized_input.roman_tokens)
             token1, token2 = tokens[0], tokens[1]

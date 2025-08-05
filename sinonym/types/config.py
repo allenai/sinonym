@@ -52,6 +52,13 @@ class ChineseNameConfig:
     default_surname_logp: float
     default_given_logp: float
     compound_penalty: float
+    
+    # Core processing constants
+    max_name_length: int  # Maximum allowed name length
+    min_tokens_required: int  # Minimum tokens for valid name parsing
+    
+    # Parsing scoring constants
+    poor_score_threshold: float  # Score below which parsing is considered poor
 
     @classmethod
     def create_default(cls) -> ChineseNameConfig:
@@ -78,6 +85,9 @@ class ChineseNameConfig:
             default_surname_logp=-15.0,
             default_given_logp=-15.0,
             compound_penalty=0.1,
+            max_name_length=100,
+            min_tokens_required=2,
+            poor_score_threshold=-25.0,
         )
 
     def with_log_probabilities(self, surname_logp: float, given_logp: float) -> ChineseNameConfig:
