@@ -200,7 +200,7 @@ def extract_basic_features(
 
 
 def _get_precomputed_surname_median(
-    surname_tokens: list[str], parsing_service: NameParsingService, normalized_cache: dict[str, str]
+    surname_tokens: list[str], parsing_service: NameParsingService, normalized_cache: dict[str, str],
 ) -> float:
     """Get pre-computed median-based surname log probability."""
     if len(surname_tokens) == 1:
@@ -210,17 +210,17 @@ def _get_precomputed_surname_median(
 
         # Look up pre-computed median
         return parsing_service._data.surname_median_logprobs.get(
-            normalized, parsing_service._config.default_surname_logp
+            normalized, parsing_service._config.default_surname_logp,
         )
     # Compound surname - return the max-based value (no median for compounds)
     surname_key = parsing_service._surname_key(surname_tokens, normalized_cache)
     return parsing_service._data.surname_log_probabilities.get(
-        surname_key, parsing_service._config.default_surname_logp
+        surname_key, parsing_service._config.default_surname_logp,
     )
 
 
 def _get_precomputed_given_median(
-    token: str, parsing_service: NameParsingService, normalized_cache: dict[str, str]
+    token: str, parsing_service: NameParsingService, normalized_cache: dict[str, str],
 ) -> float:
     """Get pre-computed median-based given name log probability for a single token."""
     normalized = normalized_cache.get(token, parsing_service._normalizer.norm(token))
@@ -230,19 +230,19 @@ def _get_precomputed_given_median(
 
 
 def _get_precomputed_surname_rank(
-    surname_tokens: list[str], parsing_service: NameParsingService, normalized_cache: dict[str, str]
+    surname_tokens: list[str], parsing_service: NameParsingService, normalized_cache: dict[str, str],
 ) -> float:
     """Get pre-computed percentile rank of this surname in the frequency database (0-1 scale)."""
     surname_key = parsing_service._surname_key(surname_tokens, normalized_cache)
 
     # Look up pre-computed percentile rank
     return parsing_service._data.surname_percentile_ranks.get(
-        surname_key, 1.0
+        surname_key, 1.0,
     )  # Bottom percentile for unknown surnames
 
 
 def _get_precomputed_given_rank(
-    token: str, parsing_service: NameParsingService, normalized_cache: dict[str, str]
+    token: str, parsing_service: NameParsingService, normalized_cache: dict[str, str],
 ) -> float:
     """Get pre-computed percentile rank of this given name character in the frequency database (0-1 scale)."""
     given_key = parsing_service._given_name_key(token, normalized_cache)
@@ -456,7 +456,7 @@ def process_names_batch(
                             "first_two_chars": first_two_chars,
                             "first_char_in_surnames": detector._data.surname_frequencies.get(first_char, 0) > 0,
                             "first_two_in_surnames": detector._data.surname_frequencies.get(first_two_chars, 0) > 0,
-                        }
+                        },
                     )
                 continue  # Skip names that don't have valid surnames
 
@@ -542,7 +542,7 @@ def process_names_batch(
         print("-" * 50)
         for ex in rejected_examples:
             print(
-                f"{ex['name']}\t{ex['length']}\t{ex['first_char']}\t{ex['first_two_chars']}\t{ex['first_char_in_surnames']}\t{ex['first_two_in_surnames']}"
+                f"{ex['name']}\t{ex['length']}\t{ex['first_char']}\t{ex['first_two_chars']}\t{ex['first_char_in_surnames']}\t{ex['first_two_in_surnames']}",
             )
 
     return training_examples

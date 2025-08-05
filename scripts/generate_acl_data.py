@@ -71,7 +71,7 @@ def filter_chinese_names(authors):
                     "original": author,  # "Wei Ming Zhang" (given surname format)
                     "formatted": formatted_name,  # "Wei-Ming Zhang" (given-surname format)
                     "tokens": author.split(),  # ["Wei", "Ming", "Zhang"]
-                }
+                },
             )
         else:
             non_chinese_count += 1
