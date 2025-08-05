@@ -2,7 +2,7 @@
 
 *A Chinese name detection and normalization library.*
 
-Sinonym is a Python library designed to accurately detect and normalize Chinese names across various romanization systems. It filters out non-Chinese names (such as Western, Korean, Vietnamese, and Japanese names) to prevent false positives.
+Sinonym is a Python library designed to accurately detect and normalize Chinese names across various romanization systems. It filters out non-Chinese names (such as Western, Korean, Vietnamese, and Japanese names).
 
 ## Data Flow Pipeline
 
@@ -23,8 +23,6 @@ Formatted Output
 ```
 
 ## What to Expect: Behavior and Output
-
-Based on a comprehensive analysis of the library's test suites, here is a detailed breakdown of its behavior.
 
 ### 1. Output Formatting & Standardization
 
