@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 from sinonym.types import (
     BatchFormatPattern,
     BatchParseResult,
-    IndividualAnalysis,
     NameFormat,
     ParseCandidate,
     ParseResult,
@@ -55,45 +54,40 @@ class BatchAnalysisService:
             return self._process_individually(names, normalizer, data, formatting_service)
 
         # Phase 1: Analyze each name individually and collect all parse candidates
-        individual_analyses = []
-        compound_metadatas = []
+        name_candidates = []  # List of (name, candidates, best_candidate, compound_metadata)
 
         for name in names:
-            analysis = self._analyze_individual_name(name, normalizer, data)
-            individual_analyses.append(analysis)
+            candidates, best_candidate = self._analyze_individual_name(name, normalizer, data)
 
             # Get compound metadata for this name
             normalized_input = normalizer.apply(name)
-            compound_metadatas.append(normalized_input.compound_metadata)
+            name_candidates.append((name, candidates, best_candidate, normalized_input.compound_metadata))
 
         # Phase 2: Detect the dominant format pattern
-        format_pattern = self._detect_format_pattern(individual_analyses)
+        format_pattern = self._detect_format_pattern(name_candidates)
 
         # Phase 3: Apply batch formatting if strong pattern detected
         if format_pattern.threshold_met:
             results = self._apply_batch_format(
-                individual_analyses,
+                name_candidates,
                 format_pattern.dominant_format,
-                normalizer,
-                data,
                 formatting_service,
-                compound_metadatas,
             )
-            improvements = self._find_improvements(individual_analyses, results)
+            improvements = self._find_improvements(name_candidates, results)
         else:
             # No strong pattern - raise error instead of falling back to individual processing
             raise ValueError(
                 f"Batch format detection confidence too low: {format_pattern.confidence:.1%} "
                 f"(threshold: {self._format_threshold:.1%}). Detected format: {format_pattern.dominant_format.name} "
                 f"with {format_pattern.given_first_count} given-first and {format_pattern.surname_first_count} "
-                f"surname-first preferences. Consider processing names individually or adjusting the threshold."
+                f"surname-first preferences. Consider processing names individually or adjusting the threshold.",
             )
 
         return BatchParseResult(
             names=names,
             results=results,
             format_pattern=format_pattern,
-            individual_analyses=individual_analyses,
+            individual_analyses=[],  # Simplified - no longer track this
             improvements=improvements,
         )
 
@@ -104,27 +98,25 @@ class BatchAnalysisService:
         Returns:
             BatchFormatPattern indicating the dominant format and confidence
         """
-        individual_analyses = []
+        name_candidates = []
         for name in names:
-            analysis = self._analyze_individual_name(name, normalizer, data)
-            individual_analyses.append(analysis)
+            candidates, best_candidate = self._analyze_individual_name(name, normalizer, data)
+            name_candidates.append((name, candidates, best_candidate, None))  # No compound_metadata needed for format detection
 
-        return self._detect_format_pattern(individual_analyses)
+        return self._detect_format_pattern(name_candidates)
 
     def _process_individually(self, names: list[str], normalizer, data, formatting_service) -> BatchParseResult:
         """Process names individually when batch is too small."""
-        individual_analyses = []
         results = []
 
         for name in names:
-            analysis = self._analyze_individual_name(name, normalizer, data)
-            individual_analyses.append(analysis)
+            candidates, best_candidate = self._analyze_individual_name(name, normalizer, data)
 
             # Get compound metadata for this name
             normalized_input = normalizer.apply(name)
             results.append(
                 self._format_best_candidate(
-                    analysis, normalizer, data, formatting_service, normalized_input.compound_metadata,
+                    best_candidate, formatting_service, normalized_input.compound_metadata,
                 ),
             )
 
@@ -142,23 +134,18 @@ class BatchAnalysisService:
             names=names,
             results=results,
             format_pattern=format_pattern,
-            individual_analyses=individual_analyses,
+            individual_analyses=[],  # Simplified
             improvements=[],
         )
 
-    def _analyze_individual_name(self, name: str, normalizer, data) -> IndividualAnalysis:
+    def _analyze_individual_name(self, name: str, normalizer, _data) -> tuple[list[ParseCandidate], ParseCandidate | None]:
         """Analyze a single name and return all parse candidates with scores."""
         # Normalize the input
         normalized_input = normalizer.apply(name)
         tokens = list(normalized_input.roman_tokens)
 
         if len(tokens) < 2:
-            return IndividualAnalysis(
-                raw_name=name,
-                candidates=[],
-                best_candidate=None,
-                confidence=0.0,
-            )
+            return [], None
 
         # Generate all possible parses
         parses_with_format = self._parsing_service._generate_all_parses_with_format(
@@ -168,12 +155,7 @@ class BatchAnalysisService:
         )
 
         if not parses_with_format:
-            return IndividualAnalysis(
-                raw_name=name,
-                candidates=[],
-                best_candidate=None,
-                confidence=0.0,
-            )
+            return [], None
 
         # Score all parses and determine their formats
         candidates = []
@@ -202,60 +184,42 @@ class BatchAnalysisService:
         # Sort by score (highest first)
         candidates.sort(key=lambda x: x.score, reverse=True)
 
-        # Calculate confidence (difference between best and second-best)
-        confidence = 0.0
         best_candidate = candidates[0] if candidates else None
-        if len(candidates) >= 2:
-            confidence = candidates[0].score - candidates[1].score
-        elif len(candidates) == 1:
-            confidence = abs(candidates[0].score)  # Use absolute score as confidence
-
-        return IndividualAnalysis(
-            raw_name=name,
-            candidates=candidates,
-            best_candidate=best_candidate,
-            confidence=confidence,
-        )
+        return candidates, best_candidate
 
     def _determine_parse_format(
-        self, surname_tokens: list[str], given_tokens: list[str], original_tokens: list[str],
+        self, surname_tokens: list[str], _given_tokens: list[str], original_tokens: list[str],
     ) -> NameFormat:
         """Determine if a parse follows surname-first or given-first format."""
-        if len(surname_tokens) == 1 and len(given_tokens) == 1 and len(original_tokens) == 2:
-            # Simple 2-token case
-            if surname_tokens[0] == original_tokens[0] and given_tokens[0] == original_tokens[1]:
-                return NameFormat.SURNAME_FIRST
-            if given_tokens[0] == original_tokens[0] and surname_tokens[0] == original_tokens[1]:
-                return NameFormat.GIVEN_FIRST
-
-        # For compound cases or unclear patterns, check position
-        # If surname is at the beginning, it's surname-first
-        if surname_tokens and surname_tokens[0] == original_tokens[0]:
+        if not surname_tokens or not original_tokens:
             return NameFormat.SURNAME_FIRST
-        # If surname is at the end, it's given-first
-        if surname_tokens and surname_tokens[-1] == original_tokens[-1]:
+
+        # Check if surname is at the beginning (surname-first) or end (given-first)
+        if surname_tokens[0] == original_tokens[0]:
+            return NameFormat.SURNAME_FIRST
+        if surname_tokens[-1] == original_tokens[-1]:
             return NameFormat.GIVEN_FIRST
 
         # Default to surname-first for unclear cases
         return NameFormat.SURNAME_FIRST
 
-    def _detect_format_pattern(self, individual_analyses: list[IndividualAnalysis]) -> BatchFormatPattern:
+    def _detect_format_pattern(self, name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]]) -> BatchFormatPattern:
         """Detect the dominant format pattern by counting individual format preferences."""
         surname_first_preferences = 0
         given_first_preferences = 0
         names_with_candidates = 0
 
         # Count format preferences: which format wins for each individual name
-        for analysis in individual_analyses:
-            if not analysis.candidates or not analysis.best_candidate:
+        for _name, candidates, best_candidate, _ in name_candidates:
+            if not candidates or not best_candidate:
                 continue
 
             names_with_candidates += 1
 
             # Count the preference of the best (winning) candidate for this name
-            if analysis.best_candidate.format == NameFormat.SURNAME_FIRST:
+            if best_candidate.format == NameFormat.SURNAME_FIRST:
                 surname_first_preferences += 1
-            elif analysis.best_candidate.format == NameFormat.GIVEN_FIRST:
+            elif best_candidate.format == NameFormat.GIVEN_FIRST:
                 given_first_preferences += 1
 
         if names_with_candidates == 0:
@@ -293,84 +257,68 @@ class BatchAnalysisService:
 
     def _apply_batch_format(
         self,
-        individual_analyses: list[IndividualAnalysis],
+        name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]],
         target_format: NameFormat,
-        normalizer,
-        data,
         formatting_service,
-        compound_metadatas,
     ) -> list[ParseResult]:
         """Apply the detected batch format by selecting best candidate matching the format."""
         results = []
         unambiguous_names = []
 
-        # First pass: check for unambiguous names that can't be forced to target format
-        for i, analysis in enumerate(individual_analyses):
-            if not analysis.candidates:
-                continue
-                
-            # Check if this name has candidates matching the target format
-            matching_candidates = [c for c in analysis.candidates if c.format == target_format]
-            
-            if not matching_candidates and len(analysis.candidates) > 0:
+        # Process all names in one pass - check for unambiguous names and apply format
+        for name, candidates, best_candidate, compound_metadata in name_candidates:
+            # Find candidates that match the target format
+            matching_candidates = [c for c in candidates if c.format == target_format]
+
+            if candidates and not matching_candidates:
                 # This name has no candidates for the target format - it's unambiguous
-                unambiguous_names.append(analysis.raw_name)
-        
-        # If we have unambiguous names, raise an error
+                unambiguous_names.append(name)
+                # Use the best available candidate
+                selected_candidate = best_candidate
+            elif matching_candidates:
+                # Use the best candidate that matches the batch format
+                selected_candidate = max(matching_candidates, key=lambda x: x.score)
+            else:
+                # No candidates at all
+                selected_candidate = None
+
+            result = self._candidate_to_parse_result(
+                selected_candidate, formatting_service, compound_metadata,
+            )
+            results.append(result)
+
+        # If we have unambiguous names, raise an error with results
         if unambiguous_names:
             name_list = "', '".join(unambiguous_names[:5])  # Show first 5
             if len(unambiguous_names) > 5:
                 name_list += f"' and {len(unambiguous_names) - 5} more"
             else:
                 name_list += "'"
-            
+
             raise ValueError(
                 f"Cannot apply batch format {target_format.name} to {len(unambiguous_names)} "
                 f"unambiguous names: '{name_list}'. These names have only one possible parse format "
                 f"and cannot be forced into the detected batch format. Consider processing these "
-                f"names individually or using a different batch."
+                f"names individually or using a different batch.",
             )
-
-        # Second pass: apply the format to all names
-        for i, analysis in enumerate(individual_analyses):
-            if not analysis.candidates:
-                results.append(ParseResult.failure("no valid parse found"))
-                continue
-
-            # Find the best candidate that matches the target format
-            matching_candidates = [c for c in analysis.candidates if c.format == target_format]
-
-            if matching_candidates:
-                # Use the best candidate that matches the batch format
-                best_matching = max(matching_candidates, key=lambda x: x.score)
-                result = self._candidate_to_parse_result(
-                    best_matching, normalizer, data, formatting_service, compound_metadatas[i],
-                )
-            else:
-                # This should not happen after our unambiguous check above
-                result = self._candidate_to_parse_result(
-                    analysis.best_candidate, normalizer, data, formatting_service, compound_metadatas[i],
-                )
-
-            results.append(result)
 
         return results
 
     def _format_best_candidate(
-        self, analysis: IndividualAnalysis, normalizer, data, formatting_service, compound_metadata,
+        self, best_candidate: ParseCandidate | None, formatting_service, compound_metadata,
     ) -> ParseResult:
         """Format the best candidate from an individual analysis."""
-        if not analysis.best_candidate:
-            return ParseResult.failure("no valid parse found")
-
         return self._candidate_to_parse_result(
-            analysis.best_candidate, normalizer, data, formatting_service, compound_metadata,
+            best_candidate, formatting_service, compound_metadata,
         )
 
     def _candidate_to_parse_result(
-        self, candidate: ParseCandidate, normalizer, data, formatting_service, compound_metadata,
+        self, candidate: ParseCandidate | None, formatting_service, compound_metadata,
     ) -> ParseResult:
         """Convert a ParseCandidate to a ParseResult using the real formatting service."""
+        if not candidate:
+            return ParseResult.failure("no valid parse found")
+
         try:
             # Use the EXACT same formatting pipeline as individual processing
             formatted_name = formatting_service.format_name_output(
@@ -385,13 +333,13 @@ class BatchAnalysisService:
             return ParseResult.failure(str(e))
 
     def _find_improvements(
-        self, individual_analyses: list[IndividualAnalysis], batch_results: list[ParseResult],
+        self, name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]], batch_results: list[ParseResult],
     ) -> list[int]:
         """Find indices of names that were improved by batch processing."""
         improvements = []
 
-        for i, (analysis, batch_result) in enumerate(zip(individual_analyses, batch_results, strict=False)):
-            if not analysis.best_candidate or not batch_result.success:
+        for i, ((name, candidates, best_candidate, _compound_metadata), batch_result) in enumerate(zip(name_candidates, batch_results, strict=False)):
+            if not best_candidate or not batch_result.success:
                 continue
 
             # Check if the batch result is different from the individual best result
@@ -399,13 +347,13 @@ class BatchAnalysisService:
             # A more sophisticated approach would compare the actual format changes
 
             # Simple heuristic: if the batch applied a different format than what was individually preferred
-            if len(analysis.candidates) >= 2:
+            if len(candidates) >= 2:
                 # Try to determine the format from the batch result
                 # This is a simplification - in a full implementation we'd track this better
-                tokens = analysis.raw_name.split()
+                tokens = name.split()
                 if len(tokens) == 2:
                     # Simple heuristic: check if the order was changed
-                    expected_individual = f"{analysis.best_candidate.given_tokens[0].capitalize()} {analysis.best_candidate.surname_tokens[0].capitalize()}"
+                    expected_individual = f"{best_candidate.given_tokens[0].capitalize()} {best_candidate.surname_tokens[0].capitalize()}"
                     if expected_individual != batch_result.result:
                         improvements.append(i)
 
