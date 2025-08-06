@@ -381,7 +381,9 @@ def test_acl_chinese_names():
         for case in failed_cases:
             print(f"  {case}")
 
-    assert len(failed_cases) == 0, f"Failed to correctly detect {len(failed_cases)} Chinese names from ACL 2025"
+    assert (
+        len(failed_cases) == 0
+    ), f"ACL Chinese name tests: {len(failed_cases)} failures out of {len(ACL_CHINESE_NAMES)} tests"
 
 
 def test_acl_non_chinese_names():
@@ -400,7 +402,9 @@ def test_acl_non_chinese_names():
         for case in failed_cases:
             print(f"  {case}")
 
-    assert len(failed_cases) == 0, f"Incorrectly detected {len(failed_cases)} non-Chinese names as Chinese"
+    assert (
+        len(failed_cases) == 0
+    ), f"ACL non-Chinese rejection tests: {len(failed_cases)} failures out of {len(ACL_NON_CHINESE_NAMES)} tests"
 
 
 def test_acl_order_preservation():
@@ -425,7 +429,9 @@ def test_acl_order_preservation():
         for case in failed_cases:
             print(f"  {case}")
 
-    assert len(failed_cases) == 0, f"{len(failed_cases)} ACL names had incorrect order changes"
+    assert (
+        len(failed_cases) == 0
+    ), f"ACL order preservation tests: {len(failed_cases)} failures out of {len(ACL_ORDER_PRESERVATION_TEST_CASES)} tests"
 
 
 def analyze_acl_2025_authors():

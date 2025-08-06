@@ -21,7 +21,8 @@ def run_tests():
     try:
         result = subprocess.run(
             ["uv", "run", "pytest", "tests/", "-v", "-s"],
-            check=False, capture_output=True,
+            check=False,
+            capture_output=True,
             text=True,
             env=env,
             timeout=60,
@@ -34,13 +35,10 @@ def run_tests():
         print(f"Error running tests: {e}")
         return ""
 
+
 def extract_failure_counts(output):
     """Extract individual test case failure counts from test output."""
     # Pattern to match lines like "X failures out of Y tests"
-    pattern = r"(\d+)\s+failures?\s+out\s+of\s+\d+\s+tests?"
-
-    matches = re.findall(pattern, output)
-
     failure_details = []
     # Also extract the full context for each failure
     detail_pattern = r"([^:]+):\s*(\d+)\s+failures?\s+out\s+of\s+(\d+)\s+tests?"
@@ -48,13 +46,16 @@ def extract_failure_counts(output):
 
     for match in detail_matches:
         test_name, failures, total = match
-        failure_details.append({
-            "name": test_name.strip(),
-            "failures": int(failures),
-            "total": int(total),
-        })
+        failure_details.append(
+            {
+                "name": test_name.strip(),
+                "failures": int(failures),
+                "total": int(total),
+            }
+        )
 
     return failure_details
+
 
 def check_performance_tests():
     """Run performance tests separately and check if they pass."""
@@ -64,7 +65,8 @@ def check_performance_tests():
     try:
         result = subprocess.run(
             ["uv", "run", "pytest", "tests/test_performance.py", "-v"],
-            check=False, capture_output=True,
+            check=False,
+            capture_output=True,
             text=True,
             env=env,
             timeout=30,
@@ -76,6 +78,7 @@ def check_performance_tests():
         return False, result.stdout + result.stderr
     except Exception as e:
         return False, str(e)
+
 
 def main():
     print("=" * 70)
@@ -153,6 +156,7 @@ def main():
     else:
         print("\n⚠ Unable to determine test status")
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

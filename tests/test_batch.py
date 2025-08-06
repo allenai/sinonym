@@ -694,7 +694,7 @@ class TestBatchACLRealWorld:
                 failed_cases.append(f"'{input_name}' should normalize to '{expected_output}' but got '{result.result}'")
 
         # This demonstrates the power of batch processing
-        assert len(failed_cases) == 0, f"Batch processing failed on {len(failed_cases)} cases: {failed_cases[:5]}"
+        assert len(failed_cases) == 0, f"ACL batch processing tests: {len(failed_cases)} failures out of {len(ACL_CHINESE_NAMES)} tests"
 
         print(f"✅ ACL batch processing: {len(ACL_CHINESE_NAMES)} names processed successfully")
         print(f"   Format detected: {batch_result.format_pattern.dominant_format.name}")
