@@ -41,6 +41,17 @@ class PinyinCacheService:
     def cache_size(self) -> int:
         return _char_to_pinyin.cache_info().currsize
 
+    def get_cache_info(self):
+        """Get cache information for diagnostics."""
+        from sinonym.types import CacheInfo
+        return CacheInfo(
+            cache_built=True,
+            cache_size=self.cache_size,
+            pickle_file_exists=False,  # This cache doesn't use pickle
+            pickle_file_size=None,
+            pickle_file_mtime=None,
+        )
+
 
     # ---------- internal ----------
     def _warm_from_csv(self) -> None:

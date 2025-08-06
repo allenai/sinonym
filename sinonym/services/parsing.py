@@ -21,10 +21,18 @@ if TYPE_CHECKING:
 class NameParsingService:
     """Service for parsing Chinese names into surname and given name components."""
 
-    def __init__(self, config, normalizer, data, weights: list[float] | None = None):
-        self._config = config
-        self._normalizer = normalizer
-        self._data = data
+    def __init__(self, context_or_config, normalizer=None, data=None, *, weights: list[float] | None = None):
+        # Support both old interface (config, normalizer, data) and new context interface
+        if hasattr(context_or_config, "config"):
+            # New context interface
+            self._config = context_or_config.config
+            self._normalizer = context_or_config.normalizer
+            self._data = context_or_config.data
+        else:
+            # Legacy interface - maintain backwards compatibility
+            self._config = context_or_config
+            self._normalizer = normalizer
+            self._data = data
 
         # Weight parameters - can be overridden
         if weights and len(weights) == 8:
@@ -81,7 +89,7 @@ class NameParsingService:
     ) -> ParseResult:
         """Try a single fallback parse configuration - pure function"""
         surname_token = order[surname_pos]
-        normalized_surname = normalized_cache.get(surname_token, self._normalizer.norm(surname_token))
+        normalized_surname = self._normalizer.get_normalized(surname_token, normalized_cache)
 
         if (
             len(surname_token) > 1  # Don't treat single letters as surnames
@@ -100,12 +108,11 @@ class NameParsingService:
                 # Check if any multi-syllable token is a known Chinese surname
                 has_chinese_surname_in_tokens = any(
                     len(token) > 3
-                    and (
-                        self._normalizer.norm(token) in self._data.surnames
-                        or StringManipulationUtils.remove_spaces(
-                            normalized_cache.get(token, self._normalizer.norm(token)),
-                        )
-                        in self._data.surnames_normalized
+                    and self._data.is_surname(
+                        token,
+                        StringManipulationUtils.remove_spaces(
+                            self._normalizer.get_normalized(token, normalized_cache),
+                        ),
                     )
                     for token in order
                 )
@@ -142,9 +149,39 @@ class NameParsingService:
         if not parses:
             return ParseResult.failure("surname not recognised")
 
-        # Score all parses
+        # Score all parses with early validation filtering
         scored_parses = []
+        # Pre-compute expensive checks once for all parses
+        has_multi_syllable_tokens = any(len(token) > 3 for token in tokens)
+        has_chinese_surname_in_tokens = None  # Lazy evaluation
+
         for surname_tokens, given_tokens, original_compound_format in parses_with_format:
+            # Early validation: reject parses where single letters are used as given names
+            # when there are multi-syllable alternatives available (likely Western names)
+            has_single_letter_given = any(len(token) == 1 for token in given_tokens)
+
+            if has_single_letter_given and has_multi_syllable_tokens:
+                # Lazy evaluation of expensive Chinese surname check
+                if has_chinese_surname_in_tokens is None:
+                    has_chinese_surname_in_tokens = any(
+                        len(token) > 3
+                        and self._data.is_surname(
+                            token,
+                            StringManipulationUtils.remove_spaces(self._normalizer.get_normalized(token, normalized_cache)),
+                        )
+                        for token in tokens
+                    )
+
+                # Quick score check before expensive full scoring
+                if not has_chinese_surname_in_tokens:
+                    # Do a quick surname validity check before full scoring
+                    surname_key = self._surname_key(surname_tokens, normalized_cache)
+                    quick_score_estimate = self._data.get_surname_logp(surname_key, self._config.default_surname_logp)
+                    if quick_score_estimate < self._config.poor_score_threshold:
+                        # This looks like a Western name where single letters are initials
+                        continue
+
+            # Full scoring for remaining candidates
             score = self.calculate_parse_score(
                 surname_tokens,
                 given_tokens,
@@ -153,31 +190,6 @@ class NameParsingService:
                 False,
                 original_compound_format,
             )
-
-            # Additional validation: reject parses where single letters are used as given names
-            # when there are multi-syllable alternatives available (likely Western names)
-            has_single_letter_given = any(len(token) == 1 for token in given_tokens)
-            has_multi_syllable_tokens = any(len(token) > 3 for token in tokens)
-
-            # Check if any multi-syllable token is a known Chinese surname
-            has_chinese_surname_in_tokens = any(
-                len(token) > 3
-                and (
-                    self._normalizer.norm(token) in self._data.surnames
-                    or StringManipulationUtils.remove_spaces(normalized_cache.get(token, self._normalizer.norm(token)))
-                    in self._data.surnames_normalized
-                )
-                for token in tokens
-            )
-
-            if (
-                has_single_letter_given
-                and has_multi_syllable_tokens
-                and score < self._config.poor_score_threshold
-                and not has_chinese_surname_in_tokens
-            ):
-                # This looks like a Western name where single letters are initials
-                continue
 
             if score > float("-inf"):
                 scored_parses.append((surname_tokens, given_tokens, score, original_compound_format))
@@ -250,7 +262,7 @@ class NameParsingService:
         # Surname-first pattern: surname + given_names
         # Check both original and normalized forms, but exclude single letters
         first_token = tokens[0]
-        first_normalized = normalized_cache.get(first_token, self._normalizer.norm(first_token))
+        first_normalized = self._normalizer.get_normalized(first_token, normalized_cache)
 
         # Check first token using centralized metadata
         first_meta = compound_metadata.get(first_token)
@@ -262,9 +274,9 @@ class NameParsingService:
             parses.append((compound_parts, tokens[1:], original_format))
         elif len(first_token) > 1:
             # Check for regular single surnames
-            is_regular_surname = (
-                self._normalizer.norm(first_token) in self._data.surnames
-                or StringManipulationUtils.remove_spaces(first_normalized) in self._data.surnames_normalized
+            is_regular_surname = self._data.is_surname(
+                first_token,
+                StringManipulationUtils.remove_spaces(first_normalized),
             )
             if is_regular_surname:
                 parses.append(([first_token], tokens[1:], None))
@@ -272,7 +284,7 @@ class NameParsingService:
         # Surname-last pattern: given_names + surname
         if len(tokens) >= 2:
             last_token = tokens[-1]
-            last_normalized = normalized_cache.get(last_token, self._normalizer.norm(last_token))
+            last_normalized = self._normalizer.get_normalized(last_token, normalized_cache)
 
             # Check last token using centralized metadata
             last_meta = compound_metadata.get(last_token)
@@ -284,9 +296,9 @@ class NameParsingService:
                 parses.append((compound_parts, tokens[:-1], original_format))
             elif len(last_token) > 1:
                 # Check for regular single surnames
-                is_regular_surname = (
-                    self._normalizer.norm(last_token) in self._data.surnames
-                    or StringManipulationUtils.remove_spaces(last_normalized) in self._data.surnames_normalized
+                is_regular_surname = self._data.is_surname(
+                    last_token,
+                    StringManipulationUtils.remove_spaces(last_normalized),
                 )
                 if is_regular_surname:
                     parses.append(([last_token], tokens[:-1], None))
@@ -344,27 +356,21 @@ class NameParsingService:
             return float("-inf")
 
         surname_key = self._surname_key(surname_tokens, normalized_cache)
-        surname_logp = self._data.surname_log_probabilities.get(surname_key, self._config.default_surname_logp)
+        surname_logp = self._data.get_surname_logp(surname_key, self._config.default_surname_logp)
 
         # Handle compound surname mapping mismatches
         if surname_logp == self._config.default_surname_logp and len(surname_tokens) > 1:
             # First try using original compound format if available (e.g., "szeto" -> "si tu")
             if original_compound_format and original_compound_format.lower() in COMPOUND_VARIANTS:
                 compound_target = COMPOUND_VARIANTS[original_compound_format.lower()]
-                surname_logp = self._data.surname_log_probabilities.get(
-                    compound_target,
-                    self._config.default_surname_logp,
-                )
+                surname_logp = self._data.get_surname_logp(compound_target, self._config.default_surname_logp)
             else:
                 # Fallback to old behavior
                 original_compound = StringManipulationUtils.lowercase_join_with_spaces(surname_tokens)
-                surname_logp = self._data.surname_log_probabilities.get(
-                    original_compound,
-                    self._config.default_surname_logp,
-                )
+                surname_logp = self._data.get_surname_logp(original_compound, self._config.default_surname_logp)
 
         given_logp_sum = sum(
-            self._data.given_log_probabilities.get(
+            self._data.get_given_logp(
                 self._given_name_key(g_token, normalized_cache),
                 self._config.default_given_logp,
             )
@@ -373,7 +379,7 @@ class NameParsingService:
 
         compound_given_bonus = 0.0
         if len(given_tokens) == 2 and all(
-            normalized_cache.get(t, self._normalizer.norm(t)) in self._data.given_names_normalized for t in given_tokens
+            self._data.is_given_name(self._normalizer.get_normalized(t, normalized_cache)) for t in given_tokens
         ):
             compound_given_bonus = 1.0
 
@@ -401,8 +407,8 @@ class NameParsingService:
 
         # Percentile rank-based scoring for surnames only
         surname_rank_bonus = 0.0
-        if surname_tokens and surname_key in self._data.surname_percentile_ranks:
-            surname_rank_bonus = self._data.surname_percentile_ranks[surname_key]
+        if surname_tokens:
+            surname_rank_bonus = self._data.get_surname_rank(surname_key)
 
         # NEW: Comparative features - scaled and balanced approach
         surname_freq_log_ratio = 0.0
@@ -415,13 +421,13 @@ class NameParsingService:
             # SURNAME comparative features
             # Calculate log frequency ratio to keep values in reasonable range
             import math
-            my_surname_freq = self._data.surname_frequencies.get(surname_key, 0.001)  # Small default
-            alt_surname_freq = self._data.surname_frequencies.get(given_as_surname_key, 0.001)
+            my_surname_freq = self._data.get_surname_freq(surname_key, 0.001)  # Small default
+            alt_surname_freq = self._data.get_surname_freq(given_as_surname_key, 0.001)
             surname_freq_log_ratio = math.log(my_surname_freq / alt_surname_freq) if alt_surname_freq > 0 else 0.0
 
             # Calculate rank difference: my_surname_rank - alternative_surname_rank
-            my_surname_rank = self._data.surname_percentile_ranks.get(surname_key, 0.0)
-            alt_surname_rank = self._data.surname_percentile_ranks.get(given_as_surname_key, 0.0)
+            my_surname_rank = self._data.get_surname_rank(surname_key)
+            alt_surname_rank = self._data.get_surname_rank(given_as_surname_key)
             surname_rank_difference = my_surname_rank - alt_surname_rank
 
 
@@ -447,31 +453,26 @@ class NameParsingService:
         2. Surname frequencies are similar (ratio < 3x)
         """
         # Get normalized forms
-        surname_norm = normalized_cache.get(surname_token, self._normalizer.norm(surname_token))
-        given_norm = normalized_cache.get(given_token, self._normalizer.norm(given_token))
+        surname_norm = self._normalizer.get_normalized(surname_token, normalized_cache)
+        given_norm = self._normalizer.get_normalized(given_token, normalized_cache)
 
         # Check if both can be surnames
-        surname_is_surname = (
-            self._normalizer.norm(surname_token) in self._data.surnames
-            or surname_norm in self._data.surnames_normalized
-        )
-        given_is_surname = (
-            self._normalizer.norm(given_token) in self._data.surnames or given_norm in self._data.surnames_normalized
-        )
+        surname_is_surname = self._data.is_surname(surname_token, surname_norm)
+        given_is_surname = self._data.is_surname(given_token, given_norm)
 
         if not (surname_is_surname and given_is_surname):
             return False  # Not ambiguous if one clearly can't be a surname
 
         # Check if both can be given names
-        surname_is_given = surname_norm in self._data.given_names_normalized
-        given_is_given = given_norm in self._data.given_names_normalized
+        surname_is_given = self._data.is_given_name(surname_norm)
+        given_is_given = self._data.is_given_name(given_norm)
 
         if not (surname_is_given and given_is_given):
             return False  # Not ambiguous if one clearly can't be a given name
 
         # Check frequency similarity - ambiguous if frequencies are similar
-        surname_freq = self._data.surname_frequencies.get(surname_norm, 0)
-        given_freq = self._data.surname_frequencies.get(given_norm, 0)
+        surname_freq = self._data.get_surname_freq(surname_norm)
+        given_freq = self._data.get_surname_freq(given_norm)
 
         if surname_freq == 0 or given_freq == 0:
             return True  # Ambiguous if we lack frequency data for either
@@ -495,7 +496,7 @@ class NameParsingService:
                 return original_key
             # Fall back to normalized form
             return StringManipulationUtils.remove_spaces(
-                normalized_cache.get(token, self._normalizer.norm(token)),
+                self._normalizer.get_normalized(token, normalized_cache),
             )
         # Compound surname - join with space
         normalized_tokens = [normalized_cache.get(t, self._normalizer.norm(t)) for t in surname_tokens]
@@ -513,7 +514,7 @@ class NameParsingService:
         if original_key in self._data.given_log_probabilities:
             return original_key
         # Fall back to normalized form
-        return self._normalizer.norm(normalized_cache.get(given_token, self._normalizer.norm(given_token)))
+        return self._normalizer.norm(self._normalizer.get_normalized(given_token, normalized_cache))
 
     def _calculate_format_alignment_bonus(
         self,

@@ -22,20 +22,91 @@ from sinonym.chinese_names_data import (
     VIETNAMESE_ONLY_SURNAMES,
     WESTERN_NAMES,
 )
-from sinonym.services.ml_japanese_classifier import create_ml_japanese_classifier
 from sinonym.types import ParseResult
 from sinonym.utils.string_manipulation import StringManipulationUtils
+
+# Optional ML Japanese classifier imports - consolidated from separate service
+try:
+    import logging
+    from pathlib import Path
+
+    import joblib
+    import numpy as np
+
+    # Import custom model components needed for loading the trained model
+    import sinonym.ml_model_components  # This makes the classes available for joblib.load
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+    joblib = None
+    np = None
+
+
+class _MLJapaneseClassifier:
+    """Consolidated ML Japanese classifier - moved from separate service for simplification."""
+
+    def __init__(self, confidence_threshold: float = 0.8):
+        self._confidence_threshold = confidence_threshold
+        self._model = None
+        self._available = ML_AVAILABLE
+
+        if ML_AVAILABLE:
+            try:
+                # Get path relative to ethnicity service file
+                project_root = Path(__file__).parent.parent.parent
+                model_path = project_root / "data" / "chinese_japanese_classifier.joblib"
+
+                if model_path.exists():
+                    self._model = joblib.load(model_path)
+                else:
+                    logging.warning(f"ML Japanese classifier model not found at {model_path}")
+                    self._available = False
+            except Exception as e:
+                logging.warning(f"Failed to load ML Japanese classifier: {e}")
+                self._available = False
+
+    def is_available(self) -> bool:
+        """Check if ML classifier is available and loaded."""
+        return self._available and self._model is not None
+
+    def classify_all_chinese_name(self, name: str) -> ParseResult:
+        """Classify an all-Chinese character name as Chinese or Japanese."""
+        if not self.is_available():
+            return ParseResult.success_with_name("")  # Default to allowing through
+
+        try:
+            # Get prediction and confidence (same as original)
+            prediction = self._model.predict([name])[0]  # 'cn' or 'jp'
+            probabilities = self._model.predict_proba([name])[0]
+            confidence = max(probabilities)
+
+            # Only reject as Japanese if we're very confident
+            if prediction == "jp" and confidence >= self._confidence_threshold:
+                return ParseResult.failure("japanese")
+            return ParseResult.success_with_name("")
+
+        except Exception as e:
+            logging.warning(f"ML Japanese classifier error: {e}")
+            return ParseResult.success_with_name("")  # Default to allowing through
 
 
 class EthnicityClassificationService:
     """Service for classifying names by ethnicity using linguistic patterns."""
 
-    def __init__(self, config, normalizer, data):
-        self._config = config
-        self._normalizer = normalizer
-        self._data = data
-        # Initialize ML Japanese classifier
-        self._ml_classifier = create_ml_japanese_classifier(confidence_threshold=0.8)
+    def __init__(self, context_or_config, normalizer=None, data=None):
+        # Support both old interface (config, normalizer, data) and new context interface
+        if hasattr(context_or_config, "config"):
+            # New context interface
+            self._config = context_or_config.config
+            self._normalizer = context_or_config.normalizer
+            self._data = context_or_config.data
+        else:
+            # Legacy interface - maintain backwards compatibility
+            self._config = context_or_config
+            self._normalizer = normalizer
+            self._data = data
+        # Initialize consolidated ML Japanese classifier
+        self._ml_classifier = _MLJapaneseClassifier(confidence_threshold=0.8)
 
     def classify_ethnicity(self, tokens: tuple[str, ...], normalized_cache: dict[str, str], original_text: str = "") -> ParseResult:
         """
@@ -87,27 +158,24 @@ class EthnicityClassificationService:
         # TIER 1: DEFINITIVE EVIDENCE (High Confidence)
         # =================================================================
 
-        # Check for Korean-only surnames (definitive Korean)
+        # Single loop for all definitive evidence checks (short-circuit optimization)
         for key in expanded_keys:
-            clean_key = StringManipulationUtils.remove_spaces(key)
-            if clean_key in KOREAN_ONLY_SURNAMES:
-                return ParseResult.failure("Korean-only surname detected")
-
-        # Check for Japanese surnames (definitive Japanese)
-        # high precision, low recall
-        for key in expanded_keys:
-            clean_key = StringManipulationUtils.remove_spaces(key)
-            if clean_key in JAPANESE_SURNAMES:
-                return ParseResult.failure("Japanese surname detected")
-
-        # Check for Western names (definitive Western)
-        for key in expanded_keys:
+            # Check for Western names first (most common case, faster lookup)
             if key in WESTERN_NAMES:
                 return ParseResult.failure("Western name detected")
 
-        # Check for Vietnamese-only surnames (definitive Vietnamese)
-        for key in expanded_keys:
+            # Clean key once for multiple checks
             clean_key = StringManipulationUtils.remove_spaces(key)
+
+            # Check Korean-only surnames (definitive Korean)
+            if clean_key in KOREAN_ONLY_SURNAMES:
+                return ParseResult.failure("Korean-only surname detected")
+
+            # Check Japanese surnames (definitive Japanese)
+            if clean_key in JAPANESE_SURNAMES:
+                return ParseResult.failure("Japanese surname detected")
+
+            # Check Vietnamese-only surnames (definitive Vietnamese)
             if clean_key in VIETNAMESE_ONLY_SURNAMES:
                 return ParseResult.failure("appears to be Vietnamese name")
 
@@ -115,18 +183,19 @@ class EthnicityClassificationService:
         # TIER 2: CULTURAL CONTEXT (Medium Confidence)
         # =================================================================
 
+        # Optimized validation chain: calculate overlapping surname evidence once with reduced string ops
+        def check_overlapping_surname(token):
+            clean_token_lower = StringManipulationUtils.remove_spaces(token).lower()
+            return (
+                clean_token_lower in self._data.surnames and (
+                    clean_token_lower in OVERLAPPING_KOREAN_SURNAMES or
+                    clean_token_lower in OVERLAPPING_VIETNAMESE_SURNAMES
+                )
+            )
+
+        has_overlapping_chinese_surname = any(check_overlapping_surname(token) for token in tokens)
+
         korean_structural_score = self._calculate_korean_structural_patterns(tokens, expanded_keys)
-
-        # Use higher threshold if there's overlapping Chinese surname evidence
-        has_overlapping_chinese_surname = False
-        for token in tokens:
-            clean_token = StringManipulationUtils.remove_spaces(token).lower()
-            if clean_token in self._data.surnames and (
-                clean_token in OVERLAPPING_KOREAN_SURNAMES or clean_token in OVERLAPPING_VIETNAMESE_SURNAMES
-            ):
-                has_overlapping_chinese_surname = True
-                break
-
         korean_threshold = 2.5 if has_overlapping_chinese_surname else 2.0
 
         if korean_structural_score >= korean_threshold:
@@ -302,18 +371,11 @@ class EthnicityClassificationService:
 
             # Check if this is a Chinese surname
             normalized_key = StringManipulationUtils.remove_spaces(key_to_normalized.get(key, key))
-            is_chinese_surname = (
-                clean_key in self._data.surnames
-                or clean_key_lower in self._data.surnames
-                or normalized_key in self._data.surnames_normalized
-            )
+            is_chinese_surname = self._data.is_surname(clean_key, normalized_key) or clean_key_lower in self._data.surnames
 
             if is_chinese_surname:
                 # Get frequency
-                surname_freq = self._data.surname_frequencies.get(
-                    clean_key_lower,
-                    0,
-                ) or self._data.surname_frequencies.get(normalized_key, 0)
+                surname_freq = self._data.get_surname_freq(clean_key_lower) or self._data.get_surname_freq(normalized_key)
 
                 if surname_freq > 0:
                     if surname_freq >= 10000:

@@ -73,8 +73,8 @@ class StringManipulationUtils:
     def _get_normalized_parts(a: str, b: str, normalized_cache: dict[str, str] | None, normalizer) -> tuple[str, str]:
         """Get normalized versions of two string parts."""
         if normalized_cache:
-            norm_a = normalized_cache.get(a, normalizer.norm(a))
-            norm_b = normalized_cache.get(b, normalizer.norm(b))
+            norm_a = normalizer.get_normalized(a, normalized_cache)
+            norm_b = normalizer.get_normalized(b, normalized_cache)
         else:
             norm_a = normalizer.norm(a)
             norm_b = normalizer.norm(b)
@@ -102,31 +102,26 @@ class StringManipulationUtils:
 
     @staticmethod
     def _should_skip_splitting(token: str, normalized_cache: dict[str, str] | None, normalizer, data_context) -> bool:
-        """Check early exit conditions that prevent splitting."""
-        # Don't split if token is a known surname itself
+        """Check early exit conditions that prevent splitting - optimized validation chain."""
+        # Get normalized form once
         if normalized_cache and token in normalized_cache:
             tok_normalized = StringManipulationUtils.remove_spaces(normalized_cache[token])
         else:
             tok_normalized = StringManipulationUtils.remove_spaces(normalizer.norm(token))
 
-        if tok_normalized in data_context.surnames_normalized:
-            return True
-
-        # Don't split HIGH_CONFIDENCE_ANCHORS - they should remain intact
+        # Optimized validation chain: combine multiple checks with OR short-circuit
         from sinonym.chinese_names_data import HIGH_CONFIDENCE_ANCHORS
-
-        if tok_normalized in HIGH_CONFIDENCE_ANCHORS:
-            return True
-
-        # Don't split tokens that are already valid Chinese given name components
         original_lower = token.lower()
-        if (
-            tok_normalized in data_context.given_names_normalized
-            or original_lower in data_context.given_names_normalized
-        ):
-            return True
 
-        return False
+        return (
+            # Don't split known surnames
+            tok_normalized in data_context.surnames_normalized or
+            # Don't split HIGH_CONFIDENCE_ANCHORS - they should remain intact
+            tok_normalized in HIGH_CONFIDENCE_ANCHORS or
+            # Don't split existing valid Chinese given name components
+            data_context.is_given_name(tok_normalized) or
+            data_context.is_given_name(original_lower)
+        )
 
     @staticmethod
     def _check_cultural_plausibility_if_needed(norm_a: str, norm_b: str, data_context, config, raw_length: int) -> bool:
@@ -214,8 +209,8 @@ class StringManipulationUtils:
             a, b = token.split("-")
             # Inline normalization for performance
             if normalized_cache:
-                norm_a = normalized_cache.get(a, normalizer.norm(a))
-                norm_b = normalized_cache.get(b, normalizer.norm(b))
+                norm_a = normalizer.get_normalized(a, normalized_cache)
+                norm_b = normalizer.get_normalized(b, normalized_cache)
             else:
                 norm_a = normalizer.norm(a)
                 norm_b = normalizer.norm(b)
@@ -228,8 +223,8 @@ class StringManipulationUtils:
         if len(camel) == 2:
             # Inline normalization for performance
             if normalized_cache:
-                norm_a = normalized_cache.get(camel[0], normalizer.norm(camel[0]))
-                norm_b = normalized_cache.get(camel[1], normalizer.norm(camel[1]))
+                norm_a = normalizer.get_normalized(camel[0], normalized_cache)
+                norm_b = normalizer.get_normalized(camel[1], normalized_cache)
             else:
                 norm_a = normalizer.norm(camel[0])
                 norm_b = normalizer.norm(camel[1])
@@ -250,10 +245,16 @@ class StringManipulationUtils:
         for i in range(1, raw_len):
             a, b = raw[:i], raw[i:]
 
+            # Short-circuit: skip very unbalanced splits (optimize for common balanced cases)
+            if len(a) == 1 and len(b) > 4:  # Very unbalanced split (e.g., "W" + "eiming")
+                continue
+            if len(b) == 1 and len(a) > 4:  # Very unbalanced split (e.g., "Weimi" + "g")
+                continue
+
             # Inline normalization for hot path performance
             if normalized_cache:
-                norm_a = normalized_cache.get(a, normalizer.norm(a))
-                norm_b = normalized_cache.get(b, normalizer.norm(b))
+                norm_a = normalizer.get_normalized(a, normalized_cache)
+                norm_b = normalizer.get_normalized(b, normalized_cache)
             else:
                 norm_a = normalizer.norm(a)
                 norm_b = normalizer.norm(b)
@@ -308,8 +309,8 @@ class StringManipulationUtils:
             return False
 
         # Frequency-based validation: reject if both parts are very uncommon
-        freq_a = data_context.given_log_probabilities.get(norm_a, config.default_given_logp)
-        freq_b = data_context.given_log_probabilities.get(norm_b, config.default_given_logp)
+        freq_a = data_context.get_given_logp(norm_a, config.default_given_logp)
+        freq_b = data_context.get_given_logp(norm_b, config.default_given_logp)
 
         # If both parts are very rare (below -12), it's suspicious
         return not (freq_a < -12.0 and freq_b < -12.0)

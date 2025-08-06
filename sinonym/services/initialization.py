@@ -50,6 +50,34 @@ class NameDataStructures:
     # Maps normalized compound surnames back to their original input format
     compound_original_format_map: dict[str, str]
 
+    def get_surname_logp(self, surname_key: str, default: float) -> float:
+        """Get surname log probability with default fallback."""
+        return self.surname_log_probabilities.get(surname_key, default)
+
+    def get_given_logp(self, given_key: str, default: float) -> float:
+        """Get given name log probability with default fallback."""
+        return self.given_log_probabilities.get(given_key, default)
+
+    def get_surname_freq(self, surname_key: str, default: float = 0.0) -> float:
+        """Get surname frequency with default fallback."""
+        return self.surname_frequencies.get(surname_key, default)
+
+    def get_surname_rank(self, surname_key: str, default: float = 0.0) -> float:
+        """Get surname percentile rank with default fallback."""
+        return self.surname_percentile_ranks.get(surname_key, default)
+
+    def is_surname(self, token: str, normalized_token: str) -> bool:
+        """Check if token is a surname using both original and normalized forms."""
+        return (
+            token in self.surnames
+            or normalized_token in self.surnames
+            or normalized_token in self.surnames_normalized
+        )
+
+    def is_given_name(self, normalized_token: str) -> bool:
+        """Check if normalized token is a given name."""
+        return normalized_token in self.given_names_normalized
+
 
 class DataInitializationService:
     """Service to initialize all name data structures."""

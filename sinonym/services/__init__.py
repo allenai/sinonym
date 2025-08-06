@@ -10,10 +10,20 @@ from sinonym.services.cache import PinyinCacheService
 from sinonym.services.ethnicity import EthnicityClassificationService
 from sinonym.services.formatting import NameFormattingService
 from sinonym.services.initialization import DataInitializationService, NameDataStructures
-from sinonym.services.ml_japanese_classifier import MLJapaneseClassifier, create_ml_japanese_classifier
 from sinonym.services.normalization import LazyNormalizationMap, NormalizationService, NormalizedInput
 from sinonym.services.parsing import NameParsingService
 from sinonym.types import CacheInfo, ChineseNameConfig, ParseResult
+
+
+class ServiceContext:
+    """Lightweight dependency context for services to reduce injection complexity."""
+
+    __slots__ = ["config", "data", "normalizer"]
+
+    def __init__(self, config, normalizer, data):
+        self.config = config
+        self.normalizer = normalizer
+        self.data = data
 
 __all__ = [
     # Batch Services
@@ -33,7 +43,5 @@ __all__ = [
     "ParseResult",
     # Services
     "PinyinCacheService",
-    # ML Services
-    "MLJapaneseClassifier",
-    "create_ml_japanese_classifier",
+    "ServiceContext",
 ]

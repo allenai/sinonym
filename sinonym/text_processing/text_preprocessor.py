@@ -91,16 +91,11 @@ class TextPreprocessor:
 
         parts = split_result.split()
 
-        # Must have exactly 2 parts for names
-        if len(parts) != 2:
-            return False
-
-        # Both parts should be reasonable length
-        if not all(2 <= len(part) <= 8 for part in parts):
-            return False
-
-        # Both parts should be alphabetic
-        return all(part.isalpha() for part in parts)
+        # Optimized validation chain: early exits and combined checks
+        return (
+            len(parts) == 2 and
+            all(2 <= len(part) <= 8 and part.isalpha() for part in parts)
+        )
 
     def _looks_like_concatenated_surnames(self, token: str) -> bool:
         """

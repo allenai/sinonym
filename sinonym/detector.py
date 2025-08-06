@@ -177,6 +177,7 @@ from sinonym.services import (
     NormalizationService,
     ParseResult,
     PinyinCacheService,
+    ServiceContext,
 )
 from sinonym.types import BatchFormatPattern, BatchParseResult
 
@@ -219,14 +220,12 @@ class ChineseNameDetector:
     def _initialize_services(self) -> None:
         """Initialize service instances with data context."""
         if self._data is not None:
-            self._ethnicity_service = EthnicityClassificationService(self._config, self._normalizer, self._data)
-            self._parsing_service = NameParsingService(
-                self._config,
-                self._normalizer,
-                self._data,
-                weights=self._weights,
-            )
-            self._formatting_service = NameFormattingService(self._config, self._normalizer, self._data)
+            # Create shared context to reduce dependency injection complexity
+            context = ServiceContext(self._config, self._normalizer, self._data)
+
+            self._ethnicity_service = EthnicityClassificationService(context)
+            self._parsing_service = NameParsingService(context, weights=self._weights)
+            self._formatting_service = NameFormattingService(context)
             self._batch_analysis_service = BatchAnalysisService(self._parsing_service)
 
     def _ensure_initialized(self) -> None:
@@ -243,9 +242,6 @@ class ChineseNameDetector:
         """Get cache information."""
         return self._cache_service.get_cache_info()
 
-    def clear_pinyin_cache(self) -> None:
-        """Clear the pinyin cache."""
-        self._cache_service.clear_cache()
 
     def is_chinese_name(self, raw_name: str) -> ParseResult:
         """
@@ -298,12 +294,8 @@ class ChineseNameDetector:
             token1_norm = normalized_input.norm_map.get(token1, self._normalizer.norm(token1))
             token2_norm = normalized_input.norm_map.get(token2, self._normalizer.norm(token2))
 
-            token1_is_surname = (
-                self._normalizer.norm(token1) in self._data.surnames or token1_norm in self._data.surnames_normalized
-            )
-            token2_is_surname = (
-                self._normalizer.norm(token2) in self._data.surnames or token2_norm in self._data.surnames_normalized
-            )
+            token1_is_surname = self._data.is_surname(token1, token1_norm)
+            token2_is_surname = self._data.is_surname(token2, token2_norm)
 
             best_result = None
             best_score = float("-inf")

@@ -52,11 +52,11 @@ class ChineseNameConfig:
     default_surname_logp: float
     default_given_logp: float
     compound_penalty: float
-    
+
     # Core processing constants
     max_name_length: int  # Maximum allowed name length
     min_tokens_required: int  # Minimum tokens for valid name parsing
-    
+
     # Parsing scoring constants
     poor_score_threshold: float  # Score below which parsing is considered poor
 

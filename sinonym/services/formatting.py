@@ -26,10 +26,18 @@ if TYPE_CHECKING:
 class NameFormattingService:
     """Service for formatting Chinese names into standardized output."""
 
-    def __init__(self, config, normalizer, data):
-        self._config = config
-        self._normalizer = normalizer
-        self._data = data
+    def __init__(self, context_or_config, normalizer=None, data=None):
+        # Support both old interface (config, normalizer, data) and new context interface
+        if hasattr(context_or_config, "config"):
+            # New context interface
+            self._config = context_or_config.config
+            self._normalizer = context_or_config.normalizer
+            self._data = context_or_config.data
+        else:
+            # Legacy interface - maintain backwards compatibility
+            self._config = context_or_config
+            self._normalizer = normalizer
+            self._data = data
 
     def format_name_output(
         self,
@@ -62,7 +70,7 @@ class NameFormattingService:
             else:
                 normalized_token = self._normalizer.norm(token)
 
-            if normalized_token in self._data.given_names_normalized:
+            if self._data.is_given_name(normalized_token):
                 parts.append(token)
                 continue
 

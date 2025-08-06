@@ -109,6 +109,14 @@ class NormalizationService:
         """
         return self._text_normalizer.normalize_token(token)
 
+    def get_normalized(self, token: str, norm_cache: dict[str, str]) -> str:
+        """
+        Get normalized form of token using cache, with fallback to normalization.
+        
+        Consolidates the common pattern: normalized_cache.get(token, self.norm(token))
+        """
+        return norm_cache.get(token, self.norm(token))
+
     def apply(self, raw_name: str) -> NormalizedInput:
         """
         Pure function: raw input → normalized structure.
