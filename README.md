@@ -4,6 +4,10 @@
 
 Sinonym is a Python library designed to accurately detect and normalize Chinese names across various romanization systems. It filters out non-Chinese names (such as Western, Korean, Vietnamese, and Japanese names).
 
+This was mostly written with Claude Code with extensive oversight from me... Sorry if the actual code is too AI-ish. It's fast, well-tested, and works pretty well.
+
+Not all the tests pass, and the test suite is intentionally skewed towards failing tests, so I know what to try to work on next. It's more-or-less impossible to guess with 100% accuracy whether a Romanized Chinese name is in the `Given-Name Surname` or `Surname Given-Name` format, and the best approach is to try to guess the most likely format from a batch of names that should all have the same format (like all the authors of an academic paper or all the names in a specific dataset). This kind of batch processing is described below.
+
 ## Data Flow Pipeline
 
 ```
