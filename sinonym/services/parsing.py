@@ -38,19 +38,18 @@ class NameParsingService:
         if weights and len(weights) == 8:
             self._weights = weights
         else:
-            # Default weights (optimized 8-feature system - 115 failures)
+            # Default weights (optimized 8-feature system - 118 failures)
             # Removed given name comparative features as they don't improve performance
             self._weights = [
-                0.465,      # surname_logp
-                0.395,      # given_logp_sum
-                -0.888,     # surname_rank_bonus
-                1.348,      # compound_given_bonus
-                1.102,      # order_preservation_bonus
-                0.425,      # surname_first_bonus
-                -0.042,     # surname_freq_log_ratio (log-based comparative feature)
-                -0.873,     # surname_rank_difference (comparative feature)
+                0.465,  # surname_logp
+                0.395,  # given_logp_sum
+                -0.888,  # surname_rank_bonus
+                1.348,  # compound_given_bonus
+                1.102,  # order_preservation_bonus
+                0.425,  # surname_first_bonus
+                -0.042,  # surname_freq_log_ratio (log-based comparative feature)
+                -0.873,  # surname_rank_difference (comparative feature)
             ]
-
 
     def parse_name_order(
         self,
@@ -167,7 +166,9 @@ class NameParsingService:
                         len(token) > 3
                         and self._data.is_surname(
                             token,
-                            StringManipulationUtils.remove_spaces(self._normalizer.get_normalized(token, normalized_cache)),
+                            StringManipulationUtils.remove_spaces(
+                                self._normalizer.get_normalized(token, normalized_cache)
+                            ),
                         )
                         for token in tokens
                     )
@@ -213,7 +214,6 @@ class NameParsingService:
         best_parse_result = max(scored_parses, key=parse_sort_key)
 
         return ParseResult.success_with_parse(best_parse_result[0], best_parse_result[1], best_parse_result[3])
-
 
     def _generate_all_parses_with_format(
         self,
@@ -421,6 +421,7 @@ class NameParsingService:
             # SURNAME comparative features
             # Calculate log frequency ratio to keep values in reasonable range
             import math
+
             my_surname_freq = self._data.get_surname_freq(surname_key, 0.001)  # Small default
             alt_surname_freq = self._data.get_surname_freq(given_as_surname_key, 0.001)
             surname_freq_log_ratio = math.log(my_surname_freq / alt_surname_freq) if alt_surname_freq > 0 else 0.0
@@ -429,7 +430,6 @@ class NameParsingService:
             my_surname_rank = self._data.get_surname_rank(surname_key)
             alt_surname_rank = self._data.get_surname_rank(given_as_surname_key)
             surname_rank_difference = my_surname_rank - alt_surname_rank
-
 
         total_score = (
             surname_logp * self._weights[0]  # Surname frequency weight
