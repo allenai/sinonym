@@ -479,28 +479,45 @@ class StringManipulationUtils:
     # ====================================================================
 
     @staticmethod
+    def _normalize_and_capitalize_single_part(part: str) -> str:
+        """Helper to normalize and capitalize a single part (no hyphens)."""
+        if not part:
+            return part
+        # Normalize Unicode and remove diacritical marks
+        normalized = unicodedata.normalize("NFD", part)
+        without_diacritics = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+        return without_diacritics[0].upper() + without_diacritics[1:].lower()
+
+    @staticmethod
     def capitalize_name_part(part: str) -> str:
-        """Properly capitalize a name part, handling apostrophes and diacritics correctly.
+        """Properly capitalize a name part, handling apostrophes, hyphens and diacritics correctly.
 
         Standard .title() incorrectly capitalizes after apostrophes (ts'ai -> Ts'Ai).
         This function:
         1. Removes diacritical marks for consistent output
-        2. Only capitalizes the first letter: ts'ai -> Ts'ai
+        2. Handles hyphenated compound parts: ou-yang -> Ou-Yang
+        3. Only capitalizes the first letter: ts'ai -> Ts'ai
 
         Args:
-            part: The name part to capitalize (may contain diacritics)
+            part: The name part to capitalize (may contain diacritics or hyphens)
 
         Returns:
-            Capitalized name part without diacritics
+            Capitalized name part without diacritics, with proper hyphen handling
         """
         if not part:
             return part
 
-        # Normalize Unicode and remove diacritical marks
-        normalized = unicodedata.normalize("NFD", part)
-        without_diacritics = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+        # Handle hyphenated compound parts
+        if "-" in part:
+            sub_parts = part.split("-")
+            capitalized_parts = [
+                StringManipulationUtils._normalize_and_capitalize_single_part(sub_part) 
+                for sub_part in sub_parts
+            ]
+            return "-".join(capitalized_parts)
 
-        return without_diacritics[0].upper() + without_diacritics[1:].lower()
+        # Single part - use helper
+        return StringManipulationUtils._normalize_and_capitalize_single_part(part)
 
     @staticmethod
     def is_camel_case(token: str) -> bool:
