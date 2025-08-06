@@ -448,7 +448,7 @@ class TestBatchOutcomes:
         # Evenly mixed format names (50/50 split)
         names = [
             "Wei-Qi Wang",  # Compound given, simple surname -> given-first preference
-            "Si-Tu Liu",  # Compound surname, simple given -> surname-first preference  
+            "Si-Tu Liu",  # Compound surname, simple given -> surname-first preference
             "Mei-Li Ou-Yang",  # Compound given, compound surname -> given-first preference
             "Ming Li",  # Simple given, simple surname -> given-first preference
             "Xiao-Mei Zhang",  # Compound given, simple surname -> given-first preference
@@ -689,7 +689,7 @@ class TestBatchACLRealWorld:
         for i, expected_output in enumerate(expected_outputs):
             result = batch_result.results[i]
             input_name = input_names[i]
-            
+
             if result.result != expected_output:
                 failed_cases.append(f"'{input_name}' should normalize to '{expected_output}' but got '{result.result}'")
 
