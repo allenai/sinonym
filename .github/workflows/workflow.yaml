@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    # Version bumps typically touch these; pyproject is the gate.
+    paths:
+      - "pyproject.toml"
+      - "sinonym/**"
+  workflow_dispatch:  # Allow manual triggering
+
+permissions:
+  contents: read
+  id-token: write  # required for PyPI trusted publishing
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.decide.outputs.should_publish }}
+      new_version: ${{ steps.decide.outputs.new_version }}
+      old_version: ${{ steps.decide.outputs.old_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for version comparison
+
+      - name: Detect version change (pyproject.toml)
+        id: decide
+        shell: bash
+        run: |
+          BEFORE_SHA="${{ github.event.before }}"
+          echo "BEFORE_SHA=$BEFORE_SHA"
+          # Use Python's stdlib tomllib to read versions
+          python - <<'PY'
+          import os, subprocess, tomllib, sys
+          out = open(os.environ["GITHUB_OUTPUT"], "a")
+          with open("pyproject.toml","rb") as f:
+              new_version = tomllib.load(f)["project"]["version"]
+          old_version = ""
+          before = os.environ.get("BEFORE_SHA")
+          if before and before != "0000000000000000000000000000000000000000":
+              try:
+                  blob = subprocess.check_output(["git","show",f"{before}:pyproject.toml"])
+                  old_version = tomllib.loads(blob.decode())["project"]["version"]
+              except subprocess.CalledProcessError:
+                  pass
+          should = str(bool(new_version and new_version != old_version)).lower()
+          print(f"Old version: {old_version}")
+          print(f"New version: {new_version}")
+          print(f"Should publish: {should}")
+          out.write(f"new_version={new_version}\n")
+          out.write(f"old_version={old_version}\n")
+          out.write(f"should_publish={should}\n")
+          PY
+
+      - uses: actions/setup-python@v5
+        if: steps.decide.outputs.should_publish == 'true'
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v6
+        if: steps.decide.outputs.should_publish == 'true'
+
+      - name: Install dependencies
+        if: steps.decide.outputs.should_publish == 'true'
+        run: uv sync --dev
+
+      - name: Run tests
+        if: steps.decide.outputs.should_publish == 'true'
+        run: uv run pytest tests/ -v
+
+      - name: Build sdist+wheel (uv)
+        if: steps.decide.outputs.should_publish == 'true'
+        run: uv build
+
+      - uses: actions/upload-artifact@v4
+        if: steps.decide.outputs.should_publish == 'true'
+        with:
+          name: dist
+          path: dist
+
+  publish:
+    needs: build
+    if: needs.build.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true

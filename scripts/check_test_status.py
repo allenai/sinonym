@@ -51,7 +51,7 @@ def extract_failure_counts(output):
                 "name": test_name.strip(),
                 "failures": int(failures),
                 "total": int(total),
-            }
+            },
         )
 
     return failure_details

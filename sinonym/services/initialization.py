@@ -7,7 +7,6 @@ building frequency mappings, and creating immutable data structures.
 
 from __future__ import annotations
 
-import csv
 import math
 import unicodedata
 from dataclasses import dataclass
@@ -15,7 +14,7 @@ from functools import cache
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import CANTONESE_SURNAMES, COMPOUND_VARIANTS, PYPINYIN_FREQUENCY_ALIASES
-from sinonym.paths import DATA_PATH
+from sinonym.resources import open_csv_reader
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
@@ -182,25 +181,24 @@ class DataInitializationService:
         surnames_raw = set()
         surname_frequencies = {}
 
-        with (DATA_PATH / "familyname_orcid.csv").open(encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                han = row["surname"]
-                pinyin_list = self._cache_service.han_to_pinyin_fast(han)
-                if pinyin_list:
-                    romanized = " ".join(pinyin_list).title()
-                    surnames_raw.update({romanized, StringManipulationUtils.remove_spaces(romanized)})
-                else:
-                    continue
+        for row in open_csv_reader("familyname_orcid.csv"):
+            han = row["surname"]
+            pinyin_list = self._cache_service.han_to_pinyin_fast(han)
+            if pinyin_list:
+                romanized = " ".join(pinyin_list).title()
+                surnames_raw.update({romanized, StringManipulationUtils.remove_spaces(romanized)})
+            else:
+                continue
 
-                # Store frequency data for both Chinese characters and romanized forms
-                ppm = float(row.get("ppm", 0))
+            # Store frequency data for both Chinese characters and romanized forms
+            ppm = float(row.get("ppm", 0))
 
-                # Store frequency for Chinese characters (original)
-                surname_frequencies[han] = max(surname_frequencies.get(han, 0), ppm)
+            # Store frequency for Chinese characters (original)
+            surname_frequencies[han] = max(surname_frequencies.get(han, 0), ppm)
 
-                # Store frequency for romanized form (existing behavior)
-                freq_key = StringManipulationUtils.remove_spaces(romanized.lower())
-                surname_frequencies[freq_key] = max(surname_frequencies.get(freq_key, 0), ppm)
+            # Store frequency for romanized form (existing behavior)
+            freq_key = StringManipulationUtils.remove_spaces(romanized.lower())
+            surname_frequencies[freq_key] = max(surname_frequencies.get(freq_key, 0), ppm)
 
         # Add frequency aliases where pypinyin output differs from expected romanization
         # These handle cases where Han characters produce different pinyin than the romanization system expects
@@ -232,23 +230,22 @@ class DataInitializationService:
         given_frequencies = {}
         total_given_freq = 0
 
-        with (DATA_PATH / "givenname_orcid.csv").open(encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                han_char = row["character"]
-                # Strip tone markers from pinyin string
-                normalized = unicodedata.normalize("NFKD", row["pinyin"])
-                pinyin = self._config.digits_pattern.sub(
-                    "",
-                    "".join(c for c in normalized if not unicodedata.combining(c)),
-                ).lower()
-                given_names.add(pinyin)
+        for row in open_csv_reader("givenname_orcid.csv"):
+            han_char = row["character"]
+            # Strip tone markers from pinyin string
+            normalized = unicodedata.normalize("NFKD", row["pinyin"])
+            pinyin = self._config.digits_pattern.sub(
+                "",
+                "".join(c for c in normalized if not unicodedata.combining(c)),
+            ).lower()
+            given_names.add(pinyin)
 
-                ppm = float(row.get("ppm", 0))
-                if ppm > 0:
-                    # Store frequency for both Chinese character and pinyin
-                    given_frequencies[han_char] = max(given_frequencies.get(han_char, 0), ppm)
-                    given_frequencies[pinyin] = max(given_frequencies.get(pinyin, 0), ppm)
-                    total_given_freq += ppm
+            ppm = float(row.get("ppm", 0))
+            if ppm > 0:
+                # Store frequency for both Chinese character and pinyin
+                given_frequencies[han_char] = max(given_frequencies.get(han_char, 0), ppm)
+                given_frequencies[pinyin] = max(given_frequencies.get(pinyin, 0), ppm)
+                total_given_freq += ppm
 
         # Convert to log probabilities for both Chinese characters and pinyin
         given_log_probabilities = {}

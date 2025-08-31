@@ -51,12 +51,14 @@ Issues = "https://github.com/allenai/sinonym/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["sinonym"]
+include = [
+    "sinonym/data/**/*"
+]
 
 [tool.hatch.build.targets.sdist]
 include = [
     "sinonym",
     "tests",
-    "data",
     "README.md",
     "pyproject.toml",
 ]

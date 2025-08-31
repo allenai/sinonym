@@ -511,7 +511,7 @@ class StringManipulationUtils:
         if "-" in part:
             sub_parts = part.split("-")
             capitalized_parts = [
-                StringManipulationUtils._normalize_and_capitalize_single_part(sub_part) 
+                StringManipulationUtils._normalize_and_capitalize_single_part(sub_part)
                 for sub_part in sub_parts
             ]
             return "-".join(capitalized_parts)

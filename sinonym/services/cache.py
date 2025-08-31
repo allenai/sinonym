@@ -6,9 +6,7 @@ for performance optimization.
 """
 from __future__ import annotations
 
-import csv
 from functools import cache
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pypinyin
@@ -55,14 +53,15 @@ class PinyinCacheService:
 
     # ---------- internal ----------
     def _warm_from_csv(self) -> None:
-        """Seed the LRU cache with the two CSVs in data/ if present."""
-        for fname in ("familyname_orcid.csv", "givenname_orcid.csv"):
-            path: Path = Path(self._config.data_dir) / fname
-            if not path.exists():
-                continue
+        """Seed the LRU cache with the two CSVs in package resources if present."""
+        from sinonym.resources import open_csv_reader
 
-            key = "surname" if "familyname" in fname else "character"
-            with path.open(encoding="utf-8") as f:
-                for row in csv.DictReader(f):
+        for fname in ("familyname_orcid.csv", "givenname_orcid.csv"):
+            try:
+                key = "surname" if "familyname" in fname else "character"
+                for row in open_csv_reader(fname):
                     for ch in row[key]:
                         _char_to_pinyin(ch)  # warms the cache once
+            except Exception:
+                # If file doesn't exist or can't be read, skip silently
+                continue

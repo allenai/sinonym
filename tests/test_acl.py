@@ -439,10 +439,9 @@ def analyze_acl_2025_authors():
     detector = ChineseNameDetector()
 
     # Read all author names from the extracted file
-    authors_file = Path(__file__).parent.parent / "acl_2025_authors.txt"
-
-    with open(authors_file, encoding="utf-8") as f:
-        authors = [line.strip() for line in f if line.strip()]
+    from sinonym.resources import read_text
+    authors_text = read_text("acl_2025_authors.txt")
+    authors = [line.strip() for line in authors_text.splitlines() if line.strip()]
 
     chinese_names = []
     non_chinese_names = []

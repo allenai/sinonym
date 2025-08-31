@@ -52,15 +52,8 @@ class _MLJapaneseClassifier:
 
         if ML_AVAILABLE:
             try:
-                # Get path relative to ethnicity service file
-                project_root = Path(__file__).parent.parent.parent
-                model_path = project_root / "data" / "chinese_japanese_classifier.joblib"
-
-                if model_path.exists():
-                    self._model = joblib.load(model_path)
-                else:
-                    logging.warning(f"ML Japanese classifier model not found at {model_path}")
-                    self._available = False
+                from sinonym.resources import load_joblib
+                self._model = load_joblib("chinese_japanese_classifier.joblib")
             except Exception as e:
                 logging.warning(f"Failed to load ML Japanese classifier: {e}")
                 self._available = False

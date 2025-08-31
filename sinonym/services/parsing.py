@@ -167,7 +167,7 @@ class NameParsingService:
                         and self._data.is_surname(
                             token,
                             StringManipulationUtils.remove_spaces(
-                                self._normalizer.get_normalized(token, normalized_cache)
+                                self._normalizer.get_normalized(token, normalized_cache),
                             ),
                         )
                         for token in tokens

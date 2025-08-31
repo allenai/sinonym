@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 .claude
 claude_scripts/
-
+data_backup/
 
 # C extensions
 *.so

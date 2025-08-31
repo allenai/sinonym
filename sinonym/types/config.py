@@ -11,7 +11,6 @@ import re
 from dataclasses import dataclass, replace
 
 from sinonym.chinese_names_data import VALID_CHINESE_ONSETS
-from sinonym.paths import DATA_PATH
 from sinonym.patterns import (
     CLEAN_PATTERN,
     COMPREHENSIVE_CJK_PATTERN,
@@ -25,7 +24,6 @@ class ChineseNameConfig:
     """Immutable configuration containing all static data structures - Scala case class style."""
 
     # Required data files
-    data_dir: str
     required_files: tuple[str, ...]
 
     # Precompiled regex patterns (immutable)
@@ -64,7 +62,6 @@ class ChineseNameConfig:
     def create_default(cls) -> ChineseNameConfig:
         """Factory method to create default configuration - Scala apply() equivalent."""
         return cls(
-            data_dir=str(DATA_PATH),
             required_files=("familyname_orcid.csv", "givenname_orcid.csv"),
             sep_pattern=re.compile(r"[·‧.\u2011-\u2015﹘﹣－⁃₋•∙⋅˙ˑːˉˇ˘˚˛˜˝]+"),
             cjk_pattern=COMPREHENSIVE_CJK_PATTERN,
