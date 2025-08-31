@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"},
+    {name = "Sergey Feldman", email = "sergey@allenai.org"},
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -25,12 +25,12 @@ classifiers = [
 ]
 keywords = ["chinese", "names", "nlp", "romanization", "pinyin"]
 dependencies = [
-    "joblib>=1.5.1",
-    "numpy>=2.2.6",
+    "joblib>=1.3",
+    "numpy>=1.24",
     "pypinyin>=0.44.0",
-    "requests>=2.32.4",
-    "scikit-learn>=1.7.1",
-    "scipy>=1.15.3",
+    "requests>=2.31",
+    "scikit-learn>=1.2,<2",
+    "scipy>=1.10",
 ]
 
 [project.optional-dependencies]
@@ -45,18 +45,18 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/sinonym"
-Repository = "https://github.com/yourusername/sinonym"
-Issues = "https://github.com/yourusername/sinonym/issues"
+Homepage = "https://github.com/allenai/sinonym"
+Repository = "https://github.com/allenai/sinonym"
+Issues = "https://github.com/allenai/sinonym/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["sinonym"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/sinonym",
-    "/tests",
-    "/data",
+    "sinonym",
+    "tests",
+    "data",
     "README.md",
     "pyproject.toml",
 ]
