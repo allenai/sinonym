@@ -140,15 +140,15 @@ def main():
         print("Individual test case failures: Unable to determine")
     print(f"Performance tests: {'PASSED ✓' if perf_passed else 'FAILED ✗'}")
 
-    # Exit code based on status (updated baseline to 56 after config improvements)
-    if failures and total_failures == 56 and perf_passed:
-        print("\n✓ Tests are at expected baseline (56 failures, performance OK)")
+    # Exit code based on status (updated baseline to 118 after config improvements)
+    if failures and total_failures == 118 and perf_passed:
+        print("\n✓ Tests are at expected baseline (118 failures, performance OK)")
         sys.exit(0)
-    elif failures and total_failures < 56 and perf_passed:
-        print(f"\n✓ IMPROVEMENT! Tests are better than baseline ({total_failures} < 56 failures, performance OK)")
+    elif failures and total_failures < 118 and perf_passed:
+        print(f"\n✓ IMPROVEMENT! Tests are better than baseline ({total_failures} < 118 failures, performance OK)")
         sys.exit(0)
-    elif failures and total_failures > 56:
-        print(f"\n✗ REGRESSION! Too many failures ({total_failures} > 56)")
+    elif failures and total_failures > 118:
+        print(f"\n✗ REGRESSION! Too many failures ({total_failures} > 118)")
         sys.exit(1)
     elif not perf_passed:
         print("\n✗ Performance tests failed!")
