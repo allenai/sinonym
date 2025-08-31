@@ -1,12 +1,4 @@
-"""
-Sinonym: Chinese Name Detection and Normalization Library
-
-A sophisticated library for detecting and normalizing Chinese names from various
-romanization systems with robust filtering capabilities.
-"""
-
+# Package init for sinonym
+__all__ = ["__version__"]
 __version__ = "0.1.0"
-
-from .detector import ChineseNameDetector
-
-__all__ = ["ChineseNameDetector"]
+# Import and expose top-level API here if desired
