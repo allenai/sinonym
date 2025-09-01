@@ -3,11 +3,15 @@ name: Release
 on:
   push:
     branches: [main]
-    # Version bumps typically touch these; pyproject is the gate.
     paths:
       - "pyproject.toml"
       - "sinonym/**"
-  workflow_dispatch:  # Allow manual triggering
+  workflow_dispatch:
+
+# Avoid overlapping publishes on rapid pushes
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -23,7 +27,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Need full history for version comparison
+          fetch-depth: 0  # need history for version comparison
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v6
 
       - name: Detect version change (pyproject.toml)
         id: decide
@@ -31,9 +41,8 @@ jobs:
         run: |
           BEFORE_SHA="${{ github.event.before }}"
           echo "BEFORE_SHA=$BEFORE_SHA"
-          # Use Python's stdlib tomllib to read versions
           python - <<'PY'
-          import os, subprocess, tomllib, sys
+          import os, subprocess, tomllib
           out = open(os.environ["GITHUB_OUTPUT"], "a")
           with open("pyproject.toml","rb") as f:
               new_version = tomllib.load(f)["project"]["version"]
@@ -54,25 +63,47 @@ jobs:
           out.write(f"should_publish={should}\n")
           PY
 
-      - uses: actions/setup-python@v5
+      - name: Install dev deps
         if: steps.decide.outputs.should_publish == 'true'
-        with:
-          python-version: "3.11"
-
-      - uses: astral-sh/setup-uv@v6
-        if: steps.decide.outputs.should_publish == 'true'
-
-      - name: Install dependencies
-        if: steps.decide.outputs.should_publish == 'true'
-        run: uv sync --dev
+        run: uv sync --group dev
 
       - name: Run tests
         if: steps.decide.outputs.should_publish == 'true'
-        run: uv run pytest tests/ -v
+        run: uv run pytest -q
 
-      - name: Build sdist+wheel (uv)
+      - name: Build sdist + wheel
         if: steps.decide.outputs.should_publish == 'true'
         run: uv build
+
+      - name: Validate metadata (twine check)
+        if: steps.decide.outputs.should_publish == 'true'
+        run: uvx twine check dist/*
+
+      - name: Smoke test import from sdist
+        if: steps.decide.outputs.should_publish == 'true'
+        run: |
+          uv pip install --system dist/*.tar.gz --force-reinstall
+          cd /tmp
+          python -c "import sinonym; print('✓ sdist import OK:', sinonym.__file__)"
+
+      - name: Smoke test import from wheel + resources
+        if: steps.decide.outputs.should_publish == 'true'
+        run: |
+          uv pip install --system dist/*.whl --force-reinstall
+          cd /tmp
+          python - <<'PY'
+          import sys, sinonym
+          print("✓ Wheel import OK")
+          print("PY:", sys.executable)
+          print("sinonym from:", sinonym.__file__)
+          try:
+              import importlib.resources as ir
+              files = list((ir.files("sinonym.data")).iterdir())
+              print("✓ data files present:", [f.name for f in files][:8], "…")
+          except Exception as e:
+              print("! data access failed:", e)
+              raise
+          PY
 
       - uses: actions/upload-artifact@v4
         if: steps.decide.outputs.should_publish == 'true'
@@ -84,6 +115,7 @@ jobs:
     needs: build
     if: needs.build.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
+    environment: pypi  # optional, matches a protected env if you use one
     permissions:
       id-token: write
       contents: read
