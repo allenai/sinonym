@@ -29,5 +29,6 @@ jobs:
 
       - name: Test import after build
         run: |
-          uv pip install dist/*.whl --force-reinstall
-          python -c "from sinonym import ChineseNameDetector; print('✓ Package imports successfully')"
+          uv pip uninstall sinonym || true
+          uv pip install dist/*.whl
+          uv run python -c "from sinonym import ChineseNameDetector; print('✓ Package imports successfully')"
