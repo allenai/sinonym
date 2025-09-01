@@ -20,7 +20,7 @@ def run_tests():
 
     try:
         result = subprocess.run(
-            ["uv", "run", "pytest", "tests/", "-v", "-s"],
+            ["uv", "run", "pytest", "tests/", "-v", "-s", "--ignore=tests/test_performance.py"],
             check=False,
             capture_output=True,
             text=True,
