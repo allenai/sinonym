@@ -4,31 +4,71 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]  # Also run on direct pushes to main for consistency
+    branches: [main]
+
+# Cancel older in-flight runs for the same PR/branch to save CI minutes
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          
+
       - uses: astral-sh/setup-uv@v6
 
-      - name: Install dependencies
-        run: uv sync --dev
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock', 'pyproject.toml') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
 
-      - name: Build package (verify it builds)
+      - name: Install dependencies (dev group)
+        run: uv sync --group dev
+
+      - name: Build package (sdist + wheel)
         run: uv build
+
+      - name: Validate package metadata (twine check)
+        run: uvx twine check dist/*
 
       - name: Check test status against baseline (118 failures expected)
         run: uv run python scripts/check_test_status.py
 
-      - name: Test import after build
+      - name: Test import from sdist
+        run: |
+          uv pip install --system dist/*.tar.gz --force-reinstall
+          cd /tmp
+          python -c "import sinonym; print('✓ sdist import OK:', sinonym.__file__)"
+
+      - name: Test import from wheel + packaged resources
         run: |
           uv pip install --system dist/*.whl --force-reinstall
           cd /tmp
-          python -c "import sys, sinonym, pypinyin; print('✓ Package imports successfully'); print('PY:', sys.executable); print('sinonym from:', sinonym.__file__); print('pypinyin OK:', pypinyin.__version__)"
+          python - <<'PY'
+import sys, sinonym, pypinyin
+print("✓ Wheel import OK")
+print("PY:", sys.executable)
+print("sinonym from:", sinonym.__file__)
+try:
+    import importlib.resources as ir
+    files = list((ir.files("sinonym.data")).iterdir())
+    print("✓ data files:", [f.name for f in files][:8], "…")
+except Exception as e:
+    print("! data access failed:", e)
+    raise
+PY
