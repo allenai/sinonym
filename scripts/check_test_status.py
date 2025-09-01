@@ -39,22 +39,27 @@ def run_tests():
 def extract_failure_counts(output):
     """Extract individual test case failure counts from test output."""
     # Pattern to match lines like "X failures out of Y tests"
-    failure_details = []
-    # Also extract the full context for each failure
-    detail_pattern = r"([^:]+):\s*(\d+)\s+failures?\s+out\s+of\s+(\d+)\s+tests?"
-    detail_matches = re.findall(detail_pattern, output)
+    # Only match AssertionError lines to avoid counting source code lines
+    failure_details = {}  # Use dict to deduplicate by test name
 
-    for match in detail_matches:
-        test_name, failures, total = match
-        failure_details.append(
-            {
-                "name": test_name.strip(),
-                "failures": int(failures),
-                "total": int(total),
-            },
-        )
+    # Split output into lines and process each one
+    lines = output.split("\n")
+    for line in lines:
+        # Only process lines that are actual AssertionError messages
+        if "AssertionError:" in line:
+            detail_pattern = r"([^:]+):\s*(\d+)\s+failures?\s+out\s+of\s+(\d+)\s+tests?"
+            match = re.search(detail_pattern, line)
+            if match:
+                test_name, failures, total = match.groups()
+                test_name = test_name.strip()
+                # Use dict to automatically deduplicate by test name
+                failure_details[test_name] = {
+                    "name": test_name,
+                    "failures": int(failures),
+                    "total": int(total),
+                }
 
-    return failure_details
+    return list(failure_details.values())
 
 
 def check_performance_tests():
