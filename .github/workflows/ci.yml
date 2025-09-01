@@ -60,15 +60,15 @@ jobs:
           uv pip install --system dist/*.whl --force-reinstall
           cd /tmp
           python - <<'PY'
-import sys, sinonym, pypinyin
-print("✓ Wheel import OK")
-print("PY:", sys.executable)
-print("sinonym from:", sinonym.__file__)
-try:
-    import importlib.resources as ir
-    files = list((ir.files("sinonym.data")).iterdir())
-    print("✓ data files:", [f.name for f in files][:8], "…")
-except Exception as e:
-    print("! data access failed:", e)
-    raise
-PY
+          import sys, sinonym, pypinyin
+          print("✓ Wheel import OK")
+          print("PY:", sys.executable)
+          print("sinonym from:", sinonym.__file__)
+          try:
+              import importlib.resources as ir
+              files = list((ir.files("sinonym.data")).iterdir())
+              print("✓ data files:", [f.name for f in files][:8], "…")
+          except Exception as e:
+              print("! data access failed:", e)
+              raise
+          PY
