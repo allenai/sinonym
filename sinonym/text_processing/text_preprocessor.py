@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
-    from sinonym.types import ChineseNameConfig
+    from sinonym.coretypes import ChineseNameConfig
 
 
 class TextPreprocessor:

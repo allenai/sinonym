@@ -12,7 +12,7 @@ from sinonym.services.formatting import NameFormattingService
 from sinonym.services.initialization import DataInitializationService, NameDataStructures
 from sinonym.services.normalization import LazyNormalizationMap, NormalizationService, NormalizedInput
 from sinonym.services.parsing import NameParsingService
-from sinonym.types import CacheInfo, ChineseNameConfig, ParseResult
+from sinonym.coretypes import CacheInfo, ChineseNameConfig, ParseResult
 
 
 class ServiceContext:

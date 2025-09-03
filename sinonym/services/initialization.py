@@ -18,7 +18,7 @@ from sinonym.resources import open_csv_reader
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
-    from sinonym.types import ChineseNameConfig
+    from sinonym.coretypes import ChineseNameConfig
 
 
 @dataclass(frozen=True)
@@ -376,4 +376,3 @@ class DataInitializationService:
     def _build_percentile_ranks(self, surname_frequencies: dict[str, float]) -> dict[str, float]:
         """Build pre-computed percentile ranks for ML features (0-1 scale)."""
         return self._percentiles(surname_frequencies)
-

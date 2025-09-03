@@ -179,7 +179,7 @@ from sinonym.services import (
     PinyinCacheService,
     ServiceContext,
 )
-from sinonym.types import BatchFormatPattern, BatchParseResult
+from sinonym.coretypes import BatchFormatPattern, BatchParseResult
 
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CHINESE NAME DETECTOR CLASS
@@ -447,7 +447,7 @@ class ChineseNameDetector:
 
         if self._batch_analysis_service is None:
             # Return a fallback pattern indicating mixed format
-            from sinonym.types import NameFormat
+            from sinonym.coretypes import NameFormat
             return BatchFormatPattern(
                 dominant_format=NameFormat.MIXED,
                 confidence=0.0,
@@ -504,7 +504,7 @@ class ChineseNameDetector:
 
     def _create_fallback_batch_result(self, names: list[str], individual_results: list[ParseResult]) -> BatchParseResult:
         """Create a fallback BatchParseResult when batch analysis is not available."""
-        from sinonym.types import BatchFormatPattern, IndividualAnalysis, NameFormat
+        from sinonym.coretypes import BatchFormatPattern, IndividualAnalysis, NameFormat
 
         # Create dummy format pattern
         format_pattern = BatchFormatPattern(

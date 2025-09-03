@@ -22,7 +22,7 @@ from sinonym.chinese_names_data import (
     VIETNAMESE_ONLY_SURNAMES,
     WESTERN_NAMES,
 )
-from sinonym.types import ParseResult
+from sinonym.coretypes import ParseResult
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 # Optional ML Japanese classifier imports - consolidated from separate service

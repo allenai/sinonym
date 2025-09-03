@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
-from sinonym.types import ParseResult
+from sinonym.coretypes import ParseResult
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:

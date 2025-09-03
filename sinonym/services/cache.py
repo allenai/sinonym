@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 import pypinyin
 
 if TYPE_CHECKING:
-    from sinonym.types import ChineseNameConfig
+    from sinonym.coretypes import ChineseNameConfig
 
 
 @cache  # one entry per unique Han character
@@ -41,7 +41,7 @@ class PinyinCacheService:
 
     def get_cache_info(self):
         """Get cache information for diagnostics."""
-        from sinonym.types import CacheInfo
+        from sinonym.coretypes import CacheInfo
         return CacheInfo(
             cache_built=True,
             cache_size=self.cache_size,

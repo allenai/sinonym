@@ -16,7 +16,7 @@ from sinonym.text_processing import CompoundDetector, TextNormalizer, TextPrepro
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
-    from sinonym.types import ChineseNameConfig
+    from sinonym.coretypes import ChineseNameConfig
 
 
 @dataclass(frozen=True)
