@@ -8,7 +8,7 @@ of the Chinese name detection system.
 import pytest
 
 from sinonym import ChineseNameDetector
-from sinonym.types import BatchFormatPattern, BatchParseResult
+from sinonym.coretypes import BatchFormatPattern, BatchParseResult
 
 
 class TestBatchFormatDetection:

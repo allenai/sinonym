@@ -6,6 +6,7 @@ using importlib.resources, ensuring compatibility across all installation method
 
 Includes helpers to load ML artifacts persisted with joblib or skops.
 """
+
 from __future__ import annotations
 
 import csv
@@ -42,24 +43,34 @@ def load_joblib(name: str):
         return joblib.load(path)
 
 
-def load_skops(name: str):
+def load_skops(name: str, trusted: list[str] | None = None):
     """Load a skops-serialized model from package resources.
 
-    Uses skops.io.load with trusted=True to allow restoration of custom
-    transformers used by the pipeline (e.g., EnhancedHeuristicFlags).
+    skops>=0.10 requires an explicit list of trusted types instead of a boolean.
+    We derive the list via get_untrusted_types() and pass it back to load(),
+    effectively trusting our own artifact. Callers can override by passing a
+    specific ``trusted`` list.
     """
-    from skops.io import load
+    from skops.io import load, get_untrusted_types
 
     with open_resource_path(name) as path:
-        # We trust our own serialized artifacts within the package.
-        return load(path, trusted=True)
+        if trusted is None:
+            # Support different skops versions: keyword-only, positional, or no-arg.
+            try:
+                trusted = get_untrusted_types(file=path)  # skops>=0.10 keyword-only
+            except TypeError:
+                try:
+                    trusted = get_untrusted_types(path)  # older positional signature
+                except TypeError:
+                    trusted = get_untrusted_types()  # no-arg fallback
+        return load(path, trusted=trusted)
 
 
 @contextmanager
 def open_resource_path(name: str) -> Iterator[Path]:
     """
     Context manager that provides a filesystem path to a resource.
-    
+
     This handles extraction to temporary files when the package is inside a zip.
     Use this when you need a real filesystem path (e.g., for libraries that require file paths).
     """
@@ -70,7 +81,7 @@ def open_resource_path(name: str) -> Iterator[Path]:
 def open_csv_reader(name: str, encoding: str = "utf-8", **kwargs):
     """
     Open a CSV file from package resources and return a csv.DictReader.
-    
+
     This is a convenience function for the common pattern of reading CSV files.
     """
     text_content = read_text(name, encoding=encoding)
@@ -84,7 +95,7 @@ def open_csv_reader(name: str, encoding: str = "utf-8", **kwargs):
 def resource_path(name: str) -> Path:
     """
     Returns a real filesystem Path to the resource.
-    
+
     WARNING: This uses as_file().__enter__() which opens a temp file handle.
     Prefer using the open_resource_path() context manager or other read_* functions.
     This is provided for compatibility but should be used carefully.

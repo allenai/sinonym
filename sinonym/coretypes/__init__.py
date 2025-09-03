@@ -1,12 +1,12 @@
 """
-Types package for Chinese name processing.
+Core types for Chinese name processing.
 
 This package contains result types, configuration classes, and other
 data structures used throughout the Chinese name detection system.
 """
 
-from sinonym.types.config import ChineseNameConfig
-from sinonym.types.results import (
+from sinonym.coretypes.config import ChineseNameConfig
+from sinonym.coretypes.results import (
     BatchFormatPattern,
     BatchParseResult,
     CacheInfo,
