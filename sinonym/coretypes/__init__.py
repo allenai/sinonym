@@ -12,6 +12,7 @@ from sinonym.coretypes.results import (
     CacheInfo,
     IndividualAnalysis,
     NameFormat,
+    ParsedName,
     ParseCandidate,
     ParseResult,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "ChineseNameConfig",
     "IndividualAnalysis",
     "NameFormat",
+    "ParsedName",
     "ParseCandidate",
     "ParseResult",
 ]

@@ -17,6 +17,7 @@ from sinonym.coretypes import (
     ParseCandidate,
     ParseResult,
 )
+from sinonym.coretypes.results import ParsedName
 
 if TYPE_CHECKING:
     from sinonym.services.parsing import NameParsingService
@@ -320,15 +321,22 @@ class BatchAnalysisService:
             return ParseResult.failure("no valid parse found")
 
         try:
-            # Use the EXACT same formatting pipeline as individual processing
-            formatted_name = formatting_service.format_name_output(
-                candidate.surname_tokens,
-                candidate.given_tokens,
-                {},  # norm_map - not needed for this step since tokens are already normalized
-                candidate.original_compound_format,
-                compound_metadata,
+            # Use the EXACT same formatting pipeline as individual processing, with tokens
+            formatted_name, given_final, surname_final, surname_str, given_str = (
+                formatting_service.format_name_output_with_tokens(
+                    candidate.surname_tokens,
+                    candidate.given_tokens,
+                    {},  # norm_map - not needed for this step since tokens are already normalized
+                    compound_metadata,
+                )
             )
-            return ParseResult.success_with_name(formatted_name)
+            parsed = ParsedName(
+                surname=surname_str,
+                given_name=given_str,
+                surname_tokens=surname_final,
+                given_tokens=given_final,
+            )
+            return ParseResult.success_with_name(formatted_name, parsed=parsed)
         except ValueError as e:
             return ParseResult.failure(str(e))
 
