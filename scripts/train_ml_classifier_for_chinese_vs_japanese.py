@@ -14,6 +14,7 @@ import unicodedata
 from pathlib import Path
 
 import joblib
+from skops.io import dump as skops_dump
 import requests
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -133,13 +134,17 @@ def main():
         confidence = max(prob)
         print(f"{name:10} → {pred.upper()} (confidence: {confidence:.3f})")
 
-    # Save model to data directory
-    model_path = Path(DATA_PATH) / "chinese_japanese_classifier.joblib"
-    print(f"\nSaving model to {model_path}...")
-    joblib.dump(pipeline, model_path)
+    # Save model to data directory (skops preferred, joblib as legacy fallback)
+    skops_path = Path(DATA_PATH) / "chinese_japanese_classifier.skops"
+    joblib_path = Path(DATA_PATH) / "chinese_japanese_classifier.joblib"
+
+    print(f"\nSaving SKOPS model to {skops_path}...")
+    skops_dump(pipeline, skops_path)
+
+    print(f"Saving legacy joblib model to {joblib_path}...")
+    joblib.dump(pipeline, joblib_path)
 
     print("✓ Model training completed and saved successfully!")
-    print(f"Model saved to: {model_path}")
 
 
 if __name__ == "__main__":

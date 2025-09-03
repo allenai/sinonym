@@ -2,8 +2,8 @@
 ML Model Components for Chinese vs Japanese Name Classification
 
 This module contains the custom transformer classes needed to load the
-pre-trained ML model. These components must be available in the Python
-path when loading the model with joblib.
+pre-trained ML model. These components must be importable when loading
+the model with skops (preferred) or joblib (legacy fallback).
 """
 
 
