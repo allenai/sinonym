@@ -21,13 +21,20 @@ from sinonym.coretypes.results import ParsedName
 
 if TYPE_CHECKING:
     from sinonym.services.parsing import NameParsingService
+    from sinonym.services.ethnicity import EthnicityClassificationService
 
 
 class BatchAnalysisService:
     """Service for analyzing batches of names to detect format patterns."""
 
-    def __init__(self, parsing_service: NameParsingService, format_threshold: float = 0.55):
+    def __init__(
+        self,
+        parsing_service: NameParsingService,
+        ethnicity_service: 'EthnicityClassificationService' | None = None,
+        format_threshold: float = 0.55,
+    ):
         self._parsing_service = parsing_service
+        self._ethnicity_service = ethnicity_service
         self._format_threshold = format_threshold  # Minimum threshold for format detection
 
     def analyze_name_batch(
@@ -147,6 +154,17 @@ class BatchAnalysisService:
 
         if len(tokens) < self._parsing_service._config.min_tokens_required:
             return [], None
+
+        # Ethnicity pre-filter: mirror individual pipeline to avoid false positives
+        if self._ethnicity_service is not None:
+            eth = self._ethnicity_service.classify_ethnicity(
+                normalized_input.roman_tokens,
+                normalized_input.norm_map,
+                name,
+            )
+            if eth.success is False:
+                # Treat as non-Chinese for batch purposes; no candidates
+                return [], None
 
         # Generate all possible parses
         parses_with_format = self._parsing_service._generate_all_parses_with_format(

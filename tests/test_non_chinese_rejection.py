@@ -30,8 +30,8 @@ NON_CHINESE_TEST_CASES = [
     ("Pham Minh Tuan", (False, "should_be_rejected")),
     ("Sunil Gupta", (False, "should_be_rejected")),
     ("Sergey Feldman", (False, "should_be_rejected")),
-
     # Korean false positive tests
+    ("Kwang-Hwi Cho", (False, "should_be_rejected")),
     ("Park Min Jung", (False, "should_be_rejected")),
     ("Lee Bo-ram", (False, "should_be_rejected")),
     ("Kim Min-jun", (False, "should_be_rejected")),  # Hyphenated Korean name
@@ -42,14 +42,38 @@ NON_CHINESE_TEST_CASES = [
     ("Yoon Soo-bin", (False, "should_be_rejected")),
     ("Han Ji-min", (False, "should_be_rejected")),
     ("Lim Young-woong", (False, "should_be_rejected")),
-
+    ("Cho Kwang-Hwi", (False, "should_be_rejected")),
+    ("Lee Young-ho", (False, "should_be_rejected")),
+    ("Ha Young Lee", (False, "should_be_rejected")),
+    ("Kim Hye-ji", (False, "should_be_rejected")),
+    ("Kim Eun-ji", (False, "should_be_rejected")),
+    ("Kim Yeon-woo", (False, "should_be_rejected")),
+    ("Park Hyeon-woo", (False, "should_be_rejected")),
+    ("Park Ji-hye", (False, "should_be_rejected")),
+    ("Choi Woo-jin", (False, "should_be_rejected")),
+    ("Jung Seok-ho", (False, "should_be_rejected")),
+    ("Yoon Seung-hyun", (False, "should_be_rejected")),
+    ("Kwon Tae-hyun", (False, "should_be_rejected")),
+    ("Ryu Seung-yeon", (False, "should_be_rejected")),
+    ("Hwang Kyu-tae", (False, "should_be_rejected")),
+    ("Ahn Jae-yong", (False, "should_be_rejected")),
+    ("Seo Yeon-woo", (False, "should_be_rejected")),
+    ("Oh Hye-rin", (False, "should_be_rejected")),
+    ("Bae Hyun-woo", (False, "should_be_rejected")),
+    ("Roh Myung-hoon", (False, "should_be_rejected")),
+    ("Jeon Hye-won", (False, "should_be_rejected")),
+    ("Yoo Ji-hoon", (False, "should_be_rejected")),
+    ("Nam Bo-ram", (False, "should_be_rejected")),
+    ("Shim Young-jin", (False, "should_be_rejected")),
+    ("Noh Kyung-ho", (False, "should_be_rejected")),
+    ("Joo Min-jae", (False, "should_be_rejected")),
+    ("Bae Eun-jeong", (False, "should_be_rejected")),
     # Non-hyphenated Korean names (should be caught by enhanced Korean detection)
     ("Kim Minjun", (False, "should_be_rejected")),  # Should be caught by multi-syllable Korean pattern detection
     ("Park Hyejin", (False, "should_be_rejected")),  # Should be caught by multi-syllable Korean pattern detection
     ("Lim Soo Jin", (False, "should_be_rejected")),  # Should be caught by multiple Korean given name patterns
     ("Yoon Soojin", (False, "should_be_rejected")),  # Should be caught by multi-syllable Korean pattern detection
     ("Choi Seunghyun", (False, "should_be_rejected")),  # Should be caught by multi-syllable Korean pattern detection
-
     # Vietnamese false positive tests
     ("Nguyen An He", (False, "should_be_rejected")),  # Should be caught by Vietnamese-only surname "nguyen"
     ("Hoang Thu Mai", (False, "should_be_rejected")),  # Should be caught by Vietnamese structural patterns
@@ -58,25 +82,24 @@ NON_CHINESE_TEST_CASES = [
     ("Tran Minh Tuan", (False, "should_be_rejected")),  # Should be caught by Vietnamese structural patterns
     ("Vo Thanh Son", (False, "should_be_rejected")),  # Should be caught by Vietnamese structural patterns
     ("Truong Minh Duc", (False, "should_be_rejected")),  # Should be caught by Vietnamese-only surname "truong"
-    ("Trinh Thi Lan", (False, "should_be_rejected")),  # Should be caught by Vietnamese-only surname "trinh" + "Thi" pattern
+    (
+        "Trinh Thi Lan",
+        (False, "should_be_rejected"),
+    ),  # Should be caught by Vietnamese-only surname "trinh" + "Thi" pattern
     ("Dinh Van Duc", (False, "should_be_rejected")),  # Should be caught by Vietnamese-only surname "dinh"
     ("Nguyen Thi Mai", (False, "should_be_rejected")),  # Should be caught by Vietnamese-only surname + "Thi" pattern
-
     # Overlapping surname differentiation tests
     ("Lim Hye-jin", (False, "should_be_rejected")),
-
     # Western names with initials
     ("De Pace A", (False, "should_be_rejected")),
     ("A. Rubin", (False, "should_be_rejected")),
     ("E. Moulin", (False, "should_be_rejected")),
-
     # Session fixes - Western names with forbidden phonetic patterns
     ("Julian Lee", (False, "should_be_rejected")),  # Contains "ian" pattern - should be blocked by cultural validation
     ("Christian Wong", (False, "should_be_rejected")),  # Contains "ian" pattern
     ("Adrian Liu", (False, "should_be_rejected")),  # Contains "ian" pattern
     ("Adrian Chen", (False, "should_be_rejected")),  # Contains "ian" pattern - should be blocked by cultural validation
     ("Brian Chen", (False, "should_be_rejected")),  # Contains "br" + "ian" patterns
-
     # Additional Western names ending in "-ian" that should be rejected
     ("Julian Smith", (False, "should_be_rejected")),
     ("Adrian Brown", (False, "should_be_rejected")),
@@ -84,23 +107,20 @@ NON_CHINESE_TEST_CASES = [
     ("Vivian White", (False, "should_be_rejected")),
     ("Fabian Garcia", (False, "should_be_rejected")),
     ("Damian Miller", (False, "should_be_rejected")),
-
     # Western names with forbidden patterns that should remain blocked
     ("Gloria Martinez", (False, "should_be_rejected")),  # Contains "gl" pattern - should be blocked
     ("Glenn Johnson", (False, "should_be_rejected")),  # Contains "gl" pattern - should be blocked
     ("Gloria Chen", (False, "should_be_rejected")),  # Western name with Chinese surname - should be blocked
     ("Clara Wong", (False, "should_be_rejected")),  # Contains "cl" pattern - should be blocked
     ("Frank Liu", (False, "should_be_rejected")),  # Contains "fr" pattern - should be blocked
-
     # Session fixes - Korean names (overlapping surnames + Korean given names)
     ("Ho-Young Lee", (False, "should_be_rejected")),  # Contains "young" Korean pattern
-
+    ("Ha Young Lee", (False, "should_be_rejected")),  # Contains "young" Korean pattern
     # Comprehensive Western name pattern fixes - names ending in -ian
     ("Sebastian Davis", (False, "should_be_rejected")),  # sebastian + -ian pattern
     ("Damian Wilson", (False, "should_be_rejected")),  # damian + -ian pattern
     ("Brian Johnson", (False, "should_be_rejected")),  # brian + -ian pattern
     ("Ryan Thompson", (False, "should_be_rejected")),  # ryan + -ian pattern
-
     # Western names ending in -an
     ("Alan Wilson", (False, "should_be_rejected")),  # alan + -an pattern with specific prefix rule
     ("Susan Davis", (False, "should_be_rejected")),  # susan + -an pattern with specific prefix rule
@@ -109,13 +129,11 @@ NON_CHINESE_TEST_CASES = [
     ("Jordan Smith", (False, "should_be_rejected")),  # jordan + -an pattern
     ("Morgan Jones", (False, "should_be_rejected")),  # morgan + -an pattern
     ("Megan Anderson", (False, "should_be_rejected")),  # megan + -an pattern
-
     # Western names ending in -ana
     ("Ana Martinez", (False, "should_be_rejected")),
     ("Dana Wilson", (False, "should_be_rejected")),
     ("Diana Johnson", (False, "should_be_rejected")),
     ("Lana Thompson", (False, "should_be_rejected")),
-
     # Western names ending in -na
     ("Tina Anderson", (False, "should_be_rejected")),
     ("Nina Davis", (False, "should_be_rejected")),
@@ -128,36 +146,29 @@ NON_CHINESE_TEST_CASES = [
     ("Hanna Jones", (False, "should_be_rejected")),
     ("Sina Miller", (False, "should_be_rejected")),
     ("Kina Davis", (False, "should_be_rejected")),
-
     # Western names ending in -ta
     ("Rita Wilson", (False, "should_be_rejected")),
     ("Beta Johnson", (False, "should_be_rejected")),
     ("Meta Thompson", (False, "should_be_rejected")),
     ("Delta Brown", (False, "should_be_rejected")),
-
     # Western names ending in -ena
     ("Dena Smith", (False, "should_be_rejected")),
     ("Lena Jones", (False, "should_be_rejected")),
     ("Rena Martinez", (False, "should_be_rejected")),
     ("Sena Anderson", (False, "should_be_rejected")),
-
     # Western names ending in -ne
     ("Anne Wilson", (False, "should_be_rejected")),
     ("Diane Davis", (False, "should_be_rejected")),
     ("June Johnson", (False, "should_be_rejected")),
     ("Wayne Thompson", (False, "should_be_rejected")),
-
     # Western names ending in -ina
     ("Zina Brown", (False, "should_be_rejected")),
-
     # Western names ending in -nna
     ("Channa Smith", (False, "should_be_rejected")),
     ("Jenna Jones", (False, "should_be_rejected")),
-
     # Western names ending in -ie
     ("Genie Martinez", (False, "should_be_rejected")),
     ("Julie Anderson", (False, "should_be_rejected")),
-
     # Individual Western names that don't fit suffix patterns
     ("Milan Rodriguez", (False, "should_be_rejected")),
     ("Liam Garcia", (False, "should_be_rejected")),
@@ -179,7 +190,6 @@ NON_CHINESE_TEST_CASES = [
     ("Eli Jones", (False, "should_be_rejected")),
     ("Wade Martinez", (False, "should_be_rejected")),
     ("Heidi Anderson", (False, "should_be_rejected")),
-
     # Comma-separated non-Chinese names (should still be rejected)
     ("Smith, John", (False, "should_be_rejected")),
     ("Garcia, Maria", (False, "should_be_rejected")),
@@ -188,14 +198,12 @@ NON_CHINESE_TEST_CASES = [
     ("Soo, Kim Min", (False, "should_be_rejected")),  # Korean name in comma format
     ("Anh, Nguyen Van", (False, "should_be_rejected")),  # Vietnamese name in comma format
     ("Martinez, Gloria", (False, "should_be_rejected")),  # Western name with forbidden "gl" pattern
-
     # Korean names with overlapping surnames (should still be rejected due to Korean given names)
     ("Gong Min-soo", (False, "should_be_rejected")),
     ("Kang Young-ho", (False, "should_be_rejected")),
     ("An Bo-ram", (False, "should_be_rejected")),
     ("Koo Hye-jin", (False, "should_be_rejected")),
     ("Ha Min-jun", (False, "should_be_rejected")),
-
     # Western names with specific "ew" patterns (should still be blocked after pattern refinement)
     ("Andrew Smith", (False, "should_be_rejected")),
     ("Matthew Johnson", (False, "should_be_rejected")),
@@ -207,29 +215,24 @@ NON_CHINESE_TEST_CASES = [
     ("Powell Martinez", (False, "should_be_rejected")),
     ("Andrew Chen", (False, "should_be_rejected")),
     ("Matthew Li", (False, "should_be_rejected")),
-
     # Concatenated Western names that should be rejected
     ("BrownPaul", (False, "should_be_rejected")),
     ("FurukawaKoichi", (False, "should_be_rejected")),
     ("SmithJohn", (False, "should_be_rejected")),
     ("JohnsonMike", (False, "should_be_rejected")),
-
     # Mixed parenthetical cases that should be rejected
     ("Zhang（Andrew）Smith", (False, "should_be_rejected")),
     ("李（Peter）Johnson", (False, "should_be_rejected")),
-
     # Additional non-Chinese names
     ("Alexander Wang", (False, "should_be_rejected")),
     ("Michelle Zhang", (False, "should_be_rejected")),
     ("Bruce Lee Jun Fan", (False, "should_be_rejected")),
     ("Leslie Cheung Kwok Wing", (False, "should_be_rejected")),
-
     # Additional Vietnamese Names
     ("Nguyen Van Hai", (False, "should_be_rejected")),
     ("Tran Thi Bich Hang", (False, "should_be_rejected")),
     ("Le Duy Anh", (False, "should_be_rejected")),
     ("Pham Tuan Dat", (False, "should_be_rejected")),
-
     # Additional Korean Names
     ("Kim Min Jung", (False, "should_be_rejected")),
     ("Lee Joon Ho", (False, "should_be_rejected")),
@@ -238,26 +241,21 @@ NON_CHINESE_TEST_CASES = [
     ("Jeong Yuna", (False, "should_be_rejected")),
     ("Hwang Byung Chul", (False, "should_be_rejected")),
     ("Kang Daniel", (False, "should_be_rejected")),
-
     # Japanese Names
     ("Sato Taro", (False, "should_be_rejected")),
     ("Tanaka Hanako", (False, "should_be_rejected")),
     ("Yamamoto Ken", (False, "should_be_rejected")),
     ("Watanabe Aiko", (False, "should_be_rejected")),
-
     # Other Western Names
     ("Mohammed Ali", (False, "should_be_rejected")),
-
     # Korean-style Given Name But Chinese Author (Borderline)
     ("Kim Jong Il", (False, "should_be_rejected")),
     ("Ryu Seung Hee", (False, "should_be_rejected")),
     ("Woo Suk Hwan", (False, "should_be_rejected")),
-
     # Japanese On'yomi Readings That Look Chinese
     ("Kato Koichi", (False, "should_be_rejected")),
     ("Honda Masaru", (False, "should_be_rejected")),
     ("Fujiwara Tetsuya", (False, "should_be_rejected")),
-
     # All-Chinese Character Japanese Names (should be rejected)
     ("佐藤太郎", (False, "should_be_rejected")),  # Sato Taro in Kanji
     ("田中花子", (False, "should_be_rejected")),  # Tanaka Hanako in Kanji
