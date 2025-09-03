@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sinonym import ChineseNameDetector
+from tests._fail_log import log_failure
 
 # Test cases for compound and multi-syllable names
 CHINESE_NAME_TEST_CASES = [
@@ -54,8 +55,15 @@ def test_compound_names():
             passed += 1
         else:
             failed += 1
-            print(f"FAILED: '{input_name}': expected {expected}, got {result_tuple}")
+            expected_success, expected_name = expected
+            actual = result.result if result.success else result.error_message
+            print(
+                f"FAILED: '{input_name}': expected ({expected_success}, '{expected_name}'), got ({result.success}, '{actual}')",
+            )
+            log_failure("Compound name tests", input_name, expected_success, expected_name, result.success, actual)
 
+    if failed:
+        print(f"Compound name tests: {failed} failures out of {len(CHINESE_NAME_TEST_CASES)} tests")
     assert failed == 0, f"Compound name tests: {failed} failures out of {len(CHINESE_NAME_TEST_CASES)} tests"
     print(f"Compound name tests: {passed} passed, {failed} failed")
 

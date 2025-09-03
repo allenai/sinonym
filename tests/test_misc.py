@@ -8,6 +8,7 @@ that were not covered in the existing test suite.
 import pytest
 
 from sinonym import ChineseNameDetector
+from tests._fail_log import log_failure
 
 # Test cases for miscellaneous Chinese name detection scenarios
 MISC_TEST_CASES = [
@@ -113,7 +114,6 @@ def test_misc_chinese_names(detector):
     """Test miscellaneous Chinese name detection scenarios."""
     passed = 0
     failed = 0
-    failed_cases = []
 
     for test_input, expected in MISC_TEST_CASES:
         expected_success, expected_output = expected
@@ -126,8 +126,16 @@ def test_misc_chinese_names(detector):
                     passed += 1
                 else:
                     failed += 1
-                    failed_cases.append(
-                        f"'{test_input}': expected (True, '{expected_output}'), got (True, '{result.result}')",
+                    print(
+                        f"FAILED: '{test_input}': expected (True, '{expected_output}'), got (True, '{result.result}')",
+                    )
+                    log_failure(
+                        "Miscellaneous tests",
+                        test_input,
+                        True,
+                        expected_output,
+                        True,
+                        result.result,
                     )
             else:
                 # For failed cases, just check that it failed
@@ -135,21 +143,34 @@ def test_misc_chinese_names(detector):
         else:
             failed += 1
             if expected_success:
-                failed_cases.append(
-                    f"'{test_input}': expected (True, '{expected_output}'), got (False, '{result.error_message}')",
+                print(
+                    f"FAILED: '{test_input}': expected (True, '{expected_output}'), got (False, '{result.error_message}')",
+                )
+                log_failure(
+                    "Miscellaneous tests",
+                    test_input,
+                    True,
+                    expected_output,
+                    False,
+                    result.error_message,
                 )
             else:
-                failed_cases.append(
-                    f"'{test_input}': expected (False, '{expected[1]}'), got (True, '{result.result}')",
+                print(
+                    f"FAILED: '{test_input}': expected (False, '{expected[1]}'), got (True, '{result.result}')",
+                )
+                log_failure(
+                    "Miscellaneous tests",
+                    test_input,
+                    False,
+                    expected[1],
+                    True,
+                    result.result,
                 )
 
     # Print detailed results
     print(f"\nMiscellaneous Chinese name tests: {passed}/{len(MISC_TEST_CASES)} passed")
 
-    if failed_cases:
-        print(f"\nFailed cases ({failed} failures):")
-        for case in failed_cases:
-            print(f"FAILED: {case}")
-
     # Assert that all tests pass
+    if failed:
+        print(f"Miscellaneous tests: {failed} failures out of {len(MISC_TEST_CASES)} tests")
     assert failed == 0, f"Miscellaneous tests: {failed} failures out of {len(MISC_TEST_CASES)} tests"

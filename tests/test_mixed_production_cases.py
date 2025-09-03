@@ -16,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sinonym import ChineseNameDetector
+from tests._fail_log import log_failure
 
 # Mixed test cases: 50% production errors, 50% production successes
 MIXED_TEST_CASES = [
@@ -280,8 +281,21 @@ def test_mixed_cases():
         else:
             failed += 1
             actual = result.result if result.success else f"ERROR: {result.error_message}"
-            print(f"FAILED: '{input_name}': expected {expected_result}, got ({result.success}, '{actual}')")
+            actual_text = result.result if result.success else result.error_message
+            print(
+                f"FAILED: '{input_name}': expected ({expected_success}, '{expected_name}'), got ({result.success}, '{actual_text}')",
+            )
+            log_failure(
+                "ML ranker test data tests",
+                input_name,
+                expected_success,
+                expected_name,
+                result.success,
+                actual_text,
+            )
 
+    if failed:
+        print(f"ML ranker test data tests: {failed} failures out of {len(MIXED_TEST_CASES)} tests")
     assert failed == 0, f"ML ranker test data tests: {failed} failures out of {len(MIXED_TEST_CASES)} tests"
 
 

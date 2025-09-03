@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sinonym import ChineseNameDetector
+from tests._fail_log import log_failure
 
 # Japanese names in Chinese characters that should be rejected by ML classifier
 # These would slip through the original rule-based system because they get converted
@@ -88,8 +89,13 @@ def test_ml_japanese_detection():
         else:
             failed += 1
             actual = result.result if result.success else f"ERROR: {result.error_message}"
-            print(f"FAILED: '{input_name}': expected {expected_result}, got ({result.success}, '{actual}')")
+            print(
+                f"FAILED: '{input_name}': expected ({expected_success}, 'should_be_rejected'), got ({result.success}, '{actual}')",
+            )
+            log_failure("ML Japanese detection tests", input_name, expected_success, "should_be_rejected", result.success, actual)
 
+    if failed:
+        print(f"ML Japanese detection tests: {failed} failures out of {len(ML_JAPANESE_TEST_CASES)} tests")
     assert failed == 0, f"ML Japanese detection tests: {failed} failures out of {len(ML_JAPANESE_TEST_CASES)} tests"
     print(f"ML Japanese detection tests: {passed} passed, {failed} failed")
 
@@ -112,8 +118,13 @@ def test_ml_chinese_control():
         else:
             failed += 1
             actual = result.result if result.success else f"ERROR: {result.error_message}"
-            print(f"FAILED: '{input_name}': expected {expected_result}, got ({result.success}, '{actual}')")
+            print(
+                f"FAILED: '{input_name}': expected ({expected_success}, '{expected_name}'), got ({result.success}, '{actual}')",
+            )
+            log_failure("ML Chinese control tests", input_name, expected_success, expected_name, result.success, actual)
 
+    if failed:
+        print(f"ML Chinese control tests: {failed} failures out of {len(ML_CHINESE_CONTROL_CASES)} tests")
     assert failed == 0, f"ML Chinese control tests: {failed} failures out of {len(ML_CHINESE_CONTROL_CASES)} tests"
     print(f"ML Chinese control tests: {passed} passed, {failed} failed")
 

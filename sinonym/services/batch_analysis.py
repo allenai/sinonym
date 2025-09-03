@@ -14,6 +14,7 @@ from sinonym.coretypes import (
     BatchFormatPattern,
     BatchParseResult,
     NameFormat,
+    IndividualAnalysis,
     ParseCandidate,
     ParseResult,
 )
@@ -91,11 +92,14 @@ class BatchAnalysisService:
                 f"surname-first preferences. Consider processing names individually or adjusting the threshold.",
             )
 
+        # Build per-name analysis details
+        individual_analyses = self._build_individual_analyses(name_candidates)
+
         return BatchParseResult(
             names=names,
             results=results,
             format_pattern=format_pattern,
-            individual_analyses=[],  # Simplified - no longer track this
+            individual_analyses=individual_analyses,
             improvements=improvements,
         )
 
@@ -116,6 +120,7 @@ class BatchAnalysisService:
     def _process_individually(self, names: list[str], normalizer, data, formatting_service) -> BatchParseResult:
         """Process names individually when batch is too small."""
         results = []
+        name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]] = []
 
         for name in names:
             candidates, best_candidate = self._analyze_individual_name(name, normalizer, data)
@@ -127,6 +132,7 @@ class BatchAnalysisService:
                     best_candidate, formatting_service, normalized_input.compound_metadata,
                 ),
             )
+            name_candidates.append((name, candidates, best_candidate, normalized_input.compound_metadata))
 
         # Create a dummy format pattern for small batches
         format_pattern = BatchFormatPattern(
@@ -138,11 +144,13 @@ class BatchAnalysisService:
             threshold_met=False,
         )
 
+        individual_analyses = self._build_individual_analyses(name_candidates)
+
         return BatchParseResult(
             names=names,
             results=results,
             format_pattern=format_pattern,
-            individual_analyses=[],  # Simplified
+            individual_analyses=individual_analyses,
             improvements=[],
         )
 
@@ -382,5 +390,54 @@ class BatchAnalysisService:
                     expected_individual = f"{best_candidate.given_tokens[0].capitalize()} {best_candidate.surname_tokens[0].capitalize()}"
                     if expected_individual != batch_result.result:
                         improvements.append(i)
-
+        
         return improvements
+
+    def _build_individual_analyses(
+        self, name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]],
+    ) -> list[IndividualAnalysis]:
+        """Build IndividualAnalysis entries with a simple confidence per name.
+
+        Confidence is computed via a softmax over candidate scores.
+        - No candidates: confidence = 0.0
+        - One candidate: confidence = 1.0
+        - Multiple: exp(score_i - max)/sum(exp(score_j - max)) for best candidate
+        """
+        import math
+
+        analyses: list[IndividualAnalysis] = []
+        for name, candidates, best_candidate, _ in name_candidates:
+            if not candidates or best_candidate is None:
+                analyses.append(
+                    IndividualAnalysis(
+                        raw_name=name,
+                        candidates=[],
+                        best_candidate=None,
+                        confidence=0.0,
+                    ),
+                )
+                continue
+
+            if len(candidates) == 1:
+                confidence = 1.0
+            else:
+                max_score = max(c.score for c in candidates)
+                exps = [math.exp(c.score - max_score) for c in candidates]
+                denom = sum(exps) if exps else 1.0
+                # Locate index of best_candidate (fall back to top-1 if not found)
+                try:
+                    idx = candidates.index(best_candidate)
+                except ValueError:
+                    idx = 0
+                confidence = exps[idx] / denom if denom > 0 else 0.0
+
+            analyses.append(
+                IndividualAnalysis(
+                    raw_name=name,
+                    candidates=candidates,
+                    best_candidate=best_candidate,
+                    confidence=float(confidence),
+                ),
+            )
+
+        return analyses
