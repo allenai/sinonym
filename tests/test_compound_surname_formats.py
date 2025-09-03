@@ -12,6 +12,7 @@ Format preservation rules:
 """
 
 from sinonym.detector import ChineseNameDetector
+from tests._fail_log import log_failure
 
 # Format preservation test cases
 COMPOUND_SURNAME_TEST_CASES = [
@@ -88,8 +89,21 @@ def test_compound_surname_format_preservation():
         else:
             failed += 1
             actual = result.result if result.success else f"ERROR: {result.error_message}"
-            print(f"FAILED: '{input_name}': expected {expected_result}, got ({result.success}, '{actual}')")
+            actual_text = result.result if result.success else result.error_message
+            print(
+                f"FAILED: '{input_name}': expected ({expected_success}, '{expected_name}'), got ({result.success}, '{actual_text}')",
+            )
+            log_failure(
+                "Compound surname format tests",
+                input_name,
+                expected_success,
+                expected_name,
+                result.success,
+                actual_text,
+            )
 
+    if failed:
+        print(f"Compound surname format tests: {failed} failures out of {len(COMPOUND_SURNAME_TEST_CASES)} tests")
     assert failed == 0, f"Compound surname format tests: {failed} failures out of {len(COMPOUND_SURNAME_TEST_CASES)} tests"
     print(f"Compound surname format tests: {passed} passed, {failed} failed")
 

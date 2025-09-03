@@ -184,7 +184,25 @@ class StringManipulationUtils:
         # PATTERN-BASED SPLITTING: Handle explicit structural patterns
         # ================================================================
 
-        # Pattern 1: Repeated syllable patterns (e.g., "huihui" → ["hui", "hui"])
+        # Pattern A: Explicit hyphen splitting (e.g., "Ka-Fai" → ["Ka", "Fai"]).
+        # If a hyphen is present, we only allow splitting at the hyphen. We never
+        # attempt alternative splits that cross the explicit boundary.
+        if "-" in token and token.count("-") == 1:
+            a, b = token.split("-")
+            # Inline normalization for performance
+            if normalized_cache:
+                norm_a = normalizer.get_normalized(a, normalized_cache)
+                norm_b = normalizer.get_normalized(b, normalized_cache)
+            else:
+                norm_a = normalizer.norm(a)
+                norm_b = normalizer.norm(b)
+            # Component validation with fallback to original forms
+            if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
+                return [a, b]
+            # Respect the explicit hyphen boundary; do not try other splits
+            return None
+
+        # Pattern 1: Repeated syllable patterns (e.g., "huihui" → ["hui", "hui"]) — only when no hyphen present
         raw = token.translate(config.hyphens_apostrophes_tr)
         if len(raw) >= 4 and len(raw) % 2 == 0:
             mid = len(raw) // 2
@@ -204,21 +222,7 @@ class StringManipulationUtils:
         # Check for forbidden phonetic patterns
         has_forbidden_patterns = bool(config.forbidden_patterns_regex.search(token.lower()))
 
-        # Pattern 2: Explicit hyphen splitting (e.g., "Ka-Fai" → ["Ka", "Fai"])
-        if "-" in token and token.count("-") == 1:
-            a, b = token.split("-")
-            # Inline normalization for performance
-            if normalized_cache:
-                norm_a = normalizer.get_normalized(a, normalized_cache)
-                norm_b = normalizer.get_normalized(b, normalized_cache)
-            else:
-                norm_a = normalizer.norm(a)
-                norm_b = normalizer.norm(b)
-            # Component validation with fallback to original forms
-            if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
-                return [a, b]
-
-        # Pattern 3: CamelCase detection (e.g., "MingHua" → ["Ming", "Hua"])
+        # Pattern 3: CamelCase detection (e.g., "MingHua" → ["Ming", "Hua"]) — only when no hyphen present
         camel = config.camel_case_pattern.findall(raw)
         if len(camel) == 2:
             # Inline normalization for performance

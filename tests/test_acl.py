@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sinonym import ChineseNameDetector
+from tests._fail_log import log_failure
 
 # Ground truth: manually verified Chinese names from ACL 2025
 ACL_CHINESE_NAMES = [
@@ -367,71 +368,55 @@ def test_acl_chinese_names():
     """Test that known Chinese names from ACL 2025 are correctly detected."""
     detector = ChineseNameDetector()
 
-    failed_cases = []
+    failed = 0
 
     for input_name, expected_output in ACL_CHINESE_NAMES:
         result = detector.is_chinese_name(input_name)
-        if not result.success:
-            failed_cases.append(f"'{input_name}' should be Chinese but got: {result.error_message}")
-        elif result.result != expected_output:
-            failed_cases.append(f"'{input_name}' should normalize to '{expected_output}' but got '{result.result}'")
+        if not result.success or result.result != expected_output:
+            failed += 1
+            # Uniform failure line format for status parser
+            actual = result.result if result.success else result.error_message
+            print(f"FAILED: '{input_name}': expected (True, '{expected_output}'), got ({result.success}, '{actual}')")
+            log_failure("ACL Chinese name tests", input_name, True, expected_output, result.success, actual)
 
-    if failed_cases:
-        print("\nFailed Chinese name detections:")
-        for case in failed_cases:
-            print(f"  {case}")
-
-    assert (
-        len(failed_cases) == 0
-    ), f"ACL Chinese name tests: {len(failed_cases)} failures out of {len(ACL_CHINESE_NAMES)} tests"
+    assert failed == 0, f"ACL Chinese name tests: {failed} failures out of {len(ACL_CHINESE_NAMES)} tests"
 
 
 def test_acl_non_chinese_names():
     """Test that known non-Chinese names from ACL 2025 are correctly rejected."""
     detector = ChineseNameDetector()
 
-    failed_cases = []
+    failed = 0
 
     for name in ACL_NON_CHINESE_NAMES:
         result = detector.is_chinese_name(name)
         if result.success:
-            failed_cases.append(f"'{name}' should be rejected but was detected as Chinese: {result.result}")
+            failed += 1
+            # Uniform failure line format for status parser
+            print(f"FAILED: '{name}': expected (False, 'should_be_rejected'), got (True, '{result.result}')")
+            log_failure("ACL non-Chinese rejection tests", name, False, "should_be_rejected", True, result.result)
 
-    if failed_cases:
-        print("\nIncorrectly detected as Chinese:")
-        for case in failed_cases:
-            print(f"  {case}")
-
-    assert (
-        len(failed_cases) == 0
-    ), f"ACL non-Chinese rejection tests: {len(failed_cases)} failures out of {len(ACL_NON_CHINESE_NAMES)} tests"
+    assert failed == 0, f"ACL non-Chinese rejection tests: {failed} failures out of {len(ACL_NON_CHINESE_NAMES)} tests"
 
 
 def test_acl_order_preservation():
     """Test that ACL names in Given-Surname format are not flipped."""
     detector = ChineseNameDetector()
 
-    failed_cases = []
+    failed = 0
 
     for input_name, expected_output in ACL_ORDER_PRESERVATION_TEST_CASES:
         result = detector.is_chinese_name(input_name)
-        if not result.success:
-            failed_cases.append(f"{input_name} should be Chinese but got: {result.error_message}")
-        else:
-            # Check that order is preserved (surname stays last)
-            input_surname = input_name.split()[-1]
-            output_surname = result.result.split()[-1]
-            if input_surname.lower() != output_surname.lower():
-                failed_cases.append(f"{input_name} surname order changed: {input_name} -> {result.result}")
+        expected_success = True
+        if not result.success or result.result != expected_output:
+            failed += 1
+            actual = result.result if result.success else result.error_message
+            print(f"FAILED: '{input_name}': expected ({expected_success}, '{expected_output}'), got ({result.success}, '{actual}')")
+            log_failure("ACL order preservation tests", input_name, True, expected_output, result.success, actual)
 
-    if failed_cases:
-        print("\nOrder preservation failures:")
-        for case in failed_cases:
-            print(f"  {case}")
-
-    assert (
-        len(failed_cases) == 0
-    ), f"ACL order preservation tests: {len(failed_cases)} failures out of {len(ACL_ORDER_PRESERVATION_TEST_CASES)} tests"
+    assert failed == 0, (
+        f"ACL order preservation tests: {failed} failures out of {len(ACL_ORDER_PRESERVATION_TEST_CASES)} tests"
+    )
 
 
 def analyze_acl_2025_authors():
