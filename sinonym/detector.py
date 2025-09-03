@@ -227,7 +227,10 @@ class ChineseNameDetector:
             self._ethnicity_service = EthnicityClassificationService(context)
             self._parsing_service = NameParsingService(context, weights=self._weights)
             self._formatting_service = NameFormattingService(context)
-            self._batch_analysis_service = BatchAnalysisService(self._parsing_service)
+            self._batch_analysis_service = BatchAnalysisService(
+                self._parsing_service,
+                ethnicity_service=self._ethnicity_service,
+            )
 
     def _ensure_initialized(self) -> None:
         """Ensure data is initialized (lazy initialization)."""

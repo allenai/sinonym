@@ -192,7 +192,7 @@ class EthnicityClassificationService:
 
         has_overlapping_chinese_surname = any(check_overlapping_surname(token) for token in tokens)
 
-        korean_structural_score = self._calculate_korean_structural_patterns(tokens, expanded_keys)
+        korean_structural_score = self._calculate_korean_structural_patterns(tokens, expanded_keys, normalized_cache)
         korean_threshold = 2.5 if has_overlapping_chinese_surname else 2.0
 
         if korean_structural_score >= korean_threshold:
@@ -289,7 +289,12 @@ class EthnicityClassificationService:
 
         return analysis
 
-    def _calculate_korean_structural_patterns(self, tokens: tuple[str, ...], expanded_keys: list[str]) -> float:
+    def _calculate_korean_structural_patterns(
+        self,
+        tokens: tuple[str, ...],
+        expanded_keys: list[str],
+        normalized_cache: dict[str, str] | None = None,
+    ) -> float:
         """Calculate Korean structural pattern score using simplified pattern analysis."""
         analysis = self._analyze_tokens_for_patterns(tokens)
 
@@ -303,7 +308,36 @@ class EthnicityClassificationService:
 
         # 1. Hyphenated Korean patterns (strong signal)
         for first, second in analysis["hyphenated_tokens"]:
+            # Existing curated-list rule
             if first in KOREAN_GIVEN_PATTERNS and second in KOREAN_GIVEN_PATTERNS:
+                score += 3.0
+                continue
+
+            # General heuristic: hyphenated pair that does NOT look Chinese but
+            # exhibits Korean romanization features (without invoking Chinese syllable logic)
+            def is_chinese_given_strict(tok: str) -> bool:
+                # Strict membership: only consider direct DB presence as Chinese given
+                if normalized_cache and tok in normalized_cache:
+                    normalized = normalized_cache[tok]
+                else:
+                    normalized = self._normalizer.norm(tok)
+                return (
+                    normalized in self._data.given_names_normalized or tok.lower() in self._data.given_names_normalized
+                )
+
+            def has_korean_like_sequence(tok: str) -> bool:
+                t = tok.lower()
+                # Distinctive sequences in Korean RR that are rare in Chinese
+                korean_vowels = ("yeo", "yae", "eo", "eu", "ui", "wi", "wo")
+                korean_onsets = ("kw", "gw", "hw")
+                return (
+                    any(seq in t for seq in korean_vowels) or
+                    any(t.startswith(seq) for seq in korean_onsets)
+                )
+
+            if (not is_chinese_given_strict(first)) and (not is_chinese_given_strict(second)) and (
+                has_korean_like_sequence(first) or has_korean_like_sequence(second)
+            ):
                 score += 3.0
 
         # 2. Known Korean name pairs (strong signal)
@@ -315,6 +349,30 @@ class EthnicityClassificationService:
             score += 2.0
         elif korean_specific_count == 1:
             score += 1.0
+
+        # 3b. Overlapping-surname + space-separated Korean given token that fails Chinese validation
+        # This captures cases like "Ha Young Lee" where:
+        # - Surname is overlapping (e.g., Ha/Lee/Cho)
+        # - One given token is a Korean-specific romanization (e.g., "young")
+        # - That token is NOT a valid Chinese given token under our normalization
+        if analysis["surname_type"] == "korean_overlapping":
+            given_tokens = [tok for tok in tokens[1:]]
+            
+            def is_chinese_given_strict(tok: str) -> bool:
+                # Strict membership: only consider direct DB presence as Chinese given
+                if normalized_cache and tok in normalized_cache:
+                    normalized = normalized_cache[tok]
+                else:
+                    normalized = self._normalizer.norm(tok)
+                return (
+                    normalized in self._data.given_names_normalized or tok.lower() in self._data.given_names_normalized
+                )
+
+            for tok in given_tokens:
+                t_lower = tok.lower()
+                if t_lower in KOREAN_SPECIFIC_PATTERNS and not is_chinese_given_strict(tok):
+                    score += 2.0
+                    break  # One strong indicator is enough
 
         # 4. Ambiguous patterns (only with Korean overlapping surname)
         if analysis["surname_type"] == "korean_overlapping":
