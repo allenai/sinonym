@@ -24,7 +24,7 @@ This directory contains utility scripts for data generation, model training, and
 - `sinonym.ml_model_components.EnhancedHeuristicFlags` (custom feature extractor)
 
 **Output**: 
-- `data/chinese_japanese_classifier.joblib` - The trained model used in production
+- `data/chinese_japanese_classifier.skops` - The trained model used in production
 - `data/model_features.json` - Feature vocabulary metadata
 
 **Usage**:
