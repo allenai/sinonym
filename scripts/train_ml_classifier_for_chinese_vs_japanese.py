@@ -14,13 +14,14 @@ import unicodedata
 from pathlib import Path
 
 import joblib
+from skops.io import dump as skops_dump
 import requests
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import FeatureUnion, Pipeline
 
 from sinonym.ml_model_components import EnhancedHeuristicFlags
-from sinonym.paths import DATA_PATH
+from importlib.resources import files
 
 # Data sources - Apache 2.0
 CN_URL = (
@@ -133,13 +134,22 @@ def main():
         confidence = max(prob)
         print(f"{name:10} → {pred.upper()} (confidence: {confidence:.3f})")
 
-    # Save model to data directory
-    model_path = Path(DATA_PATH) / "chinese_japanese_classifier.joblib"
-    print(f"\nSaving model to {model_path}...")
-    joblib.dump(pipeline, model_path)
+    # Choose a writable data directory within the package source tree
+    import sinonym as _sin
+
+    data_dir = Path(_sin.__file__).resolve().parent / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    skops_path = data_dir / "chinese_japanese_classifier.skops"
+    joblib_path = data_dir / "chinese_japanese_classifier.joblib"
+
+    print(f"\nSaving SKOPS model to {skops_path}...")
+    skops_dump(pipeline, skops_path)
+
+    print(f"Saving legacy joblib model to {joblib_path}...")
+    joblib.dump(pipeline, joblib_path)
 
     print("✓ Model training completed and saved successfully!")
-    print(f"Model saved to: {model_path}")
 
 
 if __name__ == "__main__":

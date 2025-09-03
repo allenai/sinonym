@@ -3,6 +3,8 @@ Resource loading helpers for package data files.
 
 This module provides utilities to access data files included with the sinonym package
 using importlib.resources, ensuring compatibility across all installation methods.
+
+Includes helpers to load ML artifacts persisted with joblib or skops.
 """
 from __future__ import annotations
 
@@ -38,6 +40,19 @@ def load_joblib(name: str):
 
     with open_resource_path(name) as path:
         return joblib.load(path)
+
+
+def load_skops(name: str):
+    """Load a skops-serialized model from package resources.
+
+    Uses skops.io.load with trusted=True to allow restoration of custom
+    transformers used by the pipeline (e.g., EnhancedHeuristicFlags).
+    """
+    from skops.io import load
+
+    with open_resource_path(name) as path:
+        # We trust our own serialized artifacts within the package.
+        return load(path, trusted=True)
 
 
 @contextmanager

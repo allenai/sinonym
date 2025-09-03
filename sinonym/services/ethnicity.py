@@ -30,16 +30,11 @@ try:
     import logging
     from pathlib import Path
 
-    import joblib
-    import numpy as np
-
-    # Import custom model components needed for loading the trained model
-    import sinonym.ml_model_components  # This makes the classes available for joblib.load
+    # Ensure custom model components are importable when deserializing
+    import sinonym.ml_model_components  # noqa: F401
     ML_AVAILABLE = True
 except ImportError:
     ML_AVAILABLE = False
-    joblib = None
-    np = None
 
 
 class _MLJapaneseClassifier:
@@ -52,8 +47,17 @@ class _MLJapaneseClassifier:
 
         if ML_AVAILABLE:
             try:
-                from sinonym.resources import load_joblib
-                self._model = load_joblib("chinese_japanese_classifier.joblib")
+                # Prefer skops artifact; fall back to legacy joblib if needed
+                from sinonym.resources import load_skops, load_joblib
+
+                try:
+                    self._model = load_skops("chinese_japanese_classifier.skops")
+                except Exception as skops_err:
+                    logging.info(
+                        f"SKOPS model not available or failed to load ({skops_err}); "
+                        "falling back to legacy joblib artifact."
+                    )
+                    self._model = load_joblib("chinese_japanese_classifier.joblib")
             except Exception as e:
                 logging.warning(f"Failed to load ML Japanese classifier: {e}")
                 self._available = False

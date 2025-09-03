@@ -47,6 +47,5 @@ Scripts in the `scripts/` directory are used to generate and process these data 
 ## Summary of ML Efforts
 
 1. **Chinese vs Japanese Classifier** (✅ IMPLEMENTED & ACTIVE):
-   - Files: `chinese_japanese_classifier.joblib`, `model_features.json`
-   - Successfully implemented and integrated
+   - Files: `chinese_japanese_classifier.skops`, `model_features.json`
    - Achieves 99.5% accuracy

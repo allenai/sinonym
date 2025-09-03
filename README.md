@@ -129,9 +129,34 @@ Sinonym processes names through a multi-stage pipeline designed for high accurac
 To get started with Sinonym, clone the repository and install the necessary dependencies using `uv`:
 
 ```bash
-git clone https://github.com/yourusername/sinonym.git
+git clone https://github.com/allenai/sinonym.git
 cd sinonym
-uv sync
+```
+
+1. From repo root:
+
+```bash
+# create the project venv (uv defaults to .venv if you don't give a name)
+uv venv --python 3.11
+```
+
+2. Activate the venv (choose one):
+
+```bash
+# macOS / Linux (bash / zsh)
+source .venv/bin/activate
+
+# Windows PowerShell
+. .venv\Scripts\Activate.ps1
+
+# Windows CMD
+.venv\Scripts\activate.bat
+```
+
+3. Install project dependencies (dev extras):
+
+```bash
+uv sync --active --all-extras --dev
 ```
 
 ### Machine Learning Dependencies

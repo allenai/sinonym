@@ -26,7 +26,7 @@ import requests
 
 # Import existing components
 from sinonym.detector import ChineseNameDetector
-from sinonym.paths import DATA_PATH
+from importlib.resources import files
 from sinonym.services.parsing import NameParsingService
 
 # Data sources (reuse from train_ml_classifier.py)
@@ -585,7 +585,14 @@ def main():
     print(f"Accuracy baseline: {correct_parses/total_parses:.3f}")
 
     # Save training data
-    output_path = Path(DATA_PATH) / "ml_parsing_training_data.json"
+    try:
+        import sinonym as _sin
+        data_dir = Path(_sin.__file__).resolve().parent / "data"
+    except Exception:
+        data_dir = Path.cwd()
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = data_dir / "ml_parsing_training_data.json"
     print(f"\nSaving training data to {output_path}")
 
     with open(output_path, "w", encoding="utf-8") as f:
@@ -603,7 +610,7 @@ def main():
         "chinese_names_processed": len(chinese_names),
     }
 
-    metadata_path = Path(DATA_PATH) / "ml_parsing_metadata.json"
+    metadata_path = data_dir / "ml_parsing_metadata.json"
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
 
