@@ -44,7 +44,6 @@ class NameFormattingService:
         surname_tokens: list[str],
         given_tokens: list[str],
         normalized_cache: dict[str, str] | None = None,
-        original_compound_surname: str | None = None,
         compound_metadata: dict[str, CompoundMetadata] | None = None,
     ) -> str:
         """
@@ -81,7 +80,11 @@ class NameFormattingService:
 
             # Context-aware splitting: use full database for intelligent given name splitting
             split = StringManipulationUtils.split_concatenated_name(
-                token, normalized_cache, self._data, self._normalizer, self._config,
+                token,
+                normalized_cache,
+                self._data,
+                self._normalizer,
+                self._config,
             )
             if split:
                 parts.extend(split)
@@ -149,12 +152,114 @@ class NameFormattingService:
 
         return f"{given_str} {surname_str}"
 
+    def format_name_output_with_tokens(
+        self,
+        surname_tokens: list[str],
+        given_tokens: list[str],
+        normalized_cache: dict[str, str] | None = None,
+        compound_metadata: dict[str, CompoundMetadata] | None = None,
+    ) -> tuple[str, list[str], list[str], str, str]:
+        """
+        Format parsed name components and also return the individual tokens.
+
+        Returns:
+            (full_formatted_name, given_tokens_final, surname_tokens_final, surname_str, given_str)
+
+        - given_tokens_final: individual given name tokens after splitting and capitalization
+        - surname_tokens_final: individual surname tokens (capitalized)
+        - surname_str / given_str: component strings as used in full_formatted_name
+        """
+        # Validate given name tokens first
+        if not self._normalizer.validate_given_tokens(given_tokens, normalized_cache):
+            msg = "given name tokens are not plausibly Chinese"
+            raise ValueError(msg)
+
+        # Process given tokens with splitting
+        parts: list[str] = []
+        for token in given_tokens:
+            if normalized_cache and token in normalized_cache:
+                normalized_token = normalized_cache[token]
+            else:
+                normalized_token = self._normalizer.norm(token)
+
+            if self._data.is_given_name(normalized_token):
+                parts.append(token)
+                continue
+
+            if self._normalizer.is_valid_chinese_phonetics(token):
+                parts.append(token)
+                continue
+
+            split = StringManipulationUtils.split_concatenated_name(
+                token, normalized_cache, self._data, self._normalizer, self._config,
+            )
+            if split:
+                parts.extend(split)
+            elif self._normalizer.is_valid_given_name_token(token, normalized_cache):
+                parts.append(token)
+            else:
+                msg = f"given name token '{token}' is not valid Chinese"
+                raise ValueError(msg)
+
+        if not parts:
+            raise ValueError("given name invalid")
+
+        # Build tokens and formatted parts
+        formatted_parts: list[str] = []
+        given_tokens_final: list[str] = []
+        for part in parts:
+            clean_part = StringManipulationUtils.clean_hyphen_boundaries(part)
+            if not clean_part:
+                continue
+            if "-" in clean_part:
+                sub_parts = StringManipulationUtils.split_and_clean_hyphens(clean_part)
+                capitalized_parts = [StringManipulationUtils.capitalize_name_part(sub) for sub in sub_parts]
+                given_tokens_final.extend(capitalized_parts)
+                formatted_parts.append(StringManipulationUtils.join_with_hyphens(capitalized_parts))
+            else:
+                cap = StringManipulationUtils.capitalize_name_part(clean_part)
+                formatted_parts.append(cap)
+                given_tokens_final.append(cap)
+
+        # Determine given separator (mirror format_name_output)
+        if len(formatted_parts) > 1:
+            part_lengths = [len(part.replace("-", "")) for part in formatted_parts]
+            has_single_char = any(length == 1 for length in part_lengths)
+            has_multi_char = any(length > 1 for length in part_lengths)
+
+            if has_single_char and has_multi_char:
+                given_str = StringManipulationUtils.join_with_spaces(formatted_parts)
+            else:
+                given_str = StringManipulationUtils.join_with_hyphens(formatted_parts)
+        else:
+            given_str = formatted_parts[0] if formatted_parts else ""
+
+        # Surname formatting
+        if len(surname_tokens) > 1:
+            if compound_metadata:
+                surname_str = self._format_compound_with_metadata(surname_tokens, compound_metadata)
+            else:
+                capitalized_tokens = [StringManipulationUtils.capitalize_name_part(t) for t in surname_tokens]
+                surname_str = StringManipulationUtils.join_with_hyphens(capitalized_tokens)
+        else:
+            if compound_metadata:
+                surname_str = self._format_single_token_with_metadata(surname_tokens[0], compound_metadata)
+            else:
+                surname_str = StringManipulationUtils.capitalize_name_part(surname_tokens[0])
+
+        full_formatted = f"{given_str} {surname_str}"
+        surname_tokens_final = [StringManipulationUtils.capitalize_name_part(t) for t in surname_tokens]
+
+        return full_formatted, given_tokens_final, surname_tokens_final, surname_str, given_str
+
     def capitalize_name_part(self, part: str) -> str:
         """Properly capitalize a name part - delegated to centralized utility."""
         return StringManipulationUtils.capitalize_name_part(part)
 
     def _format_compound_with_metadata(
-        self, surname_tokens: list[str], compound_metadata: dict[str, CompoundMetadata],
+        self,
+        surname_tokens: list[str],
+        compound_metadata: dict[str, CompoundMetadata],
     ) -> str:
         """Format compound surname using centralized metadata.
 
@@ -205,7 +310,9 @@ class NameFormattingService:
         return StringManipulationUtils.join_with_hyphens(capitalized_tokens)
 
     def _format_single_token_with_metadata(
-        self, surname_token: str, compound_metadata: dict[str, CompoundMetadata],
+        self,
+        surname_token: str,
+        compound_metadata: dict[str, CompoundMetadata],
     ) -> str:
         """Format single token surname using centralized metadata.
 
@@ -231,7 +338,9 @@ class NameFormattingService:
         return StringManipulationUtils.capitalize_name_part(surname_token)
 
     def _find_original_compound_token(
-        self, compound_metadata: dict[str, CompoundMetadata], target_compound: str,
+        self,
+        compound_metadata: dict[str, CompoundMetadata],
+        target_compound: str,
     ) -> str | None:
         """Find the original token that corresponds to a compound target.
 

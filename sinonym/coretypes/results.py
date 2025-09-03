@@ -28,14 +28,55 @@ class ParseResult:
     error_message: str | None = None
     # Original compound surname format (preserves input format like "Duanmu" vs "Duan-Mu")
     original_compound_surname: str | None = None
+    # Structured parsed components when available
+    parsed: ParsedName | None = None
 
     @classmethod
-    def success_with_name(cls, formatted_name: str, original_compound_surname: str | None = None) -> ParseResult:
-        return cls(success=True, result=formatted_name, error_message=None, original_compound_surname=original_compound_surname)
+    def success_with_name(
+        cls,
+        formatted_name: str,
+        original_compound_surname: str | None = None,
+        parsed: ParsedName | None = None,
+    ) -> ParseResult:
+        """Create a successful result with final formatted name.
+
+        The optional 'parsed' provides access to individual tokens and
+        component strings (surname/given) for downstream consumers.
+        """
+        return cls(
+            success=True,
+            result=formatted_name,
+            error_message=None,
+            original_compound_surname=original_compound_surname,
+            parsed=parsed,
+        )
 
     @classmethod
-    def success_with_parse(cls, surname_tokens: list[str], given_tokens: list[str], original_compound_surname: str | None = None) -> ParseResult:
-        return cls(success=True, result=(surname_tokens, given_tokens), error_message=None, original_compound_surname=original_compound_surname)
+    def success_with_parse(
+        cls,
+        surname_tokens: list[str],
+        given_tokens: list[str],
+        original_compound_surname: str | None = None,
+    ) -> ParseResult:
+        """Create a successful intermediate parse with raw tokens.
+
+        Note: 'parsed' will be populated with token lists, while the
+        component strings are simple space-joined placeholders. Final
+        capitalization and hyphenation are determined by formatting.
+        """
+        parsed = ParsedName(
+            surname=" ".join(surname_tokens),
+            given_name=" ".join(given_tokens),
+            surname_tokens=list(surname_tokens),
+            given_tokens=list(given_tokens),
+        )
+        return cls(
+            success=True,
+            result=(surname_tokens, given_tokens),
+            error_message=None,
+            original_compound_surname=original_compound_surname,
+            parsed=parsed,
+        )
 
     @classmethod
     def failure(cls, error_message: str) -> ParseResult:
@@ -45,7 +86,11 @@ class ParseResult:
         """Functor map operation - Scala-like transformation"""
         if self.success:
             try:
-                return ParseResult.success_with_name(f(self.result), self.original_compound_surname)
+                return ParseResult.success_with_name(
+                    f(self.result),
+                    self.original_compound_surname,
+                    self.parsed,
+                )
             except Exception as e:
                 return ParseResult.failure(str(e))
         return self
@@ -57,7 +102,13 @@ class ParseResult:
                 result = f(self.result)
                 # Preserve the original compound surname if the result doesn't already have one
                 if result.success and result.original_compound_surname is None:
-                    return ParseResult(result.success, result.result, result.error_message, self.original_compound_surname)
+                    return ParseResult(
+                        result.success,
+                        result.result,
+                        result.error_message,
+                        self.original_compound_surname,
+                        result.parsed,
+                    )
                 return result
             except Exception as e:
                 return ParseResult.failure(str(e))
