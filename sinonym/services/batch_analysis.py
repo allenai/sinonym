@@ -348,7 +348,7 @@ class BatchAnalysisService:
 
         try:
             # Use the EXACT same formatting pipeline as individual processing, with tokens
-            formatted_name, given_final, surname_final, surname_str, given_str = (
+            formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
                 formatting_service.format_name_output_with_tokens(
                     candidate.surname_tokens,
                     candidate.given_tokens,
@@ -361,6 +361,8 @@ class BatchAnalysisService:
                 given_name=given_str,
                 surname_tokens=surname_final,
                 given_tokens=given_final,
+                middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                middle_tokens=middle_tokens,
             )
             return ParseResult.success_with_name(formatted_name, parsed=parsed)
         except ValueError as e:
