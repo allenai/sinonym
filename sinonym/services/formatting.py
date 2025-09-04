@@ -124,7 +124,33 @@ class NameFormattingService:
             has_single_char = any(length == 1 for length in part_lengths)
             has_multi_char = any(length > 1 for length in part_lengths)
 
-            if has_single_char and has_multi_char:
+            # Special-case: one or more trailing single-letter initials
+            trailing_count = 0
+            for length in reversed(part_lengths):
+                if length == 1:
+                    trailing_count += 1
+                else:
+                    break
+
+            if trailing_count > 0 and any(l > 1 for l in part_lengths[:-trailing_count]):
+                primary_parts = formatted_parts[:-trailing_count]
+                middle_parts = formatted_parts[-trailing_count:]
+
+                # Join primary parts using mixed-length rule
+                if len(primary_parts) > 1:
+                    p_lengths = [len(p.replace("-", "")) for p in primary_parts]
+                    p_has_single = any(l == 1 for l in p_lengths)
+                    p_has_multi = any(l > 1 for l in p_lengths)
+                    if p_has_single and p_has_multi:
+                        primary_given_str = StringManipulationUtils.join_with_spaces(primary_parts)
+                    else:
+                        primary_given_str = StringManipulationUtils.join_with_hyphens(primary_parts)
+                else:
+                    primary_given_str = primary_parts[0]
+
+                middle_str = StringManipulationUtils.join_with_spaces(middle_parts)
+                given_str = f"{primary_given_str} {middle_str}".strip()
+            elif has_single_char and has_multi_char:
                 # Mixed lengths: use spaces (e.g., "Bin B" not "Bin-B")
                 given_str = StringManipulationUtils.join_with_spaces(formatted_parts)
             else:
@@ -158,7 +184,7 @@ class NameFormattingService:
         given_tokens: list[str],
         normalized_cache: dict[str, str] | None = None,
         compound_metadata: dict[str, CompoundMetadata] | None = None,
-    ) -> tuple[str, list[str], list[str], str, str]:
+    ) -> tuple[str, list[str], list[str], str, str, list[str]]:
         """
         Format parsed name components and also return the individual tokens.
 
@@ -221,13 +247,40 @@ class NameFormattingService:
                 formatted_parts.append(cap)
                 given_tokens_final.append(cap)
 
-        # Determine given separator (mirror format_name_output)
+        # Determine given separator (mirror format_name_output) and split out trailing initials
+        middle_tokens_final: list[str] = []
         if len(formatted_parts) > 1:
             part_lengths = [len(part.replace("-", "")) for part in formatted_parts]
             has_single_char = any(length == 1 for length in part_lengths)
             has_multi_char = any(length > 1 for length in part_lengths)
 
-            if has_single_char and has_multi_char:
+            # trailing run of single-letter initials → middle tokens
+            trailing_count = 0
+            for length in reversed(part_lengths):
+                if length == 1:
+                    trailing_count += 1
+                else:
+                    break
+
+            if trailing_count > 0 and any(l > 1 for l in part_lengths[:-trailing_count]):
+                middle_tokens_final = formatted_parts[-trailing_count:]
+                primary_parts = formatted_parts[:-trailing_count]
+
+                if len(primary_parts) > 1:
+                    p_lengths = [len(p.replace("-", "")) for p in primary_parts]
+                    p_has_single = any(l == 1 for l in p_lengths)
+                    p_has_multi = any(l > 1 for l in p_lengths)
+                    if p_has_single and p_has_multi:
+                        given_str = StringManipulationUtils.join_with_spaces(primary_parts)
+                    else:
+                        given_str = StringManipulationUtils.join_with_hyphens(primary_parts)
+                else:
+                    given_str = primary_parts[0] if primary_parts else ""
+
+                # Remove the middle initials from the given token list
+                if trailing_count > 0 and len(given_tokens_final) >= trailing_count:
+                    given_tokens_final = given_tokens_final[:-trailing_count]
+            elif has_single_char and has_multi_char:
                 given_str = StringManipulationUtils.join_with_spaces(formatted_parts)
             else:
                 given_str = StringManipulationUtils.join_with_hyphens(formatted_parts)
@@ -247,10 +300,15 @@ class NameFormattingService:
             else:
                 surname_str = StringManipulationUtils.capitalize_name_part(surname_tokens[0])
 
-        full_formatted = f"{given_str} {surname_str}"
+        # If we have middle tokens, include them between given and surname
+        if middle_tokens_final:
+            middle_str = StringManipulationUtils.join_with_spaces(middle_tokens_final)
+            full_formatted = f"{given_str} {middle_str} {surname_str}".strip()
+        else:
+            full_formatted = f"{given_str} {surname_str}".strip()
         surname_tokens_final = [StringManipulationUtils.capitalize_name_part(t) for t in surname_tokens]
 
-        return full_formatted, given_tokens_final, surname_tokens_final, surname_str, given_str
+        return full_formatted, given_tokens_final, surname_tokens_final, surname_str, given_str, middle_tokens_final
 
     def capitalize_name_part(self, part: str) -> str:
         """Properly capitalize a name part - delegated to centralized utility."""

@@ -339,7 +339,7 @@ class ChineseNameDetector:
             if best_result:
                 surname_tokens, given_tokens = best_result
                 try:
-                    formatted_name, given_final, surname_final, surname_str, given_str = (
+                    formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
                         self._formatting_service.format_name_output_with_tokens(
                             surname_tokens,
                             given_tokens,
@@ -352,6 +352,8 @@ class ChineseNameDetector:
                         given_name=given_str,
                         surname_tokens=surname_final,
                         given_tokens=given_final,
+                        middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                        middle_tokens=middle_tokens,
                     )
                     return ParseResult.success_with_name(formatted_name, parsed=parsed)
                 except ValueError as e:
@@ -367,7 +369,7 @@ class ChineseNameDetector:
                 if parse_result.success:
                     surname_tokens, given_tokens = parse_result.result
                     try:
-                        formatted_name, given_final, surname_final, surname_str, given_str = (
+                        formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
                             self._formatting_service.format_name_output_with_tokens(
                                 surname_tokens,
                                 given_tokens,
@@ -380,6 +382,8 @@ class ChineseNameDetector:
                             given_name=given_str,
                             surname_tokens=surname_final,
                             given_tokens=given_final,
+                            middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                            middle_tokens=middle_tokens,
                         )
                         return ParseResult.success_with_name(formatted_name, parsed=parsed)
                     except ValueError as e:

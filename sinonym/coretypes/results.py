@@ -6,7 +6,7 @@ and immutable data structures.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -17,6 +17,9 @@ class ParsedName:
     given_name: str
     surname_tokens: list[str]
     given_tokens: list[str]
+    # Optional middle name components (e.g., single-letter initials)
+    middle_name: str = ""
+    middle_tokens: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
