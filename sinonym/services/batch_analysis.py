@@ -281,7 +281,7 @@ class BatchAnalysisService:
 
         # Primary decision: simple vote counting (original behavior)
         total_preferences = surname_first_preferences + given_first_preferences
-        
+
         if surname_first_preferences > given_first_preferences:
             # Clear winner by vote count
             dominant_format = NameFormat.SURNAME_FIRST
@@ -290,26 +290,25 @@ class BatchAnalysisService:
             # Clear winner by vote count
             dominant_format = NameFormat.GIVEN_FIRST
             confidence = given_first_preferences / total_preferences
-        else:
-            # Exact tie in vote count - use confidence-weighted tie-breaking
-            if total_weight > 0:
-                surname_first_confidence = surname_first_weight / total_weight
-                given_first_confidence = given_first_weight / total_weight
-                
-                if surname_first_confidence > given_first_confidence:
-                    dominant_format = NameFormat.SURNAME_FIRST
-                    confidence = surname_first_confidence
-                elif given_first_confidence > surname_first_confidence:
-                    dominant_format = NameFormat.GIVEN_FIRST
-                    confidence = given_first_confidence
-                else:
-                    # Still tied even with confidence weighting - use heuristics
-                    dominant_format = self._apply_tie_breaking_heuristics(name_candidates)
-                    confidence = 0.5
+        # Exact tie in vote count - use confidence-weighted tie-breaking
+        elif total_weight > 0:
+            surname_first_confidence = surname_first_weight / total_weight
+            given_first_confidence = given_first_weight / total_weight
+
+            if surname_first_confidence > given_first_confidence:
+                dominant_format = NameFormat.SURNAME_FIRST
+                confidence = surname_first_confidence
+            elif given_first_confidence > surname_first_confidence:
+                dominant_format = NameFormat.GIVEN_FIRST
+                confidence = given_first_confidence
             else:
-                # Fallback to heuristics if confidence calculation fails
+                # Still tied even with confidence weighting - use heuristics
                 dominant_format = self._apply_tie_breaking_heuristics(name_candidates)
                 confidence = 0.5
+        else:
+            # Fallback to heuristics if confidence calculation fails
+            dominant_format = self._apply_tie_breaking_heuristics(name_candidates)
+            confidence = 0.5
 
         threshold_met = confidence >= self._format_threshold
 

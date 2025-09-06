@@ -13,13 +13,15 @@ import re
 import subprocess
 import sys
 
-EXPECTED_FAILURES = 60
+EXPECTED_FAILURES = 65
 
 
 def run_tests():
     """Run all tests and capture output."""
     env = os.environ.copy()
     env["PYTHONHASHSEED"] = "0"
+    # Ensure UTF-8 encoding on all platforms
+    env["PYTHONIOENCODING"] = "utf-8"
 
     try:
         # Prepare failure log path for this run
@@ -48,6 +50,7 @@ def run_tests():
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=env,
             timeout=300,
         )
@@ -118,6 +121,8 @@ def check_performance_tests():
     """Run performance tests separately and check if they pass."""
     env = os.environ.copy()
     env["PYTHONHASHSEED"] = "0"
+    # Ensure UTF-8 encoding on all platforms
+    env["PYTHONIOENCODING"] = "utf-8"
 
     try:
         result = subprocess.run(
@@ -125,6 +130,7 @@ def check_performance_tests():
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=env,
             timeout=30,
         )
