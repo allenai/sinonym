@@ -444,8 +444,8 @@ class TestBatchOutcomes:
             print(f"Surname-first batch: {problem_input} -> {problem_result.result} (expected: {problem_expected})")
 
     def test_compound_variations_batch_outcomes(self):
-        """Test batch with compound names that has no clear format pattern."""
-        # Evenly mixed format names (50/50 split)
+        """Test batch with compound names where confidence-weighted tie-breaking succeeds but application fails."""
+        # Evenly mixed format names (50/50 split) - tie-breaking will resolve this
         names = [
             "Wei-Qi Wang",  # Compound given, simple surname -> given-first preference
             "Si-Tu Liu",  # Compound surname, simple given -> surname-first preference
@@ -455,8 +455,8 @@ class TestBatchOutcomes:
             "Wei Duan-Mu",  # Simple given, compound surname -> surname-first preference
         ]
 
-        # Should fail because there's no clear pattern (50% confidence < 55% threshold)
-        with pytest.raises(ValueError, match="Batch format detection confidence too low"):
+        # Should fail because confidence-weighted tie-breaking detects a format but some names are unambiguous
+        with pytest.raises(ValueError, match="Cannot apply batch format .* to .* unambiguous names"):
             self.detector.analyze_name_batch(names)
 
 

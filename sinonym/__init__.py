@@ -13,13 +13,14 @@ __all__ = ["ChineseNameDetector"]
 # Avoid accidental shadowing of stdlib modules when editors set CWD to package dir
 def _warn_if_cwd_is_package_dir():
     try:
-        import os, sys
+        import os
+        import sys
         pkg_dir = os.path.dirname(__file__)
         # If current working directory equals package directory, importing stdlib modules
         # like `types` may resolve to our subpackages. This is a common Jupyter misconfig.
         if os.path.abspath(os.getcwd()) == os.path.abspath(pkg_dir):
             sys.stderr.write(
-                "[sinonym] Warning: Working directory is the package folder; this may shadow stdlib modules.\n"
+                "[sinonym] Warning: Working directory is the package folder; this may shadow stdlib modules.\n",
             )
     except Exception:
         pass

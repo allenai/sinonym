@@ -18,8 +18,9 @@ from pathlib import Path
 
 sys.path.append(".")
 
-from sinonym import ChineseNameDetector
 from importlib.resources import files
+
+from sinonym import ChineseNameDetector
 
 
 def load_acl_authors():

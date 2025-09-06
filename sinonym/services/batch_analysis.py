@@ -13,16 +13,16 @@ from typing import TYPE_CHECKING
 from sinonym.coretypes import (
     BatchFormatPattern,
     BatchParseResult,
-    NameFormat,
     IndividualAnalysis,
+    NameFormat,
     ParseCandidate,
     ParseResult,
 )
 from sinonym.coretypes.results import ParsedName
 
 if TYPE_CHECKING:
-    from sinonym.services.parsing import NameParsingService
     from sinonym.services.ethnicity import EthnicityClassificationService
+    from sinonym.services.parsing import NameParsingService
 
 
 class BatchAnalysisService:
@@ -31,7 +31,7 @@ class BatchAnalysisService:
     def __init__(
         self,
         parsing_service: NameParsingService,
-        ethnicity_service: 'EthnicityClassificationService' | None = None,
+        ethnicity_service: EthnicityClassificationService | None = None,
         format_threshold: float = 0.55,
     ):
         self._parsing_service = parsing_service
@@ -231,23 +231,43 @@ class BatchAnalysisService:
         return NameFormat.SURNAME_FIRST
 
     def _detect_format_pattern(self, name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]]) -> BatchFormatPattern:
-        """Detect the dominant format pattern by counting individual format preferences."""
+        """Detect the dominant format pattern with simple vote counting and confidence-weighted tie-breaking."""
         surname_first_preferences = 0
         given_first_preferences = 0
+        surname_first_weight = 0.0
+        given_first_weight = 0.0
+        total_weight = 0.0
         names_with_candidates = 0
 
-        # Count format preferences: which format wins for each individual name
+        # Count format preferences and collect confidence data for tie-breaking
         for _name, candidates, best_candidate, _ in name_candidates:
             if not candidates or not best_candidate:
                 continue
 
             names_with_candidates += 1
 
-            # Count the preference of the best (winning) candidate for this name
+            # Calculate confidence gap between top two candidates
+            if len(candidates) >= 2:
+                # Sort by score (highest first)
+                sorted_candidates = sorted(candidates, key=lambda x: x.score, reverse=True)
+                confidence_gap = sorted_candidates[0].score - sorted_candidates[1].score
+
+                # Weight by confidence gap - higher gap = more influence
+                # Minimum weight of 0.1 to ensure all names have some influence
+                weight = max(0.1, confidence_gap * 2)
+            else:
+                # Single candidate gets maximum weight
+                weight = 1.0
+
+            total_weight += weight
+
+            # Add weighted vote for the best candidate's format
             if best_candidate.format == NameFormat.SURNAME_FIRST:
                 surname_first_preferences += 1
+                surname_first_weight += weight
             elif best_candidate.format == NameFormat.GIVEN_FIRST:
                 given_first_preferences += 1
+                given_first_weight += weight
 
         if names_with_candidates == 0:
             return BatchFormatPattern(
@@ -259,17 +279,37 @@ class BatchAnalysisService:
                 threshold_met=False,
             )
 
-        # Determine dominant format based on preference count
+        # Primary decision: simple vote counting (original behavior)
         total_preferences = surname_first_preferences + given_first_preferences
+        
         if surname_first_preferences > given_first_preferences:
+            # Clear winner by vote count
             dominant_format = NameFormat.SURNAME_FIRST
             confidence = surname_first_preferences / total_preferences
         elif given_first_preferences > surname_first_preferences:
+            # Clear winner by vote count
             dominant_format = NameFormat.GIVEN_FIRST
             confidence = given_first_preferences / total_preferences
         else:
-            dominant_format = NameFormat.MIXED
-            confidence = 0.5
+            # Exact tie in vote count - use confidence-weighted tie-breaking
+            if total_weight > 0:
+                surname_first_confidence = surname_first_weight / total_weight
+                given_first_confidence = given_first_weight / total_weight
+                
+                if surname_first_confidence > given_first_confidence:
+                    dominant_format = NameFormat.SURNAME_FIRST
+                    confidence = surname_first_confidence
+                elif given_first_confidence > surname_first_confidence:
+                    dominant_format = NameFormat.GIVEN_FIRST
+                    confidence = given_first_confidence
+                else:
+                    # Still tied even with confidence weighting - use heuristics
+                    dominant_format = self._apply_tie_breaking_heuristics(name_candidates)
+                    confidence = 0.5
+            else:
+                # Fallback to heuristics if confidence calculation fails
+                dominant_format = self._apply_tie_breaking_heuristics(name_candidates)
+                confidence = 0.5
 
         threshold_met = confidence >= self._format_threshold
 
@@ -330,6 +370,50 @@ class BatchAnalysisService:
             )
 
         return results
+
+    def _apply_tie_breaking_heuristics(self, name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]]) -> NameFormat:
+        """Apply secondary heuristics for tie-breaking when confidence-weighted voting fails."""
+        # Heuristic 1: Surname strength analysis
+        surname_first_strength = 0
+        given_first_strength = 0
+
+        for name, candidates, best_candidate, _ in name_candidates:
+            if not candidates or not best_candidate:
+                continue
+
+            tokens = name.split()
+            if len(tokens) != 2:
+                continue
+
+            first_token, second_token = tokens
+
+            # Get surname frequencies for both positions
+            first_as_surname = self._parsing_service._data.get_surname_freq(first_token, 0)
+            second_as_surname = self._parsing_service._data.get_surname_freq(second_token, 0)
+
+            # Evaluate surname-first hypothesis: first token should be strong surname
+            if first_as_surname > 1000:  # Strong surname threshold
+                surname_first_strength += 2
+            elif first_as_surname > 100:  # Medium surname
+                surname_first_strength += 1
+
+            # Evaluate given-first hypothesis: second token should be strong surname
+            if second_as_surname > 1000:  # Strong surname threshold
+                given_first_strength += 2
+            elif second_as_surname > 100:  # Medium surname
+                given_first_strength += 1
+
+        # Heuristic 2: Cultural default (surname-first is traditional Chinese ordering)
+        # Add small bias toward surname-first as tiebreaker
+        surname_first_strength += 0.5
+
+        # Decision based on heuristic strength
+        if surname_first_strength > given_first_strength:
+            return NameFormat.SURNAME_FIRST
+        if given_first_strength > surname_first_strength:
+            return NameFormat.GIVEN_FIRST
+        # Final fallback: use cultural default
+        return NameFormat.SURNAME_FIRST
 
     def _format_best_candidate(
         self, best_candidate: ParseCandidate | None, formatting_service, compound_metadata,
@@ -392,7 +476,7 @@ class BatchAnalysisService:
                     expected_individual = f"{best_candidate.given_tokens[0].capitalize()} {best_candidate.surname_tokens[0].capitalize()}"
                     if expected_individual != batch_result.result:
                         improvements.append(i)
-        
+
         return improvements
 
     def _build_individual_analyses(

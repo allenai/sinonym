@@ -7,13 +7,13 @@ This script runs all tests and counts the individual test case failures
 performance tests pass.
 """
 
-import os
 import ast
+import os
 import re
 import subprocess
 import sys
 
-EXPECTED_FAILURES = 118
+EXPECTED_FAILURES = 60
 
 
 def run_tests():
@@ -105,7 +105,7 @@ def read_fail_log_path_from_output(output: str) -> str | None:
 
 def read_fail_log(path: str) -> list[str]:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return [ln.rstrip("\n") for ln in f]
     except Exception:
         return []
@@ -260,7 +260,7 @@ def main():
         sys.exit(0)
     elif logged and len(logged) < EXPECTED_FAILURES and perf_passed:
         print(
-            f"\n✓ IMPROVEMENT! Tests are better than baseline ({len(logged)} < EXPECTED_FAILURES failures, performance OK)"
+            f"\n✓ IMPROVEMENT! Tests are better than baseline ({len(logged)} < EXPECTED_FAILURES failures, performance OK)",
         )
         sys.exit(0)
     elif logged and len(logged) > EXPECTED_FAILURES:
@@ -271,7 +271,7 @@ def main():
         sys.exit(0)
     elif failures and total_failures < EXPECTED_FAILURES and perf_passed:
         print(
-            f"\n✓ IMPROVEMENT! Tests are better than baseline ({total_failures} < EXPECTED_FAILURES failures, performance OK)"
+            f"\n✓ IMPROVEMENT! Tests are better than baseline ({total_failures} < EXPECTED_FAILURES failures, performance OK)",
         )
         sys.exit(0)
     elif failures and total_failures > EXPECTED_FAILURES:

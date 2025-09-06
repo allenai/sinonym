@@ -51,7 +51,7 @@ def load_skops(name: str, trusted: list[str] | None = None):
     effectively trusting our own artifact. Callers can override by passing a
     specific ``trusted`` list.
     """
-    from skops.io import load, get_untrusted_types
+    from skops.io import get_untrusted_types, load
 
     with open_resource_path(name) as path:
         if trusted is None:

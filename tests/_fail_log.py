@@ -16,7 +16,7 @@ def log_failure(label: str, name: str, expected_success: bool, expected_output: 
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
             f.write(
-                f"{label}\t{repr(name)}\t{expected_success}\t{expected_output}\t{actual_success}\t{actual_output}\n",
+                f"{label}\t{name!r}\t{expected_success}\t{expected_output}\t{actual_success}\t{actual_output}\n",
             )
     except Exception:
         # Best-effort logging; never break tests due to logging

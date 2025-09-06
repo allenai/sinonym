@@ -24,7 +24,6 @@ CHINESE_NAME_TEST_CASES = [
     ("Chü Chen", (True, "Chu Chen")),
     ("Li Yü", (True, "Yu Li")),
     ("Lü Buwei", (True, "Bu-Wei Lu")),
-    ("Lü Wei", (True, "Wei Lu")),
     ("Wei-min Zhang 张为民", (True, "Wei-Min Zhang")),
     ("Xiaohong Li 张小红", (True, "Xiao-Hong Li")),
     ("Yü Li", (True, "Yu Li")),

@@ -294,11 +294,10 @@ class NameFormattingService:
             else:
                 capitalized_tokens = [StringManipulationUtils.capitalize_name_part(t) for t in surname_tokens]
                 surname_str = StringManipulationUtils.join_with_hyphens(capitalized_tokens)
+        elif compound_metadata:
+            surname_str = self._format_single_token_with_metadata(surname_tokens[0], compound_metadata)
         else:
-            if compound_metadata:
-                surname_str = self._format_single_token_with_metadata(surname_tokens[0], compound_metadata)
-            else:
-                surname_str = StringManipulationUtils.capitalize_name_part(surname_tokens[0])
+            surname_str = StringManipulationUtils.capitalize_name_part(surname_tokens[0])
 
         # If we have middle tokens, include them between given and surname
         if middle_tokens_final:

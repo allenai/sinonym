@@ -165,6 +165,8 @@ data structures and the detector can be safely used from multiple threads.
 import logging
 import string
 
+from sinonym.coretypes import BatchFormatPattern, BatchParseResult
+from sinonym.coretypes.results import ParsedName
 from sinonym.services import (
     BatchAnalysisService,
     CacheInfo,
@@ -179,8 +181,6 @@ from sinonym.services import (
     PinyinCacheService,
     ServiceContext,
 )
-from sinonym.coretypes import BatchFormatPattern, BatchParseResult
-from sinonym.coretypes.results import ParsedName
 
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CHINESE NAME DETECTOR CLASS
@@ -525,7 +525,7 @@ class ChineseNameDetector:
         return batch_result.results
 
     def _create_fallback_batch_result(
-        self, names: list[str], individual_results: list[ParseResult]
+        self, names: list[str], individual_results: list[ParseResult],
     ) -> BatchParseResult:
         """Create a fallback BatchParseResult when batch analysis is not available."""
         from sinonym.coretypes import BatchFormatPattern, IndividualAnalysis, NameFormat

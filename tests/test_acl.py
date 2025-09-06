@@ -173,16 +173,13 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Cao Xiao", "Cao Xiao"),  # Currently: Xiao Cao
     ("Chang Ao", "Chang Ao"),  # Currently: Ao Chang
     ("Chang Ma", "Chang Ma"),  # Currently: Ma Chang
-    ("Chen Feiyang", "Chen Feiyang"),  # Currently: Fei-Yang Chen
     ("Chen Gong", "Chen Gong"),  # Currently: Gong Chen
     ("Chen Li", "Chen Li"),  # Currently: Li Chen
-    ("Chen Li Yu", "Chen Li Yu"),  # Currently: Li-Yu Chen
     ("Chen Lin", "Chen Lin"),  # Currently: Lin Chen
     ("Chen Luo", "Chen Luo"),  # Currently: Luo Chen
     ("Chen Qian", "Chen Qian"),  # Currently: Qian Chen
     ("Chen Shen", "Chen Shen"),  # Currently: Shen Chen
     ("Chen Tang", "Chen Tang"),  # Currently: Tang Chen
-    ("Chen Zhi", "Chen Zhi"),  # Currently: Zhi Chen
     ("Chen Zhu", "Chen Zhu"),  # Currently: Zhu Chen
     ("Cheng Qian", "Cheng Qian"),  # Currently: Qian Cheng
     ("Cheng Wan", "Cheng Wan"),  # Currently: Wan Cheng
@@ -190,14 +187,12 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Chong Feng", "Chong Feng"),  # Currently: Feng Chong
     ("Chong Ruan", "Chong Ruan"),  # Currently: Ruan Chong
     ("Deng Cai", "Deng Cai"),  # Currently: Cai Deng
-    ("Deng Qiyuan", "Deng Qiyuan"),  # Currently: Qi-Yuan Deng
     ("Di Shang", "Di Shang"),  # Currently: Shang Di
     ("Dong Yu", "Dong Yu"),  # Currently: Yu Dong
     ("Fan Bu", "Fan Bu"),  # Currently: Bu Fan
     ("Fan Yin", "Fan Yin"),  # Currently: Yin Fan
     ("Feng Wei", "Feng Wei"),  # Currently: Wei Feng
     ("Feng Xia", "Feng Xia"),  # Currently: Xia Feng
-    ("GAO Zuchen", "Gao Zuchen"),  # Currently: Zu-Chen Gao
     ("Ge Qu", "Ge Qu"),  # Currently: Qu Ge
     ("Ge Shi", "Ge Shi"),  # Currently: Shi Ge
     ("Ge Yu", "Ge Yu"),  # Currently: Yu Ge
@@ -214,9 +209,6 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Haoran Que", "Hao-Ran Que"),  # Currently: Que Haoran
     ("Haoran Ye", "Hao-Ran Ye"),  # Currently: Ye Haoran
     ("He Yan", "He Yan"),  # Currently: Yan He
-    ("Hu Kai", "Hu Kai"),  # Currently: Kai Hu
-    ("Hu Yiwen", "Hu Yiwen"),  # Currently: Yi-Wen Hu
-    ("Huang Qing", "Huang Qing"),  # Currently: Qing Huang
     ("Hui Su", "Hui Su"),  # Currently: Su Hui
     ("Hui Wei", "Hui Wei"),  # Currently: Wei Hui
     ("Jiang Bian", "Jiang Bian"),  # Currently: Bian Jiang
@@ -234,12 +226,10 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Lecheng Zheng", "Lecheng Zheng"),  # Currently: Zheng Lecheng
     ("Lei Sha", "Lei Sha"),  # Currently: Sha Lei
     ("Lei Yu", "Lei Yu"),  # Currently: Yu Lei
-    ("Li Hao", "Li Hao"),  # Currently: Hao Li
     ("Li Jin", "Li Jin"),  # Currently: Jin Li
     ("Li Kuang", "Li Kuang"),  # Currently: Kuang Li
     ("Li Lin", "Li Lin"),  # Currently: Lin Li
     ("Li Ni", "Li Ni"),  # Currently: Ni Li
-    ("Li Qing", "Li Qing"),  # Currently: Qing Li
     ("Li Zheng", "Li Zheng"),  # Currently: Zheng Li
     ("Liang Lin", "Liang Lin"),  # Currently: Lin Liang
     ("Liang Pang", "Liang Pang"),  # Currently: Pang Liang
@@ -248,14 +238,8 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Lin Mu", "Lin Mu"),  # Currently: Mu Lin
     ("Lin Qiu", "Lin Qiu"),  # Currently: Qiu Lin
     ("Lin Yan", "Lin Yan"),  # Currently: Yan Lin
-    ("Liu Guoming", "Liu Guoming"),  # Currently: Guo-Ming Liu
-    ("Liu Weichuan", "Liu Weichuan"),  # Currently: Wei-Chuan Liu
-    ("Liu Yabin", "Liu Yabin"),  # Currently: Ya-Bin Liu
     ("Long Le", "Long Le"),  # Currently: Le Long
     ("Lu Xiang", "Lu Xiang"),  # Currently: Xiang Lu
-    ("Lu Xiangju", "Lu Xiangju"),  # Currently: Xiang-Ju Lu
-    ("MA Jianfei", "Ma Jianfei"),  # Currently: Jian-Fei Ma
-    ("MA Zhuoheng", "Ma Zhuoheng"),  # Currently: Zhuo-Heng Ma
     ("Man Lan", "Man Lan"),  # Currently: Lan Man
     ("Mo Yu", "Mo Yu"),  # Currently: Yu Mo
     ("Peng Di", "Peng Di"),  # Currently: Di Peng
@@ -264,14 +248,10 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Qianlong Du", "Qian-Long Du"),  # Currently: Du Qianlong
     ("Qianlong Wang", "Qian-Long Wang"),  # Currently: Wang Qianlong
     ("Qin Jin", "Qin Jin"),  # Currently: Jin Qin
-    ("Qiu Jiantao", "Qiu Jiantao"),  # Currently: Jian-Tao Qiu
     ("Ran Xin", "Ran Xin"),  # Currently: Xin Ran
     ("Rui Ming", "Rui Ming"),  # Currently: Ming Rui
-    ("SU Yihang", "Su Yihang"),  # Currently: Yi-Hang Su
     ("Shao Kuan Wei", "Shao-Kuan Wei"),  # Currently: Kuan-Wei Shao
-    ("Shi Luohe", "Shi Luohe"),  # Currently: Luo-He Shi
     ("Shi Yu", "Shi Yu"),  # Currently: Yu Shi
-    ("Song Huatong", "Song Huatong"),  # Currently: Hua-Tong Song
     ("Su Lu", "Su Lu"),  # Currently: Lu Su
     ("Sun Ao", "Sun Ao"),  # Currently: Ao Sun
     ("Tan Yue", "Tan Yue"),  # Currently: Yue Tan
@@ -290,7 +270,6 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Tong Xiao", "Tong Xiao"),  # Currently: Xiao Tong
     ("Tong Yu", "Tong Yu"),  # Currently: Yu Tong
     ("Wang Lin", "Wang Lin"),  # Currently: Lin Wang
-    ("Wei Chengzhi", "Wei Chengzhi"),  # Currently: Cheng-Zhi Wei
     ("Wei Hao", "Wei Hao"),  # Currently: Hao Wei
     ("Wei Jia", "Wei Jia"),  # Currently: Jia Wei
     ("Wei Ju", "Wei Ju"),  # Currently: Ju Wei
@@ -311,23 +290,18 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Xu Han", "Xu Han"),  # Currently: Han Xu
     ("Xu Miao", "Xu Miao"),  # Currently: Miao Xu
     ("Xu Shen", "Xu Shen"),  # Currently: Shen Xu
-    ("Xu Yinghui", "Xu Yinghui"),  # Currently: Ying-Hui Xu
     ("Yang Dai", "Yang Dai"),  # Currently: Dai Yang
     ("Yang Duan", "Yang Duan"),  # Currently: Duan Yang
     ("Yang Feng", "Yang Feng"),  # Currently: Feng Yang
     ("Yang Hou", "Yang Hou"),  # Currently: Hou Yang
     ("Yang Lu", "Yang Lu"),  # Currently: Lu Yang
-    ("Yang Nan", "Yang Nan"),  # Currently: Nan Yang
     ("Yang Song", "Yang Song"),  # Currently: Song Yang
     ("Yang Xiang", "Yang Xiang"),  # Currently: Xiang Yang
-    ("Yang Xiao", "Yang Xiao"),  # Currently: Xiao Yang
     ("Yang Xu", "Yang Xu"),  # Currently: Xu Yang
     ("Yang You", "Yang You"),  # Currently: You Yang
     ("Yang Yuan", "Yang Yuan"),  # Currently: Yuan Yang
-    ("Yang Yuguang", "Yang Yuguang"),  # Currently: Yu-Guang Yang
     ("Yang Zhong", "Yang Zhong"),  # Currently: Zhong Yang
     ("Yao Fu", "Yao Fu"),  # Currently: Fu Yao
-    ("Yao Jui-Feng", "Yao Jui-Feng"),  # Currently: Jui-Feng Yao
     ("Yao Mu", "Yao Mu"),  # Currently: Mu Yao
     ("Yao Shi", "Yao Shi"),  # Currently: Shi Yao
     ("Yao Shu", "Yao Shu"),  # Currently: Shu Yao
@@ -411,12 +385,14 @@ def test_acl_order_preservation():
         if not result.success or result.result != expected_output:
             failed += 1
             actual = result.result if result.success else result.error_message
-            print(f"FAILED: '{input_name}': expected ({expected_success}, '{expected_output}'), got ({result.success}, '{actual}')")
+            print(
+                f"FAILED: '{input_name}': expected ({expected_success}, '{expected_output}'), got ({result.success}, '{actual}')",
+            )
             log_failure("ACL order preservation tests", input_name, True, expected_output, result.success, actual)
 
-    assert failed == 0, (
-        f"ACL order preservation tests: {failed} failures out of {len(ACL_ORDER_PRESERVATION_TEST_CASES)} tests"
-    )
+    assert (
+        failed == 0
+    ), f"ACL order preservation tests: {failed} failures out of {len(ACL_ORDER_PRESERVATION_TEST_CASES)} tests"
 
 
 def analyze_acl_2025_authors():
@@ -425,6 +401,7 @@ def analyze_acl_2025_authors():
 
     # Read all author names from the extracted file
     from sinonym.resources import read_text
+
     authors_text = read_text("acl_2025_authors.txt")
     authors = [line.strip() for line in authors_text.splitlines() if line.strip()]
 

@@ -26,7 +26,6 @@ import requests
 
 # Import existing components
 from sinonym.detector import ChineseNameDetector
-from importlib.resources import files
 from sinonym.services.parsing import NameParsingService
 
 # Data sources (reuse from train_ml_classifier.py)

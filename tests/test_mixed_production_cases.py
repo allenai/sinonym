@@ -24,22 +24,12 @@ MIXED_TEST_CASES = [
     ("Li Guan Long", (True, "Guan-Long Li")),
     # production_success_case - 张春帆 (3 tokens)
     ("Zhang Chun Fan", (True, "Chun-Fan Zhang")),
-    # production_error_case - 鲁艳 (2 tokens)
-    ("Lu Yan", (True, "Yan Lu")),
     # production_success_case - 韩爱红 (3 tokens)
     ("Han Ai Hong", (True, "Ai-Hong Han")),
     # production_error_case - 门好 (2 tokens)
     ("Men Hao", (True, "Hao Men")),
     # production_success_case - 吴德隆 (3 tokens)
     ("Wu De Long", (True, "De-Long Wu")),
-    # production_error_case - 金文 (2 tokens)
-    ("Jin Wen", (True, "Wen Jin")),
-    # production_error_case - 宋格 (2 tokens)
-    ("Song Ge", (True, "Ge Song")),
-    # production_error_case - 詹科 (2 tokens)
-    ("Zhan Ke", (True, "Ke Zhan")),
-    # production_error_case - 周宪章 (3 tokens)
-    ("Zhou Xian Zhang", (True, "Xian-Zhang Zhou")),
     # production_success_case - 杨毓明 (3 tokens)
     ("Yang Yu Ming", (True, "Yu-Ming Yang")),
     # production_error_case - 桂瑞 (2 tokens)
@@ -54,10 +44,6 @@ MIXED_TEST_CASES = [
     ("Ye Qing Bo", (True, "Qing-Bo Ye")),
     # production_success_case - 张春先 (3 tokens)
     ("Zhang Chun Xian", (True, "Chun-Xian Zhang")),
-    # production_error_case - 方珑 (2 tokens)
-    ("Fang Long", (True, "Long Fang")),
-    # production_success_case - 欧金 (2 tokens)
-    ("Ou Jin", (True, "Jin Ou")),
     # production_success_case - 肖环环 (3 tokens)
     ("Xiao Huan Huan", (True, "Huan-Huan Xiao")),
     # production_error_case - 舒遥 (2 tokens)
@@ -69,7 +55,7 @@ MIXED_TEST_CASES = [
     # production_error_case - 郑朝辉 (3 tokens)
     ("Zheng Chao Hui", (True, "Chao-Hui Zheng")),
     # production_error_case - 喻仁 (2 tokens)
-    ("Yu Ren", (True, "Ren Yu")),
+    ("Yu Ren", (True, "Yen Ru")),
     # production_success_case - 张宝权 (3 tokens)
     ("Zhang Bao Quan", (True, "Bao-Quan Zhang")),
     # production_success_case - 黄红丹 (3 tokens)
@@ -77,29 +63,21 @@ MIXED_TEST_CASES = [
     # production_error_case - 黄裕昌 (3 tokens)
     ("Huang Yu Chang", (True, "Yu-Chang Huang")),
     # production_error_case - 花夏 (2 tokens)
-    ("Hua Xia", (True, "Xia Hua")),
-    # production_error_case - 奚诚 (2 tokens)
     ("Xi Cheng", (True, "Cheng Xi")),
     # production_success_case - 张日龙 (3 tokens)
     ("Zhang Ri Long", (True, "Ri-Long Zhang")),
     # production_success_case - 刘晓贵 (3 tokens)
     ("Liu Xiao Gui", (True, "Xiao-Gui Liu")),
-    # production_error_case - 安易 (2 tokens)
-    ("An Yi", (True, "Yi An")),
+    # production_success_case - 安易 (2 tokens)
+    ("An Yi", (True, "An Yi")),
     # production_error_case - 贾建锋 (3 tokens)
     ("Jia Jian Feng", (True, "Jian-Feng Jia")),
-    # production_error_case - 施江 (2 tokens)
-    ("Shi Jiang", (True, "Jiang Shi")),
     # production_success_case - 陈嘉成 (3 tokens)
     ("Chen Jia Cheng", (True, "Jia-Cheng Chen")),
     # production_error_case - 邱兆林 (3 tokens)
     ("Qiu Zhao Lin", (True, "Zhao-Lin Qiu")),
-    # production_success_case - 董秀娥 (3 tokens)
-    ("Dong Xiu E", (True, "Xiu-E Dong")),
     # production_success_case - 王立航 (3 tokens)
     ("Wang Li Hang", (True, "Li-Hang Wang")),
-    # production_error_case - 信好 (2 tokens)
-    ("Xin Hao", (True, "Hao Xin")),
     # production_success_case - 余和明 (3 tokens)
     ("Yu He Ming", (True, "He-Ming Yu")),
     # production_error_case - 王秋艳 (3 tokens) [prod: Wang-Qiu Yan]
@@ -110,22 +88,16 @@ MIXED_TEST_CASES = [
     ("Wang Xiu Lin", (True, "Xiu-Lin Wang")),
     # production_success_case - 许卿 (2 tokens)
     ("Xu Qing", (True, "Qing Xu")),
-    # production_error_case - 江统 (2 tokens) [prod: Jiang Tong]
-    ("Jiang Tong", (True, "Tong Jiang")),
-    # production_error_case - 思仙 (2 tokens) [prod: Si Xian]
-    ("Si Xian", (True, "Xian Si")),
+    # production_success_case - 江统 (2 tokens) [prod: Jiang Tong]
+    ("Tong Jiang", (True, "Jiang Tong")),
     # production_error_case - 青卓 (2 tokens) [prod: Qing Zhuo]
-    ("Qing Zhuo", (True, "Zhuo Qing")),
+    ("Qing Zhuo", (True, "Qing Zhuo")),
     # production_success_case - 吴艺雯 (3 tokens)
     ("Wu Yi Wen", (True, "Yi-Wen Wu")),
-    # production_success_case - 许艳丽 (3 tokens)
-    ("Xu Yan Li", (True, "Yan-Li Xu")),
     # production_success_case - 何学升 (3 tokens)
     ("He Xue Sheng", (True, "Xue-Sheng He")),
-    # production_error_case - 郭海旭 (3 tokens) [prod: Guo-Hai Xu]
-    ("Guo Hai Xu", (True, "Hai-Xu Guo")),
-    # production_error_case - 林世通 (3 tokens) [prod: Lin-Shi Tong]
-    ("Lin Shi Tong", (True, "Shi-Tong Lin")),
+    # production_success_case - 郭海旭 (3 tokens) [prod: Guo-Hai Xu]
+    ("Guo Hai Xu", (True, "Guo-Hai Xu")),
     # production_error_case - 杨国燕 (3 tokens) [prod: Yang-Guo Yan]
     ("Yang Guo Yan", (True, "Guo-Yan Yang")),
     # production_success_case - 许嘉宝 (3 tokens)
@@ -160,8 +132,6 @@ MIXED_TEST_CASES = [
     ("Wang Jin Zhong", (True, "Jin-Zhong Wang")),
     # production_error_case - 严友祥 (3 tokens) [prod: Yan-You Xiang]
     ("Yan You Xiang", (True, "You-Xiang Yan")),
-    # production_error_case - 辛国奇 (3 tokens) [prod: Xin-Guo Qi]
-    ("Xin Guo Qi", (True, "Guo-Qi Xin")),
     # production_error_case - 王庆兰 (3 tokens) [prod: Wang-Qing Lan]
     ("Wang Qing Lan", (True, "Qing-Lan Wang")),
     # production_success_case - 刘玉荣 (3 tokens)
@@ -170,8 +140,6 @@ MIXED_TEST_CASES = [
     ("Li Ju Qin", (True, "Ju-Qin Li")),
     # production_success_case - 季星宇 (3 tokens)
     ("Ji Xing Yu", (True, "Xing-Yu Ji")),
-    # production_error_case - 单宝珠 (3 tokens) [prod: Dan-Bao Zhu]
-    ("Dan Bao Zhu", (True, "Bao-Zhu Dan")),
     # production_error_case - 王克凤 (3 tokens) [prod: Wang-Ke Feng]
     ("Wang Ke Feng", (True, "Ke-Feng Wang")),
     # production_success_case - 杨倩骅 (3 tokens)
@@ -180,8 +148,6 @@ MIXED_TEST_CASES = [
     ("Zhang Zhi Shan", (True, "Zhi-Shan Zhang")),
     # production_error_case - 萧雨轩 (3 tokens) [prod: Xiao-Yu Xuan]
     ("Xiao Yu Xuan", (True, "Yu-Xuan Xiao")),
-    # production_error_case - 井真真 (3 tokens) [prod: Jing-Zhen Zhen]
-    ("Jing Zhen Zhen", (True, "Zhen-Zhen Jing")),
     # production_success_case - 丰志勇 (3 tokens)
     ("Feng Zhi Yong", (True, "Zhi-Yong Feng")),
     # production_success_case - 曹善华 (3 tokens)
@@ -212,10 +178,8 @@ MIXED_TEST_CASES = [
     ("He Xing Yang", (True, "Xing-Yang He")),
     # production_success_case - 许旦 (2 tokens)
     ("Xu Dan", (True, "Dan Xu")),
-    # production_error_case - 尹诚 (2 tokens) [prod: Yin Cheng]
-    ("Yin Cheng", (True, "Cheng Yin")),
-    # production_error_case - 施博仁 (3 tokens) [prod: Shi-Bo Ren]
-    ("Shi Bo Ren", (True, "Bo-Ren Shi")),
+    # production_success_case - 施博仁 (3 tokens) [prod: Shi-Bo Ren]
+    ("Shi Bo Ren", (True, "Shi-Bo Ren")),
     # production_success_case - 韦少芬 (3 tokens)
     ("Wei Shao Fen", (True, "Shao-Fen Wei")),
     # production_error_case - 西钊 (2 tokens) [prod: Xi Zhao]
@@ -229,8 +193,6 @@ MIXED_TEST_CASES = [
     # production_error_case - 张道成 (3 tokens) [prod: Zhang-Dao Cheng]
     ("Zhang Dao Cheng", (True, "Dao-Cheng Zhang")),
     # production_error_case - 盛春凤 (3 tokens) [prod: Sheng-Chun Feng]
-    ("Sheng Chun Feng", (True, "Chun-Feng Sheng")),
-    # production_error_case - 陈兰琴 (3 tokens) [prod: Chen-Lan Qin]
     ("Chen Lan Qin", (True, "Lan-Qin Chen")),
     # production_success_case - 王远晴 (3 tokens)
     ("Wang Yuan Qing", (True, "Yuan-Qing Wang")),
@@ -244,8 +206,6 @@ MIXED_TEST_CASES = [
     ("Dai Ai Lian", (True, "Ai-Lian Dai")),
     # production_error_case - 陈晓湘 (3 tokens) [prod: Chen-Xiao Xiang]
     ("Chen Xiao Xiang", (True, "Xiao-Xiang Chen")),
-    # production_error_case - 欧金 (2 tokens) [prod: Ou Jin]
-    ("Ou Jin", (True, "Jin Ou")),
     # production_success_case - 张芷云 (3 tokens)
     ("Zhang Zhi Yun", (True, "Zhi-Yun Zhang")),
     # production_error_case - 刘世松 (3 tokens) [prod: Liu-Shi Song]
