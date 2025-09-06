@@ -48,14 +48,14 @@ class _MLJapaneseClassifier:
         if ML_AVAILABLE:
             try:
                 # Prefer skops artifact; fall back to legacy joblib if needed
-                from sinonym.resources import load_skops, load_joblib
+                from sinonym.resources import load_joblib, load_skops
 
                 try:
                     self._model = load_skops("chinese_japanese_classifier.skops")
                 except Exception as skops_err:
                     logging.info(
                         f"SKOPS model not available or failed to load ({skops_err}); "
-                        "falling back to legacy joblib artifact."
+                        "falling back to legacy joblib artifact.",
                     )
                     self._model = load_joblib("chinese_japanese_classifier.joblib")
             except Exception as e:
@@ -341,11 +341,10 @@ class EthnicityClassificationService:
                 # as Korean if EITHER half matches curated Korean tokens.
                 if has_korean_signature(first) or has_korean_signature(second):
                     score += 3.0
-            else:
-                # General case (no overlapping surname): require that not both halves are
-                # Chinese given tokens to avoid false positives on Chinese names.
-                if (not (first_cn and second_cn)) and (has_korean_signature(first) or has_korean_signature(second)):
-                    score += 3.0
+            # General case (no overlapping surname): require that not both halves are
+            # Chinese given tokens to avoid false positives on Chinese names.
+            elif (not (first_cn and second_cn)) and (has_korean_signature(first) or has_korean_signature(second)):
+                score += 3.0
 
         # 2. Known Korean name pairs (strong signal)
         score += len(analysis["korean_given_pairs"]) * 3.0

@@ -14,14 +14,13 @@ import unicodedata
 from pathlib import Path
 
 import joblib
-from skops.io import dump as skops_dump
 import requests
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import FeatureUnion, Pipeline
+from skops.io import dump as skops_dump
 
 from sinonym.ml_model_components import EnhancedHeuristicFlags
-from importlib.resources import files
 
 # Data sources - Apache 2.0
 CN_URL = (

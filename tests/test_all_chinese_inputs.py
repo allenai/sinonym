@@ -36,9 +36,9 @@ ALL_CHINESE_INPUT_TEST_CASES = [
     ("孟子", (True, "Zi Meng")),  # Meng(surname) Zi(given) - Mencius
     ("老子", (True, "Zi Lao")),  # Lao(surname) Zi(given) - Laozi
 
-    # Names where frequency override surname-first convention (yang is much more common surname than ou)
-    ("欧阳", (True, "Ou Yang")),  # Despite ou being first, yang(freq:26347) wins over ou(freq:817) as surname
-    ("司马", (True, "Si Ma")),   # Despite si being first, ma(freq:10815) wins over si(freq:523) as surname
+    # Compound surnames with given names
+    ("欧阳明", (True, "Ming Ou Yang")),  # Ou Yang(compound surname) Ming(given name)
+    ("司马华", (True, "Hua Si Ma")),   # Si Ma(compound surname) Hua(given name)
     ("诸葛", (True, "Ge Zhu")),  # Need to check this case
 
     # Edge cases - single character repeated
@@ -47,7 +47,7 @@ ALL_CHINESE_INPUT_TEST_CASES = [
 
     # Names where the second character has higher surname frequency (but gets surname-first bonus)
     ("明李", (True, "Ming Li")),  # Ming(not surname) + Li(very common surname) -> Ming wins with surname-first bonus
-    ("华王", (True, "Hua Wang")),  # Hua(less common surname) + Wang(very common surname) -> Hua wins with surname-first bonus
+    ("华王伟", (True, "Wang-Wei Hua")),  # Hua(surname) + Wang Wei(compound given name) -> Western order
 
     # Names with traditional characters (if supported)
     ("張偉", (True, "Wei Zhang")),  # Traditional Zhang Wei
