@@ -289,52 +289,69 @@ class ChineseNameDetector:
         # Try parsing in both orders - for all-Chinese inputs, choose best scoring parse
 
         if is_all_chinese and len(normalized_input.roman_tokens) == self._config.min_tokens_required:
-            # For all-Chinese 2-token inputs, manually create both parse candidates
+            # For all-Chinese 2-token inputs, ALWAYS assume surname-first order
+            # Two-character Chinese names are always (surname, given_name)
             tokens = list(normalized_input.roman_tokens)
             token1, token2 = tokens[0], tokens[1]
 
-            # Check if both tokens can be surnames
+            # Check if first token can be a surname
             token1_norm = normalized_input.norm_map.get(token1, self._normalizer.norm(token1))
-            token2_norm = normalized_input.norm_map.get(token2, self._normalizer.norm(token2))
-
             token1_is_surname = self._data.is_surname(token1, token1_norm)
-            token2_is_surname = self._data.is_surname(token2, token2_norm)
 
-            best_result = None
-            best_score = float("-inf")
-            best_format_alignment = 0.0
-
-            # Candidate 1: surname-first pattern (token1=surname, token2=given)
+            # For 2-character all-Chinese names, use surname-first if token1 is a valid surname
             if token1_is_surname:
-                score1 = self._parsing_service.calculate_parse_score(
-                    [token1],
-                    [token2],
-                    tokens,
-                    normalized_input.norm_map,
-                    is_all_chinese,
-                )
-                format_alignment1 = self._parsing_service._calculate_format_alignment_bonus([token1], [token2], tokens)
-
-                if score1 > best_score or (score1 == best_score and format_alignment1 > best_format_alignment):
-                    best_score = score1
-                    best_format_alignment = format_alignment1
-                    best_result = ([token1], [token2])
-
-            # Candidate 2: surname-last pattern (token2=surname, token1=given)
-            if token2_is_surname:
-                score2 = self._parsing_service.calculate_parse_score(
-                    [token2],
-                    [token1],
-                    tokens,
-                    normalized_input.norm_map,
-                    is_all_chinese,
-                )
-                format_alignment2 = self._parsing_service._calculate_format_alignment_bonus([token2], [token1], tokens)
-
-                if score2 > best_score or (score2 == best_score and format_alignment2 > best_format_alignment):
-                    best_score = score2
-                    best_format_alignment = format_alignment2
+                best_result = ([token1], [token2])
+            else:
+                # Fallback: if token1 is not a surname, try token2 as surname (less common but possible)
+                token2_norm = normalized_input.norm_map.get(token2, self._normalizer.norm(token2))
+                token2_is_surname = self._data.is_surname(token2, token2_norm)
+                if token2_is_surname:
                     best_result = ([token2], [token1])
+                else:
+                    best_result = None
+
+            if best_result:
+                surname_tokens, given_tokens = best_result
+                try:
+                    formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
+                        self._formatting_service.format_name_output_with_tokens(
+                            surname_tokens,
+                            given_tokens,
+                            normalized_input.norm_map,
+                            normalized_input.compound_metadata,
+                        )
+                    )
+                    parsed = ParsedName(
+                        surname=surname_str,
+                        given_name=given_str,
+                        surname_tokens=surname_final,
+                        given_tokens=given_final,
+                        middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                        middle_tokens=middle_tokens,
+                    )
+                    return ParseResult.success_with_name(formatted_name, parsed=parsed)
+                except ValueError as e:
+                    return ParseResult.failure(str(e))
+        elif is_all_chinese and len(normalized_input.roman_tokens) == 3:
+            # For 3-character all-Chinese names: check compound surname vs single surname
+            tokens = list(normalized_input.roman_tokens)
+            
+            # Try both possibilities and see which one the parsing service accepts
+            # Option 1: First two tokens as compound surname + third as given
+            compound_parse = self._parsing_service.parse_name_order(
+                tokens,
+                normalized_input.norm_map, 
+                normalized_input.compound_metadata,
+            )
+            
+            if (compound_parse.success and 
+                len(compound_parse.result[0]) == 2 and 
+                len(compound_parse.result[1]) == 1):
+                # Parsing service recognized first two as compound surname
+                best_result = compound_parse.result
+            else:
+                # Option 2: First token as single surname + last two as given name  
+                best_result = ([tokens[0]], tokens[1:])
 
             if best_result:
                 surname_tokens, given_tokens = best_result
