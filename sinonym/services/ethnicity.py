@@ -44,7 +44,9 @@ class _MLJapaneseClassifier:
         self._confidence_threshold = confidence_threshold
         self._model = None
         self._available = ML_AVAILABLE
-        self._cache = {}  # Cache for ML classification results
+        # Thread-local cache for ML classification results
+        import threading
+        self._thread_local = threading.local()
 
         if ML_AVAILABLE:
             try:
@@ -72,9 +74,13 @@ class _MLJapaneseClassifier:
         if not self.is_available():
             return ParseResult.success_with_name("")  # Default to allowing through
 
-        # Check cache first for performance
-        if name in self._cache:
-            return self._cache[name]
+        # Check thread-local cache first for performance
+        if not hasattr(self._thread_local, "cache"):
+            self._thread_local.cache = {}
+        
+        cache = self._thread_local.cache
+        if name in cache:
+            return cache[name]
 
         try:
             # Get prediction and confidence (same as original)
@@ -88,14 +94,14 @@ class _MLJapaneseClassifier:
             else:
                 result = ParseResult.success_with_name("")
 
-            # Cache the result for performance
-            self._cache[name] = result
+            # Cache the result for performance in thread-local storage
+            cache[name] = result
             return result
 
         except Exception as e:
             logging.warning(f"ML Japanese classifier error: {e}")
             result = ParseResult.success_with_name("")  # Default to allowing through
-            self._cache[name] = result  # Cache even error results
+            cache[name] = result  # Cache even error results in thread-local storage
             return result
 
 

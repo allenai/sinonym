@@ -26,20 +26,26 @@ class LazyNormalizationMap:
     Uses __slots__ and MappingProxyType for architectural correctness.
     """
 
-    __slots__ = ("_cache", "_normalizer", "_tokens")
+    __slots__ = ("_thread_local", "_normalizer", "_tokens")
 
     def __init__(self, tokens: tuple[str, ...], normalizer: NormalizationService):
         object.__setattr__(self, "_tokens", tokens)
         object.__setattr__(self, "_normalizer", normalizer)
-        # Use a regular dict internally but expose as MappingProxyType
-        object.__setattr__(self, "_cache", {})
+        # Use thread-local storage for cache to ensure thread safety
+        import threading
+        object.__setattr__(self, "_thread_local", threading.local())
 
     def get(self, token: str, default: str | None = None):
-        """Get normalized value for token, computing lazily."""
-        if token not in self._cache:
+        """Get normalized value for token, computing lazily with thread-local cache."""
+        # Ensure thread-local cache exists
+        if not hasattr(self._thread_local, "cache"):
+            self._thread_local.cache = {}
+        
+        cache = self._thread_local.cache
+        if token not in cache:
             # Compute and cache the normalized value
-            self._cache[token] = self._normalizer._text_normalizer.normalize_token(token)
-        return self._cache[token]
+            cache[token] = self._normalizer._text_normalizer.normalize_token(token)
+        return cache[token]
 
     def __getitem__(self, token: str) -> str:
         """Dict-like access."""

@@ -145,14 +145,19 @@ class TextPreprocessor:
         if not cleaned:
             return False
 
-        # Check if all remaining characters are CJK - use character caching for performance
-        if not hasattr(self, "_cjk_char_cache"):
-            self._cjk_char_cache = {}
+        # Check if all remaining characters are CJK - use thread-local character caching for performance
+        if not hasattr(self, "_thread_local"):
+            import threading
+            self._thread_local = threading.local()
 
+        if not hasattr(self._thread_local, "cjk_char_cache"):
+            self._thread_local.cjk_char_cache = {}
+
+        cache = self._thread_local.cjk_char_cache
         for char in cleaned:
-            if char not in self._cjk_char_cache:
-                self._cjk_char_cache[char] = bool(self._config.cjk_pattern.search(char))
-            if not self._cjk_char_cache[char]:
+            if char not in cache:
+                cache[char] = bool(self._config.cjk_pattern.search(char))
+            if not cache[char]:
                 return False
         return True
 

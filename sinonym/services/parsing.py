@@ -486,15 +486,20 @@ class NameParsingService:
             token = surname_tokens[0]
 
             # If token contains Chinese characters, try Chinese character lookup first
-            # Use character caching for performance
-            if not hasattr(self, "_cjk_char_cache"):
-                self._cjk_char_cache = {}
+            # Use thread-local character caching for performance
+            if not hasattr(self, "_thread_local"):
+                import threading
+                self._thread_local = threading.local()
 
+            if not hasattr(self._thread_local, "cjk_char_cache"):
+                self._thread_local.cjk_char_cache = {}
+
+            cache = self._thread_local.cjk_char_cache
             has_cjk = False
             for char in token:
-                if char not in self._cjk_char_cache:
-                    self._cjk_char_cache[char] = bool(self._config.cjk_pattern.search(char))
-                if self._cjk_char_cache[char]:
+                if char not in cache:
+                    cache[char] = bool(self._config.cjk_pattern.search(char))
+                if cache[char]:
                     has_cjk = True
                     break
 
@@ -517,15 +522,20 @@ class NameParsingService:
     def _given_name_key(self, given_token: str, normalized_cache: dict[str, str]) -> str:
         """Convert given name token to lookup key, preferring Chinese characters when available."""
         # If token contains Chinese characters, try Chinese character lookup first
-        # Use character caching for performance
-        if not hasattr(self, "_cjk_char_cache"):
-            self._cjk_char_cache = {}
+        # Use thread-local character caching for performance
+        if not hasattr(self, "_thread_local"):
+            import threading
+            self._thread_local = threading.local()
 
+        if not hasattr(self._thread_local, "cjk_char_cache"):
+            self._thread_local.cjk_char_cache = {}
+
+        cache = self._thread_local.cjk_char_cache
         has_cjk = False
         for char in given_token:
-            if char not in self._cjk_char_cache:
-                self._cjk_char_cache[char] = bool(self._config.cjk_pattern.search(char))
-            if self._cjk_char_cache[char]:
+            if char not in cache:
+                cache[char] = bool(self._config.cjk_pattern.search(char))
+            if cache[char]:
                 has_cjk = True
                 break
 
