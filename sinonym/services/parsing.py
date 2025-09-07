@@ -486,7 +486,19 @@ class NameParsingService:
             token = surname_tokens[0]
 
             # If token contains Chinese characters, try Chinese character lookup first
-            if any(self._config.cjk_pattern.search(char) for char in token):
+            # Use character caching for performance
+            if not hasattr(self, "_cjk_char_cache"):
+                self._cjk_char_cache = {}
+
+            has_cjk = False
+            for char in token:
+                if char not in self._cjk_char_cache:
+                    self._cjk_char_cache[char] = bool(self._config.cjk_pattern.search(char))
+                if self._cjk_char_cache[char]:
+                    has_cjk = True
+                    break
+
+            if has_cjk:
                 if token in self._data.surname_frequencies:
                     return token
 
@@ -505,7 +517,19 @@ class NameParsingService:
     def _given_name_key(self, given_token: str, normalized_cache: dict[str, str]) -> str:
         """Convert given name token to lookup key, preferring Chinese characters when available."""
         # If token contains Chinese characters, try Chinese character lookup first
-        if any(self._config.cjk_pattern.search(char) for char in given_token):
+        # Use character caching for performance
+        if not hasattr(self, "_cjk_char_cache"):
+            self._cjk_char_cache = {}
+
+        has_cjk = False
+        for char in given_token:
+            if char not in self._cjk_char_cache:
+                self._cjk_char_cache[char] = bool(self._config.cjk_pattern.search(char))
+            if self._cjk_char_cache[char]:
+                has_cjk = True
+                break
+
+        if has_cjk:
             if given_token in self._data.given_log_probabilities:
                 return given_token
 

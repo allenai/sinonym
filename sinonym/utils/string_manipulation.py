@@ -17,6 +17,9 @@ from __future__ import annotations
 import unicodedata
 from typing import TYPE_CHECKING
 
+# Import at module level to avoid repeated imports in hot paths
+from sinonym.chinese_names_data import HIGH_CONFIDENCE_ANCHORS
+
 if TYPE_CHECKING:
     from sinonym.services.normalization import CompoundMetadata
 
@@ -110,7 +113,6 @@ class StringManipulationUtils:
             tok_normalized = StringManipulationUtils.remove_spaces(normalizer.norm(token))
 
         # Optimized validation chain: combine multiple checks with OR short-circuit
-        from sinonym.chinese_names_data import HIGH_CONFIDENCE_ANCHORS
         original_lower = token.lower()
 
         return (

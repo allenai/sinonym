@@ -44,6 +44,7 @@ class _MLJapaneseClassifier:
         self._confidence_threshold = confidence_threshold
         self._model = None
         self._available = ML_AVAILABLE
+        self._cache = {}  # Cache for ML classification results
 
         if ML_AVAILABLE:
             try:
@@ -71,6 +72,10 @@ class _MLJapaneseClassifier:
         if not self.is_available():
             return ParseResult.success_with_name("")  # Default to allowing through
 
+        # Check cache first for performance
+        if name in self._cache:
+            return self._cache[name]
+
         try:
             # Get prediction and confidence (same as original)
             prediction = self._model.predict([name])[0]  # 'cn' or 'jp'
@@ -79,12 +84,19 @@ class _MLJapaneseClassifier:
 
             # Only reject as Japanese if we're very confident
             if prediction == "jp" and confidence >= self._confidence_threshold:
-                return ParseResult.failure("japanese")
-            return ParseResult.success_with_name("")
+                result = ParseResult.failure("japanese")
+            else:
+                result = ParseResult.success_with_name("")
+
+            # Cache the result for performance
+            self._cache[name] = result
+            return result
 
         except Exception as e:
             logging.warning(f"ML Japanese classifier error: {e}")
-            return ParseResult.success_with_name("")  # Default to allowing through
+            result = ParseResult.success_with_name("")  # Default to allowing through
+            self._cache[name] = result  # Cache even error results
+            return result
 
 
 class EthnicityClassificationService:
