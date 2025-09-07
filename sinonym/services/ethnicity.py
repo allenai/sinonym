@@ -24,6 +24,7 @@ from sinonym.chinese_names_data import (
 )
 from sinonym.coretypes import ParseResult
 from sinonym.utils.string_manipulation import StringManipulationUtils
+from sinonym.utils.thread_cache import ThreadLocalCache
 
 # Optional ML Japanese classifier imports - consolidated from separate service
 try:
@@ -45,8 +46,7 @@ class _MLJapaneseClassifier:
         self._model = None
         self._available = ML_AVAILABLE
         # Thread-local cache for ML classification results
-        import threading
-        self._thread_local = threading.local()
+        self._cache = ThreadLocalCache()
 
         if ML_AVAILABLE:
             try:
@@ -74,35 +74,24 @@ class _MLJapaneseClassifier:
         if not self.is_available():
             return ParseResult.success_with_name("")  # Default to allowing through
 
-        # Check thread-local cache first for performance
-        if not hasattr(self._thread_local, "cache"):
-            self._thread_local.cache = {}
-        
-        cache = self._thread_local.cache
-        if name in cache:
-            return cache[name]
+        # Use unified cache with compute function
+        def compute_classification():
+            try:
+                # Get prediction and confidence (same as original)
+                prediction = self._model.predict([name])[0]  # 'cn' or 'jp'
+                probabilities = self._model.predict_proba([name])[0]
+                confidence = max(probabilities)
 
-        try:
-            # Get prediction and confidence (same as original)
-            prediction = self._model.predict([name])[0]  # 'cn' or 'jp'
-            probabilities = self._model.predict_proba([name])[0]
-            confidence = max(probabilities)
+                # Only reject as Japanese if we're very confident
+                if prediction == "jp" and confidence >= self._confidence_threshold:
+                    return ParseResult.failure("japanese")
+                return ParseResult.success_with_name("")
 
-            # Only reject as Japanese if we're very confident
-            if prediction == "jp" and confidence >= self._confidence_threshold:
-                result = ParseResult.failure("japanese")
-            else:
-                result = ParseResult.success_with_name("")
+            except Exception as e:
+                logging.warning(f"ML Japanese classifier error: {e}")
+                return ParseResult.success_with_name("")  # Default to allowing through
 
-            # Cache the result for performance in thread-local storage
-            cache[name] = result
-            return result
-
-        except Exception as e:
-            logging.warning(f"ML Japanese classifier error: {e}")
-            result = ParseResult.success_with_name("")  # Default to allowing through
-            cache[name] = result  # Cache even error results in thread-local storage
-            return result
+        return self._cache.get_or_compute(name, compute_classification)
 
 
 class EthnicityClassificationService:

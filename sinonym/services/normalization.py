@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from sinonym.chinese_names_data import VALID_CHINESE_RIMES
 from sinonym.text_processing import CompoundDetector, TextNormalizer, TextPreprocessor
 from sinonym.utils.string_manipulation import StringManipulationUtils
+from sinonym.utils.thread_cache import ThreadLocalCache
 
 if TYPE_CHECKING:
     from sinonym.coretypes import ChineseNameConfig
@@ -23,29 +24,22 @@ if TYPE_CHECKING:
 class LazyNormalizationMap:
     """
     Lazy normalization map with true immutability.
-    Uses __slots__ and MappingProxyType for architectural correctness.
+    Uses unified ThreadLocalCache for consistency.
     """
 
-    __slots__ = ("_thread_local", "_normalizer", "_tokens")
+    __slots__ = ("_cache", "_normalizer", "_tokens")
 
     def __init__(self, tokens: tuple[str, ...], normalizer: NormalizationService):
         object.__setattr__(self, "_tokens", tokens)
         object.__setattr__(self, "_normalizer", normalizer)
-        # Use thread-local storage for cache to ensure thread safety
-        import threading
-        object.__setattr__(self, "_thread_local", threading.local())
+        object.__setattr__(self, "_cache", ThreadLocalCache())
 
     def get(self, token: str, default: str | None = None):
         """Get normalized value for token, computing lazily with thread-local cache."""
-        # Ensure thread-local cache exists
-        if not hasattr(self._thread_local, "cache"):
-            self._thread_local.cache = {}
-        
-        cache = self._thread_local.cache
-        if token not in cache:
-            # Compute and cache the normalized value
-            cache[token] = self._normalizer._text_normalizer.normalize_token(token)
-        return cache[token]
+        return self._cache.get_or_compute(
+            token,
+            lambda: self._normalizer._text_normalizer.normalize_token(token),
+        )
 
     def __getitem__(self, token: str) -> str:
         """Dict-like access."""
@@ -78,7 +72,7 @@ class NormalizedInput:
     cleaned: str  # After punctuation/formatting cleanup
     tokens: tuple[str, ...]  # After separator splitting
     roman_tokens: tuple[str, ...]  # After Han→pinyin & mixed-token processing
-    norm_map: dict[str, str] | LazyNormalizationMap  # token → fully normalized (lazy)
+    norm_map: dict[str, str]  # token → fully normalized (eager)
     compound_metadata: dict[str, CompoundMetadata]  # token → compound info
 
     @classmethod
@@ -156,8 +150,8 @@ class NormalizationService:
         if not roman_tokens:
             return NormalizedInput.empty(raw_name)
 
-        # Phase 6: Create lazy normalization map (computed on-demand)
-        norm_map = LazyNormalizationMap(roman_tokens, self)
+        # Phase 6: Create eager normalization map for performance in hot paths
+        norm_map = {token: self._text_normalizer.normalize_token(token) for token in roman_tokens}
 
         # Phase 7: Generate compound metadata for each token (centralized detection)
         compound_metadata = self._compound_detector.generate_compound_metadata(roman_tokens, self._data)

@@ -74,14 +74,22 @@ class StringManipulationUtils:
 
     @staticmethod
     def _get_normalized_parts(a: str, b: str, normalized_cache: dict[str, str] | None, normalizer) -> tuple[str, str]:
-        """Get normalized versions of two string parts."""
+        """Get normalized versions of two string parts - optimized for eager cache."""
+        # With eager normalization, prefer cache lookup over normalizer calls
         if normalized_cache:
-            norm_a = normalizer.get_normalized(a, normalized_cache)
-            norm_b = normalizer.get_normalized(b, normalized_cache)
+            norm_a = normalized_cache.get(a, normalizer.norm(a))
+            norm_b = normalized_cache.get(b, normalizer.norm(b))
         else:
             norm_a = normalizer.norm(a)
             norm_b = normalizer.norm(b)
         return norm_a, norm_b
+    
+    @staticmethod
+    def _get_normalized_single(token: str, normalized_cache: dict[str, str] | None, normalizer) -> str:
+        """Get normalized version of single token - optimized for eager cache."""
+        if normalized_cache:
+            return normalized_cache.get(token, normalizer.norm(token))
+        return normalizer.norm(token)
 
     @staticmethod
     def _is_valid_component_pair(norm_a: str, norm_b: str, data_context, orig_a: str = None, orig_b: str = None) -> bool:
@@ -106,7 +114,11 @@ class StringManipulationUtils:
     @staticmethod
     def _should_skip_splitting(token: str, normalized_cache: dict[str, str] | None, normalizer, data_context) -> bool:
         """Check early exit conditions that prevent splitting - optimized validation chain."""
-        # Get normalized form once
+        # Early exit for very short tokens - no point splitting < 3 chars
+        if len(token) < 3:
+            return True
+            
+        # Get normalized form once - use eager cache for performance
         if normalized_cache and token in normalized_cache:
             tok_normalized = StringManipulationUtils.remove_spaces(normalized_cache[token])
         else:
@@ -191,13 +203,8 @@ class StringManipulationUtils:
         # attempt alternative splits that cross the explicit boundary.
         if "-" in token and token.count("-") == 1:
             a, b = token.split("-")
-            # Inline normalization for performance
-            if normalized_cache:
-                norm_a = normalizer.get_normalized(a, normalized_cache)
-                norm_b = normalizer.get_normalized(b, normalized_cache)
-            else:
-                norm_a = normalizer.norm(a)
-                norm_b = normalizer.norm(b)
+            # Optimized normalization using helper
+            norm_a, norm_b = StringManipulationUtils._get_normalized_parts(a, b, normalized_cache, normalizer)
             # Component validation with fallback to original forms
             if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
                 return [a, b]
@@ -212,11 +219,8 @@ class StringManipulationUtils:
             second_half = raw[mid:]
 
             if first_half.lower() == second_half.lower():
-                # Check if the repeated syllable is valid - inline for performance
-                if normalized_cache and first_half in normalized_cache:
-                    norm_syllable = normalized_cache[first_half]
-                else:
-                    norm_syllable = normalizer.norm(first_half)
+                # Check if the repeated syllable is valid - optimized with helper
+                norm_syllable = StringManipulationUtils._get_normalized_single(first_half, normalized_cache, normalizer)
                 # For repeated syllables, we only need to check if one is valid (they're the same)
                 if norm_syllable in data_context.plausible_components or first_half.lower() in data_context.plausible_components:
                     return [first_half, second_half]
@@ -227,13 +231,8 @@ class StringManipulationUtils:
         # Pattern 3: CamelCase detection (e.g., "MingHua" → ["Ming", "Hua"]) — only when no hyphen present
         camel = config.camel_case_pattern.findall(raw)
         if len(camel) == 2:
-            # Inline normalization for performance
-            if normalized_cache:
-                norm_a = normalizer.get_normalized(camel[0], normalized_cache)
-                norm_b = normalizer.get_normalized(camel[1], normalized_cache)
-            else:
-                norm_a = normalizer.norm(camel[0])
-                norm_b = normalizer.norm(camel[1])
+            # Optimized normalization using helper
+            norm_a, norm_b = StringManipulationUtils._get_normalized_parts(camel[0], camel[1], normalized_cache, normalizer)
             # Inline component validation for performance
             if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, camel[0], camel[1]):
                 return camel
