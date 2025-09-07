@@ -198,10 +198,12 @@ class TestBatchEdgeCases:
     def test_all_rejected_batch(self):
         """Test batch where all names are rejected."""
         names = ["John Smith", "Mary Johnson", "David Brown"]
-
-        # Should raise error because no valid Chinese names to establish format pattern
-        with pytest.raises(ValueError, match="Batch format detection confidence too low"):
-            self.detector.analyze_name_batch(names)
+        # Should not raise; returns per-name non-Chinese failures and MIXED pattern with zero participants
+        result = self.detector.analyze_name_batch(names)
+        assert len(result.results) == len(names)
+        assert all(r.success is False for r in result.results)
+        assert result.format_pattern.total_count == 0
+        assert result.format_pattern.threshold_met is False
 
     def test_compound_names_batch(self):
         """Test batch processing with compound names."""
@@ -245,10 +247,9 @@ class TestBatchEdgeCases:
             "Li明",  # Mixed: romanized surname, Chinese given (unambiguous)
             "王Xiao-Li",  # Mixed: Chinese surname, romanized compound given
         ]
-
-        # Should raise error because "Li明" is unambiguous and can't be forced to batch format
-        with pytest.raises(ValueError, match="Cannot apply batch format .* to .* unambiguous names"):
-            self.detector.analyze_name_batch(names)
+        # Should not raise; unambiguous names keep their best individual parse
+        result = self.detector.analyze_name_batch(names)
+        assert len(result.results) == len(names)
 
 
 class TestBatchImprovements:
@@ -455,9 +456,11 @@ class TestBatchOutcomes:
             "Wei Duan-Mu",  # Simple given, compound surname -> surname-first preference
         ]
 
-        # Should fail because confidence-weighted tie-breaking detects a format but some names are unambiguous
-        with pytest.raises(ValueError, match="Cannot apply batch format .* to .* unambiguous names"):
-            self.detector.analyze_name_batch(names)
+        # Should not raise; unambiguous names are kept as-is while others follow detected pattern
+        result = self.detector.analyze_name_batch(names)
+        assert len(result.results) == len(names)
+        # All are Chinese; results should be successful
+        assert all(r.success for r in result.results)
 
 
 class TestBatchRealFailingCases:
@@ -563,9 +566,9 @@ class TestBatchRealFailingCases:
 
         batch_names = given_first_anchors + surname_first_items + [problem_case]
 
-        # Should fail because "Liu Wei-Ming" is unambiguous and can't be forced to batch format
-        with pytest.raises(ValueError, match="Cannot apply batch format .* to .* unambiguous names"):
-            self.detector.analyze_name_batch(batch_names, format_threshold=0.67)
+        # Should not raise; unambiguous names are not forced
+        result = self.detector.analyze_name_batch(batch_names, format_threshold=0.67)
+        assert len(result.results) == len(batch_names)
 
 
 class TestBatchACLRealWorld:

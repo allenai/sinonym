@@ -291,22 +291,11 @@ for result in results:
 
 Batch processing requires a minimum of 2 names and works best with 5+ names for reliable pattern detection.
 
-### Batch Processing Limitations
+### Batch Processing Behavior
 
-**Unambiguous Names**: Some names have only one possible parsing format (e.g., compound given names like "Wei-Qi Wang"). If the batch contains unambiguous names that conflict with the detected format pattern, batch processing will raise an error rather than forcing incorrect parsing.
+**Unambiguous Names**: Some names have only one possible parsing format (e.g., compound given names like "Wei‑Qi Wang"). Batch processing never forces such names into the detected pattern and never raises. These names keep their best individual parse while other Chinese names benefit from the jointly detected order.
 
-**Example Error**:
-```python
-names = ["Xin Liu", "Yang Li", "Wei-Qi Wang"]  # "Wei-Qi Wang" is unambiguous
-try:
-    result = detector.analyze_name_batch(names)
-except ValueError as e:
-    print(e)  # "Cannot apply batch format to unambiguous names"
-```
-
-**Confidence Threshold**: Batch processing requires at least 55% confidence in format detection. Mixed-format batches with unclear patterns will raise an error rather than fall back to individual processing.
-
-**Solution**: For mixed batches or those with unambiguous names, process names individually using `detector.is_chinese_name()`.
+**Confidence (Advisory Only)**: Batch detection computes a dominant format and a confidence value, but there is no confidence threshold gating. Results are always returned. The confidence is informational (e.g., for logging/UX) and is not used to raise errors.
 
 ### Batch Processing with Mixed Name Types
 
@@ -331,7 +320,7 @@ result = detector.analyze_name_batch(mixed_names)
 
 # Format detection uses only the 8 Chinese names
 # If 7 prefer GIVEN_FIRST vs 1 SURNAME_FIRST = 87.5% confidence
-# Above 55% threshold → GIVEN_FIRST format applied to all Chinese names
+# GIVEN_FIRST pattern is applied to Chinese names; non‑Chinese names return clear failures
 
 print(f"Total results: {len(result.results)}")  # 10 (same as input)
 print(f"Format detected: {result.format_pattern.dominant_format}")  # GIVEN_FIRST

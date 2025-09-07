@@ -75,8 +75,11 @@ class BatchAnalysisService:
         # Phase 2: Detect the dominant format pattern
         format_pattern = self._detect_format_pattern(name_candidates)
 
-        # Phase 3: Apply batch formatting if strong pattern detected
-        if format_pattern.threshold_met:
+        # Phase 3: Apply batch formatting without gating on confidence
+        # If we have at least one Chinese participant (names that produced candidates),
+        # apply the detected dominant format. Otherwise, fall back to individual processing
+        # to surface per-name outcomes (including non-Chinese reasons).
+        if format_pattern.total_count > 0:
             results = self._apply_batch_format(
                 name_candidates,
                 format_pattern.dominant_format,
@@ -84,13 +87,7 @@ class BatchAnalysisService:
             )
             improvements = self._find_improvements(name_candidates, results)
         else:
-            # No strong pattern - raise error instead of falling back to individual processing
-            raise ValueError(
-                f"Batch format detection confidence too low: {format_pattern.confidence:.1%} "
-                f"(threshold: {self._format_threshold:.1%}). Detected format: {format_pattern.dominant_format.name} "
-                f"with {format_pattern.given_first_count} given-first and {format_pattern.surname_first_count} "
-                f"surname-first preferences. Consider processing names individually or adjusting the threshold.",
-            )
+            return self._process_individually(names, normalizer, data, formatting_service)
 
         # Build per-name analysis details
         individual_analyses = self._build_individual_analyses(name_candidates)
@@ -127,20 +124,37 @@ class BatchAnalysisService:
 
             # Get compound metadata for this name
             normalized_input = normalizer.apply(name)
-            results.append(
-                self._format_best_candidate(
-                    best_candidate, formatting_service, normalized_input.compound_metadata,
-                ),
-            )
+            if best_candidate is None and self._ethnicity_service is not None:
+                eth = self._ethnicity_service.classify_ethnicity(
+                    normalized_input.roman_tokens,
+                    normalized_input.norm_map,
+                    name,
+                )
+                if eth.success is False:
+                    results.append(eth)
+                else:
+                    results.append(
+                        self._format_best_candidate(
+                            best_candidate, formatting_service, normalized_input.compound_metadata,
+                        ),
+                    )
+            else:
+                results.append(
+                    self._format_best_candidate(
+                        best_candidate, formatting_service, normalized_input.compound_metadata,
+                    ),
+                )
             name_candidates.append((name, candidates, best_candidate, normalized_input.compound_metadata))
 
-        # Create a dummy format pattern for small batches
+        # Create a dummy format pattern for small batches or non-participant fallbacks
         format_pattern = BatchFormatPattern(
             dominant_format=NameFormat.MIXED,
             confidence=0.0,
             surname_first_count=0,
             given_first_count=0,
-            total_count=len(names),
+            # total_count counts only Chinese-participant names; in individual fallback,
+            # treat as zero participants to match detect_batch_format semantics.
+            total_count=0,
             threshold_met=False,
         )
 
@@ -348,25 +362,29 @@ class BatchAnalysisService:
                 # No candidates at all
                 selected_candidate = None
 
+            # If no candidate could be selected (likely non-Chinese), try to return
+            # a specific ethnicity-based failure to mirror single-name behavior.
+            if selected_candidate is None and self._ethnicity_service is not None:
+                try:
+                    normalizer = getattr(self._parsing_service, "_normalizer", None)
+                    if normalizer is not None:
+                        normalized_input = normalizer.apply(name)
+                        eth = self._ethnicity_service.classify_ethnicity(
+                            normalized_input.roman_tokens,
+                            normalized_input.norm_map,
+                            name,
+                        )
+                        if eth.success is False:
+                            results.append(eth)
+                            continue
+                except Exception:
+                    # Fall back to generic failure formatting below
+                    pass
+
             result = self._candidate_to_parse_result(
                 selected_candidate, formatting_service, compound_metadata,
             )
             results.append(result)
-
-        # If we have unambiguous names, raise an error with results
-        if unambiguous_names:
-            name_list = "', '".join(unambiguous_names[:5])  # Show first 5
-            if len(unambiguous_names) > 5:
-                name_list += f"' and {len(unambiguous_names) - 5} more"
-            else:
-                name_list += "'"
-
-            raise ValueError(
-                f"Cannot apply batch format {target_format.name} to {len(unambiguous_names)} "
-                f"unambiguous names: '{name_list}'. These names have only one possible parse format "
-                f"and cannot be forced into the detected batch format. Consider processing these "
-                f"names individually or using a different batch.",
-            )
 
         return results
 
