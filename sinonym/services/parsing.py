@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.coretypes import ParseResult
-from sinonym.utils.cjk_cache import CJKCharacterCache
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
@@ -52,8 +51,6 @@ class NameParsingService:
                 -0.873,  # surname_rank_difference (comparative feature)
             ]
 
-        # Initialize centralized CJK character cache
-        self._cjk_cache = CJKCharacterCache(self._config.cjk_pattern)
 
     def parse_name_order(
         self,
@@ -490,7 +487,7 @@ class NameParsingService:
             token = surname_tokens[0]
 
             # If token contains Chinese characters, try Chinese character lookup first
-            if self._cjk_cache.has_cjk_characters(token):
+            if self._config.cjk_pattern.search(token):
                 if token in self._data.surname_frequencies:
                     return token
 
@@ -509,7 +506,7 @@ class NameParsingService:
     def _given_name_key(self, given_token: str, normalized_cache: dict[str, str]) -> str:
         """Convert given name token to lookup key, preferring Chinese characters when available."""
         # If token contains Chinese characters, try Chinese character lookup first
-        if self._cjk_cache.has_cjk_characters(given_token):
+        if self._config.cjk_pattern.search(given_token):
             if given_token in self._data.given_log_probabilities:
                 return given_token
 

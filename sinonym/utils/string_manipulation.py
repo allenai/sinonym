@@ -37,7 +37,7 @@ class StringManipulationUtils:
     @classmethod
     def _get_thread_cache(cls):
         """Get thread-local unsplittable cache, creating it if needed."""
-        if not hasattr(cls._thread_local, 'unsplittable_cache'):
+        if not hasattr(cls._thread_local, "unsplittable_cache"):
             cls._thread_local.unsplittable_cache = set()
         return cls._thread_local.unsplittable_cache
 
