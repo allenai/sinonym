@@ -55,9 +55,8 @@ CHINESE_NAME_TEST_CASES = [
 ]
 
 
-def test_regional_variants():
+def test_regional_variants(detector):
     """Test regional variants including Cantonese, Wade-Giles, and Taiwanese forms."""
-    detector = ChineseNameDetector()
 
     passed = 0
     failed = 0

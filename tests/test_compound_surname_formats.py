@@ -71,9 +71,8 @@ COMPOUND_SURNAME_TEST_CASES = [
 ]
 
 
-def test_compound_surname_format_preservation():
+def test_compound_surname_format_preservation(detector):
     """Test that compound surname formats are preserved while fixing capitalization."""
-    detector = ChineseNameDetector()
 
     passed = 0
     failed = 0

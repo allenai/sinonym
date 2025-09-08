@@ -71,9 +71,8 @@ ML_CHINESE_CONTROL_CASES = [
 ]
 
 
-def test_ml_japanese_detection():
+def test_ml_japanese_detection(detector):
     """Test that Japanese names in Chinese characters are correctly rejected by ML classifier."""
-    detector = ChineseNameDetector()
 
     passed = 0
     failed = 0
@@ -100,9 +99,8 @@ def test_ml_japanese_detection():
     print(f"ML Japanese detection tests: {passed} passed, {failed} failed")
 
 
-def test_ml_chinese_control():
+def test_ml_chinese_control(detector):
     """Test that Chinese control names are correctly accepted."""
-    detector = ChineseNameDetector()
 
     passed = 0
     failed = 0

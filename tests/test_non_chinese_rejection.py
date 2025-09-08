@@ -370,9 +370,8 @@ NON_CHINESE_TEST_CASES = [
 ]
 
 
-def test_non_chinese_rejection():
+def test_non_chinese_rejection(detector):
     """Test that non-Chinese names are correctly rejected."""
-    detector = ChineseNameDetector()
 
     passed = 0
     failed = 0

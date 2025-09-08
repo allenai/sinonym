@@ -223,9 +223,8 @@ MIXED_TEST_CASES = [
 ]
 
 
-def test_mixed_cases():
+def test_mixed_cases(detector):
     """Test mixed cases from production results."""
-    detector = ChineseNameDetector()
 
     passed = 0
     failed = 0

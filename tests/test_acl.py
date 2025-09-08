@@ -338,9 +338,8 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
 ]
 
 
-def test_acl_chinese_names():
+def test_acl_chinese_names(detector):
     """Test that known Chinese names from ACL 2025 are correctly detected."""
-    detector = ChineseNameDetector()
 
     failed = 0
 
@@ -356,9 +355,8 @@ def test_acl_chinese_names():
     assert failed == 0, f"ACL Chinese name tests: {failed} failures out of {len(ACL_CHINESE_NAMES)} tests"
 
 
-def test_acl_non_chinese_names():
+def test_acl_non_chinese_names(detector):
     """Test that known non-Chinese names from ACL 2025 are correctly rejected."""
-    detector = ChineseNameDetector()
 
     failed = 0
 
@@ -373,9 +371,8 @@ def test_acl_non_chinese_names():
     assert failed == 0, f"ACL non-Chinese rejection tests: {failed} failures out of {len(ACL_NON_CHINESE_NAMES)} tests"
 
 
-def test_acl_order_preservation():
+def test_acl_order_preservation(detector):
     """Test that ACL names in Given-Surname format are not flipped."""
-    detector = ChineseNameDetector()
 
     failed = 0
 
@@ -395,9 +392,8 @@ def test_acl_order_preservation():
     ), f"ACL order preservation tests: {failed} failures out of {len(ACL_ORDER_PRESERVATION_TEST_CASES)} tests"
 
 
-def analyze_acl_2025_authors():
+def analyze_acl_2025_authors(detector):
     """Analyze all ACL 2025 author names (not a test, just analysis)."""
-    detector = ChineseNameDetector()
 
     # Read all author names from the extracted file
     from sinonym.resources import read_text

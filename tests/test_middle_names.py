@@ -86,8 +86,7 @@ MIDDLE_NAME_INDIVIDUAL_CASES = [
 ]
 
 
-def test_middle_name_individual():
-    detector = ChineseNameDetector()
+def test_middle_name_individual(detector):
 
     passed = 0
     failed = 0
@@ -157,8 +156,7 @@ def test_middle_name_individual():
     print(f"Middle name individual tests: {passed} passed, {failed} failed")
 
 
-def test_middle_name_batch():
-    detector = ChineseNameDetector()
+def test_middle_name_batch(detector):
 
     names = [raw for raw, _ in MIDDLE_NAME_INDIVIDUAL_CASES]
     expected = [exp for _, exp in MIDDLE_NAME_INDIVIDUAL_CASES]
@@ -290,8 +288,7 @@ MIDDLE_NAME_MIXED_CASES = [
 ]
 
 
-def test_middle_name_mixed_individual_and_batch():
-    detector = ChineseNameDetector()
+def test_middle_name_mixed_individual_and_batch(detector):
 
     # Individual
     ind_failed = 0

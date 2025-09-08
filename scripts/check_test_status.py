@@ -15,6 +15,8 @@ import sys
 
 EXPECTED_FAILURES = 61
 
+EXPECTED_FAILURES = 61
+
 
 def run_tests():
     """Run all tests and capture output."""
