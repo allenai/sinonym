@@ -15,6 +15,7 @@ scattered across normalization, parsing, and formatting services.
 from __future__ import annotations
 
 import unicodedata
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 # Import at module level to avoid repeated imports in hot paths
@@ -26,6 +27,10 @@ if TYPE_CHECKING:
 
 class StringManipulationUtils:
     """Centralized utilities for string manipulation in Chinese name processing."""
+
+    # Class-level cache for tokens that have been determined to be unsplittable
+    # This prevents repeated expensive splitting attempts on the same tokens
+    _unsplittable_cache = set()
 
     # ====================================================================
     # SPLITTING FUNCTIONS
@@ -73,23 +78,19 @@ class StringManipulationUtils:
         return "".join(result)
 
     @staticmethod
-    def _get_normalized_parts(a: str, b: str, normalized_cache: dict[str, str] | None, normalizer) -> tuple[str, str]:
-        """Get normalized versions of two string parts - optimized for eager cache."""
-        # With eager normalization, prefer cache lookup over normalizer calls
-        if normalized_cache:
-            norm_a = normalized_cache.get(a, normalizer.norm(a))
-            norm_b = normalized_cache.get(b, normalizer.norm(b))
-        else:
-            norm_a = normalizer.norm(a)
-            norm_b = normalizer.norm(b)
-        return norm_a, norm_b
-    
-    @staticmethod
-    def _get_normalized_single(token: str, normalized_cache: dict[str, str] | None, normalizer) -> str:
-        """Get normalized version of single token - optimized for eager cache."""
+    def _get_normalized(token: str, normalized_cache: dict[str, str] | None, normalizer) -> str:
+        """Get normalized version of token - unified cache-optimized helper."""
         if normalized_cache:
             return normalized_cache.get(token, normalizer.norm(token))
         return normalizer.norm(token)
+
+    @staticmethod
+    def _get_normalized_parts(a: str, b: str, normalized_cache: dict[str, str] | None, normalizer) -> tuple[str, str]:
+        """Get normalized versions of two string parts - uses unified helper."""
+        return (
+            StringManipulationUtils._get_normalized(a, normalized_cache, normalizer),
+            StringManipulationUtils._get_normalized(b, normalized_cache, normalizer),
+        )
 
     @staticmethod
     def _is_valid_component_pair(norm_a: str, norm_b: str, data_context, orig_a: str = None, orig_b: str = None) -> bool:
@@ -117,7 +118,7 @@ class StringManipulationUtils:
         # Early exit for very short tokens - no point splitting < 3 chars
         if len(token) < 3:
             return True
-            
+
         # Get normalized form once - use eager cache for performance
         if normalized_cache and token in normalized_cache:
             tok_normalized = StringManipulationUtils.remove_spaces(normalized_cache[token])
@@ -189,9 +190,18 @@ class StringManipulationUtils:
             return None
 
         # ================================================================
+        # UNSPLITTABLE CACHE: Skip tokens we've already determined can't be split
+        # ================================================================
+        token_lower = token.lower()
+        if token_lower in StringManipulationUtils._unsplittable_cache:
+            return None
+
+        # ================================================================
         # EARLY EXIT CONDITIONS: Skip splitting for certain token types
         # ================================================================
         if StringManipulationUtils._should_skip_splitting(token, normalized_cache, normalizer, data_context):
+            # Cache this result to avoid future expensive splitting attempts
+            StringManipulationUtils._unsplittable_cache.add(token_lower)
             return None
 
         # ================================================================
@@ -220,7 +230,7 @@ class StringManipulationUtils:
 
             if first_half.lower() == second_half.lower():
                 # Check if the repeated syllable is valid - optimized with helper
-                norm_syllable = StringManipulationUtils._get_normalized_single(first_half, normalized_cache, normalizer)
+                norm_syllable = StringManipulationUtils._get_normalized(first_half, normalized_cache, normalizer)
                 # For repeated syllables, we only need to check if one is valid (they're the same)
                 if norm_syllable in data_context.plausible_components or first_half.lower() in data_context.plausible_components:
                     return [first_half, second_half]
@@ -292,10 +302,8 @@ class StringManipulationUtils:
                 if StringManipulationUtils.is_plausible_chinese_split(norm_a, norm_b, data_context, config):
                     return [a, b]
 
-        # No valid split found
-        if has_forbidden_patterns:
-            return None
-
+        # No valid split found - cache this result to avoid future expensive attempts
+        StringManipulationUtils._unsplittable_cache.add(token_lower)
         return None
 
     @staticmethod
@@ -475,8 +483,9 @@ class StringManipulationUtils:
         return [part.strip() for part in text.split("-") if part.strip()]
 
     @staticmethod
+    @lru_cache(maxsize=4096)
     def remove_spaces(text: str) -> str:
-        """Remove spaces from text - centralized space removal."""
+        """Remove spaces from text - centralized space removal with caching."""
         return text.replace(" ", "")
 
     # ====================================================================
@@ -484,8 +493,9 @@ class StringManipulationUtils:
     # ====================================================================
 
     @staticmethod
+    @lru_cache(maxsize=2048)
     def _normalize_and_capitalize_single_part(part: str) -> str:
-        """Helper to normalize and capitalize a single part (no hyphens)."""
+        """Helper to normalize and capitalize a single part (no hyphens) - cached for performance."""
         if not part:
             return part
         # Normalize Unicode and remove diacritical marks

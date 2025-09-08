@@ -199,14 +199,13 @@ class EthnicityClassificationService:
 
         has_overlapping_chinese_surname = any(check_overlapping_surname(token) for token in tokens)
 
-        korean_structural_score = self._calculate_korean_structural_patterns(tokens, expanded_keys, normalized_cache)
+        korean_score, vietnamese_score = self._calculate_non_chinese_patterns_unified(tokens, expanded_keys, normalized_cache)
         korean_threshold = 2.5 if has_overlapping_chinese_surname else 2.0
 
-        if korean_structural_score >= korean_threshold:
+        if korean_score >= korean_threshold:
             return ParseResult.failure("Korean structural patterns detected")
 
-        vietnamese_structural_score = self._calculate_vietnamese_structural_patterns(tokens, expanded_keys)
-        if vietnamese_structural_score >= 2.0:
+        if vietnamese_score >= 2.0:
             return ParseResult.failure("appears to be Vietnamese name")
 
         # =================================================================
@@ -296,7 +295,136 @@ class EthnicityClassificationService:
 
         return analysis
 
-    def _calculate_korean_structural_patterns(
+    def _calculate_non_chinese_patterns_unified(
+        self,
+        tokens: tuple[str, ...],
+        expanded_keys: list[str],
+        normalized_cache: dict[str, str] | None = None,
+    ) -> tuple[float, float]:
+        """Calculate Korean and Vietnamese structural pattern scores with shared analysis."""
+        # Single pattern analysis pass (eliminates duplicate work)
+        analysis = self._analyze_tokens_for_patterns(tokens)
+
+        # Calculate Korean score
+        korean_score = self._calculate_korean_score_from_analysis(
+            analysis, tokens, expanded_keys, normalized_cache,
+        )
+
+        # Calculate Vietnamese score
+        vietnamese_score = self._calculate_vietnamese_score_from_analysis(
+            analysis, tokens, expanded_keys,
+        )
+
+        return korean_score, vietnamese_score
+
+    def _calculate_korean_score_from_analysis(
+        self,
+        analysis: dict,
+        tokens: tuple[str, ...],
+        expanded_keys: list[str],
+        normalized_cache: dict[str, str] | None = None,
+    ) -> float:
+        """Calculate Korean score from pre-computed analysis."""
+        # Early returns for definitive cases
+        if analysis["surname_type"] == "chinese_only":
+            return 0.0  # Block Korean scoring for non-overlapping Chinese surnames
+        if analysis["surname_type"] == "korean_only":
+            return 10.0  # Definitive Korean evidence
+
+        score = 0.0
+
+        # Overlapping Korean surname anywhere in the name
+        overlapping_any = any(
+            StringManipulationUtils.remove_spaces(t).lower() in OVERLAPPING_KOREAN_SURNAMES
+            for t in tokens
+        )
+
+        # Helper functions (reused from original)
+        def is_chinese_given_strict(tok: str) -> bool:
+            if normalized_cache and tok in normalized_cache:
+                normalized = normalized_cache[tok]
+            else:
+                normalized = self._normalizer.norm(tok)
+            return (
+                normalized in self._data.given_names_normalized or tok.lower() in self._data.given_names_normalized
+            )
+
+        def has_korean_signature(tok: str) -> bool:
+            t = tok.lower()
+            return t in KOREAN_GIVEN_PATTERNS or t in KOREAN_SPECIFIC_PATTERNS
+
+        # 1. Hyphenated Korean patterns (strong signal)
+        for first, second in analysis["hyphenated_tokens"]:
+            # Existing curated-list rule (definitive)
+            if first in KOREAN_GIVEN_PATTERNS and second in KOREAN_GIVEN_PATTERNS:
+                score += 3.0
+                continue
+
+            first_cn = is_chinese_given_strict(first)
+            second_cn = is_chinese_given_strict(second)
+            if overlapping_any:
+                if has_korean_signature(first) or has_korean_signature(second):
+                    score += 3.0
+            elif (not (first_cn and second_cn)) and (has_korean_signature(first) or has_korean_signature(second)):
+                score += 3.0
+
+        # 2. Known Korean name pairs (strong signal)
+        score += len(analysis["korean_given_pairs"]) * 3.0
+
+        # 3. Korean-specific tokens (strong signal)
+        score += len(analysis["korean_specific_tokens"]) * 3.0
+
+        # 4. Block Chinese given names when Korean overlapping surname is present
+        if analysis["surname_type"] == "korean_overlapping":
+            for tok in tokens[1:]:
+                if not is_chinese_given_strict(tok):
+                    continue
+                t_lower = tok.lower()
+                if (t_lower in KOREAN_GIVEN_PATTERNS or t_lower in KOREAN_SPECIFIC_PATTERNS) and not is_chinese_given_strict(tok):
+                    score += 3.0
+                    break
+
+        # 5. Ambiguous patterns (only with Korean overlapping surname in first position)
+        if analysis["surname_type"] == "korean_overlapping":
+            korean_ambiguous_count = len(analysis["korean_ambiguous_tokens"])
+            if korean_ambiguous_count >= 2:
+                score += 1.0
+
+        return score
+
+    def _calculate_vietnamese_score_from_analysis(
+        self,
+        analysis: dict,
+        tokens: tuple[str, ...],
+        expanded_keys: list[str],
+    ) -> float:
+        """Calculate Vietnamese score from pre-computed analysis."""
+        score = 0.0
+
+        # 1. Vietnamese "Thi" pattern (very strong indicator)
+        if analysis["has_thi_pattern"]:
+            score += 3.0
+
+        # 2. Vietnamese surname + given name patterns (but only if no Chinese surname)
+        vietnamese_surname_count = 1 if analysis["surname_type"] == "vietnamese_overlapping" else 0
+        vietnamese_given_count = len(analysis["vietnamese_tokens"])
+
+        if vietnamese_surname_count >= 1 and vietnamese_given_count >= 1:
+            # Check if any token is a Chinese surname
+            has_chinese_surname = any(
+                StringManipulationUtils.remove_spaces(key) in self._data.surnames for key in expanded_keys
+            )
+
+            if not has_chinese_surname:
+                score += 2.0  # Strong Vietnamese pattern
+
+        # 3. Multiple Vietnamese given names
+        if vietnamese_given_count >= 2:
+            score += 1.5  # Medium Vietnamese pattern
+
+        return score
+
+    def _calculate_korean_structural_patterns_legacy(
         self,
         tokens: tuple[str, ...],
         expanded_keys: list[str],

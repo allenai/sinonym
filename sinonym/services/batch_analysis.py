@@ -66,10 +66,11 @@ class BatchAnalysisService:
         name_candidates = []  # List of (name, candidates, best_candidate, compound_metadata)
 
         for name in names:
-            candidates, best_candidate = self._analyze_individual_name(name, normalizer, data)
-
-            # Get compound metadata for this name
+            # Normalize once and reuse
             normalized_input = normalizer.apply(name)
+            candidates, best_candidate = self._analyze_individual_name_with_normalized(
+                name, normalized_input, data,
+            )
             name_candidates.append((name, candidates, best_candidate, normalized_input.compound_metadata))
 
         # Phase 2: Detect the dominant format pattern
@@ -109,7 +110,11 @@ class BatchAnalysisService:
         """
         name_candidates = []
         for name in names:
-            candidates, best_candidate = self._analyze_individual_name(name, normalizer, data)
+            # Normalize once for format detection (compound_metadata not needed)
+            normalized_input = normalizer.apply(name)
+            candidates, best_candidate = self._analyze_individual_name_with_normalized(
+                name, normalized_input, data,
+            )
             name_candidates.append((name, candidates, best_candidate, None))  # No compound_metadata needed for format detection
 
         return self._detect_format_pattern(name_candidates)
@@ -120,10 +125,11 @@ class BatchAnalysisService:
         name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]] = []
 
         for name in names:
-            candidates, best_candidate = self._analyze_individual_name(name, normalizer, data)
-
-            # Get compound metadata for this name
+            # Normalize once and reuse
             normalized_input = normalizer.apply(name)
+            candidates, best_candidate = self._analyze_individual_name_with_normalized(
+                name, normalized_input, data,
+            )
             if best_candidate is None and self._ethnicity_service is not None:
                 eth = self._ethnicity_service.classify_ethnicity(
                     normalized_input.roman_tokens,
@@ -168,10 +174,10 @@ class BatchAnalysisService:
             improvements=[],
         )
 
-    def _analyze_individual_name(self, name: str, normalizer, _data) -> tuple[list[ParseCandidate], ParseCandidate | None]:
-        """Analyze a single name and return all parse candidates with scores."""
-        # Normalize the input
-        normalized_input = normalizer.apply(name)
+    def _analyze_individual_name_with_normalized(
+        self, name: str, normalized_input, _data,
+    ) -> tuple[list[ParseCandidate], ParseCandidate | None]:
+        """Analyze a single name using pre-computed normalized input."""
         tokens = list(normalized_input.roman_tokens)
 
         if len(tokens) < self._parsing_service._config.min_tokens_required:

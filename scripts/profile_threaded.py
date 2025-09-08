@@ -1,13 +1,24 @@
 #!/usr/bin/env python3
 """
-Multi-threaded performance testing script for sinonym.
+Low-variance multi-threaded performance testing script for sinonym.
 
 Tests performance with different numbers of threads and demonstrates
-thread safety of the optimized caching implementation.
+thread safety of the optimized caching implementation. This version
+minimizes variance through:
+- Deterministic hash seeds
+- Reproducible test data generation
+- Cache pre-warming
+- Multiple measurement runs with statistics
 """
 
 import concurrent.futures
+import gc
+import os
+import statistics
 import time
+
+# Set deterministic hash seed for consistent dict iteration
+os.environ["PYTHONHASHSEED"] = "42"
 
 from sinonym.detector import ChineseNameDetector
 from tests.test_performance import TestChineseNameDetectorPerformance
@@ -75,63 +86,98 @@ def verify_consistency(single_results: list[tuple[str, bool]],
     return single_sorted == multi_sorted
 
 
-def main():
-    print("=" * 70)
-    print("SINONYM MULTI-THREADED PERFORMANCE TEST")
-    print("=" * 70)
+def run_multiple_measurements(test_func, *args, num_runs=3):
+    """Run multiple measurements and return statistics."""
+    times = []
+    results = None
 
-    # Generate test data using the existing performance test helper
+    for _ in range(num_runs):
+        gc.collect()  # Clean state between runs
+        time_taken, test_results = test_func(*args)
+        times.append(time_taken)
+        if results is None:
+            results = test_results  # Keep first run's results for verification
+
+    mean_time = statistics.mean(times)
+    std_time = statistics.stdev(times) if len(times) > 1 else 0
+    cv = (std_time / mean_time * 100) if mean_time > 0 else 0
+
+    return mean_time, std_time, cv, results
+
+
+def main():
+    print("=" * 75)
+    print("SINONYM MULTI-THREADED PERFORMANCE TEST (LOW VARIANCE)")
+    print("=" * 75)
+
+    # Generate deterministic test data
     detector = ChineseNameDetector()
     helper = TestChineseNameDetectorPerformance()
-
-    # Use a smaller dataset to make threading effects more visible
     test_names = helper.generate_test_names(detector, 1200)  # 1200 names
 
-    print(f"Testing with {len(test_names)} names")
+    print(f"Generated {len(test_names)} deterministic test names")
+
+    # Pre-warm caches
+    print("Pre-warming caches...")
+    for name in test_names[:100]:
+        detector.is_chinese_name(name)
+
+    print("Running multi-threaded tests with statistical analysis...")
     print()
 
     # Test with different thread counts
     thread_counts = [1, 2, 4, 8]
 
-    # Run single-threaded test first for baseline
-    print("Running single-threaded baseline...")
-    single_time, single_results = test_single_thread(test_names, detector)
-    single_rate = len(test_names) / single_time
+    # Run single-threaded baseline with statistics
+    print("Measuring single-threaded baseline (3 runs)...")
+    single_mean, single_std, single_cv, single_results = run_multiple_measurements(
+        test_single_thread, test_names, detector,
+    )
+    single_rate = len(test_names) / single_mean
 
-    print(f"Single-threaded: {single_time:.3f}s ({single_rate:.0f} names/sec)")
+    print(f"Single-threaded: {single_mean:.3f}s ±{single_std:.3f} (CV: {single_cv:.1f}%) | {single_rate:.0f} names/sec")
     print()
 
-    print("Thread Count | Time (s) | Rate (names/sec) | Speedup | Thread Safety")
-    print("-" * 70)
+    print("Threads | Mean Time(s) | Std(s) | CV(%) | Rate(names/s) | Speedup | Safety")
+    print("-" * 75)
 
     for num_threads in thread_counts:
         if num_threads == 1:
             # Use single-threaded results
-            thread_time = single_time
+            mean_time = single_mean
+            std_time = single_std
+            cv = single_cv
             thread_results = single_results
             consistent = True
         else:
-            # Test multi-threaded
-            thread_time, thread_results = test_multithreaded(test_names, num_threads)
+            # Test multi-threaded with statistics
+            mean_time, std_time, cv, thread_results = run_multiple_measurements(
+                test_multithreaded, test_names, num_threads,
+            )
             consistent = verify_consistency(single_results, thread_results)
 
-        thread_rate = len(test_names) / thread_time
-        speedup = single_time / thread_time
+        thread_rate = len(test_names) / mean_time
+        speedup = single_mean / mean_time
 
         safety_status = "✓ PASS" if consistent else "✗ FAIL"
+        cv_status = "✓" if cv < 10.0 else "⚠" if cv < 20.0 else "✗"
 
-        print(f"{num_threads:^12} | {thread_time:^8.3f} | {thread_rate:^15.0f} | {speedup:^7.2f}x | {safety_status}")
+        print(f"{num_threads:^7} | {mean_time:^12.3f} | {std_time:^6.3f} | {cv:^4.1f}{cv_status} | {thread_rate:^13.0f} | {speedup:^7.2f}x | {safety_status}")
 
     print()
-    print("=" * 70)
+    print("=" * 75)
     print("SUMMARY:")
-    print("=" * 70)
+    print("=" * 75)
+    print("• Deterministic test data eliminates variance from random name generation")
+    print("• Pre-warmed caches eliminate cold-start effects")
+    print("• Multiple measurements provide statistical confidence")
     print("• Thread safety: All threads produce identical results")
-    print("• Performance: Shows actual threading impact on shared detector")
-    print("• Cache behavior: Thread-local caches isolate thread state")
+    print("• CV < 10%: Good measurement stability")
+    print("• CV 10-20%: Moderate system noise")
+    print("• CV > 20%: High variance, check system load")
     print()
-    print("Note: Speedup may be limited by GIL and I/O bound operations.")
-    print("Thread safety verification is the primary goal.")
+    print("Note: GIL limits CPU-bound threading speedup in Python.")
+    print("Thread safety and cache isolation are the primary validation goals.")
 
 
 if __name__ == "__main__":

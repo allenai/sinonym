@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.coretypes import ParseResult
+from sinonym.utils.cjk_cache import CJKCharacterCache
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
@@ -50,6 +51,9 @@ class NameParsingService:
                 -0.042,  # surname_freq_log_ratio (log-based comparative feature)
                 -0.873,  # surname_rank_difference (comparative feature)
             ]
+
+        # Initialize centralized CJK character cache
+        self._cjk_cache = CJKCharacterCache(self._config.cjk_pattern)
 
     def parse_name_order(
         self,
@@ -486,24 +490,7 @@ class NameParsingService:
             token = surname_tokens[0]
 
             # If token contains Chinese characters, try Chinese character lookup first
-            # Use thread-local character caching for performance
-            if not hasattr(self, "_thread_local"):
-                import threading
-                self._thread_local = threading.local()
-
-            if not hasattr(self._thread_local, "cjk_char_cache"):
-                self._thread_local.cjk_char_cache = {}
-
-            cache = self._thread_local.cjk_char_cache
-            has_cjk = False
-            for char in token:
-                if char not in cache:
-                    cache[char] = bool(self._config.cjk_pattern.search(char))
-                if cache[char]:
-                    has_cjk = True
-                    break
-
-            if has_cjk:
+            if self._cjk_cache.has_cjk_characters(token):
                 if token in self._data.surname_frequencies:
                     return token
 
@@ -522,24 +509,7 @@ class NameParsingService:
     def _given_name_key(self, given_token: str, normalized_cache: dict[str, str]) -> str:
         """Convert given name token to lookup key, preferring Chinese characters when available."""
         # If token contains Chinese characters, try Chinese character lookup first
-        # Use thread-local character caching for performance
-        if not hasattr(self, "_thread_local"):
-            import threading
-            self._thread_local = threading.local()
-
-        if not hasattr(self._thread_local, "cjk_char_cache"):
-            self._thread_local.cjk_char_cache = {}
-
-        cache = self._thread_local.cjk_char_cache
-        has_cjk = False
-        for char in given_token:
-            if char not in cache:
-                cache[char] = bool(self._config.cjk_pattern.search(char))
-            if cache[char]:
-                has_cjk = True
-                break
-
-        if has_cjk:
+        if self._cjk_cache.has_cjk_characters(given_token):
             if given_token in self._data.given_log_probabilities:
                 return given_token
 
