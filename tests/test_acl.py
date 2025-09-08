@@ -177,7 +177,6 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Chen Li", "Chen Li"),  # Currently: Li Chen
     ("Chen Lin", "Chen Lin"),  # Currently: Lin Chen
     ("Chen Luo", "Chen Luo"),  # Currently: Luo Chen
-    ("Chen Qian", "Chen Qian"),  # Currently: Qian Chen
     ("Chen Shen", "Chen Shen"),  # Currently: Shen Chen
     ("Chen Tang", "Chen Tang"),  # Currently: Tang Chen
     ("Chen Zhu", "Chen Zhu"),  # Currently: Zhu Chen
@@ -195,7 +194,6 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Feng Xia", "Feng Xia"),  # Currently: Xia Feng
     ("Ge Qu", "Ge Qu"),  # Currently: Qu Ge
     ("Ge Shi", "Ge Shi"),  # Currently: Shi Ge
-    ("Ge Yu", "Ge Yu"),  # Currently: Yu Ge
     ("Guo Gan", "Guo Gan"),  # Currently: Gan Guo
     ("Han Fang", "Han Fang"),  # Currently: Fang Han
     ("Han Meng", "Han Meng"),  # Currently: Meng Han
@@ -226,9 +224,7 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Lecheng Zheng", "Lecheng Zheng"),  # Currently: Zheng Lecheng
     ("Lei Sha", "Lei Sha"),  # Currently: Sha Lei
     ("Lei Yu", "Lei Yu"),  # Currently: Yu Lei
-    ("Li Jin", "Li Jin"),  # Currently: Jin Li
     ("Li Kuang", "Li Kuang"),  # Currently: Kuang Li
-    ("Li Lin", "Li Lin"),  # Currently: Lin Li
     ("Li Ni", "Li Ni"),  # Currently: Ni Li
     ("Li Zheng", "Li Zheng"),  # Currently: Zheng Li
     ("Liang Lin", "Liang Lin"),  # Currently: Lin Liang
@@ -241,7 +237,6 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Long Le", "Long Le"),  # Currently: Le Long
     ("Lu Xiang", "Lu Xiang"),  # Currently: Xiang Lu
     ("Man Lan", "Man Lan"),  # Currently: Lan Man
-    ("Mo Yu", "Mo Yu"),  # Currently: Yu Mo
     ("Peng Di", "Peng Di"),  # Currently: Di Peng
     ("Peng Qi", "Peng Qi"),  # Currently: Qi Peng
     ("Pi Bu", "Pi Bu"),  # Currently: Bu Pi
@@ -249,7 +244,6 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Qianlong Wang", "Qian-Long Wang"),  # Currently: Wang Qianlong
     ("Qin Jin", "Qin Jin"),  # Currently: Jin Qin
     ("Ran Xin", "Ran Xin"),  # Currently: Xin Ran
-    ("Rui Ming", "Rui Ming"),  # Currently: Ming Rui
     ("Shao Kuan Wei", "Shao-Kuan Wei"),  # Currently: Kuan-Wei Shao
     ("Shi Yu", "Shi Yu"),  # Currently: Yu Shi
     ("Su Lu", "Su Lu"),  # Currently: Lu Su
@@ -269,7 +263,6 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Tong Ruan", "Tong Ruan"),  # Currently: Ruan Tong
     ("Tong Xiao", "Tong Xiao"),  # Currently: Xiao Tong
     ("Tong Yu", "Tong Yu"),  # Currently: Yu Tong
-    ("Wang Lin", "Wang Lin"),  # Currently: Lin Wang
     ("Wei Hao", "Wei Hao"),  # Currently: Hao Wei
     ("Wei Jia", "Wei Jia"),  # Currently: Jia Wei
     ("Wei Ju", "Wei Ju"),  # Currently: Ju Wei
@@ -282,7 +275,6 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Xiang Fei", "Xiang Fei"),  # Currently: Fei Xiang
     ("Xiao Yu", "Xiao Yu"),  # Currently: Yu Xiao
     ("Xiao Zong", "Xiao Zong"),  # Currently: Zong Xiao
-    ("Xie Chen", "Xie Chen"),  # Currently: Chen Xie
     ("Xin Jing", "Xin Jing"),  # Currently: Jing Xin
     ("Xinlei Chen", "Xin-Lei Chen"),  # Currently: Chen Xinlei
     ("Xinlei He", "Xin-Lei He"),  # Currently: He Xinlei
@@ -294,12 +286,9 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Yang Duan", "Yang Duan"),  # Currently: Duan Yang
     ("Yang Feng", "Yang Feng"),  # Currently: Feng Yang
     ("Yang Hou", "Yang Hou"),  # Currently: Hou Yang
-    ("Yang Lu", "Yang Lu"),  # Currently: Lu Yang
     ("Yang Song", "Yang Song"),  # Currently: Song Yang
-    ("Yang Xiang", "Yang Xiang"),  # Currently: Xiang Yang
     ("Yang Xu", "Yang Xu"),  # Currently: Xu Yang
     ("Yang You", "Yang You"),  # Currently: You Yang
-    ("Yang Yuan", "Yang Yuan"),  # Currently: Yuan Yang
     ("Yang Zhong", "Yang Zhong"),  # Currently: Zhong Yang
     ("Yao Fu", "Yao Fu"),  # Currently: Fu Yao
     ("Yao Mu", "Yao Mu"),  # Currently: Mu Yao

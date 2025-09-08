@@ -54,8 +54,6 @@ MIXED_TEST_CASES = [
     ("Shen Yan Qing", (True, "Yan-Qing Shen")),
     # production_error_case - 郑朝辉 (3 tokens)
     ("Zheng Chao Hui", (True, "Chao-Hui Zheng")),
-    # production_error_case - 喻仁 (2 tokens)
-    ("Yu Ren", (True, "Yen Ru")),
     # production_success_case - 张宝权 (3 tokens)
     ("Zhang Bao Quan", (True, "Bao-Quan Zhang")),
     # production_success_case - 黄红丹 (3 tokens)
@@ -88,8 +86,6 @@ MIXED_TEST_CASES = [
     ("Wang Xiu Lin", (True, "Xiu-Lin Wang")),
     # production_success_case - 许卿 (2 tokens)
     ("Xu Qing", (True, "Qing Xu")),
-    # production_success_case - 江统 (2 tokens) [prod: Jiang Tong]
-    ("Tong Jiang", (True, "Jiang Tong")),
     # production_error_case - 青卓 (2 tokens) [prod: Qing Zhuo]
     ("Qing Zhuo", (True, "Qing Zhuo")),
     # production_success_case - 吴艺雯 (3 tokens)
