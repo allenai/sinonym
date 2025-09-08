@@ -14,6 +14,7 @@ scattered across normalization, parsing, and formatting services.
 
 from __future__ import annotations
 
+import threading
 import unicodedata
 from functools import lru_cache
 from typing import TYPE_CHECKING
@@ -28,9 +29,17 @@ if TYPE_CHECKING:
 class StringManipulationUtils:
     """Centralized utilities for string manipulation in Chinese name processing."""
 
-    # Class-level cache for tokens that have been determined to be unsplittable
+    # Thread-local cache for tokens that have been determined to be unsplittable
     # This prevents repeated expensive splitting attempts on the same tokens
-    _unsplittable_cache = set()
+    # Each thread maintains its own cache for optimal performance
+    _thread_local = threading.local()
+
+    @classmethod
+    def _get_thread_cache(cls):
+        """Get thread-local unsplittable cache, creating it if needed."""
+        if not hasattr(cls._thread_local, 'unsplittable_cache'):
+            cls._thread_local.unsplittable_cache = set()
+        return cls._thread_local.unsplittable_cache
 
     # ====================================================================
     # SPLITTING FUNCTIONS
@@ -193,7 +202,8 @@ class StringManipulationUtils:
         # UNSPLITTABLE CACHE: Skip tokens we've already determined can't be split
         # ================================================================
         token_lower = token.lower()
-        if token_lower in StringManipulationUtils._unsplittable_cache:
+        thread_cache = StringManipulationUtils._get_thread_cache()
+        if token_lower in thread_cache:
             return None
 
         # ================================================================
@@ -201,7 +211,7 @@ class StringManipulationUtils:
         # ================================================================
         if StringManipulationUtils._should_skip_splitting(token, normalized_cache, normalizer, data_context):
             # Cache this result to avoid future expensive splitting attempts
-            StringManipulationUtils._unsplittable_cache.add(token_lower)
+            thread_cache.add(token_lower)
             return None
 
         # ================================================================
@@ -303,7 +313,7 @@ class StringManipulationUtils:
                     return [a, b]
 
         # No valid split found - cache this result to avoid future expensive attempts
-        StringManipulationUtils._unsplittable_cache.add(token_lower)
+        thread_cache.add(token_lower)
         return None
 
     @staticmethod
