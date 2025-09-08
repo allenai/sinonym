@@ -14,8 +14,13 @@ scattered across normalization, parsing, and formatting services.
 
 from __future__ import annotations
 
+import threading
 import unicodedata
+from functools import lru_cache
 from typing import TYPE_CHECKING
+
+# Import at module level to avoid repeated imports in hot paths
+from sinonym.chinese_names_data import HIGH_CONFIDENCE_ANCHORS
 
 if TYPE_CHECKING:
     from sinonym.services.normalization import CompoundMetadata
@@ -23,6 +28,18 @@ if TYPE_CHECKING:
 
 class StringManipulationUtils:
     """Centralized utilities for string manipulation in Chinese name processing."""
+
+    # Thread-local cache for tokens that have been determined to be unsplittable
+    # This prevents repeated expensive splitting attempts on the same tokens
+    # Each thread maintains its own cache for optimal performance
+    _thread_local = threading.local()
+
+    @classmethod
+    def _get_thread_cache(cls):
+        """Get thread-local unsplittable cache, creating it if needed."""
+        if not hasattr(cls._thread_local, "unsplittable_cache"):
+            cls._thread_local.unsplittable_cache = set()
+        return cls._thread_local.unsplittable_cache
 
     # ====================================================================
     # SPLITTING FUNCTIONS
@@ -70,15 +87,19 @@ class StringManipulationUtils:
         return "".join(result)
 
     @staticmethod
-    def _get_normalized_parts(a: str, b: str, normalized_cache: dict[str, str] | None, normalizer) -> tuple[str, str]:
-        """Get normalized versions of two string parts."""
+    def _get_normalized(token: str, normalized_cache: dict[str, str] | None, normalizer) -> str:
+        """Get normalized version of token - unified cache-optimized helper."""
         if normalized_cache:
-            norm_a = normalizer.get_normalized(a, normalized_cache)
-            norm_b = normalizer.get_normalized(b, normalized_cache)
-        else:
-            norm_a = normalizer.norm(a)
-            norm_b = normalizer.norm(b)
-        return norm_a, norm_b
+            return normalized_cache.get(token, normalizer.norm(token))
+        return normalizer.norm(token)
+
+    @staticmethod
+    def _get_normalized_parts(a: str, b: str, normalized_cache: dict[str, str] | None, normalizer) -> tuple[str, str]:
+        """Get normalized versions of two string parts - uses unified helper."""
+        return (
+            StringManipulationUtils._get_normalized(a, normalized_cache, normalizer),
+            StringManipulationUtils._get_normalized(b, normalized_cache, normalizer),
+        )
 
     @staticmethod
     def _is_valid_component_pair(norm_a: str, norm_b: str, data_context, orig_a: str = None, orig_b: str = None) -> bool:
@@ -103,14 +124,17 @@ class StringManipulationUtils:
     @staticmethod
     def _should_skip_splitting(token: str, normalized_cache: dict[str, str] | None, normalizer, data_context) -> bool:
         """Check early exit conditions that prevent splitting - optimized validation chain."""
-        # Get normalized form once
+        # Early exit for very short tokens - no point splitting < 3 chars
+        if len(token) < 3:
+            return True
+
+        # Get normalized form once - use eager cache for performance
         if normalized_cache and token in normalized_cache:
             tok_normalized = StringManipulationUtils.remove_spaces(normalized_cache[token])
         else:
             tok_normalized = StringManipulationUtils.remove_spaces(normalizer.norm(token))
 
         # Optimized validation chain: combine multiple checks with OR short-circuit
-        from sinonym.chinese_names_data import HIGH_CONFIDENCE_ANCHORS
         original_lower = token.lower()
 
         return (
@@ -175,9 +199,19 @@ class StringManipulationUtils:
             return None
 
         # ================================================================
+        # UNSPLITTABLE CACHE: Skip tokens we've already determined can't be split
+        # ================================================================
+        token_lower = token.lower()
+        thread_cache = StringManipulationUtils._get_thread_cache()
+        if token_lower in thread_cache:
+            return None
+
+        # ================================================================
         # EARLY EXIT CONDITIONS: Skip splitting for certain token types
         # ================================================================
         if StringManipulationUtils._should_skip_splitting(token, normalized_cache, normalizer, data_context):
+            # Cache this result to avoid future expensive splitting attempts
+            thread_cache.add(token_lower)
             return None
 
         # ================================================================
@@ -189,13 +223,8 @@ class StringManipulationUtils:
         # attempt alternative splits that cross the explicit boundary.
         if "-" in token and token.count("-") == 1:
             a, b = token.split("-")
-            # Inline normalization for performance
-            if normalized_cache:
-                norm_a = normalizer.get_normalized(a, normalized_cache)
-                norm_b = normalizer.get_normalized(b, normalized_cache)
-            else:
-                norm_a = normalizer.norm(a)
-                norm_b = normalizer.norm(b)
+            # Optimized normalization using helper
+            norm_a, norm_b = StringManipulationUtils._get_normalized_parts(a, b, normalized_cache, normalizer)
             # Component validation with fallback to original forms
             if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
                 return [a, b]
@@ -210,11 +239,8 @@ class StringManipulationUtils:
             second_half = raw[mid:]
 
             if first_half.lower() == second_half.lower():
-                # Check if the repeated syllable is valid - inline for performance
-                if normalized_cache and first_half in normalized_cache:
-                    norm_syllable = normalized_cache[first_half]
-                else:
-                    norm_syllable = normalizer.norm(first_half)
+                # Check if the repeated syllable is valid - optimized with helper
+                norm_syllable = StringManipulationUtils._get_normalized(first_half, normalized_cache, normalizer)
                 # For repeated syllables, we only need to check if one is valid (they're the same)
                 if norm_syllable in data_context.plausible_components or first_half.lower() in data_context.plausible_components:
                     return [first_half, second_half]
@@ -225,13 +251,8 @@ class StringManipulationUtils:
         # Pattern 3: CamelCase detection (e.g., "MingHua" → ["Ming", "Hua"]) — only when no hyphen present
         camel = config.camel_case_pattern.findall(raw)
         if len(camel) == 2:
-            # Inline normalization for performance
-            if normalized_cache:
-                norm_a = normalizer.get_normalized(camel[0], normalized_cache)
-                norm_b = normalizer.get_normalized(camel[1], normalized_cache)
-            else:
-                norm_a = normalizer.norm(camel[0])
-                norm_b = normalizer.norm(camel[1])
+            # Optimized normalization using helper
+            norm_a, norm_b = StringManipulationUtils._get_normalized_parts(camel[0], camel[1], normalized_cache, normalizer)
             # Inline component validation for performance
             if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, camel[0], camel[1]):
                 return camel
@@ -291,10 +312,8 @@ class StringManipulationUtils:
                 if StringManipulationUtils.is_plausible_chinese_split(norm_a, norm_b, data_context, config):
                     return [a, b]
 
-        # No valid split found
-        if has_forbidden_patterns:
-            return None
-
+        # No valid split found - cache this result to avoid future expensive attempts
+        thread_cache.add(token_lower)
         return None
 
     @staticmethod
@@ -474,8 +493,9 @@ class StringManipulationUtils:
         return [part.strip() for part in text.split("-") if part.strip()]
 
     @staticmethod
+    @lru_cache(maxsize=4096)
     def remove_spaces(text: str) -> str:
-        """Remove spaces from text - centralized space removal."""
+        """Remove spaces from text - centralized space removal with caching."""
         return text.replace(" ", "")
 
     # ====================================================================
@@ -483,8 +503,9 @@ class StringManipulationUtils:
     # ====================================================================
 
     @staticmethod
+    @lru_cache(maxsize=2048)
     def _normalize_and_capitalize_single_part(part: str) -> str:
-        """Helper to normalize and capitalize a single part (no hyphens)."""
+        """Helper to normalize and capitalize a single part (no hyphens) - cached for performance."""
         if not part:
             return part
         # Normalize Unicode and remove diacritical marks

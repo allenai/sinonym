@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from sinonym.chinese_names_data import VALID_CHINESE_RIMES
 from sinonym.text_processing import CompoundDetector, TextNormalizer, TextPreprocessor
 from sinonym.utils.string_manipulation import StringManipulationUtils
+from sinonym.utils.thread_cache import ThreadLocalCache
 
 if TYPE_CHECKING:
     from sinonym.coretypes import ChineseNameConfig
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
 class LazyNormalizationMap:
     """
     Lazy normalization map with true immutability.
-    Uses __slots__ and MappingProxyType for architectural correctness.
+    Uses unified ThreadLocalCache for consistency.
     """
 
     __slots__ = ("_cache", "_normalizer", "_tokens")
@@ -31,15 +32,14 @@ class LazyNormalizationMap:
     def __init__(self, tokens: tuple[str, ...], normalizer: NormalizationService):
         object.__setattr__(self, "_tokens", tokens)
         object.__setattr__(self, "_normalizer", normalizer)
-        # Use a regular dict internally but expose as MappingProxyType
-        object.__setattr__(self, "_cache", {})
+        object.__setattr__(self, "_cache", ThreadLocalCache())
 
     def get(self, token: str, default: str | None = None):
-        """Get normalized value for token, computing lazily."""
-        if token not in self._cache:
-            # Compute and cache the normalized value
-            self._cache[token] = self._normalizer._text_normalizer.normalize_token(token)
-        return self._cache[token]
+        """Get normalized value for token, computing lazily with thread-local cache."""
+        return self._cache.get_or_compute(
+            token,
+            lambda: self._normalizer._text_normalizer.normalize_token(token),
+        )
 
     def __getitem__(self, token: str) -> str:
         """Dict-like access."""
@@ -72,7 +72,7 @@ class NormalizedInput:
     cleaned: str  # After punctuation/formatting cleanup
     tokens: tuple[str, ...]  # After separator splitting
     roman_tokens: tuple[str, ...]  # After Han→pinyin & mixed-token processing
-    norm_map: dict[str, str] | LazyNormalizationMap  # token → fully normalized (lazy)
+    norm_map: dict[str, str]  # token → fully normalized (eager)
     compound_metadata: dict[str, CompoundMetadata]  # token → compound info
 
     @classmethod
@@ -150,8 +150,8 @@ class NormalizationService:
         if not roman_tokens:
             return NormalizedInput.empty(raw_name)
 
-        # Phase 6: Create lazy normalization map (computed on-demand)
-        norm_map = LazyNormalizationMap(roman_tokens, self)
+        # Phase 6: Create eager normalization map for performance in hot paths
+        norm_map = {token: self._text_normalizer.normalize_token(token) for token in roman_tokens}
 
         # Phase 7: Generate compound metadata for each token (centralized detection)
         compound_metadata = self._compound_detector.generate_compound_metadata(roman_tokens, self._data)
@@ -168,11 +168,25 @@ class NormalizationService:
     def _process_mixed_tokens(self, tokens: list[str], is_all_chinese: bool = False) -> list[str]:
         """Extract existing mixed token processing logic with enhanced all-Chinese support."""
         mix = []
+        # Cache for character-level CJK pattern checks to avoid repeated regex calls
+        cjk_cache = {}
+
         for token in tokens:
             if self._config.cjk_pattern.search(token) and self._config.ascii_alpha_pattern.search(token):
-                # Split mixed Han/Roman token
-                han = "".join(c for c in token if self._config.cjk_pattern.search(c))
-                rom = "".join(c for c in token if c.isascii() and c.isalpha())
+                # Split mixed Han/Roman token - use character caching for performance
+                han_chars = []
+                rom_chars = []
+                for c in token:
+                    if c not in cjk_cache:
+                        cjk_cache[c] = bool(self._config.cjk_pattern.search(c))
+
+                    if cjk_cache[c]:
+                        han_chars.append(c)
+                    elif c.isascii() and c.isalpha():
+                        rom_chars.append(c)
+
+                han = "".join(han_chars)
+                rom = "".join(rom_chars)
                 if han:
                     mix.append(han)
                 if rom:
@@ -210,9 +224,21 @@ class NormalizationService:
                         roman_tokens_split.extend(parts)
                     # Use centralized split_concat method if available
                     elif self._data:
+                        # Create expanded normalized cache including potential splits to reduce redundant normalizations
+                        local_cache = {clean_token: self._text_normalizer.normalize_token(clean_token)}
+
+                        # Pre-populate cache with likely split candidates to avoid redundant normalization
+                        if len(clean_token) >= 4:  # Only for tokens that could reasonably split
+                            for i in range(2, len(clean_token) - 1):  # Split positions
+                                part1, part2 = clean_token[:i], clean_token[i:]
+                                if part1 not in local_cache:
+                                    local_cache[part1] = self._text_normalizer.normalize_token(part1)
+                                if part2 not in local_cache:
+                                    local_cache[part2] = self._text_normalizer.normalize_token(part2)
+
                         split_result = StringManipulationUtils.split_concatenated_name(
                             clean_token,
-                            None,
+                            local_cache,
                             self._data,
                             self,
                             self._config,

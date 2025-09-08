@@ -39,9 +39,8 @@ CHINESE_NAME_TEST_CASES = [
 ]
 
 
-def test_compound_names():
+def test_compound_names(detector):
     """Test compound and multi-syllable Chinese names."""
-    detector = ChineseNameDetector()
 
     passed = 0
     failed = 0

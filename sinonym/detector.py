@@ -335,22 +335,22 @@ class ChineseNameDetector:
         elif is_all_chinese and len(normalized_input.roman_tokens) == 3:
             # For 3-character all-Chinese names: check compound surname vs single surname
             tokens = list(normalized_input.roman_tokens)
-            
+
             # Try both possibilities and see which one the parsing service accepts
             # Option 1: First two tokens as compound surname + third as given
             compound_parse = self._parsing_service.parse_name_order(
                 tokens,
-                normalized_input.norm_map, 
+                normalized_input.norm_map,
                 normalized_input.compound_metadata,
             )
-            
-            if (compound_parse.success and 
-                len(compound_parse.result[0]) == 2 and 
+
+            if (compound_parse.success and
+                len(compound_parse.result[0]) == 2 and
                 len(compound_parse.result[1]) == 1):
                 # Parsing service recognized first two as compound surname
                 best_result = compound_parse.result
             else:
-                # Option 2: First token as single surname + last two as given name  
+                # Option 2: First token as single surname + last two as given name
                 best_result = ([tokens[0]], tokens[1:])
 
             if best_result:

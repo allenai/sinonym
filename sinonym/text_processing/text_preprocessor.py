@@ -145,8 +145,21 @@ class TextPreprocessor:
         if not cleaned:
             return False
 
-        # Check if all remaining characters are CJK
-        return all(self._config.cjk_pattern.search(char) for char in cleaned)
+        # Check if all remaining characters are CJK - use thread-local character caching for performance
+        if not hasattr(self, "_thread_local"):
+            import threading
+            self._thread_local = threading.local()
+
+        if not hasattr(self._thread_local, "cjk_char_cache"):
+            self._thread_local.cjk_char_cache = {}
+
+        cache = self._thread_local.cjk_char_cache
+        for char in cleaned:
+            if char not in cache:
+                cache[char] = bool(self._config.cjk_pattern.search(char))
+            if not cache[char]:
+                return False
+        return True
 
     def contains_non_chinese_scripts(self, text: str) -> bool:
         """

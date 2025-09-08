@@ -121,9 +121,8 @@ CHINESE_NAME_TEST_CASES = [
 ]
 
 
-def test_name_formatting():
+def test_name_formatting(detector):
     """Test various name formatting patterns including hyphens, commas, periods."""
-    detector = ChineseNameDetector()
 
     passed = 0
     failed = 0

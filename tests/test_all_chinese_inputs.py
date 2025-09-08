@@ -58,9 +58,8 @@ ALL_CHINESE_INPUT_TEST_CASES = [
     ("王小明", (True, "Xiao-Ming Wang")),  # 3 characters should use existing logic
 ]
 
-def test_all_chinese_inputs():
+def test_all_chinese_inputs(detector):
     """Test all-Chinese input processing with surname-first preference."""
-    detector = ChineseNameDetector()
 
     passed = 0
     failed = 0

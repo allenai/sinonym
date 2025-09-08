@@ -104,10 +104,7 @@ MISC_TEST_CASES = [
 ]
 
 
-@pytest.fixture
-def detector():
-    """Create a ChineseNameDetector instance for testing."""
-    return ChineseNameDetector()
+# Local detector fixture removed - using session-scoped fixture from conftest.py
 
 
 def test_misc_chinese_names(detector):

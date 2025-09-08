@@ -132,9 +132,8 @@ CHINESE_NAME_TEST_CASES = [
 ]
 
 
-def test_basic_chinese_names():
+def test_basic_chinese_names(detector):
     """Test basic Chinese names with simple patterns."""
-    detector = ChineseNameDetector()
 
     passed = 0
     failed = 0

@@ -42,9 +42,8 @@ CHINESE_NAME_TEST_CASES = [
 ]
 
 
-def test_mixed_scripts():
+def test_mixed_scripts(detector):
     """Test names with mixed scripts, diacritics, and special characters."""
-    detector = ChineseNameDetector()
 
     passed = 0
     failed = 0

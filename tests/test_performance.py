@@ -40,7 +40,12 @@ class TestChineseNameDetectorPerformance:
         return ChineseNameDetector()
 
     def generate_test_names(self, detector: ChineseNameDetector, count: int) -> list[str]:
-        """Generate diverse Chinese and non-Chinese names for realistic testing."""
+        """Generate diverse Chinese and non-Chinese names for realistic testing.
+        
+        Returns exactly 'count' unique names in a deterministic way by setting random seed.
+        """
+        # Set deterministic seed for reproducible results
+        random.seed(42)
 
         # Use surnames from our data structures
         chinese_surnames = list(detector._data.surnames)[:200]  # Top 200 surnames
@@ -48,43 +53,31 @@ class TestChineseNameDetectorPerformance:
 
         # Common non-Chinese patterns
         western_first = [
-            "John",
-            "Mary",
-            "David",
-            "Sarah",
-            "Michael",
-            "Lisa",
-            "James",
-            "Jennifer",
-            "Robert",
-            "Jessica",
-            "William",
-            "Ashley",
-            "Christopher",
-            "Amanda",
+            "John", "Mary", "David", "Sarah", "Michael", "Lisa", "James", "Jennifer",
+            "Robert", "Jessica", "William", "Ashley", "Christopher", "Amanda",
+            "Thomas", "Elizabeth", "Daniel", "Patricia", "Matthew", "Linda",
         ]
         western_last = [
-            "Smith",
-            "Johnson",
-            "Williams",
-            "Brown",
-            "Jones",
-            "Garcia",
-            "Miller",
-            "Davis",
-            "Rodriguez",
-            "Martinez",
-            "Hernandez",
-            "Lopez",
-            "Gonzalez",
+            "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller",
+            "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez",
+            "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin",
         ]
 
-        korean_names = ["Kim Min Soo", "Park Ji Hoon", "Lee Soo Jin", "Choi Young Hee", "Jung Hye Won"]
-        japanese_names = ["Tanaka Hiroshi", "Suzuki Yuki", "Yamamoto Akira", "Sato Kenji"]
+        korean_names = [
+            "Kim Min Soo", "Park Ji Hoon", "Lee Soo Jin", "Choi Young Hee", "Jung Hye Won",
+            "Lim Da Hye", "Song Ji Ho", "Kang Min Jung", "Yoon Seok Jin", "Han So Young",
+        ]
+        japanese_names = [
+            "Tanaka Hiroshi", "Suzuki Yuki", "Yamamoto Akira", "Sato Kenji",
+            "Watanabe Miki", "Ito Takeshi", "Nakamura Yuki", "Kobayashi Rei",
+        ]
 
-        names = []
+        names = set()  # Use set to ensure uniqueness
+        attempts = 0
+        max_attempts = count * 10  # Prevent infinite loops
 
-        for _ in range(count):
+        while len(names) < count and attempts < max_attempts:
+            attempts += 1
             choice = random.random()
 
             if choice < 0.6:  # 60% Chinese names
@@ -98,22 +91,34 @@ class TestChineseNameDetectorPerformance:
 
                 # Mix surname-first and surname-last orders
                 if random.random() < 0.6:
-                    names.append(f"{given} {surname}")
+                    name = f"{given} {surname}"
                 else:
-                    names.append(f"{surname} {given}")
+                    name = f"{surname} {given}"
+                names.add(name)
 
             elif choice < 0.8:  # 20% Western names
                 first = random.choice(western_first)
                 last = random.choice(western_last)
-                names.append(f"{first} {last}")
+                names.add(f"{first} {last}")
 
             elif choice < 0.9:  # 10% Korean names
-                names.append(random.choice(korean_names))
+                names.add(random.choice(korean_names))
 
             else:  # 10% Japanese names
-                names.append(random.choice(japanese_names))
+                names.add(random.choice(japanese_names))
 
-        return names
+        # Convert to list and ensure deterministic ordering
+        result = sorted(list(names))
+
+        # If we couldn't generate enough unique names, pad with numbered variations
+        if len(result) < count:
+            base_names = result[:]
+            while len(result) < count:
+                base_name = base_names[len(result) % len(base_names)]
+                suffix_num = (len(result) // len(base_names)) + 1
+                result.append(f"{base_name} {suffix_num}")
+
+        return result[:count]  # Ensure exactly 'count' names
 
     def test_performance_diverse_data(self, detector):
         """
