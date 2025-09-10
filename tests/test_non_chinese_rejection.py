@@ -377,7 +377,7 @@ def test_non_chinese_rejection(detector):
     failed = 0
 
     for input_name, expected_result in NON_CHINESE_TEST_CASES:
-        result = detector.is_chinese_name(input_name)
+        result = detector.normalize_name(input_name)
 
         # Extract expected success status from tuple
         expected_success, _ = expected_result

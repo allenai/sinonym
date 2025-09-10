@@ -92,7 +92,7 @@ def test_middle_name_individual(detector):
     failed = 0
 
     for raw, exp in MIDDLE_NAME_INDIVIDUAL_CASES:
-        res = detector.is_chinese_name(raw)
+        res = detector.normalize_name(raw)
 
         if not res.success:
             failed += 1
@@ -293,7 +293,7 @@ def test_middle_name_mixed_individual_and_batch(detector):
     # Individual
     ind_failed = 0
     for raw, exp in MIDDLE_NAME_MIXED_CASES:
-        res = detector.is_chinese_name(raw)
+        res = detector.normalize_name(raw)
         if not res.success:
             ind_failed += 1
             log_failure("Middle name mixed individual (formatted)", raw, True, exp["formatted"], res.success, res.error_message)
@@ -352,3 +352,27 @@ def test_middle_name_mixed_individual_and_batch(detector):
 
     assert batch_failed == 0, f"Middle name mixed batch tests: {batch_failed} failures out of {len(MIDDLE_NAME_MIXED_CASES)} tests"
 
+
+def test_middle_initial_leading_between_surname_and_given(detector):
+    """Ensure a leading single-letter initial in given tokens is treated as middle and original order reflects positions."""
+    raw = "Li A. Wei"
+    res = detector.normalize_name(raw)
+
+    assert res.success, f"Expected success, got error: {res.error_message}"
+
+    # Final formatting should place middle initial between given and surname
+    assert res.result == "Wei A Li"
+
+    # Parsed normalized output order
+    assert res.parsed is not None
+    assert res.parsed.given_tokens == ["Wei"]
+    assert res.parsed.middle_tokens == ["A"]
+    assert res.parsed.surname == "Li"
+
+    # Original-order view: first token is 'Li' (given), last is 'Wei' (surname), middle preserved
+    por = res.parsed_original_order
+    assert por is not None
+    assert por.order == ["surname", "middle", "given"]
+    assert por.given_name == "Li"
+    assert por.surname == "Wei"
+    assert por.middle_tokens == ["A"]

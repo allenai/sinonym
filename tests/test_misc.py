@@ -114,7 +114,7 @@ def test_misc_chinese_names(detector):
 
     for test_input, expected in MISC_TEST_CASES:
         expected_success, expected_output = expected
-        result = detector.is_chinese_name(test_input)
+        result = detector.normalize_name(test_input)
 
         if result.success == expected_success:
             if expected_success:

@@ -333,7 +333,7 @@ def test_acl_chinese_names(detector):
     failed = 0
 
     for input_name, expected_output in ACL_CHINESE_NAMES:
-        result = detector.is_chinese_name(input_name)
+        result = detector.normalize_name(input_name)
         if not result.success or result.result != expected_output:
             failed += 1
             # Uniform failure line format for status parser
@@ -350,7 +350,7 @@ def test_acl_non_chinese_names(detector):
     failed = 0
 
     for name in ACL_NON_CHINESE_NAMES:
-        result = detector.is_chinese_name(name)
+        result = detector.normalize_name(name)
         if result.success:
             failed += 1
             # Uniform failure line format for status parser
@@ -366,7 +366,7 @@ def test_acl_order_preservation(detector):
     failed = 0
 
     for input_name, expected_output in ACL_ORDER_PRESERVATION_TEST_CASES:
-        result = detector.is_chinese_name(input_name)
+        result = detector.normalize_name(input_name)
         expected_success = True
         if not result.success or result.result != expected_output:
             failed += 1
@@ -396,7 +396,7 @@ def analyze_acl_2025_authors(detector):
 
     for author in authors:
         try:
-            result = detector.is_chinese_name(author)
+            result = detector.normalize_name(author)
             if result.success:
                 chinese_names.append((author, result.result))
             else:

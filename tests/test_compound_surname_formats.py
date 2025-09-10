@@ -78,7 +78,7 @@ def test_compound_surname_format_preservation(detector):
     failed = 0
 
     for input_name, expected_result in COMPOUND_SURNAME_TEST_CASES:
-        result = detector.is_chinese_name(input_name)
+        result = detector.normalize_name(input_name)
 
         # Extract expected success status and name from tuple
         expected_success, expected_name = expected_result

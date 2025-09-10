@@ -247,14 +247,30 @@ class NameFormattingService:
                 formatted_parts.append(cap)
                 given_tokens_final.append(cap)
 
-        # Determine given separator (mirror format_name_output) and split out trailing initials
+        # Determine given separator (mirror format_name_output)
+        # Also peel leading/trailing single-letter initials into middle tokens when appropriate
         middle_tokens_final: list[str] = []
         if len(formatted_parts) > 1:
             part_lengths = [len(part.replace("-", "")) for part in formatted_parts]
             has_single_char = any(length == 1 for length in part_lengths)
             has_multi_char = any(length > 1 for length in part_lengths)
 
-            # trailing run of single-letter initials → middle tokens
+            # leading run of single-letter initials → middle tokens (only if followed by any multi-char part)
+            leading_count = 0
+            for length in part_lengths:
+                if length == 1:
+                    leading_count += 1
+                else:
+                    break
+
+            if leading_count > 0 and any(l > 1 for l in part_lengths[leading_count:]):
+                middle_tokens_final.extend(formatted_parts[:leading_count])
+                formatted_parts = formatted_parts[leading_count:]
+                part_lengths = part_lengths[leading_count:]
+                if len(given_tokens_final) >= leading_count:
+                    given_tokens_final = given_tokens_final[leading_count:]
+
+            # trailing run of single-letter initials → middle tokens (only if preceded by any multi-char part)
             trailing_count = 0
             for length in reversed(part_lengths):
                 if length == 1:
@@ -263,7 +279,7 @@ class NameFormattingService:
                     break
 
             if trailing_count > 0 and any(l > 1 for l in part_lengths[:-trailing_count]):
-                middle_tokens_final = formatted_parts[-trailing_count:]
+                middle_tokens_final.extend(formatted_parts[-trailing_count:])
                 primary_parts = formatted_parts[:-trailing_count]
 
                 if len(primary_parts) > 1:
@@ -277,13 +293,20 @@ class NameFormattingService:
                 else:
                     given_str = primary_parts[0] if primary_parts else ""
 
-                # Remove the middle initials from the given token list
+                # Remove the trailing middle initials from the given token list
                 if trailing_count > 0 and len(given_tokens_final) >= trailing_count:
                     given_tokens_final = given_tokens_final[:-trailing_count]
-            elif has_single_char and has_multi_char:
-                given_str = StringManipulationUtils.join_with_spaces(formatted_parts)
+            elif len(formatted_parts) > 1:
+                # Mixed lengths remain in given – choose separator
+                part_lengths = [len(part.replace("-", "")) for part in formatted_parts]
+                has_single_char = any(length == 1 for length in part_lengths)
+                has_multi_char = any(length > 1 for length in part_lengths)
+                if has_single_char and has_multi_char:
+                    given_str = StringManipulationUtils.join_with_spaces(formatted_parts)
+                else:
+                    given_str = StringManipulationUtils.join_with_hyphens(formatted_parts)
             else:
-                given_str = StringManipulationUtils.join_with_hyphens(formatted_parts)
+                given_str = formatted_parts[0] if formatted_parts else ""
         else:
             given_str = formatted_parts[0] if formatted_parts else ""
 

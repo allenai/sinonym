@@ -34,7 +34,7 @@ def run_single_measurement(detector, names, enable_profiling=True):
 
     start = time.perf_counter()
     for name in names:
-        detector.is_chinese_name(name)
+        detector.normalize_name(name)
     end = time.perf_counter()
 
     if enable_profiling:
@@ -58,7 +58,7 @@ def main():
     print("Pre-warming caches...")
     # Full warm-up to ensure all code paths are exercised
     for name in names:  # Warm up with ALL names to fully load caches
-        detector.is_chinese_name(name)
+        detector.normalize_name(name)
 
     print("Caches fully warmed. Now measuring warm performance...")
 

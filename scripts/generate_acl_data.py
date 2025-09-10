@@ -61,7 +61,7 @@ def filter_chinese_names(authors):
             continue
 
         # Test with our detector
-        result = detector.is_chinese_name(author)
+        result = detector.normalize_name(author)
         if result.success:
             # Parse the result to extract surname and given parts
             formatted_name = result.result  # e.g., "Wei-Ming Zhang"
@@ -162,7 +162,7 @@ def convert_to_training_format(chinese_names, detector):
         # If we couldn't identify the correct parse based on position,
         # use the detector's actual output as the correct parse
         if not correct_parse:
-            result = detector.is_chinese_name(original)
+            result = detector.normalize_name(original)
             if result.success:
                 # Parse the formatted result to extract correct parse
                 formatted = result.result  # "Wei-Ming Zhang"

@@ -305,7 +305,7 @@ def test_batch_vs_individual_consistency(detector):
     batch_result = detector.analyze_name_batch(names)
 
     # Process individually
-    individual_results = [detector.is_chinese_name(name) for name in names]
+    individual_results = [detector.normalize_name(name) for name in names]
 
     # Results should be consistent (though format might differ due to batch logic)
     assert len(batch_result.results) == len(individual_results)

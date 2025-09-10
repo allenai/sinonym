@@ -65,7 +65,7 @@ def test_all_chinese_inputs(detector):
     failed = 0
 
     for input_name, expected in ALL_CHINESE_INPUT_TEST_CASES:
-        result = detector.is_chinese_name(input_name)
+        result = detector.normalize_name(input_name)
         # Convert ParseResult to tuple format for comparison
         result_tuple = (result.success, result.result if result.success else result.error_message)
 

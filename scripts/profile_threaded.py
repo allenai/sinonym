@@ -29,7 +29,7 @@ def test_single_thread(names: list[str], detector: ChineseNameDetector) -> tuple
     start_time = time.perf_counter()
     results = []
     for name in names:
-        result = detector.is_chinese_name(name)
+        result = detector.normalize_name(name)
         results.append((name, result.success))
     end_time = time.perf_counter()
     return end_time - start_time, results
@@ -120,7 +120,7 @@ def main():
     # Pre-warm caches
     print("Pre-warming caches...")
     for name in test_names[:100]:
-        detector.is_chinese_name(name)
+        detector.normalize_name(name)
 
     print("Running multi-threaded tests with statistical analysis...")
     print()

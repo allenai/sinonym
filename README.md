@@ -174,31 +174,31 @@ from sinonym.detector import ChineseNameDetector
 detector = ChineseNameDetector()
 
 # --- Example 1: A simple Chinese name ---
-result = detector.is_chinese_name("Li Wei")
+result = detector.normalize_name("Li Wei")
 if result.success:
     print(f"Normalized Name: {result.result}")
     # Expected Output: Normalized Name: Wei Li
 
 # --- Example 2: A compound given name ---
-result = detector.is_chinese_name("Wang Weiming")
+result = detector.normalize_name("Wang Weiming")
 if result.success:
     print(f"Normalized Name: {result.result}")
     # Expected Output: Normalized Name: Wei-Ming Wang
 
 # --- Example 3: An all-Chinese character name ---
-result = detector.is_chinese_name("巩俐")
+result = detector.normalize_name("巩俐")
 if result.success:
     print(f"Normalized Name: {result.result}")
     # Expected Output: Normalized Name: Li Gong
 
 # --- Example 4: A non-Chinese name ---
-result = detector.is_chinese_name("John Smith")
+result = detector.normalize_name("John Smith")
 if not result.success:
     print(f"Error: {result.error_message}")
     # Expected Output: Error: name not recognised as Chinese
 
 # --- Example 5: Japanese name in Chinese characters (ML-enhanced detection) ---
-result = detector.is_chinese_name("山田太郎")
+result = detector.normalize_name("山田太郎")
 if not result.success:
     print(f"Error: {result.error_message}")
     # Expected Output: Error: Japanese name detected by ML classifier
@@ -224,13 +224,50 @@ if pattern.threshold_met:
 else:
     print("Mixed formatting detected - process individually")
 
-# --- Example 8: Simple batch processing for data cleanup ---
-messy_names = ["Li, Wei", "Zhang.Ming", "Wang Xiaoli"]
-clean_results = detector.process_name_batch(messy_names)
-for original, clean in zip(messy_names, clean_results):
-    if clean.success:
-        print(f"Cleaned: '{original}' → '{clean.result}'")
-    # Expected Output: Li, Wei → Wei Li, Zhang.Ming → Ming Zhang, etc.
+  # --- Example 8: Simple batch processing for data cleanup ---
+  messy_names = ["Li, Wei", "Zhang.Ming", "Wang Xiaoli"]
+  clean_results = detector.process_name_batch(messy_names)
+  for original, clean in zip(messy_names, clean_results):
+      if clean.success:
+          print(f"Cleaned: '{original}' → '{clean.result}'")
+      # Expected Output: Li, Wei → Wei Li, Zhang.Ming → Ming Zhang, etc.
+```
+
+## Parse Results
+
+When you call `normalize_name`, you get a `ParseResult` with helpful structured fields:
+
+- `success`: True/False indicating recognition as Chinese
+- `result`: Final formatted string in `Given-Name Surname` order
+- `parsed`: A `ParsedName` with normalized components in output order
+  - `surname`, `given_name`: component strings as in `result`
+  - `surname_tokens`, `given_tokens`: normalized, capitalized tokens used to form components
+  - `middle_tokens`: trailing single-letter initials extracted from given name, if present
+  - `order`: component order descriptor, typically `["given", "middle", "surname"]`
+- `parsed_original_order`: A `ParsedName` aligned to the input’s original order. In this view, the labels are positional: `given` corresponds to the first component(s) in the original input, and `surname` to the last component(s), regardless of the semantic roles used for normalization.
+
+Notes:
+- The tokens in `parsed` and `parsed_original_order` are the same normalized tokens; only the conceptual ordering differs via the `order` list.
+- `middle_tokens` are preserved in both structures and included between given and surname when present.
+
+Examples:
+
+```python
+res = detector.normalize_name("Li Wei")
+# res.result == "Wei Li"
+# res.parsed.order == ["given", "middle", "surname"]
+# res.parsed_original_order.order == ["surname", "given"]
+# res.parsed_original_order.given_name == "Li"   # first in input
+# res.parsed_original_order.surname == "Wei"     # last in input
+
+res = detector.normalize_name("Chi-Ying F. Huang")
+# res.result == "Chi-Ying F Huang"
+# res.parsed.given_tokens == ["Chi", "Ying"]
+# res.parsed.middle_tokens == ["F"]
+# res.parsed.order == ["given", "middle", "surname"]
+# res.parsed_original_order.order == ["given", "middle", "surname"]
+# res.parsed_original_order.given_name == "Chi-Ying"
+# res.parsed_original_order.surname == "Huang"
 ```
 
 ## Batch Processing for Consistent Formatting

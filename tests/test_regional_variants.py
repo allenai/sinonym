@@ -62,7 +62,7 @@ def test_regional_variants(detector):
     failed = 0
 
     for input_name, expected in CHINESE_NAME_TEST_CASES:
-        result = detector.is_chinese_name(input_name)
+        result = detector.normalize_name(input_name)
         # Convert ParseResult to tuple format for comparison
         result_tuple = (result.success, result.result if result.success else result.error_message)
 

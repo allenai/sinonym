@@ -12,7 +12,13 @@ from enum import Enum
 
 @dataclass(frozen=True)
 class ParsedName:
-    """Parsed name with surname and given name components."""
+    """Parsed name with surname and given name components.
+
+    The optional 'order' field records the component order for how these
+    parts appear when combined. For normalized output this is typically
+    ["given", "middle", "surname"], while for original input order it may
+    be ["surname", "given", "middle"], etc.
+    """
     surname: str
     given_name: str
     surname_tokens: list[str]
@@ -20,6 +26,8 @@ class ParsedName:
     # Optional middle name components (e.g., single-letter initials)
     middle_name: str = ""
     middle_tokens: list[str] = field(default_factory=list)
+    # Component order helper (values drawn from {"given","middle","surname"})
+    order: list[str] = field(default_factory=lambda: ["given", "middle", "surname"]) 
 
 
 @dataclass(frozen=True)
@@ -31,8 +39,10 @@ class ParseResult:
     error_message: str | None = None
     # Original compound surname format (preserves input format like "Duanmu" vs "Duan-Mu")
     original_compound_surname: str | None = None
-    # Structured parsed components when available
+    # Structured parsed components when available (normalized output order)
     parsed: ParsedName | None = None
+    # Structured parsed components in the original input order
+    parsed_original_order: ParsedName | None = None
 
     @classmethod
     def success_with_name(
@@ -40,6 +50,7 @@ class ParseResult:
         formatted_name: str,
         original_compound_surname: str | None = None,
         parsed: ParsedName | None = None,
+        parsed_original_order: ParsedName | None = None,
     ) -> ParseResult:
         """Create a successful result with final formatted name.
 
@@ -52,6 +63,7 @@ class ParseResult:
             error_message=None,
             original_compound_surname=original_compound_surname,
             parsed=parsed,
+            parsed_original_order=parsed_original_order,
         )
 
     @classmethod
@@ -79,6 +91,7 @@ class ParseResult:
             error_message=None,
             original_compound_surname=original_compound_surname,
             parsed=parsed,
+            parsed_original_order=None,
         )
 
     @classmethod
@@ -93,6 +106,7 @@ class ParseResult:
                     f(self.result),
                     self.original_compound_surname,
                     self.parsed,
+                    self.parsed_original_order,
                 )
             except Exception as e:
                 return ParseResult.failure(str(e))
@@ -111,6 +125,7 @@ class ParseResult:
                         result.error_message,
                         self.original_compound_surname,
                         result.parsed,
+                        result.parsed_original_order,
                     )
                 return result
             except Exception as e:

@@ -470,8 +470,37 @@ class BatchAnalysisService:
                 given_tokens=given_final,
                 middle_name=" ".join(middle_tokens) if middle_tokens else "",
                 middle_tokens=middle_tokens,
+                order=["given", "middle", "surname"],
             )
-            return ParseResult.success_with_name(formatted_name, parsed=parsed)
+            # Determine original order from candidate format and assign fields
+            if candidate.format == NameFormat.GIVEN_FIRST:
+                order_list = ["given"] + (["middle"] if middle_tokens else []) + ["surname"]
+                parsed_original_order = ParsedName(
+                    surname=surname_str,
+                    given_name=given_str,
+                    surname_tokens=surname_final,
+                    given_tokens=given_final,
+                    middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                    middle_tokens=middle_tokens,
+                    order=order_list,
+                )
+            else:
+                order_list = ["surname"] + (["middle"] if middle_tokens else []) + ["given"]
+                # Original: surname-first → swap labels so first part maps to given
+                parsed_original_order = ParsedName(
+                    surname=given_str,
+                    given_name=surname_str,
+                    surname_tokens=given_final,
+                    given_tokens=surname_final,
+                    middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                    middle_tokens=middle_tokens,
+                    order=order_list,
+                )
+            return ParseResult.success_with_name(
+                formatted_name,
+                parsed=parsed,
+                parsed_original_order=parsed_original_order,
+            )
         except ValueError as e:
             return ParseResult.failure(str(e))
 

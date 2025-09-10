@@ -183,7 +183,7 @@ class TestChineseNameDetectorPerformance:
         start_time = time.perf_counter()
         results = []
         for name in test_names:
-            result = detector.is_chinese_name(name)
+            result = detector.normalize_name(name)
             results.append(result)
         end_time = time.perf_counter()
 

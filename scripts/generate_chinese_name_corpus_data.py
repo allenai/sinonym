@@ -460,7 +460,7 @@ def process_names_batch(
                 continue  # Skip names that don't have valid surnames
 
             # Use the detector's preprocessing to get proper tokens
-            result = detector.is_chinese_name(romanized_name)
+            result = detector.normalize_name(romanized_name)
             if not result.success:
                 continue
 

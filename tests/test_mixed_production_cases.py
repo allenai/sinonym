@@ -259,7 +259,7 @@ def test_mixed_cases(detector):
     failed = 0
 
     for input_name, expected_result in MIXED_TEST_CASES:
-        result = detector.is_chinese_name(input_name)
+        result = detector.normalize_name(input_name)
 
         # Extract expected success status and name from tuple
         expected_success, expected_name = expected_result

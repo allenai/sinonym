@@ -73,22 +73,22 @@ correctly handling Chinese compounds (e.g., "Weiming" → "Wei", "Ming").
 
 # Basic usage
 detector = ChineseNameDetector()
-result = detector.is_chinese_name("Zhang Wei")
+result = detector.normalize_name("Zhang Wei")
 # Returns: ParseResult(success=True, result="Wei Zhang")
 
 # Compound given names
-result = detector.is_chinese_name("Li Weiming")
+result = detector.normalize_name("Li Weiming")
 # Returns: ParseResult(success=True, result="Wei-Ming Li")
 
 # Mixed scripts
-result = detector.is_chinese_name("张Wei Ming")
+result = detector.normalize_name("张Wei Ming")
 # Returns: ParseResult(success=True, result="Wei-Ming Zhang")
 
 # Non-Chinese names (correctly rejected)
-result = detector.is_chinese_name("John Smith")
+result = detector.normalize_name("John Smith")
 # Returns: ParseResult(success=False, error_message="surname not recognised")
 
-result = detector.is_chinese_name("Kim Min-jun")
+result = detector.normalize_name("Kim Min-jun")
 # Returns: ParseResult(success=False, error_message="appears to be Korean name")
 
 # Access result data
@@ -151,7 +151,7 @@ The module provides detailed error messages for debugging:
 
 The main class is `ChineseNameDetector`:
 - `ChineseNameDetector()`: Main detector class
-- `detector.is_chinese_name(name) -> ParseResult`: Returns structured result with success/error
+- `detector.normalize_name(name) -> ParseResult`: Returns structured result with success/error
 - `ParseResult.success`: Boolean indicating if name was recognized as Chinese
 - `ParseResult.result`: Formatted name if successful
 - `ParseResult.error_message`: Error description if failed
@@ -246,7 +246,7 @@ class ChineseNameDetector:
         """Get cache information."""
         return self._cache_service.get_cache_info()
 
-    def is_chinese_name(self, raw_name: str) -> ParseResult:
+    def normalize_name(self, raw_name: str) -> ParseResult:
         """
         Main API method: Detect if a name is Chinese and normalize it.
 
@@ -328,8 +328,38 @@ class ChineseNameDetector:
                         given_tokens=given_final,
                         middle_name=" ".join(middle_tokens) if middle_tokens else "",
                         middle_tokens=middle_tokens,
+                        order=["given", "middle", "surname"],
                     )
-                    return ParseResult.success_with_name(formatted_name, parsed=parsed)
+                    # Determine original input order and assign components accordingly
+                    if token1_is_surname:
+                        # Original: surname-first → in original-order view, first part is "given"
+                        order_list = ["surname", "given"]
+                        parsed_original_order = ParsedName(
+                            surname=given_str,
+                            given_name=surname_str,
+                            surname_tokens=given_final,
+                            given_tokens=surname_final,
+                            middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                            middle_tokens=middle_tokens,
+                            order=order_list,
+                        )
+                    else:
+                        # Original: given-first (or token2 surname) → keep labels
+                        order_list = ["given", "surname"]
+                        parsed_original_order = ParsedName(
+                            surname=surname_str,
+                            given_name=given_str,
+                            surname_tokens=surname_final,
+                            given_tokens=given_final,
+                            middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                            middle_tokens=middle_tokens,
+                            order=order_list,
+                        )
+                    return ParseResult.success_with_name(
+                        formatted_name,
+                        parsed=parsed,
+                        parsed_original_order=parsed_original_order,
+                    )
                 except ValueError as e:
                     return ParseResult.failure(str(e))
         elif is_all_chinese and len(normalized_input.roman_tokens) == 3:
@@ -371,8 +401,23 @@ class ChineseNameDetector:
                         given_tokens=given_final,
                         middle_name=" ".join(middle_tokens) if middle_tokens else "",
                         middle_tokens=middle_tokens,
+                        order=["given", "middle", "surname"],
                     )
-                    return ParseResult.success_with_name(formatted_name, parsed=parsed)
+                    # For 3-character all-Chinese, original order is surname-first → swap labels
+                    parsed_original_order = ParsedName(
+                        surname=given_str,
+                        given_name=surname_str,
+                        surname_tokens=given_final,
+                        given_tokens=surname_final,
+                        middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                        middle_tokens=middle_tokens,
+                        order=["surname", "given"],
+                    )
+                    return ParseResult.success_with_name(
+                        formatted_name,
+                        parsed=parsed,
+                        parsed_original_order=parsed_original_order,
+                    )
                 except ValueError as e:
                     return ParseResult.failure(str(e))
         else:
@@ -401,12 +446,58 @@ class ChineseNameDetector:
                             given_tokens=given_final,
                             middle_name=" ".join(middle_tokens) if middle_tokens else "",
                             middle_tokens=middle_tokens,
+                            order=["given", "middle", "surname"],
                         )
-                        return ParseResult.success_with_name(formatted_name, parsed=parsed)
+                        # Determine original input order relative to detected parse
+                        used_original = order == normalized_input.roman_tokens
+                        k = len(surname_tokens)
+                        is_surname_first_in_this_order = list(order[:k]) == surname_tokens
+                        is_surname_last_in_this_order = list(order[-k:]) == surname_tokens
+
+                        if used_original:
+                            original_is_given_first = is_surname_last_in_this_order
+                        else:
+                            original_is_given_first = is_surname_first_in_this_order
+
+                        if original_is_given_first:
+                            order_list = ["given"] + (["middle"] if middle_tokens else []) + ["surname"]
+                            # Keep labels as-is
+                            parsed_original_order = ParsedName(
+                                surname=surname_str,
+                                given_name=given_str,
+                                surname_tokens=surname_final,
+                                given_tokens=given_final,
+                                middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                                middle_tokens=middle_tokens,
+                                order=order_list,
+                            )
+                        else:
+                            order_list = ["surname"] + (["middle"] if middle_tokens else []) + ["given"]
+                            # Original: surname-first → swap labels to reflect "first part" as given
+                            parsed_original_order = ParsedName(
+                                surname=given_str,
+                                given_name=surname_str,
+                                surname_tokens=given_final,
+                                given_tokens=surname_final,
+                                middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                                middle_tokens=middle_tokens,
+                                order=order_list,
+                            )
+
+                        return ParseResult.success_with_name(
+                            formatted_name,
+                            parsed=parsed,
+                            parsed_original_order=parsed_original_order,
+                        )
                     except ValueError as e:
                         return ParseResult.failure(str(e))
 
         return ParseResult.failure("name not recognised as Chinese")
+
+    # Backwards compatibility alias
+    def is_chinese_name(self, raw_name: str) -> ParseResult:  # pragma: no cover - thin wrapper
+        """Deprecated: use normalize_name(). Maintained for compatibility."""
+        return self.normalize_name(raw_name)
 
     def analyze_name_batch(
         self,
@@ -439,7 +530,7 @@ class ChineseNameDetector:
 
         if self._batch_analysis_service is None:
             # Fallback to individual processing if batch service not available
-            individual_results = [self.is_chinese_name(name) for name in names]
+            individual_results = [self.normalize_name(name) for name in names]
             return self._create_fallback_batch_result(names, individual_results)
 
         # Configure threshold for this analysis
@@ -520,7 +611,7 @@ class ChineseNameDetector:
         Process a batch of names and return just the parse results.
 
         This is a convenience method that returns only the ParseResult list
-        from batch analysis, similar to calling is_chinese_name() on each name
+        from batch analysis, similar to calling normalize_name() on each name
         but with batch format detection applied.
 
         Args:
