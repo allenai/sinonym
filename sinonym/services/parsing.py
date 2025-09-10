@@ -38,17 +38,16 @@ class NameParsingService:
         if weights and len(weights) == 8:
             self._weights = weights
         else:
-            # Default weights (optimized 8-feature system - 118 failures)
-            # Removed given name comparative features as they don't improve performance
+            # Default weights (8 features)
             self._weights = [
-                0.465,  # surname_logp
-                0.395,  # given_logp_sum
+                0.465,   # surname_logp
+                0.395,   # given_logp_sum
                 -0.888,  # surname_rank_bonus
-                1.348,  # compound_given_bonus
-                1.102,  # order_preservation_bonus
-                0.425,  # surname_first_bonus
+                1.348,   # compound_given_bonus
+                1.102,   # order_preservation_bonus
+                0.425,   # surname_first_bonus
                 -0.042,  # surname_freq_log_ratio (log-based comparative feature)
-                -0.873,  # surname_rank_difference (comparative feature)
+                -0.573,  # surname_rank_difference (comparative feature)
             ]
 
 

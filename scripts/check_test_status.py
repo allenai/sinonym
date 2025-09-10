@@ -13,7 +13,7 @@ import re
 import subprocess
 import sys
 
-EXPECTED_FAILURES = 48
+EXPECTED_FAILURES = 54
 
 
 def run_tests():

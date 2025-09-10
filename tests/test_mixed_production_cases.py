@@ -218,6 +218,39 @@ MIXED_TEST_CASES = [
     ("Li Zhen Qiang", (True, "Zhen-Qiang Li")),
 ]
 
+# Additional mixed production cases
+MIXED_TEST_CASES += [
+    ("bin han", (True, "Bin Han")),
+    ("bing liu", (True, "Bing Liu")),
+    ("chao liu", (True, "Chao Liu")),
+    ("feng xiaobing", (True, "Xiao-Bing Feng")),
+    ("he lili", (True, "Li-Li He")),
+    ("jian li", (True, "Jian Li")),
+    ("jian zhang", (True, "Jian Zhang")),
+    ("jun sun", (True, "Jun Sun")),
+    ("ke chen", (True, "Ke Chen")),
+    ("lei zhang", (True, "Lei Zhang")),
+    ("li fei fei", (True, "Fei-Fei Li")),
+    ("li keqin", (True, "Ke-Qin Li")),
+    ("ling ma", (True, "Ling Ma")),
+    ("liu chao", (True, "Chao Liu")),
+    ("ma xiaojing", (True, "Xiao-Jing Ma")),
+    ("mi zhang", (True, "Mi Zhang")),
+    ("ping gao", (True, "Ping Gao")),
+    ("rui zhou", (True, "Rui Zhou")),
+    ("wang jing", (True, "Jing Wang")),
+    ("wang liang", (True, "Liang Wang")),
+    ("wang rui", (True, "Rui Wang")),
+    ("wang wei ping", (True, "Wei-Ping Wang")),
+    ("xu feng", (True, "Feng Xu")),
+    ("yang guang", (True, "Guang Yang")),
+    ("yang jun", (True, "Jun Yang")),
+    ("ying he", (True, "Ying He")),
+    ("zeng bin", (True, "Bin Zeng")),
+    ("zhang ping", (True, "Ping Zhang")),
+    ("zhang yi", (True, "Yi Zhang")),
+]
+
 
 def test_mixed_cases(detector):
     """Test mixed cases from production results."""

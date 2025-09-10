@@ -3,7 +3,14 @@ Pytest configuration and fixtures for sinonym test suite.
 
 This module provides shared fixtures to optimize test performance by avoiding
 repeated expensive initialization of ChineseNameDetector instances.
+
+Also supports injecting candidate weight vectors via the optional
+environment variable `SINONYM_WEIGHTS` (JSON-encoded list of 8 floats), to
+enable automated optimization scripts to evaluate weight configurations.
 """
+
+import json
+import os
 
 import pytest
 from sinonym import ChineseNameDetector
@@ -24,7 +31,18 @@ def detector():
     Returns:
         ChineseNameDetector: Fully initialized detector instance
     """
-    return ChineseNameDetector()
+    # Optionally override weight vector via environment for optimization runs
+    weights = None
+    raw = os.getenv("SINONYM_WEIGHTS")
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list) and len(parsed) == 8:
+                weights = [float(x) for x in parsed]
+        except Exception:
+            weights = None
+
+    return ChineseNameDetector(weights=weights)
 
 
 @pytest.fixture(scope="session") 
@@ -34,4 +52,4 @@ def fast_detector():
     
     Some tests may prefer this name to emphasize performance optimization.
     """
-    return ChineseNameDetector()
+    return detector()

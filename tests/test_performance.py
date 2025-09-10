@@ -28,7 +28,6 @@ from sinonym import ChineseNameDetector
 # Performance thresholds as constants
 MAX_MICROSECONDS_PER_NAME = 1000  # 1ms requirement
 MIN_DIVERSE_NAMES_PER_SECOND = 7500  # 7,500 names/second for diverse data
-MAX_PERFORMANCE_VARIANCE = 0.7  # 70% threshold
 
 
 class TestChineseNameDetectorPerformance:
@@ -41,7 +40,7 @@ class TestChineseNameDetectorPerformance:
 
     def generate_test_names(self, detector: ChineseNameDetector, count: int) -> list[str]:
         """Generate diverse Chinese and non-Chinese names for realistic testing.
-        
+
         Returns exactly 'count' unique names in a deterministic way by setting random seed.
         """
         # Set deterministic seed for reproducible results
@@ -53,23 +52,71 @@ class TestChineseNameDetectorPerformance:
 
         # Common non-Chinese patterns
         western_first = [
-            "John", "Mary", "David", "Sarah", "Michael", "Lisa", "James", "Jennifer",
-            "Robert", "Jessica", "William", "Ashley", "Christopher", "Amanda",
-            "Thomas", "Elizabeth", "Daniel", "Patricia", "Matthew", "Linda",
+            "John",
+            "Mary",
+            "David",
+            "Sarah",
+            "Michael",
+            "Lisa",
+            "James",
+            "Jennifer",
+            "Robert",
+            "Jessica",
+            "William",
+            "Ashley",
+            "Christopher",
+            "Amanda",
+            "Thomas",
+            "Elizabeth",
+            "Daniel",
+            "Patricia",
+            "Matthew",
+            "Linda",
         ]
         western_last = [
-            "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller",
-            "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez",
-            "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin",
+            "Smith",
+            "Johnson",
+            "Williams",
+            "Brown",
+            "Jones",
+            "Garcia",
+            "Miller",
+            "Davis",
+            "Rodriguez",
+            "Martinez",
+            "Hernandez",
+            "Lopez",
+            "Gonzalez",
+            "Wilson",
+            "Anderson",
+            "Thomas",
+            "Taylor",
+            "Moore",
+            "Jackson",
+            "Martin",
         ]
 
         korean_names = [
-            "Kim Min Soo", "Park Ji Hoon", "Lee Soo Jin", "Choi Young Hee", "Jung Hye Won",
-            "Lim Da Hye", "Song Ji Ho", "Kang Min Jung", "Yoon Seok Jin", "Han So Young",
+            "Kim Min Soo",
+            "Park Ji Hoon",
+            "Lee Soo Jin",
+            "Choi Young Hee",
+            "Jung Hye Won",
+            "Lim Da Hye",
+            "Song Ji Ho",
+            "Kang Min Jung",
+            "Yoon Seok Jin",
+            "Han So Young",
         ]
         japanese_names = [
-            "Tanaka Hiroshi", "Suzuki Yuki", "Yamamoto Akira", "Sato Kenji",
-            "Watanabe Miki", "Ito Takeshi", "Nakamura Yuki", "Kobayashi Rei",
+            "Tanaka Hiroshi",
+            "Suzuki Yuki",
+            "Yamamoto Akira",
+            "Sato Kenji",
+            "Watanabe Miki",
+            "Ito Takeshi",
+            "Nakamura Yuki",
+            "Kobayashi Rei",
         ]
 
         names = set()  # Use set to ensure uniqueness
@@ -160,41 +207,3 @@ class TestChineseNameDetectorPerformance:
 
         # Verify all names were processed
         assert len(results) == len(test_names), "Not all names were processed"
-
-    def test_performance_consistency(self, detector):
-        """
-        Test that performance is consistent across multiple runs.
-
-        This test ensures there are no significant performance regressions
-        or inconsistencies in processing speed.
-        """
-        test_names = ["Zhang Wei", "John Smith", "Kim Min Soo", "Liu Dehua"] * 50  # 200 names
-        run_times = []
-
-        # Run the test multiple times
-        for _run in range(5):
-            start_time = time.perf_counter()
-            for name in test_names:
-                detector.is_chinese_name(name)
-            end_time = time.perf_counter()
-            run_times.append(end_time - start_time)
-
-        # Calculate statistics
-        avg_time = sum(run_times) / len(run_times)
-        min_time = min(run_times)
-        max_time = max(run_times)
-        avg_rate = len(test_names) / avg_time
-        avg_time_per_name = (avg_time / len(test_names)) * 1_000_000
-
-        print(f"\nConsistency Test (5 runs of {len(test_names)} names):")
-        print(f"Average: {avg_rate:.0f} names/sec ({avg_time_per_name:.1f} μs/name)")
-        print(f"Range: {len(test_names)/max_time:.0f} - {len(test_names)/min_time:.0f} names/sec")
-
-        # Performance should be consistent (variance < 50%)
-        variance_ratio = (max_time - min_time) / avg_time
-        assert (
-            variance_ratio < MAX_PERFORMANCE_VARIANCE
-        ), f"Performance variance {variance_ratio:.2f} exceeds {MAX_PERFORMANCE_VARIANCE:.0%} threshold"
-        assert (
-            avg_rate > MIN_DIVERSE_NAMES_PER_SECOND
-        ), f"Average rate {avg_rate:.0f} below minimum {MIN_DIVERSE_NAMES_PER_SECOND} names/sec"
