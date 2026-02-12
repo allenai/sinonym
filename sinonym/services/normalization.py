@@ -217,17 +217,8 @@ class NormalizationService:
                         roman_tokens_split.extend(parts)
                     # Use centralized split_concat method if available
                     elif self._data:
-                        # Create expanded normalized cache including potential splits to reduce redundant normalizations
+                        # Seed cache with the full token; split helper fills additional entries on demand.
                         local_cache = {clean_token: self._text_normalizer.normalize_token(clean_token)}
-
-                        # Pre-populate cache with likely split candidates to avoid redundant normalization
-                        if len(clean_token) >= 4:  # Only for tokens that could reasonably split
-                            for i in range(2, len(clean_token) - 1):  # Split positions
-                                part1, part2 = clean_token[:i], clean_token[i:]
-                                if part1 not in local_cache:
-                                    local_cache[part1] = self._text_normalizer.normalize_token(part1)
-                                if part2 not in local_cache:
-                                    local_cache[part2] = self._text_normalizer.normalize_token(part2)
 
                         split_result = StringManipulationUtils.split_concatenated_name(
                             clean_token,

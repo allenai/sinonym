@@ -564,6 +564,11 @@ class EthnicityClassificationService:
             # Handle both original and normalized forms
             key_to_normalized[key] = normalized_cache.get(key, key)
 
+        # Local memoization for repeated split/component checks
+        split_result_cache: dict[str, list[str] | None] = {}
+        split_component_validity_cache: dict[tuple[str, ...], bool] = {}
+        component_normalized_cache: dict[str, str] = {}
+
         for key in expanded_keys:
             clean_key = StringManipulationUtils.remove_spaces(key)
             clean_key_lower = clean_key.lower()
@@ -603,17 +608,37 @@ class EthnicityClassificationService:
                         chinese_surname_strength += 1.0
             else:
                 # NEW: Check if this could be a compound Chinese given name
-                split_result = StringManipulationUtils.split_concatenated_name(
-                    clean_key_lower, normalized_cache, self._data, self._normalizer, self._config,
-                )
+                if clean_key_lower in split_result_cache:
+                    split_result = split_result_cache[clean_key_lower]
+                else:
+                    split_result = StringManipulationUtils.split_concatenated_name(
+                        clean_key_lower,
+                        normalized_cache,
+                        self._data,
+                        self._normalizer,
+                        self._config,
+                    )
+                    split_result_cache[clean_key_lower] = split_result
+
                 if split_result and len(split_result) >= 2:
-                    # Check if all components are valid Chinese given name components
-                    all_chinese_components = True
-                    for component in split_result:
-                        comp_normalized = self._normalizer.norm(component)
-                        if comp_normalized not in self._data.given_names_normalized:
-                            all_chinese_components = False
-                            break
+                    split_result_key = tuple(split_result)
+                    if split_result_key in split_component_validity_cache:
+                        all_chinese_components = split_component_validity_cache[split_result_key]
+                    else:
+                        # Check if all components are valid Chinese given name components
+                        all_chinese_components = True
+                        for component in split_result:
+                            if component in component_normalized_cache:
+                                comp_normalized = component_normalized_cache[component]
+                            else:
+                                comp_normalized = self._normalizer.norm(component)
+                                component_normalized_cache[component] = comp_normalized
+
+                            if comp_normalized not in self._data.given_names_normalized:
+                                all_chinese_components = False
+                                break
+
+                        split_component_validity_cache[split_result_key] = all_chinese_components
 
                     if all_chinese_components:
                         # Add modest boost for compound given names (helps cases like "Beining")

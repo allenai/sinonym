@@ -8,6 +8,7 @@ validation patterns.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
@@ -57,14 +58,25 @@ class NameParsingService:
         normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
     ) -> ParseResult:
-        """Parse using rule-based system with fallback - pattern matching style."""
-        # Try probabilistic parsing first
-        parse_result = self._best_parse(order, normalized_cache, compound_metadata)
+        """Parse and return ParseResult for compatibility with external callers."""
+        parsed = self.parse_name_order_tokens(order, normalized_cache, compound_metadata)
+        if parsed is None:
+            return ParseResult.failure("surname not recognised")
 
-        # Pattern match on result type (Scala-like)
-        if parse_result.success and isinstance(parse_result.result, tuple):
-            surname_tokens, given_tokens = parse_result.result
-            return ParseResult.success_with_parse(surname_tokens, given_tokens, parse_result.original_compound_surname)
+        surname_tokens, given_tokens, original_compound_surname = parsed
+        return ParseResult.success_with_parse(surname_tokens, given_tokens, original_compound_surname)
+
+    def parse_name_order_tokens(
+        self,
+        order: list[str],
+        normalized_cache: dict[str, str],
+        compound_metadata: dict[str, CompoundMetadata],
+    ) -> tuple[list[str], list[str], str | None] | None:
+        """Fast internal parse path that avoids ParseResult object construction."""
+        # Try probabilistic parsing first
+        best_parse = self._best_parse_tokens(order, normalized_cache, compound_metadata)
+        if best_parse is not None:
+            return best_parse
 
         # Fallback parsing - try different surname positions
         fallback_attempts = [
@@ -73,11 +85,11 @@ class NameParsingService:
         ]
 
         for surname_pos, given_slice in fallback_attempts:
-            result = self._try_fallback_parse(order, surname_pos, given_slice, normalized_cache)
-            if result.success:
+            result = self._try_fallback_parse_tokens(order, surname_pos, given_slice, normalized_cache)
+            if result is not None:
                 return result
 
-        return ParseResult.failure("surname not recognised")
+        return None
 
     def _try_fallback_parse(
         self,
@@ -129,6 +141,51 @@ class NameParsingService:
 
         return ParseResult.failure("No valid surname found")
 
+    def _try_fallback_parse_tokens(
+        self,
+        order: list[str],
+        surname_pos: int,
+        given_slice: slice,
+        normalized_cache: dict[str, str],
+    ) -> tuple[list[str], list[str], str | None] | None:
+        """Token-only fallback parse for hot internal call paths."""
+        surname_token = order[surname_pos]
+        normalized_surname = self._normalizer.get_normalized(surname_token, normalized_cache)
+
+        if (
+            len(surname_token) > 1
+            and StringManipulationUtils.remove_spaces(normalized_surname) in self._data.surnames_normalized
+        ):
+            surname_tokens = [surname_token]
+            given_tokens = order[given_slice]
+            if given_tokens:
+                score = self.calculate_parse_score(surname_tokens, given_tokens, order, normalized_cache, False)
+
+                has_single_letter_given = any(len(token) == 1 for token in given_tokens)
+                has_multi_syllable_tokens = any(len(token) > 3 for token in order)
+                has_chinese_surname_in_tokens = any(
+                    len(token) > 3
+                    and self._data.is_surname(
+                        token,
+                        StringManipulationUtils.remove_spaces(
+                            self._normalizer.get_normalized(token, normalized_cache),
+                        ),
+                    )
+                    for token in order
+                )
+
+                if (
+                    has_single_letter_given
+                    and has_multi_syllable_tokens
+                    and score < self._config.poor_score_threshold
+                    and not has_chinese_surname_in_tokens
+                ):
+                    return None
+
+                return (surname_tokens, given_tokens, None)
+
+        return None
+
     def _best_parse(
         self,
         tokens: list[str],
@@ -153,6 +210,7 @@ class NameParsingService:
         # Pre-compute expensive checks once for all parses
         has_multi_syllable_tokens = any(len(token) > 3 for token in tokens)
         has_chinese_surname_in_tokens = None  # Lazy evaluation
+        score_cache = {"surname_key": {}, "given_key": {}, "ambiguous": {}}
 
         for surname_tokens, given_tokens, original_compound_format in parses_with_format:
             # Early validation: reject parses where single letters are used as given names
@@ -190,6 +248,7 @@ class NameParsingService:
                 normalized_cache,
                 False,
                 original_compound_format,
+                score_cache=score_cache,
             )
 
             if score > float("-inf"):
@@ -198,22 +257,95 @@ class NameParsingService:
         if not scored_parses:
             return ParseResult.failure("no valid parse found")
 
-        # Find best scoring parse with deterministic tie-breaking
-        # Sort by: (1) score descending, (2) format alignment descending, (3) deterministic secondary key
-        def parse_sort_key(parse_data):
-            surname_tokens, given_tokens, score, original_compound_format = parse_data
-
-            # Calculate format alignment bonus for tie-breaking
+        # Find best scoring parse with deterministic tie-breaking.
+        # Sort semantics: (1) score, (2) format alignment, (3) deterministic secondary key.
+        best_parse_result = None
+        best_sort_key = None
+        for candidate in scored_parses:
+            surname_tokens, given_tokens, score, _original_compound_format = candidate
             format_alignment = self._calculate_format_alignment_bonus(surname_tokens, given_tokens, tokens)
-
-            # Deterministic secondary key (string representation for consistent ordering)
             secondary_key = f"{surname_tokens}|{given_tokens}"
-
-            return (score, format_alignment, secondary_key)
-
-        best_parse_result = max(scored_parses, key=parse_sort_key)
+            candidate_key = (score, format_alignment, secondary_key)
+            if best_sort_key is None or candidate_key > best_sort_key:
+                best_sort_key = candidate_key
+                best_parse_result = candidate
 
         return ParseResult.success_with_parse(best_parse_result[0], best_parse_result[1], best_parse_result[3])
+
+    def _best_parse_tokens(
+        self,
+        tokens: list[str],
+        normalized_cache: dict[str, str],
+        compound_metadata: dict[str, CompoundMetadata],
+    ) -> tuple[list[str], list[str], str | None] | None:
+        """Token-only best-parse path for internal hot loops."""
+        if len(tokens) < self._config.min_tokens_required:
+            return None
+
+        parses_with_format = self._generate_all_parses_with_format(
+            tokens,
+            normalized_cache,
+            compound_metadata,
+        )
+        parses = [(surname, given) for surname, given, _ in parses_with_format]
+        if not parses:
+            return None
+
+        scored_parses = []
+        has_multi_syllable_tokens = any(len(token) > 3 for token in tokens)
+        has_chinese_surname_in_tokens = None
+        score_cache = {"surname_key": {}, "given_key": {}, "ambiguous": {}}
+
+        for surname_tokens, given_tokens, original_compound_format in parses_with_format:
+            has_single_letter_given = any(len(token) == 1 for token in given_tokens)
+
+            if has_single_letter_given and has_multi_syllable_tokens:
+                if has_chinese_surname_in_tokens is None:
+                    has_chinese_surname_in_tokens = any(
+                        len(token) > 3
+                        and self._data.is_surname(
+                            token,
+                            StringManipulationUtils.remove_spaces(
+                                self._normalizer.get_normalized(token, normalized_cache),
+                            ),
+                        )
+                        for token in tokens
+                    )
+
+                if not has_chinese_surname_in_tokens:
+                    surname_key = self._surname_key(surname_tokens, normalized_cache)
+                    quick_score_estimate = self._data.get_surname_logp(surname_key, self._config.default_surname_logp)
+                    if quick_score_estimate < self._config.poor_score_threshold:
+                        continue
+
+            score = self.calculate_parse_score(
+                surname_tokens,
+                given_tokens,
+                tokens,
+                normalized_cache,
+                False,
+                original_compound_format,
+                score_cache=score_cache,
+            )
+
+            if score > float("-inf"):
+                scored_parses.append((surname_tokens, given_tokens, score, original_compound_format))
+
+        if not scored_parses:
+            return None
+
+        best_parse_result = None
+        best_sort_key = None
+        for candidate in scored_parses:
+            surname_tokens, given_tokens, score, _original_compound_format = candidate
+            format_alignment = self._calculate_format_alignment_bonus(surname_tokens, given_tokens, tokens)
+            secondary_key = f"{surname_tokens}|{given_tokens}"
+            candidate_key = (score, format_alignment, secondary_key)
+            if best_sort_key is None or candidate_key > best_sort_key:
+                best_sort_key = candidate_key
+                best_parse_result = candidate
+
+        return best_parse_result[0], best_parse_result[1], best_parse_result[3]
 
     def _generate_all_parses_with_format(
         self,
@@ -350,12 +482,25 @@ class NameParsingService:
         normalized_cache: dict[str, str],
         is_all_chinese: bool = False,
         original_compound_format: str | None = None,
+        score_cache: dict[str, dict] | None = None,
     ) -> float:
         """Calculate unified score for a parse candidate."""
         if not given_tokens:
             return float("-inf")
 
-        surname_key = self._surname_key(surname_tokens, normalized_cache)
+        surname_key_cache = score_cache.get("surname_key") if score_cache else None
+        given_key_cache = score_cache.get("given_key") if score_cache else None
+        ambiguous_cache = score_cache.get("ambiguous") if score_cache else None
+
+        surname_tuple = tuple(surname_tokens)
+        if surname_key_cache is not None:
+            surname_key = surname_key_cache.get(surname_tuple)
+            if surname_key is None:
+                surname_key = self._surname_key(surname_tokens, normalized_cache)
+                surname_key_cache[surname_tuple] = surname_key
+        else:
+            surname_key = self._surname_key(surname_tokens, normalized_cache)
+
         surname_logp = self._data.get_surname_logp(surname_key, self._config.default_surname_logp)
 
         # Handle compound surname mapping mismatches
@@ -369,13 +514,16 @@ class NameParsingService:
                 original_compound = StringManipulationUtils.lowercase_join_with_spaces(surname_tokens)
                 surname_logp = self._data.get_surname_logp(original_compound, self._config.default_surname_logp)
 
-        given_logp_sum = sum(
-            self._data.get_given_logp(
-                self._given_name_key(g_token, normalized_cache),
-                self._config.default_given_logp,
-            )
-            for g_token in given_tokens
-        )
+        given_logp_sum = 0.0
+        for g_token in given_tokens:
+            if given_key_cache is not None:
+                given_key = given_key_cache.get(g_token)
+                if given_key is None:
+                    given_key = self._given_name_key(g_token, normalized_cache)
+                    given_key_cache[g_token] = given_key
+            else:
+                given_key = self._given_name_key(g_token, normalized_cache)
+            given_logp_sum += self._data.get_given_logp(given_key, self._config.default_given_logp)
 
         compound_given_bonus = 0.0
         if len(given_tokens) == 2 and all(
@@ -402,7 +550,16 @@ class NameParsingService:
             # Check if this parse maintains the original given-surname order (given first, surname last)
             if given_tokens[0] == tokens[0] and surname_tokens[0] == tokens[1]:
                 # This maintains the original order - check if case is ambiguous
-                if self._is_ambiguous_case(surname_tokens[0], given_tokens[0], normalized_cache):
+                ambiguous_key = (surname_tokens[0], given_tokens[0])
+                if ambiguous_cache is not None:
+                    is_ambiguous = ambiguous_cache.get(ambiguous_key)
+                    if is_ambiguous is None:
+                        is_ambiguous = self._is_ambiguous_case(surname_tokens[0], given_tokens[0], normalized_cache)
+                        ambiguous_cache[ambiguous_key] = is_ambiguous
+                else:
+                    is_ambiguous = self._is_ambiguous_case(surname_tokens[0], given_tokens[0], normalized_cache)
+
+                if is_ambiguous:
                     order_preservation_bonus = 1.0  # Strong bonus for preserving original order in ambiguous cases
         if not is_all_chinese and len(tokens) == 3 and len(surname_tokens) == 1 and len(given_tokens) == 2:
             # Narrow extension for hard 3-token given-first cases:
@@ -441,18 +598,24 @@ class NameParsingService:
 
         if len(surname_tokens) == 1 and len(given_tokens) == 1:
             # Get the alternative key
-            given_as_surname_key = self._surname_key(given_tokens, normalized_cache)
+            given_tuple = tuple(given_tokens)
+            if surname_key_cache is not None:
+                given_as_surname_key = surname_key_cache.get(given_tuple)
+                if given_as_surname_key is None:
+                    given_as_surname_key = self._surname_key(given_tokens, normalized_cache)
+                    surname_key_cache[given_tuple] = given_as_surname_key
+            else:
+                given_as_surname_key = self._surname_key(given_tokens, normalized_cache)
 
             # SURNAME comparative features
             # Calculate log frequency ratio to keep values in reasonable range
-            import math
-
             my_surname_freq = self._data.get_surname_freq(surname_key, 0.001)  # Small default
             alt_surname_freq = self._data.get_surname_freq(given_as_surname_key, 0.001)
             surname_freq_log_ratio = math.log(my_surname_freq / alt_surname_freq) if alt_surname_freq > 0 else 0.0
 
             # Calculate rank difference: my_surname_rank - alternative_surname_rank
-            my_surname_rank = self._data.get_surname_rank(surname_key)
+            # Reuse precomputed rank from the same scoring pass.
+            my_surname_rank = surname_rank_bonus
             alt_surname_rank = self._data.get_surname_rank(given_as_surname_key)
             surname_rank_difference = my_surname_rank - alt_surname_rank
 

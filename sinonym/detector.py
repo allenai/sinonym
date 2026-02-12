@@ -370,17 +370,19 @@ class ChineseNameDetector:
 
             # Try both possibilities and see which one the parsing service accepts
             # Option 1: First two tokens as compound surname + third as given
-            compound_parse = self._parsing_service.parse_name_order(
+            compound_parse = self._parsing_service.parse_name_order_tokens(
                 tokens,
                 normalized_input.norm_map,
                 normalized_input.compound_metadata,
             )
 
-            if (compound_parse.success and
-                len(compound_parse.result[0]) == 2 and
-                len(compound_parse.result[1]) == 1):
+            if (
+                compound_parse is not None
+                and len(compound_parse[0]) == 2
+                and len(compound_parse[1]) == 1
+            ):
                 # Parsing service recognized first two as compound surname
-                best_result = compound_parse.result
+                best_result = (compound_parse[0], compound_parse[1])
             else:
                 # Option 2: First token as single surname + last two as given name
                 best_result = ([tokens[0]], tokens[1:])
@@ -430,22 +432,22 @@ class ChineseNameDetector:
 
             for order in (normalized_input.roman_tokens, normalized_input.roman_tokens[::-1]):
                 order_tokens = list(order)
-                parse_result = self._parsing_service.parse_name_order(
+                parse_result = self._parsing_service.parse_name_order_tokens(
                     order_tokens,
                     normalized_input.norm_map,
                     normalized_input.compound_metadata,
                 )
-                if not parse_result.success or not isinstance(parse_result.result, tuple):
+                if parse_result is None:
                     continue
 
-                surname_tokens, given_tokens = parse_result.result
+                surname_tokens, given_tokens, original_compound_surname = parse_result
                 score = self._parsing_service.calculate_parse_score(
                     surname_tokens,
                     given_tokens,
                     original_tokens,
                     normalized_input.norm_map,
                     False,
-                    parse_result.original_compound_surname,
+                    original_compound_surname,
                 )
                 used_original = order_tokens == original_tokens
 
