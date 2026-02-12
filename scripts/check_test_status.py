@@ -13,7 +13,14 @@ import re
 import subprocess
 import sys
 
-EXPECTED_FAILURES = 54
+EXPECTED_FAILURES = 52
+
+
+def _safe_for_console(value: object) -> str:
+    """Return text that is safe to print on the current console encoding."""
+    text = str(value)
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    return text.encode(encoding, errors="backslashreplace").decode(encoding, errors="replace")
 
 
 def run_tests():
@@ -204,10 +211,14 @@ def main():
         print("DETAILED FAILURES (from fail log):")
         print("=" * 70)
         for i, e in enumerate(parsed_entries, start=1):
+            label = _safe_for_console(e["label"])
+            name = _safe_for_console(e["name"])
+            expected_output = _safe_for_console(e["expected_output"])
+            actual_output = _safe_for_console(e["actual_output"])
             print(
-                f"{i:4d}. [{e['label']}] {e['name']} | "
+                f"{i:4d}. [{label}] {name} | "
                 f"expected_success={e['expected_success']} actual_success={e['actual_success']} | "
-                f"expected={e['expected_output']} | actual={e['actual_output']}",
+                f"expected={expected_output} | actual={actual_output}",
             )
         print("=" * 70)
     elif failures:
@@ -235,18 +246,18 @@ def main():
     perf_passed, perf_output = check_performance_tests()
 
     if perf_passed:
-        print("✓ Performance tests PASSED")
+        print("Performance tests PASSED")
 
         # Try to extract performance metrics
         if "microseconds per name" in perf_output:
             lines = perf_output.split("\n")
             for line in lines:
                 if "microseconds per name" in line or "names/second" in line:
-                    print(f"  {line.strip()}")
+                    print(_safe_for_console(f"  {line.strip()}"))
     else:
-        print("✗ Performance tests FAILED")
+        print("Performance tests FAILED")
         print("Performance test output:")
-        print(perf_output)
+        print(_safe_for_console(perf_output))
 
     # Final summary
     print("\n" + "=" * 70)
@@ -258,36 +269,36 @@ def main():
         print(f"Individual test case failures: {total_failures}")
     else:
         print("Individual test case failures: Unable to determine")
-    print(f"Performance tests: {'PASSED ✓' if perf_passed else 'FAILED ✗'}")
+    print(f"Performance tests: {'PASSED' if perf_passed else 'FAILED'}")
 
     # Exit code based on status (updated baseline to EXPECTED_FAILURES after config improvements)
     if logged and len(logged) == EXPECTED_FAILURES and perf_passed:
-        print("\n✓ Tests are at expected baseline (EXPECTED_FAILURES failures, performance OK)")
+        print("\nTests are at expected baseline (EXPECTED_FAILURES failures, performance OK)")
         sys.exit(0)
     elif logged and len(logged) < EXPECTED_FAILURES and perf_passed:
         print(
-            f"\n✓ IMPROVEMENT! Tests are better than baseline ({len(logged)} < EXPECTED_FAILURES failures, performance OK)",
+            f"\nIMPROVEMENT! Tests are better than baseline ({len(logged)} < EXPECTED_FAILURES failures, performance OK)",
         )
         sys.exit(0)
     elif logged and len(logged) > EXPECTED_FAILURES:
-        print(f"\n✗ REGRESSION! Too many failures ({len(logged)} > EXPECTED_FAILURES)")
+        print(f"\nREGRESSION! Too many failures ({len(logged)} > EXPECTED_FAILURES)")
         sys.exit(1)
     elif failures and total_failures == EXPECTED_FAILURES and perf_passed:
-        print("\n✓ Tests are at expected baseline (EXPECTED_FAILURES failures, performance OK)")
+        print("\nTests are at expected baseline (EXPECTED_FAILURES failures, performance OK)")
         sys.exit(0)
     elif failures and total_failures < EXPECTED_FAILURES and perf_passed:
         print(
-            f"\n✓ IMPROVEMENT! Tests are better than baseline ({total_failures} < EXPECTED_FAILURES failures, performance OK)",
+            f"\nIMPROVEMENT! Tests are better than baseline ({total_failures} < EXPECTED_FAILURES failures, performance OK)",
         )
         sys.exit(0)
     elif failures and total_failures > EXPECTED_FAILURES:
-        print(f"\n✗ REGRESSION! Too many failures ({total_failures} > EXPECTED_FAILURES)")
+        print(f"\nREGRESSION! Too many failures ({total_failures} > EXPECTED_FAILURES)")
         sys.exit(1)
     elif not perf_passed:
-        print("\n✗ Performance tests failed!")
+        print("\nPerformance tests failed!")
         sys.exit(1)
     else:
-        print("\n⚠ Unable to determine test status")
+        print("\nUnable to determine test status")
         sys.exit(0)
 
 

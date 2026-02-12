@@ -404,6 +404,31 @@ class NameParsingService:
                 # This maintains the original order - check if case is ambiguous
                 if self._is_ambiguous_case(surname_tokens[0], given_tokens[0], normalized_cache):
                     order_preservation_bonus = 1.0  # Strong bonus for preserving original order in ambiguous cases
+        if not is_all_chinese and len(tokens) == 3 and len(surname_tokens) == 1 and len(given_tokens) == 2:
+            # Narrow extension for hard 3-token given-first cases:
+            # only apply when surname-last is materially more plausible than surname-first.
+            if given_tokens == tokens[0:2] and surname_tokens[0] == tokens[2]:
+                first_norm = self._normalizer.get_normalized(tokens[0], normalized_cache)
+                last_norm = self._normalizer.get_normalized(tokens[2], normalized_cache)
+                first_is_surname = self._data.is_surname(tokens[0], first_norm)
+                last_is_surname = self._data.is_surname(tokens[2], last_norm)
+                first_is_given = self._data.is_given_name(first_norm)
+                last_is_given = self._data.is_given_name(last_norm)
+                first_surname_freq = self._data.get_surname_freq(first_norm)
+                last_surname_freq = self._data.get_surname_freq(last_norm)
+                freq_ratio = (last_surname_freq / first_surname_freq) if first_surname_freq > 0 else 0.0
+
+                if (
+                    first_is_surname
+                    and last_is_surname
+                    and first_is_given
+                    and last_is_given
+                    and first_surname_freq > 0
+                    and first_surname_freq < 3000
+                    and last_surname_freq > first_surname_freq
+                    and freq_ratio <= 3.0
+                ):
+                    order_preservation_bonus = max(order_preservation_bonus, 0.5)
 
         # Percentile rank-based scoring for surnames only
         surname_rank_bonus = 0.0
@@ -537,7 +562,7 @@ class NameParsingService:
             # This parse maintains given-surname order (Western style)
             return 0.001  # Small bonus for format alignment
         if surname_token == original_tokens[0] and given_token == original_tokens[1]:
-            # This parse maintains surname-given order (Chinese style)
-            return 0.001  # Small bonus for format alignment
+            # Keep a neutral score for the opposite parse so ties are actually discriminated.
+            return 0.0
         # This parse changes the token order
         return 0.0

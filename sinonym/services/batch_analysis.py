@@ -76,11 +76,10 @@ class BatchAnalysisService:
         # Phase 2: Detect the dominant format pattern
         format_pattern = self._detect_format_pattern(name_candidates)
 
-        # Phase 3: Apply batch formatting without gating on confidence
-        # If we have at least one Chinese participant (names that produced candidates),
-        # apply the detected dominant format. Otherwise, fall back to individual processing
-        # to surface per-name outcomes (including non-Chinese reasons).
-        if format_pattern.total_count > 0:
+        # Phase 3: Apply batch formatting only when the dominant pattern confidence
+        # clears the configured threshold. Otherwise, fall back to individual
+        # processing to avoid over-applying a weak batch signal.
+        if format_pattern.total_count > 0 and format_pattern.threshold_met:
             results = self._apply_batch_format(
                 name_candidates,
                 format_pattern.dominant_format,
@@ -404,15 +403,21 @@ class BatchAnalysisService:
             if not candidates or not best_candidate:
                 continue
 
-            tokens = name.split()
+            try:
+                normalized_input = self._parsing_service._normalizer.apply(name)
+                tokens = list(normalized_input.roman_tokens)
+            except Exception:
+                tokens = name.split()
             if len(tokens) != 2:
                 continue
 
             first_token, second_token = tokens
+            first_key = self._parsing_service._normalizer.norm(first_token)
+            second_key = self._parsing_service._normalizer.norm(second_token)
 
             # Get surname frequencies for both positions
-            first_as_surname = self._parsing_service._data.get_surname_freq(first_token, 0)
-            second_as_surname = self._parsing_service._data.get_surname_freq(second_token, 0)
+            first_as_surname = self._parsing_service._data.get_surname_freq(first_key, 0)
+            second_as_surname = self._parsing_service._data.get_surname_freq(second_key, 0)
 
             # Evaluate surname-first hypothesis: first token should be strong surname
             if first_as_surname > 1000:  # Strong surname threshold
@@ -486,12 +491,12 @@ class BatchAnalysisService:
                 )
             else:
                 order_list = ["surname"] + (["middle"] if middle_tokens else []) + ["given"]
-                # Original: surname-first → swap labels so first part maps to given
+                # Original: surname-first → preserve component labels and annotate order only
                 parsed_original_order = ParsedName(
-                    surname=given_str,
-                    given_name=surname_str,
-                    surname_tokens=given_final,
-                    given_tokens=surname_final,
+                    surname=surname_str,
+                    given_name=given_str,
+                    surname_tokens=surname_final,
+                    given_tokens=given_final,
                     middle_name=" ".join(middle_tokens) if middle_tokens else "",
                     middle_tokens=middle_tokens,
                     order=order_list,

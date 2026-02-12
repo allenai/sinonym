@@ -201,16 +201,9 @@ class NormalizationService:
 
         for token in mix:
             if self._config.cjk_pattern.search(token):
-                # Convert Han to pinyin with enhanced processing for all-Chinese inputs
-                if is_all_chinese and len(token) > 1:
-                    # For all-Chinese inputs, process each character separately
-                    # This helps with surname/given name boundary detection
-                    pinyin_tokens = self._cache_service.han_to_pinyin_fast(token)
-                    han_tokens.extend(pinyin_tokens)
-                else:
-                    # Standard processing for mixed inputs
-                    pinyin_tokens = self._cache_service.han_to_pinyin_fast(token)
-                    han_tokens.extend(pinyin_tokens)
+                # Convert Han to pinyin. all-Chinese and mixed-script paths share the same behavior.
+                pinyin_tokens = self._cache_service.han_to_pinyin_fast(token)
+                han_tokens.extend(pinyin_tokens)
             else:
                 # Clean Roman token
                 clean_token = self._config.clean_roman_pattern.sub("", token)

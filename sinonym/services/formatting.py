@@ -350,13 +350,41 @@ class NameFormattingService:
         Returns:
             Formatted surname string using metadata-driven formatting
         """
-        # Find the first token's metadata to determine format type
-        first_token_meta = None
-        for meta in compound_metadata.values():
-            if meta.is_compound:
-                # Check if this metadata matches our surname tokens
-                target_parts = meta.compound_target.split()
-                if len(target_parts) == len(surname_tokens):
+        def _get_meta_for_token(token: str) -> CompoundMetadata | None:
+            meta = compound_metadata.get(token)
+            if meta is not None:
+                return meta
+
+            token_lower = token.lower()
+            for original_token, candidate in compound_metadata.items():
+                if original_token.lower() == token_lower:
+                    return candidate
+            return None
+
+        first_token_meta = _get_meta_for_token(surname_tokens[0])
+        second_token_meta = _get_meta_for_token(surname_tokens[1]) if len(surname_tokens) > 1 else None
+
+        # Prefer direct token-linked metadata when available.
+        if not first_token_meta or not first_token_meta.is_compound:
+            first_token_meta = None
+        elif len(surname_tokens) > 1:
+            if not second_token_meta or not second_token_meta.is_compound:
+                first_token_meta = None
+            elif first_token_meta.compound_target != second_token_meta.compound_target:
+                first_token_meta = None
+
+        # Compact/camelCase compounds are represented by a single original token in metadata.
+        # Match by split result so we don't accidentally pick unrelated compound metadata.
+        if not first_token_meta:
+            surname_tokens_lower = [token.lower() for token in surname_tokens]
+            for original_token, meta in compound_metadata.items():
+                if not meta.is_compound:
+                    continue
+
+                split_parts = StringManipulationUtils.split_compound_token(original_token, meta)
+                if len(split_parts) != len(surname_tokens):
+                    continue
+                if [part.lower() for part in split_parts] == surname_tokens_lower:
                     first_token_meta = meta
                     break
 

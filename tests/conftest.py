@@ -46,10 +46,10 @@ def detector():
 
 
 @pytest.fixture(scope="session") 
-def fast_detector():
+def fast_detector(detector):
     """
     Alias for detector fixture for backwards compatibility.
     
     Some tests may prefer this name to emphasize performance optimization.
     """
-    return detector()
+    return detector

@@ -363,7 +363,10 @@ class EthnicityClassificationService:
             first_cn = is_chinese_given_strict(first)
             second_cn = is_chinese_given_strict(second)
             if overlapping_any:
-                if has_korean_signature(first) or has_korean_signature(second):
+                if (
+                    (has_korean_signature(first) or has_korean_signature(second))
+                    and not (first_cn and second_cn)
+                ):
                     score += 3.0
             elif (not (first_cn and second_cn)) and (has_korean_signature(first) or has_korean_signature(second)):
                 score += 3.0
@@ -371,20 +374,14 @@ class EthnicityClassificationService:
         # 2. Known Korean name pairs (strong signal)
         score += len(analysis["korean_given_pairs"]) * 3.0
 
-        # 3. Korean-specific tokens (strong signal)
-        score += len(analysis["korean_specific_tokens"]) * 3.0
+        # 3. Korean-specific tokens (bounded signal to avoid over-rejection)
+        korean_specific_count = len(analysis["korean_specific_tokens"])
+        if korean_specific_count >= 2:
+            score += 2.0
+        elif korean_specific_count == 1:
+            score += 1.0
 
-        # 4. Block Chinese given names when Korean overlapping surname is present
-        if analysis["surname_type"] == "korean_overlapping":
-            for tok in tokens[1:]:
-                if not is_chinese_given_strict(tok):
-                    continue
-                t_lower = tok.lower()
-                if (t_lower in KOREAN_GIVEN_PATTERNS or t_lower in KOREAN_SPECIFIC_PATTERNS) and not is_chinese_given_strict(tok):
-                    score += 3.0
-                    break
-
-        # 5. Ambiguous patterns (only with Korean overlapping surname in first position)
+        # 4. Ambiguous patterns (only with Korean overlapping surname in first position)
         if analysis["surname_type"] == "korean_overlapping":
             korean_ambiguous_count = len(analysis["korean_ambiguous_tokens"])
             if korean_ambiguous_count >= 2:

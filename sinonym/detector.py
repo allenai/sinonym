@@ -164,6 +164,7 @@ data structures and the detector can be safely used from multiple threads.
 
 import logging
 import string
+import threading
 
 from sinonym.coretypes import BatchFormatPattern, BatchParseResult
 from sinonym.coretypes.results import ParsedName
@@ -203,6 +204,7 @@ class ChineseNameDetector:
         self._parsing_service: NameParsingService | None = None
         self._formatting_service: NameFormattingService | None = None
         self._batch_analysis_service: BatchAnalysisService | None = None
+        self._batch_threshold_lock = threading.Lock()
 
         # Initialize data structures
         self._initialize()
@@ -332,13 +334,13 @@ class ChineseNameDetector:
                     )
                     # Determine original input order and assign components accordingly
                     if token1_is_surname:
-                        # Original: surname-first → in original-order view, first part is "given"
+                        # Original: surname-first → preserve component labels and annotate order
                         order_list = ["surname", "given"]
                         parsed_original_order = ParsedName(
-                            surname=given_str,
-                            given_name=surname_str,
-                            surname_tokens=given_final,
-                            given_tokens=surname_final,
+                            surname=surname_str,
+                            given_name=given_str,
+                            surname_tokens=surname_final,
+                            given_tokens=given_final,
                             middle_name=" ".join(middle_tokens) if middle_tokens else "",
                             middle_tokens=middle_tokens,
                             order=order_list,
@@ -403,12 +405,13 @@ class ChineseNameDetector:
                         middle_tokens=middle_tokens,
                         order=["given", "middle", "surname"],
                     )
-                    # For 3-character all-Chinese, original order is surname-first → swap labels
+                    # For 3-character all-Chinese, original order is surname-first
+                    # Preserve component labels and annotate only the order.
                     parsed_original_order = ParsedName(
-                        surname=given_str,
-                        given_name=surname_str,
-                        surname_tokens=given_final,
-                        given_tokens=surname_final,
+                        surname=surname_str,
+                        given_name=given_str,
+                        surname_tokens=surname_final,
+                        given_tokens=given_final,
                         middle_name=" ".join(middle_tokens) if middle_tokens else "",
                         middle_tokens=middle_tokens,
                         order=["surname", "given"],
@@ -421,76 +424,115 @@ class ChineseNameDetector:
                 except ValueError as e:
                     return ParseResult.failure(str(e))
         else:
-            # Original logic for non-all-Chinese or multi-token inputs
+            # Evaluate both order hypotheses and pick the best-scoring parse
+            original_tokens = list(normalized_input.roman_tokens)
+            best_candidate = None
+
             for order in (normalized_input.roman_tokens, normalized_input.roman_tokens[::-1]):
+                order_tokens = list(order)
                 parse_result = self._parsing_service.parse_name_order(
-                    list(order),
+                    order_tokens,
                     normalized_input.norm_map,
                     normalized_input.compound_metadata,
                 )
-                if parse_result.success:
-                    surname_tokens, given_tokens = parse_result.result
-                    try:
-                        formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
-                            self._formatting_service.format_name_output_with_tokens(
-                                surname_tokens,
-                                given_tokens,
-                                normalized_input.norm_map,
-                                normalized_input.compound_metadata,
-                            )
+                if not parse_result.success or not isinstance(parse_result.result, tuple):
+                    continue
+
+                surname_tokens, given_tokens = parse_result.result
+                score = self._parsing_service.calculate_parse_score(
+                    surname_tokens,
+                    given_tokens,
+                    original_tokens,
+                    normalized_input.norm_map,
+                    False,
+                    parse_result.original_compound_surname,
+                )
+                used_original = order_tokens == original_tokens
+
+                candidate = {
+                    "surname_tokens": surname_tokens,
+                    "given_tokens": given_tokens,
+                    "score": score,
+                    "order_tokens": order_tokens,
+                    "used_original": used_original,
+                }
+
+                if (
+                    best_candidate is None
+                    or candidate["score"] > best_candidate["score"]
+                    or (
+                        candidate["score"] == best_candidate["score"]
+                        and candidate["used_original"]
+                        and not best_candidate["used_original"]
+                    )
+                ):
+                    best_candidate = candidate
+
+            if best_candidate is not None:
+                surname_tokens = best_candidate["surname_tokens"]
+                given_tokens = best_candidate["given_tokens"]
+                order_tokens = best_candidate["order_tokens"]
+                used_original = best_candidate["used_original"]
+                try:
+                    formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
+                        self._formatting_service.format_name_output_with_tokens(
+                            surname_tokens,
+                            given_tokens,
+                            normalized_input.norm_map,
+                            normalized_input.compound_metadata,
                         )
-                        parsed = ParsedName(
+                    )
+                    parsed = ParsedName(
+                        surname=surname_str,
+                        given_name=given_str,
+                        surname_tokens=surname_final,
+                        given_tokens=given_final,
+                        middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                        middle_tokens=middle_tokens,
+                        order=["given", "middle", "surname"],
+                    )
+                    # Determine original input order relative to detected parse
+                    k = len(surname_tokens)
+                    is_surname_first_in_this_order = list(order_tokens[:k]) == surname_tokens
+                    is_surname_last_in_this_order = list(order_tokens[-k:]) == surname_tokens
+
+                    if used_original:
+                        original_is_given_first = is_surname_last_in_this_order
+                    else:
+                        original_is_given_first = is_surname_first_in_this_order
+
+                    if original_is_given_first:
+                        order_list = ["given"] + (["middle"] if middle_tokens else []) + ["surname"]
+                        # Keep labels as-is
+                        parsed_original_order = ParsedName(
                             surname=surname_str,
                             given_name=given_str,
                             surname_tokens=surname_final,
                             given_tokens=given_final,
                             middle_name=" ".join(middle_tokens) if middle_tokens else "",
                             middle_tokens=middle_tokens,
-                            order=["given", "middle", "surname"],
+                            order=order_list,
                         )
-                        # Determine original input order relative to detected parse
-                        used_original = order == normalized_input.roman_tokens
-                        k = len(surname_tokens)
-                        is_surname_first_in_this_order = list(order[:k]) == surname_tokens
-                        is_surname_last_in_this_order = list(order[-k:]) == surname_tokens
-
-                        if used_original:
-                            original_is_given_first = is_surname_last_in_this_order
-                        else:
-                            original_is_given_first = is_surname_first_in_this_order
-
-                        if original_is_given_first:
-                            order_list = ["given"] + (["middle"] if middle_tokens else []) + ["surname"]
-                            # Keep labels as-is
-                            parsed_original_order = ParsedName(
-                                surname=surname_str,
-                                given_name=given_str,
-                                surname_tokens=surname_final,
-                                given_tokens=given_final,
-                                middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                                middle_tokens=middle_tokens,
-                                order=order_list,
-                            )
-                        else:
-                            order_list = ["surname"] + (["middle"] if middle_tokens else []) + ["given"]
-                            # Original: surname-first → swap labels to reflect "first part" as given
-                            parsed_original_order = ParsedName(
-                                surname=given_str,
-                                given_name=surname_str,
-                                surname_tokens=given_final,
-                                given_tokens=surname_final,
-                                middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                                middle_tokens=middle_tokens,
-                                order=order_list,
-                            )
-
-                        return ParseResult.success_with_name(
-                            formatted_name,
-                            parsed=parsed,
-                            parsed_original_order=parsed_original_order,
+                    else:
+                        order_list = ["surname"] + (["middle"] if middle_tokens else []) + ["given"]
+                        # Original: surname-first → keep labels stable and annotate order only
+                        parsed_original_order = ParsedName(
+                            surname=surname_str,
+                            given_name=given_str,
+                            surname_tokens=surname_final,
+                            given_tokens=given_final,
+                            middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                            middle_tokens=middle_tokens,
+                            order=order_list,
                         )
-                    except ValueError as e:
-                        return ParseResult.failure(str(e))
+
+                    return ParseResult.success_with_name(
+                        formatted_name,
+                        parsed=parsed,
+                        parsed_original_order=parsed_original_order,
+                    )
+                except ValueError as e:
+                    return ParseResult.failure(str(e))
 
         return ParseResult.failure("name not recognised as Chinese")
 
@@ -533,21 +575,22 @@ class ChineseNameDetector:
             individual_results = [self.normalize_name(name) for name in names]
             return self._create_fallback_batch_result(names, individual_results)
 
-        # Configure threshold for this analysis
-        original_threshold = self._batch_analysis_service._format_threshold
-        self._batch_analysis_service._format_threshold = format_threshold
+        with self._batch_threshold_lock:
+            # Configure threshold for this analysis
+            original_threshold = self._batch_analysis_service._format_threshold
+            self._batch_analysis_service._format_threshold = format_threshold
 
-        try:
-            return self._batch_analysis_service.analyze_name_batch(
-                names,
-                self._normalizer,
-                self._data,
-                self._formatting_service,
-                minimum_batch_size,
-            )
-        finally:
-            # Restore original threshold
-            self._batch_analysis_service._format_threshold = original_threshold
+            try:
+                return self._batch_analysis_service.analyze_name_batch(
+                    names,
+                    self._normalizer,
+                    self._data,
+                    self._formatting_service,
+                    minimum_batch_size,
+                )
+            finally:
+                # Restore original threshold
+                self._batch_analysis_service._format_threshold = original_threshold
 
     def detect_batch_format(
         self,
@@ -587,19 +630,20 @@ class ChineseNameDetector:
                 threshold_met=False,
             )
 
-        # Configure threshold for this analysis
-        original_threshold = self._batch_analysis_service._format_threshold
-        self._batch_analysis_service._format_threshold = format_threshold
+        with self._batch_threshold_lock:
+            # Configure threshold for this analysis
+            original_threshold = self._batch_analysis_service._format_threshold
+            self._batch_analysis_service._format_threshold = format_threshold
 
-        try:
-            return self._batch_analysis_service.detect_batch_format(
-                names,
-                self._normalizer,
-                self._data,
-            )
-        finally:
-            # Restore original threshold
-            self._batch_analysis_service._format_threshold = original_threshold
+            try:
+                return self._batch_analysis_service.detect_batch_format(
+                    names,
+                    self._normalizer,
+                    self._data,
+                )
+            finally:
+                # Restore original threshold
+                self._batch_analysis_service._format_threshold = original_threshold
 
     def process_name_batch(
         self,

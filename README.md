@@ -111,7 +111,7 @@ Formatted Output
 ### 5. Performance
 
 *   **High-Performance with Caching**
-    *   The library is benchmarked to be very fast, capable of processing over 10,000 diverse names per second, and uses caching to significantly speed up the processing of repeated names.
+    *   The library is benchmarked to be very fast, capable of processing over 3,000 diverse names per second, and uses caching to significantly speed up the processing of repeated names.
 
 ## How It Works
 

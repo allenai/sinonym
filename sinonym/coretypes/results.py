@@ -18,6 +18,8 @@ class ParsedName:
     parts appear when combined. For normalized output this is typically
     ["given", "middle", "surname"], while for original input order it may
     be ["surname", "given", "middle"], etc.
+    Component labels remain stable: `surname`/`given_name` always identify
+    those components regardless of `order`.
     """
     surname: str
     given_name: str
