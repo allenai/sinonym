@@ -40,6 +40,13 @@ Multi-threaded performance and thread-safety validation. Tests `normalize_name` 
 uv run python scripts/profile_threaded.py
 ```
 
+### `profile_multiprocess.py`
+Persistent multi-process throughput and parity check. Compares single-process throughput to a spawn-based persistent process pool, verifies that outputs are identical for a deterministic workload, and reports median speedup.
+
+```bash
+uv run python scripts/profile_multiprocess.py --names 12000 --warmup 3000 --runs 3 --workers 6 --chunk-size 64
+```
+
 ### `train_ml_classifier_for_chinese_vs_japanese.py`
 Trains the Chinese-vs-Japanese name classifier used in production. Downloads Chinese (~1.2M) and Japanese (~180K) name corpora, trains a scikit-learn pipeline (TF-IDF character n-grams + 20 linguistic heuristic features + logistic regression), and saves the model to `data/chinese_japanese_classifier.skops`.
 

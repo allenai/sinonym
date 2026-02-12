@@ -258,17 +258,45 @@ class NameParsingService:
             return ParseResult.failure("no valid parse found")
 
         # Find best scoring parse with deterministic tie-breaking.
-        # Sort semantics: (1) score, (2) format alignment, (3) deterministic secondary key.
+        # Tie-break metadata is computed lazily only when scores tie.
         best_parse_result = None
-        best_sort_key = None
+        best_score = float("-inf")
+        best_format_alignment = 0.0
+        best_secondary_key = ""
+        tie_break_ready = False
         for candidate in scored_parses:
             surname_tokens, given_tokens, score, _original_compound_format = candidate
-            format_alignment = self._calculate_format_alignment_bonus(surname_tokens, given_tokens, tokens)
-            secondary_key = f"{surname_tokens}|{given_tokens}"
-            candidate_key = (score, format_alignment, secondary_key)
-            if best_sort_key is None or candidate_key > best_sort_key:
-                best_sort_key = candidate_key
+            if best_parse_result is None or score > best_score:
                 best_parse_result = candidate
+                best_score = score
+                tie_break_ready = False
+                continue
+            if score < best_score:
+                continue
+
+            if not tie_break_ready:
+                best_surname_tokens, best_given_tokens, _best_score, _best_original_compound = best_parse_result
+                best_format_alignment = self._calculate_format_alignment_bonus(
+                    best_surname_tokens,
+                    best_given_tokens,
+                    tokens,
+                )
+                best_secondary_key = f"{best_surname_tokens}|{best_given_tokens}"
+                tie_break_ready = True
+
+            format_alignment = self._calculate_format_alignment_bonus(surname_tokens, given_tokens, tokens)
+            if format_alignment > best_format_alignment:
+                best_parse_result = candidate
+                best_format_alignment = format_alignment
+                best_secondary_key = f"{surname_tokens}|{given_tokens}"
+                continue
+            if format_alignment < best_format_alignment:
+                continue
+
+            secondary_key = f"{surname_tokens}|{given_tokens}"
+            if secondary_key > best_secondary_key:
+                best_parse_result = candidate
+                best_secondary_key = secondary_key
 
         return ParseResult.success_with_parse(best_parse_result[0], best_parse_result[1], best_parse_result[3])
 
@@ -335,15 +363,43 @@ class NameParsingService:
             return None
 
         best_parse_result = None
-        best_sort_key = None
+        best_score = float("-inf")
+        best_format_alignment = 0.0
+        best_secondary_key = ""
+        tie_break_ready = False
         for candidate in scored_parses:
             surname_tokens, given_tokens, score, _original_compound_format = candidate
-            format_alignment = self._calculate_format_alignment_bonus(surname_tokens, given_tokens, tokens)
-            secondary_key = f"{surname_tokens}|{given_tokens}"
-            candidate_key = (score, format_alignment, secondary_key)
-            if best_sort_key is None or candidate_key > best_sort_key:
-                best_sort_key = candidate_key
+            if best_parse_result is None or score > best_score:
                 best_parse_result = candidate
+                best_score = score
+                tie_break_ready = False
+                continue
+            if score < best_score:
+                continue
+
+            if not tie_break_ready:
+                best_surname_tokens, best_given_tokens, _best_score, _best_original_compound = best_parse_result
+                best_format_alignment = self._calculate_format_alignment_bonus(
+                    best_surname_tokens,
+                    best_given_tokens,
+                    tokens,
+                )
+                best_secondary_key = f"{best_surname_tokens}|{best_given_tokens}"
+                tie_break_ready = True
+
+            format_alignment = self._calculate_format_alignment_bonus(surname_tokens, given_tokens, tokens)
+            if format_alignment > best_format_alignment:
+                best_parse_result = candidate
+                best_format_alignment = format_alignment
+                best_secondary_key = f"{surname_tokens}|{given_tokens}"
+                continue
+            if format_alignment < best_format_alignment:
+                continue
+
+            secondary_key = f"{surname_tokens}|{given_tokens}"
+            if secondary_key > best_secondary_key:
+                best_parse_result = candidate
+                best_secondary_key = secondary_key
 
         return best_parse_result[0], best_parse_result[1], best_parse_result[3]
 

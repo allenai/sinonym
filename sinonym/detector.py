@@ -182,6 +182,7 @@ from sinonym.services import (
     PinyinCacheService,
     ServiceContext,
 )
+from sinonym.services.process_pool import PersistentMultiprocessNormalizer, normalize_names_multiprocess
 
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CHINESE NAME DETECTOR CLASS
@@ -376,11 +377,7 @@ class ChineseNameDetector:
                 normalized_input.compound_metadata,
             )
 
-            if (
-                compound_parse is not None
-                and len(compound_parse[0]) == 2
-                and len(compound_parse[1]) == 1
-            ):
+            if compound_parse is not None and len(compound_parse[0]) == 2 and len(compound_parse[1]) == 1:
                 # Parsing service recognized first two as compound surname
                 best_result = (compound_parse[0], compound_parse[1])
             else:
@@ -678,8 +675,58 @@ class ChineseNameDetector:
         batch_result = self.analyze_name_batch(names, format_threshold, minimum_batch_size)
         return batch_result.results
 
+    def create_persistent_multiprocess_pool(
+        self,
+        *,
+        max_workers: int | None = None,
+        chunk_size: int = 64,
+        mp_start_method: str = "spawn",
+    ) -> PersistentMultiprocessNormalizer:
+        """
+        Create a persistent multi-process pool for repeated normalization calls.
+
+        Notes:
+        - Uses one detector instance per worker process.
+        - For Windows/macOS scripts, call this behind an
+          `if __name__ == "__main__":` guard.
+        """
+        self._ensure_initialized()
+        return PersistentMultiprocessNormalizer(
+            max_workers=max_workers,
+            chunk_size=chunk_size,
+            mp_start_method=mp_start_method,
+            detector_config=self._config,
+            detector_weights=self._weights,
+        )
+
+    def process_name_batch_multiprocess(
+        self,
+        names: list[str],
+        *,
+        max_workers: int | None = None,
+        chunk_size: int = 64,
+        mp_start_method: str = "spawn",
+    ) -> list[ParseResult]:
+        """
+        Process one batch with a temporary multi-process pool.
+
+        For repeated calls, prefer `create_persistent_multiprocess_pool()`
+        to avoid repeated process start-up overhead.
+        """
+        self._ensure_initialized()
+        return normalize_names_multiprocess(
+            names,
+            max_workers=max_workers,
+            chunk_size=chunk_size,
+            mp_start_method=mp_start_method,
+            detector_config=self._config,
+            detector_weights=self._weights,
+        )
+
     def _create_fallback_batch_result(
-        self, names: list[str], individual_results: list[ParseResult],
+        self,
+        names: list[str],
+        individual_results: list[ParseResult],
     ) -> BatchParseResult:
         """Create a fallback BatchParseResult when batch analysis is not available."""
         from sinonym.coretypes import BatchFormatPattern, IndividualAnalysis, NameFormat

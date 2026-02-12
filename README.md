@@ -320,6 +320,36 @@ for result in results:
     print(f"Processed: {result.result}")
 ```
 
+### Persistent Multi-Process Processing
+
+For high-throughput workloads, you can keep a persistent process pool alive and
+reuse worker processes across multiple calls. This avoids repeated process
+start-up overhead and works on Windows/macOS/Linux via `spawn`.
+
+```python
+from sinonym.detector import ChineseNameDetector
+
+def main():
+    detector = ChineseNameDetector()
+    names_a = ["Li Wei", "Wang Weiming", "Zhang Ming"]
+    names_b = ["Xin Liu", "Yang Li", "Chen Huang"]
+
+    # Reuse workers across many calls
+    with detector.create_persistent_multiprocess_pool(max_workers=6, chunk_size=64) as pool:
+        results_a = pool.normalize_names(names_a)
+        results_b = pool.normalize_names(names_b)
+
+    # One-off convenience wrapper (creates and closes a temporary pool)
+    single_batch = detector.process_name_batch_multiprocess(names_a, max_workers=6, chunk_size=64)
+    return results_a, results_b, single_batch
+
+if __name__ == "__main__":
+    main()
+```
+
+Use the `if __name__ == "__main__":` guard in scripts to ensure safe process
+spawning on Windows and macOS.
+
 ### When to Use Batch Processing
 
 *   **Academic Papers**: Author lists typically follow consistent formatting
@@ -394,14 +424,14 @@ If you'd like to contribute to Sinonym, here’s how to set up your development 
 First, clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/sinonym.git
+git clone https://github.com/allenai/sinonym.git
 cd sinonym
 ```
 
 Then, install the development dependencies:
 
 ```bash
-uv sync --extra dev
+uv sync --active --all-extras --dev
 ```
 
 ### Running Tests
@@ -421,6 +451,10 @@ We use `ruff` for linting and formatting:
 uv run ruff check . --fix
 uv run ruff format .
 ```
+
+### Benchmarking & Profiling
+
+See [scripts/README.md](scripts/README.md) for benchmark, profiling, and test status scripts.
 
 ## License
 
