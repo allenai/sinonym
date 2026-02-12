@@ -260,6 +260,18 @@ def test_batch_threshold_state_is_thread_safe(detector):
             assert future.result() == expected
 
 
+def test_low_confidence_batch_preserves_detected_format_metadata(detector):
+    names = ["Li Wei", "Wei Li", "Zhang Ming"]
+    high_threshold = 0.9
+
+    detected = detector.detect_batch_format(names, format_threshold=high_threshold)
+    batch = detector.analyze_name_batch(names, format_threshold=high_threshold)
+
+    assert detected.total_count > 0
+    assert not detected.threshold_met
+    assert batch.format_pattern == detected
+
+
 def test_korean_specific_token_signal_is_capped(detector):
     ethnicity_service = detector._ethnicity_service
     tokens = ("Ha", "Young", "Lee")

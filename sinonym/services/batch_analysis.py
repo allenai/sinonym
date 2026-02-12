@@ -87,7 +87,14 @@ class BatchAnalysisService:
             )
             improvements = self._find_improvements(name_candidates, results)
         else:
-            return self._process_individually(names, normalizer, data, formatting_service)
+            individual_fallback = self._process_individually(names, normalizer, data, formatting_service)
+            return BatchParseResult(
+                names=individual_fallback.names,
+                results=individual_fallback.results,
+                format_pattern=format_pattern,
+                individual_analyses=individual_fallback.individual_analyses,
+                improvements=[],
+            )
 
         # Build per-name analysis details
         individual_analyses = self._build_individual_analyses(name_candidates)
