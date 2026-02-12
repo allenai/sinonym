@@ -137,7 +137,7 @@ CANTONESE_PHONETIC_RULES = {
     "sau": "shou",
     "tau": "tao",
     "wun": "huan",
-    "kai": "qi",  # Cantonese mapping (overrides Wade-Giles "gai")
+    "kai": "kai",  # Preserve "kai" by default; avoid forcing it to "qi" without explicit Cantonese context
     "hoi": "hai",
     "ngai": "ai",
     "tsz": "zi",

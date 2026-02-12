@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import math
 import unicodedata
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import CANTONESE_SURNAMES, COMPOUND_VARIANTS, PYPINYIN_FREQUENCY_ALIASES
@@ -37,17 +39,17 @@ class NameDataStructures:
     plausible_components: frozenset[str]
 
     # Frequency and probability mappings
-    surname_frequencies: dict[str, float]
-    surname_log_probabilities: dict[str, float]
-    given_log_probabilities: dict[str, float]
+    surname_frequencies: Mapping[str, float]
+    surname_log_probabilities: Mapping[str, float]
+    given_log_probabilities: Mapping[str, float]
 
     # Pre-computed percentile ranks for ML features (0-1 scale)
-    surname_percentile_ranks: dict[str, float]
+    surname_percentile_ranks: Mapping[str, float]
 
     # Compound surname mappings
-    compound_hyphen_map: dict[str, str]
+    compound_hyphen_map: Mapping[str, str]
     # Maps normalized compound surnames back to their original input format
-    compound_original_format_map: dict[str, str]
+    compound_original_format_map: Mapping[str, str]
 
     def get_surname_logp(self, surname_key: str, default: float) -> float:
         """Get surname log probability with default fallback."""
@@ -149,32 +151,48 @@ class DataInitializationService:
             given_names=given_names,
             given_names_normalized=given_names_normalized,
             plausible_components=plausible_components,
-            surname_frequencies=surname_frequencies,
-            surname_log_probabilities=surname_log_probabilities,
-            given_log_probabilities=given_log_probabilities,
-            surname_percentile_ranks=surname_percentile_ranks,
-            compound_hyphen_map=compound_hyphen_map,
-            compound_original_format_map=compound_original_format_map,
+            surname_frequencies=MappingProxyType(dict(surname_frequencies)),
+            surname_log_probabilities=MappingProxyType(dict(surname_log_probabilities)),
+            given_log_probabilities=MappingProxyType(dict(given_log_probabilities)),
+            surname_percentile_ranks=MappingProxyType(dict(surname_percentile_ranks)),
+            compound_hyphen_map=MappingProxyType(dict(compound_hyphen_map)),
+            compound_original_format_map=MappingProxyType(dict(compound_original_format_map)),
         )
 
     def _is_plausible_chinese_syllable(self, component: str) -> bool:
         """
         Check if a component is a plausible Chinese syllable suitable for compound splitting.
-        Uses a more lenient approach than strict onset-rime decomposition to handle
-        romanization variations and valid Chinese syllables.
         """
         if not component or len(component) > 7:
             return False
 
-        # Reject components with forbidden Western patterns
         component_lower = component.lower()
         if self._config.forbidden_patterns_regex.search(component_lower):
             return False
 
-        # Accept if it's a known Chinese syllable (from the given names database)
-        # This handles cases like 'xue', 'yue', 'jue' which are valid Chinese syllables
-        # even if they don't decompose cleanly in the onset-rime system we're using
-        return True  # Since we're already filtering from given_names, they should be valid
+        # Prefer strict phonetic validation when available.
+        if self._normalizer.is_valid_chinese_phonetics(component_lower):
+            return True
+
+        # Fallback: retain permissive coverage for known-valid entries while
+        # still filtering clearly implausible components.
+        if not component_lower.isalpha():
+            return False
+
+        vowels = set("aeiouü")
+        if not any(ch in vowels for ch in component_lower):
+            return False
+
+        consonant_run = 0
+        for ch in component_lower:
+            if ch in vowels:
+                consonant_run = 0
+            else:
+                consonant_run += 1
+                if consonant_run >= 4:
+                    return False
+
+        return True
 
     def _build_surname_data(self) -> tuple[set[str], dict[str, float]]:
         """Build surname sets and frequency data."""
@@ -228,7 +246,6 @@ class DataInitializationService:
         """Build given name data, log probabilities, and dynamically generate plausible components."""
         given_names = set()
         given_frequencies = {}
-        total_given_freq = 0
 
         for row in open_csv_reader("givenname_orcid.csv"):
             han_char = row["character"]
@@ -245,7 +262,9 @@ class DataInitializationService:
                 # Store frequency for both Chinese character and pinyin
                 given_frequencies[han_char] = max(given_frequencies.get(han_char, 0), ppm)
                 given_frequencies[pinyin] = max(given_frequencies.get(pinyin, 0), ppm)
-                total_given_freq += ppm
+
+        # Keep denominator on the same aggregation basis as given_frequencies (max per key).
+        total_given_freq = sum(given_frequencies.values())
 
         # Convert to log probabilities for both Chinese characters and pinyin
         given_log_probabilities = {}
@@ -328,6 +347,7 @@ class DataInitializationService:
         """Build surname log probabilities including compound surnames."""
         surname_log_probabilities = {}
         total_surname_freq = sum(surname_frequencies.values())
+        compound_freq_delta = 0.0
 
         # Base surname probabilities
         for surname, freq in surname_frequencies.items():
@@ -350,9 +370,21 @@ class DataInitializationService:
                 min_compound_freq = 0.1  # Reasonable floor for compound surnames
                 compound_freq = max(compound_freq, min_compound_freq)
 
+                existing_freq = surname_frequencies.get(compound_surname, 0.0)
                 surname_frequencies[compound_surname] = compound_freq
-                prob = compound_freq / total_surname_freq
-                surname_log_probabilities[compound_surname] = math.log(prob)
+                compound_freq_delta += max(compound_freq - existing_freq, 0.0)
+
+        total_with_compounds = total_surname_freq + compound_freq_delta
+        if total_with_compounds <= 0:
+            total_with_compounds = total_surname_freq
+
+        # Add/refresh compound surname probabilities using the updated denominator.
+        for compound_surname in compound_surnames:
+            compound_freq = surname_frequencies.get(compound_surname)
+            if compound_freq is None or compound_freq <= 0:
+                continue
+            prob = compound_freq / total_with_compounds
+            surname_log_probabilities[compound_surname] = math.log(prob)
 
         # Add frequency mappings for compound variants
         for variant_compound, standard_compound in COMPOUND_VARIANTS.items():

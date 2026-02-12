@@ -369,10 +369,10 @@ def test_middle_initial_leading_between_surname_and_given(detector):
     assert res.parsed.middle_tokens == ["A"]
     assert res.parsed.surname == "Li"
 
-    # Original-order view: first token is 'Li' (given), last is 'Wei' (surname), middle preserved
+    # Original-order view: preserves component labels and annotates original sequence
     por = res.parsed_original_order
     assert por is not None
     assert por.order == ["surname", "middle", "given"]
-    assert por.given_name == "Li"
-    assert por.surname == "Wei"
+    assert por.given_name == "Wei"
+    assert por.surname == "Li"
     assert por.middle_tokens == ["A"]

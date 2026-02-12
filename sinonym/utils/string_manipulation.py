@@ -444,19 +444,23 @@ class StringManipulationUtils:
         if len(target_parts) != 2:
             return [token]  # Can't split
 
-        # Use target lengths as a guide, but preserve original structure
-        target_len1, _target_len2 = len(target_parts[0]), len(target_parts[1])
+        # Scale split position to source token length instead of assuming
+        # source and target component lengths are identical.
+        target_len1, target_len2 = len(target_parts[0]), len(target_parts[1])
+        target_total = target_len1 + target_len2
 
-        # Try splitting at the boundary suggested by target lengths
-        split_point = target_len1
-        if split_point < len(token):
-            part1 = token[:split_point]
-            part2 = token[split_point:]
-            return [part1, part2]
+        if target_total > 0:
+            split_point = round(len(token) * (target_len1 / target_total))
+        else:
+            split_point = len(token) // 2
 
-        # Fallback: split in middle
-        mid = len(token) // 2
-        return [token[:mid], token[mid:]]
+        # When target parts are equal-length but source is odd, prefer giving
+        # the extra character to the first part (e.g., "szeto" -> "sze" + "to").
+        if target_len1 == target_len2 and len(token) % 2 == 1:
+            split_point = len(token) // 2 + 1
+
+        split_point = max(1, min(len(token) - 1, split_point))
+        return [token[:split_point], token[split_point:]]
 
     # ====================================================================
     # COMMON STRING OPERATIONS

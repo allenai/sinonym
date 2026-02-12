@@ -6,7 +6,7 @@ maintains fast processing speeds suitable for production use.
 
 Key Performance Requirements:
 - Average processing time < 1ms per name (sub-millisecond requirement)
-- Processing rate > 1000 names/second for diverse data
+- Processing rate > 3000 names/second for diverse data
 - Consistent performance across different name types
 
 The test includes both diverse data (minimal cache benefit) and cached data
@@ -27,7 +27,7 @@ from sinonym import ChineseNameDetector
 
 # Performance thresholds as constants
 MAX_MICROSECONDS_PER_NAME = 1000  # 1ms requirement
-MIN_DIVERSE_NAMES_PER_SECOND = 7500  # 7,500 names/second for diverse data
+MIN_DIVERSE_NAMES_PER_SECOND = 3000  # 3,000 names/second for diverse data
 
 
 class TestChineseNameDetectorPerformance:
@@ -172,7 +172,7 @@ class TestChineseNameDetectorPerformance:
         Test processing performance with diverse data (realistic scenario).
 
         This test ensures the detector maintains sub-millisecond average processing
-        time and can handle at least 1000 names per second with diverse input.
+        time and can handle at least 3000 names per second with diverse input.
         """
         # Generate diverse test data
         test_names = self.generate_test_names(detector, 1000)

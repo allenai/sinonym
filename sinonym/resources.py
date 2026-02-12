@@ -9,15 +9,18 @@ Includes helpers to load ML artifacts persisted with joblib or skops.
 
 from __future__ import annotations
 
+import atexit
 import csv
 import json
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Any
 
 _DATA_PKG = "sinonym.data"
+_RESOURCE_PATH_STACK = ExitStack()
+atexit.register(_RESOURCE_PATH_STACK.close)
 
 
 def read_text(name: str, encoding: str = "utf-8") -> str:
@@ -96,9 +99,8 @@ def resource_path(name: str) -> Path:
     """
     Returns a real filesystem Path to the resource.
 
-    WARNING: This uses as_file().__enter__() which opens a temp file handle.
-    Prefer using the open_resource_path() context manager or other read_* functions.
-    This is provided for compatibility but should be used carefully.
+    This compatibility helper keeps the extraction context alive for process
+    lifetime via a module-level ExitStack.
     """
     ref = files(_DATA_PKG) / name
-    return as_file(ref).__enter__()
+    return _RESOURCE_PATH_STACK.enter_context(as_file(ref))

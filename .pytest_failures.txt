@@ -1,0 +1,52 @@
+ACL Chinese name tests	'Tong Zhang'	True	Tong Zhang	True	Zhang Tong
+ACL Chinese name tests	'Bei Yu'	True	Bei Yu	True	Yu Bei
+ACL Chinese name tests	'Fei Yu'	True	Fei Yu	True	Yu Fei
+ACL order preservation tests	'Hao Fei'	True	Hao Fei	True	Fei Hao
+ACL order preservation tests	'Hao-Ran Wei'	True	Hao-Ran Wei	True	Wei Hao-Ran
+ACL order preservation tests	'Haoran Jin'	True	Hao-Ran Jin	True	Jin Haoran
+ACL order preservation tests	'Haoran Que'	True	Hao-Ran Que	True	Que Haoran
+ACL order preservation tests	'Haoran Ye'	True	Hao-Ran Ye	True	Ye Haoran
+ACL order preservation tests	'Junjie Fang'	True	Jun-Jie Fang	True	Fang Junjie
+ACL order preservation tests	'Junjie Peng'	True	Jun-Jie Peng	True	Peng Junjie
+ACL order preservation tests	'Junjie Ye'	True	Jun-Jie Ye	True	Ye Junjie
+ACL order preservation tests	'Kun Kuang'	True	Kun Kuang	True	Kuang Kun
+ACL order preservation tests	'Lecheng Zheng'	True	Lecheng Zheng	True	Zheng Lecheng
+ACL order preservation tests	'Qianlong Du'	True	Qian-Long Du	True	Du Qianlong
+ACL order preservation tests	'Qianlong Wang'	True	Qian-Long Wang	True	Wang Qianlong
+ACL order preservation tests	'Xinlei Chen'	True	Xin-Lei Chen	True	Chen Xinlei
+ACL order preservation tests	'Xinlei He'	True	Xin-Lei He	True	He Xinlei
+ACL order preservation tests	'Yao Shu'	True	Yao Shu	True	Shu Yao
+ACL order preservation tests	'Yuwen Wang'	True	Yuwen Wang	True	Wang Yuwen
+ACL order preservation tests	'Yuxuan Dong'	True	Yuxuan Dong	True	Dong Yuxuan
+ACL order preservation tests	'Yuxuan Gu'	True	Yuxuan Gu	True	Gu Yuxuan
+Basic Chinese name tests	'Feng Cha'	True	Cha Feng	True	Feng Cha
+Basic Chinese name tests	'He Cha'	True	Cha He	True	He Cha
+Basic Chinese name tests	'Hu Cha'	True	Cha Hu	True	Hu Cha
+Basic Chinese name tests	'Li Gong'	True	Gong Li	True	Li Gong
+Basic Chinese name tests	'Gao Wei'	True	Wei Gao	True	Gao Wei
+Basic Chinese name tests	'Kong Kung'	True	Kung Kong	True	Kong Kung
+Basic Chinese name tests	'Lu Xun'	True	Xun Lu	True	Lu Xun
+Basic Chinese name tests	'Qin Shi'	True	Shi Qin	True	Qin Shi
+Basic Chinese name tests	'Xun Zhou'	True	Xun Zhou	True	Zhou Xun
+Basic Chinese name tests	'Zhou Xun'	True	Xun Zhou	True	Zhou Xun
+Compound name tests	'Leung Ka Fai'	True	Ka-Fai Leung	True	Leung-Ka Fai
+Miscellaneous tests	'Jin Hua'	True	Hua Jin	True	Jin Hua
+Miscellaneous tests	'Miao Yu'	True	Miao Yu	True	Yu Miao
+Miscellaneous tests	'Yu Miao'	True	Miao Yu	True	Yu Miao
+Miscellaneous tests	'Wen Jing'	True	Jing Wen	True	Wen Jing
+Miscellaneous tests	'Jing Wen'	True	Jing Wen	True	Wen Jing
+ML ranker test data tests	'Gui Rui'	True	Rui Gui	True	Gui Rui
+ML ranker test data tests	'Shu Yao'	True	Yao Shu	True	Shu Yao
+ML ranker test data tests	'Huang Yu Chang'	True	Yu-Chang Huang	True	Huang-Yu Chang
+ML ranker test data tests	'Jia Jian Feng'	True	Jian-Feng Jia	True	Jia-Jian Feng
+ML ranker test data tests	'Fan Jia Liang'	True	Jia-Liang Fan	True	Fan-Jia Liang
+ML ranker test data tests	'Wei Wen Xing'	True	Wen-Xing Wei	True	Wei-Wen Xing
+ML ranker test data tests	'Xi Zhao'	True	Zhao Xi	True	Xi Zhao
+ML ranker test data tests	'Fu Meng Ting'	True	Meng-Ting Fu	True	Fu-Meng Ting
+ML ranker test data tests	'ke chen'	True	Ke Chen	True	Chen Ke
+ML ranker test data tests	'mi zhang'	True	Mi Zhang	True	Zhang Mi
+ML ranker test data tests	'xu feng'	True	Feng Xu	True	Xu Feng
+ML ranker test data tests	'yang guang'	True	Guang Yang	True	Yang Guang
+Mixed scripts tests	'Zhou（Mary）Li'	True	Li Zhou	True	Zhou Li
+Name formatting tests	'JinHua'	True	Hua Jin	True	Jin Hua
+Name formatting tests	'LinShu'	True	Shu Lin	True	Lin Shu

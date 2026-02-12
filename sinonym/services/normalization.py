@@ -201,16 +201,9 @@ class NormalizationService:
 
         for token in mix:
             if self._config.cjk_pattern.search(token):
-                # Convert Han to pinyin with enhanced processing for all-Chinese inputs
-                if is_all_chinese and len(token) > 1:
-                    # For all-Chinese inputs, process each character separately
-                    # This helps with surname/given name boundary detection
-                    pinyin_tokens = self._cache_service.han_to_pinyin_fast(token)
-                    han_tokens.extend(pinyin_tokens)
-                else:
-                    # Standard processing for mixed inputs
-                    pinyin_tokens = self._cache_service.han_to_pinyin_fast(token)
-                    han_tokens.extend(pinyin_tokens)
+                # Convert Han to pinyin. all-Chinese and mixed-script paths share the same behavior.
+                pinyin_tokens = self._cache_service.han_to_pinyin_fast(token)
+                han_tokens.extend(pinyin_tokens)
             else:
                 # Clean Roman token
                 clean_token = self._config.clean_roman_pattern.sub("", token)
@@ -224,17 +217,8 @@ class NormalizationService:
                         roman_tokens_split.extend(parts)
                     # Use centralized split_concat method if available
                     elif self._data:
-                        # Create expanded normalized cache including potential splits to reduce redundant normalizations
+                        # Seed cache with the full token; split helper fills additional entries on demand.
                         local_cache = {clean_token: self._text_normalizer.normalize_token(clean_token)}
-
-                        # Pre-populate cache with likely split candidates to avoid redundant normalization
-                        if len(clean_token) >= 4:  # Only for tokens that could reasonably split
-                            for i in range(2, len(clean_token) - 1):  # Split positions
-                                part1, part2 = clean_token[:i], clean_token[i:]
-                                if part1 not in local_cache:
-                                    local_cache[part1] = self._text_normalizer.normalize_token(part1)
-                                if part2 not in local_cache:
-                                    local_cache[part2] = self._text_normalizer.normalize_token(part2)
 
                         split_result = StringManipulationUtils.split_concatenated_name(
                             clean_token,
