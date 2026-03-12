@@ -495,6 +495,15 @@ class ChineseNameDetector:
                     is_surname_first_in_this_order = list(order_tokens[:k]) == surname_tokens
                     is_surname_last_in_this_order = list(order_tokens[-k:]) == surname_tokens
 
+                    # Compound surname fallback: surname_tokens may be sub-tokens
+                    # of a single original token (e.g. ['Ou','yang'] from 'Ouyang')
+                    if not is_surname_first_in_this_order and not is_surname_last_in_this_order:
+                        joined_surname = "".join(surname_tokens).lower()
+                        if order_tokens[0].lower() == joined_surname:
+                            is_surname_first_in_this_order = True
+                        elif order_tokens[-1].lower() == joined_surname:
+                            is_surname_last_in_this_order = True
+
                     if used_original:
                         original_is_given_first = is_surname_last_in_this_order
                     else:

@@ -253,6 +253,15 @@ class BatchAnalysisService:
         if surname_tokens[-1] == original_tokens[-1]:
             return NameFormat.GIVEN_FIRST
 
+        # Compound surname: surname_tokens may be sub-tokens of a single
+        # original token (e.g. ['Ou','yang'] from 'Ouyang').
+        # Reconstruct and check against original tokens.
+        joined_surname = "".join(surname_tokens).lower()
+        if original_tokens[0].lower() == joined_surname:
+            return NameFormat.SURNAME_FIRST
+        if original_tokens[-1].lower() == joined_surname:
+            return NameFormat.GIVEN_FIRST
+
         # Default to surname-first for unclear cases
         return NameFormat.SURNAME_FIRST
 
