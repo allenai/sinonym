@@ -126,6 +126,12 @@ corroborate, and DETECTS a mis-split (a given name in the surname field, a surna
 the first field) → fails closed. New `western_givennames.csv` (18,716 high-confidence
 given names, first-ratio >=0.90 over the corpus) backs the conflict detection.
 
+A `use_prior` flag (default `True`) toggles this: `use_prior=False` IGNORES the
+supplied split, concatenates the fields, and re-derives via the flat string router
+(== `normalize_name` of the joined name) — for callers whose upstream split is
+unreliable. E.g. `(Della,"","de Souza")` → `Della de Souza` with the prior, but
+fails (flat leading-particle FN) without it.
+
 Effect on the original failures:
 - FN `Della de Souza` — fixed: arriving as `(Della, "", "de Souza")`, `Della` is never
   mistaken for a boundary → already-compound → `Della de Souza`.

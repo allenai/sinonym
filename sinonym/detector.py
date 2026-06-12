@@ -184,6 +184,7 @@ from sinonym.services import (
 )
 from sinonym.services.process_pool import PersistentMultiprocessNormalizer, normalize_names_multiprocess
 from sinonym.services.western_particle import (
+    join_name_parts as _join_name_parts,
     load_western_givennames,
     load_western_particles,
     load_western_surnames,
@@ -595,20 +596,31 @@ class ChineseNameDetector:
         last: str = "",
         *,
         suffix: str | None = None,
+        use_prior: bool = True,
     ) -> ParseResult:
-        """Canonicalise a Western name already split into first/middle/last.
+        """Canonicalise a Western name supplied as first/middle/last.
 
-        Opt-in (requires ``enable_western_particles=True``). Folds a stranded surname
-        particle into the surname using the upstream split as a strong prior that is
-        cross-checked against corpus token statistics. FAILS CLOSED — returns
-        ``ParseResult.failure`` (caller keeps its own split) when not confident:
-        ambiguous particle, a mis-split source, or nothing to fold. The formatted
-        ``result`` preserves token order; only the particle is lowercased.
+        Opt-in (requires ``enable_western_particles=True``). ``use_prior`` controls
+        whether the supplied field split is used as evidence:
+
+        - ``use_prior=True`` (default): PRIOR-AWARE. Treat the first/middle/last split
+          as a strong prior, cross-checked against corpus token statistics — fold a
+          stranded particle into the surname, detect a mis-split source, and FAIL
+          CLOSED (return ``ParseResult.failure``) when not confident.
+        - ``use_prior=False``: NO PRIOR. Ignore the supplied split; concatenate the
+          fields into a flat string and run the same string-based router as
+          ``normalize_name`` (re-derives the given/surname boundary from scratch).
+          Use when the upstream split is unreliable.
+
+        Either way the formatted ``result`` preserves token order; only the particle
+        is lowercased.
         """
         if not self._enable_western_particles:
             return ParseResult.failure("western particle handling not enabled")
         self._ensure_initialized()
         self._ensure_western_loaded()
+        if not use_prior:
+            return self.normalize_name(_join_name_parts(first, middle, last))
         return try_western_particle_parts(
             first, middle, last,
             self._western_particles, self._western_surnames, self._western_givennames,

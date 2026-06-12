@@ -95,6 +95,12 @@ def _toks(value) -> list[str]:
     return [t for t in str(value).split() if t.strip()]
 
 
+def join_name_parts(first, middle=None, last="") -> str:
+    """Flatten first/middle/last fields back into a single ordered name string
+    (used for the no-prior path that ignores the supplied split)."""
+    return " ".join(_toks(first) + _toks(middle) + _toks(last))
+
+
 def _surname_like(tok: str, surnames: frozenset[str], givens: frozenset[str]) -> bool:
     """A token is surname-like if it is a known surname, or at least not a known
     given name (conservative — unknown tokens are allowed as surname cores)."""

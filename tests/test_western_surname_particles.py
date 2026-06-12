@@ -140,6 +140,21 @@ def test_structured_fixes_flat_false_negative(western_detector):
     assert r.success and r.result == "Della de Souza"
 
 
+def test_use_prior_flag(western_detector):
+    """use_prior=True uses the field split as a prior; use_prior=False ignores it and
+    re-derives from the concatenated string (== normalize_name of the joined name)."""
+    # Della de Souza: the prior makes it foldable; without the prior the flat router
+    # hits the leading-particle false-negative and rejects.
+    assert western_detector.normalize_name_parts("Della", "", "de Souza", use_prior=True).result == "Della de Souza"
+    assert western_detector.normalize_name_parts("Della", "", "de Souza", use_prior=False).success is False
+    # no-prior must match the flat normalize_name of the joined string, for fold and reject cases.
+    for f, m, l in [("Roeland", "van", "Hout"), ("Della", "", "de Souza"), ("John", "Ben", "Carter")]:
+        joined = " ".join([t for t in [f, *(m if isinstance(m, list) else m.split()), l] if t])
+        np = western_detector.normalize_name_parts(f, m, l, use_prior=False)
+        flat = western_detector.normalize_name(joined)
+        assert np.success == flat.success and np.result == flat.result
+
+
 def test_structured_middle_as_list_or_string(western_detector):
     """middle accepts both a string and a list of tokens."""
     assert western_detector.normalize_name_parts("Roeland", "van", "Hout").result == "Roeland van Hout"
