@@ -1,0 +1,82 @@
+input,expect,output,status,note
+Roeland van Hout,fold,Roeland van Hout,ok,dutch van + surname (gold case 282371911)
+Denis de Casabianca,fold,Denis de Casabianca,ok,french de (gold case 153773955)
+Maximilian Pierer von Esch,fold,Maximilian Pierer von Esch,ok,german von two-given (gold case 276961277)
+Osmar Luiz Ferreira de Carvalho,fold,Osmar Luiz Ferreira de Carvalho,ok,portuguese de multi-given; parsed split now pulls Ferreira into surname via surname dict (see split test)
+Vincent van Gogh,fold,Vincent van Gogh,ok,dutch van
+Theo van Gogh,fold,Theo van Gogh,ok,dutch van
+Jan van Eyck,fold,Jan van Eyck,ok,dutch van
+Ludwig van Beethoven,fold,Ludwig van Beethoven,ok,dutch van
+Anna van Helsing,fold,Anna van Helsing,ok,dutch van lowercase-correct
+Charles de Gaulle,fold,Charles de Gaulle,ok,french de
+Hugo de Vries,fold,Hugo de Vries,ok,dutch de
+Simone de Beauvoir,fold,Simone de Beauvoir,ok,french de
+Willem de Kooning,fold,Willem de Kooning,ok,dutch de
+Leonardo da Vinci,fold,Leonardo da Vinci,ok,italian da
+Maria da Silva,fold,Maria da Silva,ok,portuguese da + non-particle core silva
+Otto von Bismarck,fold,Otto von Bismarck,ok,german von
+Friedrich von Hayek,fold,Friedrich von Hayek,ok,german von
+Jose del Toro,fold,Jose del Toro,ok,spanish del
+Manuel del Rio,fold,Manuel del Rio,ok,spanish del
+Gabriel dos Santos,fold,Gabriel dos Santos,ok,portuguese dos
+Joao dos Reis,fold,Joao dos Reis,ok,portuguese dos
+Pedro dos Santos Silva,fold,Pedro dos Santos Silva,ok,portuguese dos multi-core
+Cornelis ten Boom,fold,Cornelis ten Boom,ok,dutch ten
+Jan ter Horst,fold,Jan ter Horst,ok,dutch ter
+Sven den Boer,fold,Sven den Boer,ok,dutch den
+Jan van der Berg,fold,Jan van der Berg,ok,dutch van der two particles
+Daphne du Maurier,fold,Daphne du Maurier,ok,french du
+Ahmed bin Salman,fold,Ahmed bin Salman,ok,arabic bin
+Mohammed bin Rashid,fold,Mohammed bin Rashid,ok,arabic bin
+Bashar al Assad,fold,Bashar al Assad,ok,arabic al
+Omar al Bashir,fold,Omar al Bashir,ok,arabic al
+Ivan della Rosa,fold,Ivan della Rosa,ok,italian della
+Marco della Valle,fold,Marco della Valle,ok,italian della
+Juan de la Cruz,fold,Juan de la Cruz,ok,spanish de la consecutive particles
+Diego de la Vega,fold,Diego de la Vega,ok,spanish de la
+Oscar de la Renta,fold,Oscar de la Renta,ok,spanish de la
+Antoine de Saint-Exupery,fold,Antoine de Saint-Exupery,ok,french de hyphenated core
+Cecil B. de Mille,fold,Cecil B de Mille,ok,initial given; period stripped by normalizer
+Roeland Van Hout,fold,Roeland van Hout,ok,particle lowercased from Van
+Denis De Casabianca,fold,Denis de Casabianca,ok,particle lowercased from De
+Jan Van Der Berg,fold,Jan van der Berg,ok,both particles lowercased
+John Smith,reject,,ok,no particle
+Michael Jordan,reject,,ok,no particle
+Albert Einstein,reject,,ok,no particle
+Marie Curie,reject,,ok,no particle
+Jean-Claude Smith,reject,,ok,hyphenated given no particle
+van Hout,reject,,ok,bare surname fragment no given
+de la Cruz,reject,,ok,leading-particle fragment no given
+Le Duc Tho,reject,,ok,leading particle Le no given before it
+Al Pacino,reject,,ok,Al is given two tokens
+Van Morrison,reject,,ok,Van is given two tokens
+Della Reese,reject,,ok,Della is given two tokens
+Ben Stiller,reject,,ok,Ben is given two tokens
+Anil Kumar Sharma,reject,,ok,kumar excluded from particle set (DB tail)
+Rajesh Kumar Singh,reject,,ok,kumar excluded (DB tail)
+Priya Kumar Patel,reject,,ok,kumar excluded (DB tail)
+Maria Garcia Lopez,reject,,ok,hispanic two-surname not particles (DB tail)
+Juan Carlos Garcia,reject,,ok,garcia excluded (DB tail)
+Ana Silva Costa,reject,,ok,silva excluded (DB tail)
+Pedro Rodriguez Silva,reject,,ok,rodriguez/silva excluded (DB tail)
+Sofia Martinez Lopez,reject,,ok,martinez/lopez excluded (DB tail)
+Carlos Perez Gonzalez,reject,,ok,perez/gonzalez excluded (DB tail)
+John Ben Carter,reject,,xfail,FALSE POSITIVE: Ben is middle given but folds as particle
+John Al Smith,reject,,xfail,FALSE POSITIVE: Al is middle given but folds as particle
+Tran Van Thanh,reject,,xfail,FALSE POSITIVE: vietnamese Van middle folds (router is western-only)
+Nguyen Le Minh,reject,,xfail,FALSE POSITIVE: vietnamese Le middle folds
+Ana Paula da Silva,fold,Ana Paula da Silva,ok,2 given then da
+Jose Maria de Souza,fold,Jose Maria de Souza,ok,2 given then de
+Maria Luisa von Trapp,fold,Maria Luisa von Trapp,ok,2 given then von
+John Michael Robert van Dijk,fold,John Michael Robert van Dijk,ok,3 given then van
+Anna de Souza,fold,Anna de Souza,ok,single given then de
+Pierre de la Tour,fold,Pierre de la Tour,ok,given then de la
+Maria De Souza Santos,fold,Maria de Souza Santos,ok,de medial as particle multi-core surname
+Della de Souza,fold,Della de Souza,xfail,AMBIGUITY false-negative: leading given Della is particle-token so boundary=0 rejects
+Ben de Vries,fold,Ben de Vries,xfail,AMBIGUITY false-negative: leading given Ben is particle-token
+Al de Roma,fold,Al de Roma,xfail,AMBIGUITY false-negative: leading given Al is particle-token
+John Van Smith,reject,,xfail,AMBIGUITY false-positive: Van medial given folds as particle
+Ursula Le Guin,fold,Ursula Le Guin,xfail,CASING: integral capitalized Le Guin lowercased wrongly to le Guin
+Robert De Niro,fold,Robert De Niro,xfail,CASING: integral De Niro lowercased wrongly to de Niro
+Mary Le Roy,fold,Mary Le Roy,xfail,CASING: integral Le Roy lowercased wrongly to le Roy
+Jean-Claude Van Damme,fold,Jean-Claude Van Damme,xfail,CASING: integral Van Damme lowercased wrongly to van Damme

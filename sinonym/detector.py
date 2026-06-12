@@ -183,6 +183,11 @@ from sinonym.services import (
     ServiceContext,
 )
 from sinonym.services.process_pool import PersistentMultiprocessNormalizer, normalize_names_multiprocess
+from sinonym.services.western_particle import (
+    load_western_particles,
+    load_western_surnames,
+    try_western_particle,
+)
 
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CHINESE NAME DETECTOR CLASS
@@ -192,13 +197,25 @@ from sinonym.services.process_pool import PersistentMultiprocessNormalizer, norm
 class ChineseNameDetector:
     """Main Chinese name detection and normalization service."""
 
-    def __init__(self, config: ChineseNameConfig | None = None, weights: list[float] | None = None):
+    def __init__(
+        self,
+        config: ChineseNameConfig | None = None,
+        weights: list[float] | None = None,
+        enable_western_particles: bool = False,
+    ):
         self._config = config or ChineseNameConfig.create_default()
         self._cache_service = PinyinCacheService(self._config)
         self._normalizer = NormalizationService(self._config, self._cache_service)
         self._data_service = DataInitializationService(self._config, self._cache_service, self._normalizer)
         self._data: NameDataStructures | None = None
         self._weights = weights  # Store weights to pass to parsing service
+        # Opt-in Western surname-particle canonicalisation (default OFF → Chinese
+        # contract unchanged). When ON, normalize_name routes Western
+        # given+particle+surname names (van/de/von/…) to a canonical success
+        # instead of rejecting them. See services/western_particle.py.
+        self._enable_western_particles = enable_western_particles
+        self._western_particles: frozenset[str] | None = None
+        self._western_surnames: frozenset[str] | None = None
 
         # Service instances (initialized after data loading)
         self._ethnicity_service: EthnicityClassificationService | None = None
@@ -278,6 +295,20 @@ class ChineseNameDetector:
 
         # Check if this is an all-Chinese input first
         is_all_chinese = self._normalizer._text_preprocessor.is_all_chinese_input(raw_name)
+
+        # Western surname-particle router (opt-in). Fires BEFORE the non-Chinese
+        # rejection so a "given + particle + surname" Western name is canonicalised
+        # (particle folded into the surname) instead of rejected. Skipped for
+        # all-Chinese input so romanised pinyin syllables (de/da/…) aren't hijacked.
+        if self._enable_western_particles and not is_all_chinese:
+            if self._western_particles is None:
+                self._western_particles = load_western_particles()
+                self._western_surnames = load_western_surnames()
+            western = try_western_particle(
+                normalized_input.roman_tokens, self._western_particles, self._western_surnames,
+            )
+            if western is not None:
+                return western
 
         # Check for non-Chinese ethnicity using normalized tokens (consistent for all inputs)
         non_chinese_result = self._ethnicity_service.classify_ethnicity(
