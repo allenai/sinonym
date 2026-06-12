@@ -26,8 +26,8 @@ Jan ter Horst,fold,Jan ter Horst,ok,dutch ter
 Sven den Boer,fold,Sven den Boer,ok,dutch den
 Jan van der Berg,fold,Jan van der Berg,ok,dutch van der two particles
 Daphne du Maurier,fold,Daphne du Maurier,ok,french du
-Ahmed bin Salman,fold,Ahmed bin Salman,ok,arabic bin
-Mohammed bin Rashid,fold,Mohammed bin Rashid,ok,arabic bin
+Ahmed bin Salman,reject,,ok,bin is AMBIGUOUS tier (78% given-side in corpus) -> gated/fail-closed on flat path
+Mohammed bin Rashid,reject,,ok,bin ambiguous -> gated/fail-closed
 Bashar al Assad,fold,Bashar al Assad,ok,arabic al
 Omar al Bashir,fold,Omar al Bashir,ok,arabic al
 Ivan della Rosa,fold,Ivan della Rosa,ok,italian della
@@ -61,10 +61,10 @@ Ana Silva Costa,reject,,ok,silva excluded (DB tail)
 Pedro Rodriguez Silva,reject,,ok,rodriguez/silva excluded (DB tail)
 Sofia Martinez Lopez,reject,,ok,martinez/lopez excluded (DB tail)
 Carlos Perez Gonzalez,reject,,ok,perez/gonzalez excluded (DB tail)
-John Ben Carter,reject,,xfail,FALSE POSITIVE: Ben is middle given but folds as particle
+John Ben Carter,reject,,ok,FIXED by tier gate: ben is AMBIGUOUS -> no fold -> rejected (was a false positive)
 John Al Smith,reject,,xfail,FALSE POSITIVE: Al is middle given but folds as particle
 Tran Van Thanh,reject,,xfail,FALSE POSITIVE: vietnamese Van middle folds (router is western-only)
-Nguyen Le Minh,reject,,xfail,FALSE POSITIVE: vietnamese Le middle folds
+Nguyen Le Minh,reject,,ok,FIXED by tier gate: le is AMBIGUOUS -> no fold -> rejected (was a false positive)
 Ana Paula da Silva,fold,Ana Paula da Silva,ok,2 given then da
 Jose Maria de Souza,fold,Jose Maria de Souza,ok,2 given then de
 Maria Luisa von Trapp,fold,Maria Luisa von Trapp,ok,2 given then von
@@ -76,7 +76,7 @@ Della de Souza,fold,Della de Souza,xfail,AMBIGUITY false-negative: leading given
 Ben de Vries,fold,Ben de Vries,xfail,AMBIGUITY false-negative: leading given Ben is particle-token
 Al de Roma,fold,Al de Roma,xfail,AMBIGUITY false-negative: leading given Al is particle-token
 John Van Smith,reject,,xfail,AMBIGUITY false-positive: Van medial given folds as particle
-Ursula Le Guin,fold,Ursula Le Guin,xfail,CASING: integral capitalized Le Guin lowercased wrongly to le Guin
+Ursula Le Guin,fold,Ursula Le Guin,xfail,integral Le Guin; le is AMBIGUOUS so now rejected (ideal would fold keeping caps)
 Robert De Niro,fold,Robert De Niro,xfail,CASING: integral De Niro lowercased wrongly to de Niro
-Mary Le Roy,fold,Mary Le Roy,xfail,CASING: integral Le Roy lowercased wrongly to le Roy
+Mary Le Roy,fold,Mary Le Roy,xfail,integral Le Roy; le AMBIGUOUS so now rejected (ideal would fold keeping caps)
 Jean-Claude Van Damme,fold,Jean-Claude Van Damme,xfail,CASING: integral Van Damme lowercased wrongly to van Damme

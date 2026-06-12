@@ -46,6 +46,21 @@ def _load_cases():
 _CASES = _load_cases()
 _FOLD_CASES = [r for r in _CASES if r["expect"] == "fold"]
 
+_PARTS_CSV = Path(__file__).parent / "data" / "western_particle_parts_cases.csv"
+
+
+def _load_parts_cases():
+    rows = []
+    with _PARTS_CSV.open(encoding="utf-8") as fh:
+        for r in csv.DictReader(fh):
+            if not (r.get("first", "").strip() or r.get("last", "").strip()):
+                continue
+            rows.append(r)
+    return rows
+
+
+_PARTS_CASES = _load_parts_cases()
+
 
 def _param(r):
     marks = []
@@ -92,6 +107,43 @@ def test_default_detector_still_rejects_every_fold_case(default_detector, r):
     hold regardless of the router's own limitations.)"""
     res = default_detector.normalize_name(r["input"])
     assert res.success is False, f"DEFAULT must reject {r['input']!r}, got {res.result!r}"
+
+
+@pytest.mark.parametrize(
+    "r",
+    [pytest.param(r, id=f"{r['first']}|{r['middle']}|{r['last']}") for r in _PARTS_CASES],
+)
+def test_structured_parts_cases(western_detector, r):
+    """STRUCTURED path: normalize_name_parts(first, middle, last). Folds confidently
+    or fails closed (returns failure → caller keeps its split). The source split is a
+    prior cross-checked against corpus stats; mis-split inputs fail rather than emit a
+    wrong canonical."""
+    res = western_detector.normalize_name_parts(r["first"], r["middle"], r["last"])
+    if r["expect"] == "fold":
+        assert res.success, f"({r['first']}|{r['middle']}|{r['last']}) should fold, got: {res.error_message}"
+        assert res.result == r["output"], f"-> {res.result!r}, expected {r['output']!r}"
+    else:
+        assert res.success is False, f"({r['first']}|{r['middle']}|{r['last']}) should fail closed, got {res.result!r}"
+
+
+def test_structured_default_off_rejects():
+    """Default detector: normalize_name_parts must fail (flag off, contract intact)."""
+    off = ChineseNameDetector()
+    assert off.normalize_name_parts("Roeland", ["van"], "Hout").success is False
+
+
+def test_structured_fixes_flat_false_negative(western_detector):
+    """The flat path rejects `Della de Souza` (leading particle); the structured path
+    fixes it because Della arrives in the first field."""
+    assert western_detector.normalize_name("Della de Souza").success is False  # flat FN
+    r = western_detector.normalize_name_parts("Della", "", "de Souza")          # structured fix
+    assert r.success and r.result == "Della de Souza"
+
+
+def test_structured_middle_as_list_or_string(western_detector):
+    """middle accepts both a string and a list of tokens."""
+    assert western_detector.normalize_name_parts("Roeland", "van", "Hout").result == "Roeland van Hout"
+    assert western_detector.normalize_name_parts("Roeland", ["van"], "Hout").result == "Roeland van Hout"
 
 
 def test_parsed_components_carry_the_particle(western_detector):

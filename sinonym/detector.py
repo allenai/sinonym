@@ -184,9 +184,11 @@ from sinonym.services import (
 )
 from sinonym.services.process_pool import PersistentMultiprocessNormalizer, normalize_names_multiprocess
 from sinonym.services.western_particle import (
+    load_western_givennames,
     load_western_particles,
     load_western_surnames,
     try_western_particle,
+    try_western_particle_parts,
 )
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -214,8 +216,9 @@ class ChineseNameDetector:
         # given+particle+surname names (van/de/von/…) to a canonical success
         # instead of rejecting them. See services/western_particle.py.
         self._enable_western_particles = enable_western_particles
-        self._western_particles: frozenset[str] | None = None
+        self._western_particles: dict[str, str] | None = None
         self._western_surnames: frozenset[str] | None = None
+        self._western_givennames: frozenset[str] | None = None
 
         # Service instances (initialized after data loading)
         self._ethnicity_service: EthnicityClassificationService | None = None
@@ -301,9 +304,7 @@ class ChineseNameDetector:
         # (particle folded into the surname) instead of rejected. Skipped for
         # all-Chinese input so romanised pinyin syllables (de/da/…) aren't hijacked.
         if self._enable_western_particles and not is_all_chinese:
-            if self._western_particles is None:
-                self._western_particles = load_western_particles()
-                self._western_surnames = load_western_surnames()
+            self._ensure_western_loaded()
             western = try_western_particle(
                 normalized_input.roman_tokens, self._western_particles, self._western_surnames,
             )
@@ -579,6 +580,39 @@ class ChineseNameDetector:
     def is_chinese_name(self, raw_name: str) -> ParseResult:  # pragma: no cover - thin wrapper
         """Deprecated: use normalize_name(). Maintained for compatibility."""
         return self.normalize_name(raw_name)
+
+    def _ensure_western_loaded(self) -> None:
+        """Lazy-load the Western particle/surname/given-name data on first use."""
+        if self._western_particles is None:
+            self._western_particles = load_western_particles()
+            self._western_surnames = load_western_surnames()
+            self._western_givennames = load_western_givennames()
+
+    def normalize_name_parts(
+        self,
+        first: str,
+        middle: "str | list[str] | None" = None,
+        last: str = "",
+        *,
+        suffix: str | None = None,
+    ) -> ParseResult:
+        """Canonicalise a Western name already split into first/middle/last.
+
+        Opt-in (requires ``enable_western_particles=True``). Folds a stranded surname
+        particle into the surname using the upstream split as a strong prior that is
+        cross-checked against corpus token statistics. FAILS CLOSED — returns
+        ``ParseResult.failure`` (caller keeps its own split) when not confident:
+        ambiguous particle, a mis-split source, or nothing to fold. The formatted
+        ``result`` preserves token order; only the particle is lowercased.
+        """
+        if not self._enable_western_particles:
+            return ParseResult.failure("western particle handling not enabled")
+        self._ensure_initialized()
+        self._ensure_western_loaded()
+        return try_western_particle_parts(
+            first, middle, last,
+            self._western_particles, self._western_surnames, self._western_givennames,
+        )
 
     def analyze_name_batch(
         self,

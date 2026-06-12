@@ -1,0 +1,19 @@
+first,middle,last,expect,output,status,note
+Roeland,van,Hout,fold,Roeland van Hout,ok,trailing-middle particle folded
+Vincent,van,Gogh,fold,Vincent van Gogh,ok,trailing-middle particle
+Juan,de la,Cruz,fold,Juan de la Cruz,ok,two trailing particles in middle
+Maximilian,Pierer von,Esch,fold,Maximilian Pierer von Esch,ok,non-particle given + trailing particle
+Pedro,Silva dos,Santos,fold,Pedro Silva dos Santos,ok,surname-in-middle + trailing particle dos
+Roeland,Van,Hout,fold,Roeland van Hout,ok,particle lowercased
+Della,,de Souza,fold,Della de Souza,ok,already-compound last; Della never mistaken for boundary (FN fixed)
+Charles,,de Gaulle,fold,Charles de Gaulle,ok,already-compound last
+Anna,,de Souza,fold,Anna de Souza,ok,already-compound last
+Otto,,von Bismarck,fold,Otto von Bismarck,ok,already-compound last
+Maria,Garcia,de Souza,fold,Maria Garcia de Souza,ok,already-compound last + surname middle (source trusted)
+Osmar,Luiz Ferreira,de Carvalho,fold,Osmar Luiz Ferreira de Carvalho,ok,already-compound last; source split trusted
+John,Ben,Carter,reject,,ok,ben AMBIGUOUS -> fail closed (FP avoided)
+Ahmed,bin,Salman,reject,,ok,bin AMBIGUOUS -> fail closed
+John,Michael,Carter,reject,,ok,no particle to fold
+Silva,,Maria,reject,,ok,mis-split: given name (Maria) in surname field -> fail closed
+Ferreira,,John,reject,,ok,mis-split: given name (John) in surname field -> fail closed
+de,,Carvalho,reject,,ok,particle stranded in first field; nothing to fold confidently

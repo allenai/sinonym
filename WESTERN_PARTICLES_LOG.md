@@ -1,5 +1,9 @@
 # Western surname-particle canonicalization — experiment log
 
+> **v2 enhancement (current)** — confidence tiers + structured input, to cut false
+> positives AND false negatives. See "## Enhancement v2" below. v1 (string-only
+> router) is described first for context.
+
 Scope: sinonym changes only. This is the Western leg of a multi-stage locale router
 that extends the (Chinese-first) normalizer to canonicalize Western names whose
 **surname particle** (`van`, `de`, `von`, `del`, `da`, `du`, `al`, …) is split off
@@ -85,67 +89,90 @@ Result: `Osmar Luiz Ferreira de Carvalho` → `Osmar Luiz` / `Ferreira de Carval
 `van Hout`; `Maximilian Pierer von Esch` — `Pierer` not a surname → stays given).
 
 ## Tests
-`tests/test_western_surname_particles.py` (data-driven from the CSV) + structural
-tests. **135 passed, 12 xfail.** Full suite: **210 passed, 12 xfail, 9 failed** —
-the 9 failures are PRE-EXISTING on a clean checkout (env / sklearn-pickle version
-mismatch), confirmed via `git stash`; zero regressions from this work.
+`tests/test_western_surname_particles.py`, data-driven from two CSVs
+(`western_particle_cases.csv` flat, `western_particle_parts_cases.csv` structured) +
+structural tests. **156 passed, 10 xfail.** Full suite: **219 passed, 10 xfail,
+9 failed** — the 9 failures are PRE-EXISTING on a clean checkout (env / sklearn-pickle
+version mismatch), confirmed via `git stash`; zero regressions from this work.
 
 Coverage: nobiliary folds across 9+ particle languages; 2–3 given names then a
-particle; casing folds; the split refinement; negatives including the DB
-non-particle tail (`kumar/garcia/silva/perez/gonzalez/rodriguez/martinez` — all
-correctly REJECTED, no false fold); structural (default still rejects every
-fold-case, parsed components, Chinese names not hijacked, flag isolation).
+particle; casing folds; the split refinement; the structured path (folds + already-
+compound + **mis-split → fail-closed**); tier-gated ambiguous particles; negatives
+incl. the DB non-particle tail (`kumar/garcia/silva/perez/gonzalez/rodriguez/martinez`
+— all REJECTED, no false fold); structural (default rejects both entry points, parsed
+components, Chinese not hijacked, flag isolation, middle as str or list).
 
-## Known limitations (xfail — irreducible token ambiguity, would need per-name knowledge)
-A token like `de` / `van` / `ben` / `al` / `le` is BOTH a surname particle AND, for
-some people, a real **first/middle** given name or an integral capitalized surname
-element. The rule splits a name into `given` (→ first + middle) and `surname`
-(→ last) at the particle; when the particle token is actually playing a given/last
-role, that split lands in the wrong field. The closed list cannot tell which role
-applies without per-name knowledge.
+## Enhancement v2 — confidence tiers + structured input (cut FP and FN)
+v1 took a flat STRING and re-guessed the field split, treating every particle as
+equally certain → the documented false positives/negatives. v2 adds two levers,
+both **fail-closed** (when unsure, return failure → caller keeps its own split).
 
-Notation below: the INTENDED parse vs what the rule produces, by field.
+**(a) Particle confidence tiers (data-driven).** `surname_particles.csv` gains
+`first_ratio` + `tier` columns (from the 691M-row corpus): a particle is `ambiguous`
+when it is a given name >=30% of the time, else `safe`. AMBIGUOUS =
+`{di, do, le, des, bin, ibn, abu, ben, st}` (e.g. `ben` 0.62, `bin` 0.78 — `Bin` is a
+common Chinese given name); SAFE = the rest (`de` 0.09, `van` 0.12, `den` 0.05, …).
+Both paths refuse to fold a run containing an ambiguous particle. Effect: the flat
+path now REJECTS `John Ben Carter`/`Nguyen Le Minh` (were false positives) instead of
+mis-folding. Tradeoff: Arabic patronymics `bin`/`ibn`/`abu` are ambiguous in this
+(academic, China-heavy) corpus, so `Ahmed bin Salman` fails closed rather than folds.
 
-**(1) FALSE POSITIVE — a particle-token sitting in the MIDDLE (a given/middle name)
-is pulled into LAST and lowercased.**
+**(b) Structured entry point** `ChineseNameDetector.normalize_name_parts(first,
+middle, last)` (opt-in; `try_western_particle_parts`). Uses the upstream
+first/middle/last split as a strong PRIOR — **not** ground truth, because sources
+mis-split/mis-order just like Chinese name order. It folds a trailing-middle particle
+run into the surname (or normalizes an already-compound last) only when corpus stats
+corroborate, and DETECTS a mis-split (a given name in the surname field, a surname in
+the first field) → fails closed. New `western_givennames.csv` (18,716 high-confidence
+given names, first-ratio >=0.90 over the corpus) backs the conflict detection.
 
-| input | intended first / middle / last | rule's first / middle / last → output | error |
-|---|---|---|---|
-| `John Ben Carter` | John / **Ben** / Carter | John / — / **ben Carter** → `John ben Carter` | middle given `Ben` demoted into surname + lowercased |
-| `John Van Smith` | John / **Van** / Smith | John / — / **van Smith** → `John van Smith` | same |
-| `Tran Van Thanh` (Vietnamese) | given Thanh / **Van** / surname Tran | Tran / — / **van Thanh** → `Tran van Thanh` | `Van` is a Vietnamese middle, not a particle (router is Western-only) |
-| `Nguyen Le Minh` (Vietnamese) | given Minh / **Le** / surname Nguyen | Nguyen / — / **le Minh** → `Nguyen le Minh` | same |
+Effect on the original failures:
+- FN `Della de Souza` — fixed: arriving as `(Della, "", "de Souza")`, `Della` is never
+  mistaken for a boundary → already-compound → `Della de Souza`.
+- FP `John Ben Carter` — fixed: `(John, [Ben], Carter)` → `ben` ambiguous → fail closed.
+- Mis-split `(Silva, "", "Maria")` / `(Ferreira, "", "John")` → fail closed (never a
+  wrong canonical) instead of emitting garbage.
+- `(Osmar,"Luiz Ferreira","de Carvalho")` → unchanged string; source split trusted.
 
-**(2) FALSE NEGATIVE — a particle-token used as the FIRST name lands at index 0, so
-the "first particle" is the given itself → no given remains before it → REJECT.**
+The contract is **success ⇔ a confident fold (or already-canonical compound)**;
+everything else returns `ParseResult.failure(reason)`. No silent / low-confidence
+folds on either path. Batch mode was intentionally out of scope for v2.
 
-| input | intended first / middle / last | rule | error |
-|---|---|---|---|
-| `Della de Souza` | **Della** / — / de Souza | first particle = `della` @ idx0 → boundary<1 → **rejected** | a real `de Souza` fold is dropped because the first name equals a particle |
-| `Ben de Vries` | **Ben** / — / de Vries | `ben` @ idx0 → **rejected** | same |
-| `Al de Roma` | **Al** / — / de Roma | `al` @ idx0 → **rejected** | same |
+## Limitations — fixed in v2 vs residual
+A token like `de` / `van` / `ben` / `le` is BOTH a surname particle AND, for some
+people, a real first/middle given name or an integral capitalized surname element.
+The closed list alone cannot tell which role applies; v2 mitigates with tiers +
+structured input + fail-closed, but some residue remains.
 
-(The "first particle = boundary" rule is REQUIRED for `de la Cruz` — given `Juan`,
-last `de la Cruz` — but that same rule mis-fires here. The two requirements conflict;
-no single positional rule satisfies both.)
+**FIXED in v2:**
+- FP from AMBIGUOUS particles — `John Ben Carter`, `Nguyen Le Minh`: `ben`/`le` are
+  ambiguous tier → no fold → REJECTED (flat + structured). ✓
+- FN from a leading particle-token-given — `Della de Souza`, `Ben de Vries`: the FLAT
+  path still rejects (leading particle → boundary 0), but the STRUCTURED path fixes
+  it (`(Della,"","de Souza")` → `Della de Souza`). ✓
+- Mis-split source — `(Silva,"","Maria")` etc.: detected → fail closed (never a wrong
+  canonical). ✓
 
-**(3) CASING — an integral, conventionally-capitalized surname element is lowercased.**
+**RESIDUAL (still xfail):**
+- FP from a SAFE particle that is a given name in context — `John Van Smith` →
+  `John van Smith`, `Tran Van Thanh` (Vietnamese middle). `van` is 88% surname-side in
+  the corpus so it stays SAFE and folds; statistically defensible but wrong here.
+- CASING — integral capitalized surnames: `Robert De Niro`→`de Niro`,
+  `Jean-Claude Van Damme`→`van Damme` (safe `de`/`van` fold + lowercase). `Le Guin`/
+  `Le Roy` now REJECT (le ambiguous) rather than fold — still not the ideal
+  caps-preserving fold.
+- FN that needs reorder — flat `Della de Souza` (only the structured path fixes it).
 
-| input | intended first / middle / last | rule's output | error |
-|---|---|---|---|
-| `Ursula Le Guin` | Ursula / — / **Le Guin** | `Ursula le Guin` | `Le` is integral to the surname (English caps), not a lowercase particle |
-| `Robert De Niro` | Robert / — / **De Niro** | `Robert de Niro` | same |
-| `Mary Le Roy` | Mary / — / **Le Roy** | `Mary le Roy` | same |
-| `Jean-Claude Van Damme` | Jean-Claude / — / **Van Damme** | `Jean-Claude van Damme` | same |
-
-(By-design lowercase-particle convention; semantically wrong for these few where the
-particle is a fixed part of the surname.)
-
-All recorded as `xfail(strict=False)` so the suite stays green while tracking the
+All residual cases are recorded as `xfail(strict=False)` so the suite stays green
+while tracking the
 gap; if the logic later improves they xpass.
 
 ## Files
-- `sinonym/services/western_particle.py`
-- `sinonym/detector.py` (flag + router wiring + imports)
-- `sinonym/data/surname_particles.csv`, `sinonym/data/western_surnames.csv`
-- `tests/test_western_surname_particles.py`, `tests/data/western_particle_cases.csv`
+- `sinonym/services/western_particle.py` (loaders, `try_western_particle` flat,
+  `try_western_particle_parts` structured)
+- `sinonym/detector.py` (flag, router wiring, `normalize_name_parts`, imports)
+- `sinonym/data/surname_particles.csv` (+ `first_ratio`,`tier`),
+  `sinonym/data/western_surnames.csv`, `sinonym/data/western_givennames.csv`
+- `tests/test_western_surname_particles.py`,
+  `tests/data/western_particle_cases.csv` (flat),
+  `tests/data/western_particle_parts_cases.csv` (structured)
