@@ -218,6 +218,63 @@ def test_chinese_names_not_hijacked_when_enabled():
     assert on.normalize_name("Zhang Wei").result == "Wei Zhang"
 
 
+_MIXED_BATCH = [
+    "Zhang Wei",                       # chinese -> reorder
+    "Roeland van Hout",                # western fold
+    "Charles de Gaulle",               # western fold
+    "Wang Xiaoli",                     # chinese
+    "John Smith",                      # neither -> default (fail) kept
+    "Ahmed bin Salman",                # ambiguous particle -> fail closed
+    "Osmar Luiz Ferreira de Carvalho", # western fold
+]
+
+
+def test_mixed_batch_routes_western_and_keeps_default():
+    """A mixed Chinese+Western batch: Chinese names normalize, Western particle names
+    fold, and names that are neither (John Smith) / ambiguous (bin) keep the default
+    failure — the post-pass is additive."""
+    on = ChineseNameDetector(enable_western_particles=True)
+    res = on.process_name_batch(_MIXED_BATCH)
+    out = {n: (r.result if r.success else None) for n, r in zip(_MIXED_BATCH, res)}
+    assert out["Zhang Wei"] == "Wei Zhang"
+    assert out["Roeland van Hout"] == "Roeland van Hout"
+    assert out["Charles de Gaulle"] == "Charles de Gaulle"
+    assert out["Osmar Luiz Ferreira de Carvalho"] == "Osmar Luiz Ferreira de Carvalho"
+    assert out["John Smith"] is None          # default kept
+    assert out["Ahmed bin Salman"] is None    # ambiguous -> fail closed
+
+
+def test_batch_default_off_keeps_western_failing():
+    """Flag OFF: batch contract unchanged — Western names still fail; Chinese still
+    normalize."""
+    off = ChineseNameDetector()
+    res = off.process_name_batch(_MIXED_BATCH)
+    out = {n: r.success for n, r in zip(_MIXED_BATCH, res)}
+    assert out["Zhang Wei"] is True
+    assert out["Roeland van Hout"] is False
+    assert out["Charles de Gaulle"] is False
+
+
+def test_batch_format_vote_excludes_western():
+    """Western (non-Chinese) names produce no candidates → excluded from the
+    surname-first/given-first vote, so they cannot skew Chinese ordering."""
+    on = ChineseNameDetector(enable_western_particles=True)
+    fp = on.detect_batch_format(_MIXED_BATCH)
+    # only the 2 Chinese names (Zhang Wei, Wang Xiaoli) vote; the 5 non-Chinese
+    # (Western / no-evidence) names are excluded → cannot skew Chinese ordering.
+    assert fp.total_count == 2
+    assert fp.total_count < len(_MIXED_BATCH)
+
+
+def test_analyze_name_batch_substitutes_western_in_results():
+    """analyze_name_batch's BatchParseResult.results carries the Western folds."""
+    on = ChineseNameDetector(enable_western_particles=True)
+    bpr = on.analyze_name_batch(_MIXED_BATCH)
+    by = {n: (r.result if r.success else None) for n, r in zip(bpr.names, bpr.results)}
+    assert by["Roeland van Hout"] == "Roeland van Hout"
+    assert by["Zhang Wei"] == "Wei Zhang"
+
+
 def test_flag_isolation_between_instances():
     on = ChineseNameDetector(enable_western_particles=True)
     off = ChineseNameDetector()

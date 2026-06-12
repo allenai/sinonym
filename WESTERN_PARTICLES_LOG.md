@@ -1,8 +1,8 @@
 # Western surname-particle canonicalization — experiment log
 
-> **v2 enhancement (current)** — confidence tiers + structured input, to cut false
-> positives AND false negatives. See "## Enhancement v2" below. v1 (string-only
-> router) is described first for context.
+> **v2** — confidence tiers + structured input (cut FP/FN). **v3** — batch routing
+> for mixed Chinese+Western lists. See "## Enhancement v2" / "## Enhancement v3"
+> below. v1 (string-only router) is described first for context.
 
 Scope: sinonym changes only. This is the Western leg of a multi-stage locale router
 that extends the (Chinese-first) normalizer to canonicalize Western names whose
@@ -91,7 +91,7 @@ Result: `Osmar Luiz Ferreira de Carvalho` → `Osmar Luiz` / `Ferreira de Carval
 ## Tests
 `tests/test_western_surname_particles.py`, data-driven from two CSVs
 (`western_particle_cases.csv` flat, `western_particle_parts_cases.csv` structured) +
-structural tests. **156 passed, 10 xfail.** Full suite: **219 passed, 10 xfail,
+structural tests. **161 passed, 10 xfail.** Full suite: **224 passed, 10 xfail,
 9 failed** — the 9 failures are PRE-EXISTING on a clean checkout (env / sklearn-pickle
 version mismatch), confirmed via `git stash`; zero regressions from this work.
 
@@ -142,7 +142,34 @@ Effect on the original failures:
 
 The contract is **success ⇔ a confident fold (or already-canonical compound)**;
 everything else returns `ParseResult.failure(reason)`. No silent / low-confidence
-folds on either path. Batch mode was intentionally out of scope for v2.
+folds on either path.
+
+## Enhancement v3 — batch routing for mixed Chinese + Western lists
+The in-process batch APIs (`analyze_name_batch`/`process_name_batch`) run a separate
+Chinese-oriented parser and didn't invoke the Western router, so a mixed batch
+normalized the Chinese names but FAILED the Western ones. Fix reuses the rejection
+the batch parser already produces: `batch_analysis` runs an ethnicity pre-filter per
+name and emits `classify_ethnicity`'s `"no Chinese evidence found"` for non-Chinese
+names (and excludes them from the surname-first/given-first vote — so no format-vote
+skew). A small ADDITIVE post-pass in the detector wrapper
+(`_apply_western_to_batch`, using `_western_fallback`) replaces a per-name
+non-Chinese failure with a CONFIDENT Western fold when the flag is on:
+```
+process_name_batch(["Zhang Wei","Roeland van Hout","Charles de Gaulle",
+                    "Wang Xiaoli","John Smith","Ahmed bin Salman"])
+  Zhang Wei        -> Wei Zhang          (chinese)
+  Roeland van Hout -> Roeland van Hout   (western fold)
+  Charles de Gaulle-> Charles de Gaulle  (western fold)
+  Wang Xiaoli      -> Xiao-Li Wang       (chinese)
+  John Smith       -> FAIL               (default kept — neither)
+  Ahmed bin Salman -> FAIL               (ambiguous particle, fail closed)
+```
+**Default outcome preserved:** a name that is neither confidently Chinese nor a
+confident fold keeps its existing default (the failure); the post-pass never passes
+through an identity result and never changes the flag-off contract. `process_name_batch`
+inherits via `analyze_name_batch`; `process_name_batch_multiprocess` already routed
+through `normalize_name` (Western worked there already). Out of scope: a structured
+batch (list of first/middle/last) / `use_prior` in batch.
 
 ## Limitations — fixed in v2 vs residual
 A token like `de` / `van` / `ben` / `le` is BOTH a surname particle AND, for some

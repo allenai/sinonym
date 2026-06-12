@@ -165,6 +165,7 @@ data structures and the detector can be safely used from multiple threads.
 import logging
 import string
 import threading
+from dataclasses import replace
 
 from sinonym.coretypes import BatchFormatPattern, BatchParseResult
 from sinonym.coretypes.results import ParsedName
@@ -305,10 +306,7 @@ class ChineseNameDetector:
         # (particle folded into the surname) instead of rejected. Skipped for
         # all-Chinese input so romanised pinyin syllables (de/da/…) aren't hijacked.
         if self._enable_western_particles and not is_all_chinese:
-            self._ensure_western_loaded()
-            western = try_western_particle(
-                normalized_input.roman_tokens, self._western_particles, self._western_surnames,
-            )
+            western = self._try_western_tokens(normalized_input.roman_tokens)
             if western is not None:
                 return western
 
@@ -589,6 +587,24 @@ class ChineseNameDetector:
             self._western_surnames = load_western_surnames()
             self._western_givennames = load_western_givennames()
 
+    def _try_western_tokens(self, roman_tokens):
+        """Run the flat Western-particle router on pre-normalized tokens.
+        Returns a ParseResult (confident fold) or None. Shared by normalize_name and
+        the batch fallback."""
+        self._ensure_western_loaded()
+        return try_western_particle(roman_tokens, self._western_particles, self._western_surnames)
+
+    def _western_fallback(self, name: str) -> "ParseResult | None":
+        """Western-particle fallback for a raw name the Chinese pipeline rejected
+        (used by the batch post-pass). Mirrors normalize_name's western branch: skip
+        all-Chinese input, then try the flat router. None if not enabled / not a fold."""
+        if not self._enable_western_particles:
+            return None
+        if self._normalizer._text_preprocessor.is_all_chinese_input(name):
+            return None
+        normalized_input = self._normalizer.apply(name)
+        return self._try_western_tokens(normalized_input.roman_tokens)
+
     def normalize_name_parts(
         self,
         first: str,
@@ -666,7 +682,7 @@ class ChineseNameDetector:
             self._batch_analysis_service._format_threshold = format_threshold
 
             try:
-                return self._batch_analysis_service.analyze_name_batch(
+                result = self._batch_analysis_service.analyze_name_batch(
                     names,
                     self._normalizer,
                     self._data,
@@ -676,6 +692,28 @@ class ChineseNameDetector:
             finally:
                 # Restore original threshold
                 self._batch_analysis_service._format_threshold = original_threshold
+
+        # Route per-name non-Chinese rejects to the Western-particle handler.
+        return self._apply_western_to_batch(result)
+
+    def _apply_western_to_batch(self, result: BatchParseResult) -> BatchParseResult:
+        """Additive post-pass over a batch result: replace a per-name NON-CHINESE
+        failure with a CONFIDENT Western-particle fold (when enabled). The batch
+        service already emits the `classify_ethnicity` rejection for non-Chinese
+        names and excludes them from the format vote — this reuses that as the
+        routing hook. Names that are neither confidently Chinese nor a confident
+        fold KEEP their existing default result (no pass-through)."""
+        if not self._enable_western_particles:
+            return result
+        new_results = list(result.results)
+        changed = False
+        for i, r in enumerate(new_results):
+            if not r.success:
+                western = self._western_fallback(result.names[i])
+                if western is not None and western.success:
+                    new_results[i] = western
+                    changed = True
+        return replace(result, results=new_results) if changed else result
 
     def detect_batch_format(
         self,
