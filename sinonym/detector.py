@@ -322,19 +322,26 @@ class ChineseNameDetector:
         if not first_group or not last_group:
             return None
 
-        first_is_surname = self._is_surname_group(first_group, normalized_input.norm_map)
-        last_is_surname = self._is_surname_group(last_group, normalized_input.norm_map)
-
-        if last_is_surname and not first_is_surname:
-            surname_tokens = last_group
-            given_tokens = first_group
-            original_order = ["given", "surname"]
-        elif first_is_surname:
-            surname_tokens = first_group
-            given_tokens = last_group
+        # OCR/noisy spacing can split a compound surname across the group boundary.
+        boundary_compound = first_group + last_group[:1] if len(first_group) == 1 and len(last_group) > 1 else []
+        if boundary_compound and self._is_surname_group(boundary_compound, normalized_input.norm_map):
+            surname_tokens = boundary_compound
+            given_tokens = last_group[1:]
             original_order = ["surname", "given"]
         else:
-            return None
+            first_is_surname = self._is_surname_group(first_group, normalized_input.norm_map)
+            last_is_surname = self._is_surname_group(last_group, normalized_input.norm_map)
+
+            if last_is_surname and not first_is_surname:
+                surname_tokens = last_group
+                given_tokens = first_group
+                original_order = ["given", "surname"]
+            elif first_is_surname:
+                surname_tokens = first_group
+                given_tokens = last_group
+                original_order = ["surname", "given"]
+            else:
+                return None
 
         try:
             return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)

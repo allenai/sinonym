@@ -453,6 +453,22 @@ def test_spaced_all_chinese_given_first_preserves_group_boundary(detector):
     assert result.parsed_original_order.order == ["given", "surname"]
 
 
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("\u53f8 \u9a6c\u534e", "Hua Si Ma"),
+        ("\u6b27 \u9633\u660e", "Ming Ou Yang"),
+        ("\u8bf8 \u845b\u4eae", "Liang Zhu Ge"),
+    ],
+)
+def test_spaced_all_chinese_preserves_compound_surname_boundary(detector, raw_name, expected):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+    assert result.parsed_original_order.order == ["surname", "given"]
+
+
 def test_name_data_structures_mapping_fields_are_immutable(detector):
     data = detector._data
     mapping_fields = [
