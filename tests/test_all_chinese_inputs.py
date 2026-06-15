@@ -53,6 +53,9 @@ ALL_CHINESE_INPUT_TEST_CASES = [
     ("張偉", (True, "Wei Zhang")),  # Traditional Zhang Wei
     ("劉強", (True, "Qiang Liu")),  # Traditional Liu Qiang
 
+    # Explicit whitespace can separate given-first all-Chinese groups
+    ("\u589e\u53cb  \u53f6", (True, "Zeng-You Ye")),
+
     # Three character names should fall back to original logic (not handled by special all-Chinese logic)
     ("李明华", (True, "Ming-Hua Li")),  # 3 characters should use existing logic
     ("王小明", (True, "Xiao-Ming Wang")),  # 3 characters should use existing logic

@@ -125,6 +125,77 @@ def test_three_token_order_preservation_regression(detector):
     assert clear.result == "Wei-Ming Zhang"
 
 
+def test_guarded_low_frequency_surname_ratio_preserves_given_first_order(detector):
+    cases = {
+        "Bei Yu": "Bei Yu",
+        "Lecheng Zheng": "Lecheng Zheng",
+        "Yuxuan Dong": "Yuxuan Dong",
+        "Xun Zhou": "Xun Zhou",
+        "mi zhang": "Mi Zhang",
+    }
+
+    for raw_name, expected in cases.items():
+        result = detector.normalize_name(raw_name)
+        assert result.success
+        assert result.result == expected
+
+
+def test_guarded_low_frequency_surname_ratio_keeps_compound_and_common_surname_boundaries(detector):
+    cases = {
+        "Men Hao": "Hao Men",
+        "Ouyang Xiu": "Xiu Ouyang",
+        "Murong Xue": "Xue Murong",
+    }
+
+    for raw_name, expected in cases.items():
+        result = detector.normalize_name(raw_name)
+        assert result.success
+        assert result.result == expected
+
+
+def test_given_context_gold_split_bypasses_surname_guard(detector):
+    cases = {
+        "Junjie Fang": "Jun-Jie Fang",
+        "Junjie Peng": "Jun-Jie Peng",
+        "Junjie Ye": "Jun-Jie Ye",
+    }
+
+    for raw_name, expected in cases.items():
+        result = detector.normalize_name(raw_name)
+        assert result.success
+        assert result.result == expected
+
+
+def test_given_context_gold_split_keeps_ambiguous_non_gold_tokens_unsplit(detector):
+    splitter = StringManipulationUtils.split_concatenated_name
+    data = detector._data
+    normalizer = detector._normalizer
+    config = detector._config
+
+    junjie = normalizer.apply("Junjie")
+    assert splitter("Junjie", junjie.norm_map, data, normalizer, config) is None
+    assert StringManipulationUtils.split_surname_like_given_name(
+        "Junjie",
+        junjie.norm_map,
+        data,
+        normalizer,
+        config,
+    ) == ["Jun", "jie"]
+
+    for token in ["Yuxuan", "Lecheng"]:
+        normalized = normalizer.apply(token)
+        assert (
+            StringManipulationUtils.split_surname_like_given_name(
+                token,
+                normalized.norm_map,
+                data,
+                normalizer,
+                config,
+            )
+            is None
+        )
+
+
 def test_two_token_format_alignment_tie_break_is_directional(detector):
     parsing = detector._parsing_service
 
@@ -370,6 +441,16 @@ def test_han_conversion_parity_across_all_chinese_flag(detector):
         all_chinese_path = normalizer._process_mixed_tokens(tokens, is_all_chinese=True)
         mixed_path = normalizer._process_mixed_tokens(tokens, is_all_chinese=False)
         assert all_chinese_path == mixed_path
+
+
+def test_spaced_all_chinese_given_first_preserves_group_boundary(detector):
+    result = detector.normalize_name("\u589e\u53cb  \u53f6")
+
+    assert result.success
+    assert result.result == "Zeng-You Ye"
+    assert result.parsed.surname == "Ye"
+    assert result.parsed.given_name == "Zeng-You"
+    assert result.parsed_original_order.order == ["given", "surname"]
 
 
 def test_name_data_structures_mapping_fields_are_immutable(detector):

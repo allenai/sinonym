@@ -20,10 +20,13 @@ from functools import lru_cache
 from typing import TYPE_CHECKING
 
 # Import at module level to avoid repeated imports in hot paths
-from sinonym.chinese_names_data import HIGH_CONFIDENCE_ANCHORS
+from sinonym.chinese_names_data import COMPOUND_VARIANTS, HIGH_CONFIDENCE_ANCHORS
 
 if TYPE_CHECKING:
     from sinonym.services.normalization import CompoundMetadata
+
+MIN_SPLIT_TOKEN_LENGTH = 3
+MAX_UNBALANCED_SPLIT_REST_LENGTH = 4
 
 
 class StringManipulationUtils:
@@ -122,10 +125,45 @@ class StringManipulationUtils:
         return False
 
     @staticmethod
-    def _should_skip_splitting(token: str, normalized_cache: dict[str, str] | None, normalizer, data_context) -> bool:
+    def _high_confidence_given_split(
+        token: str,
+        normalized_cache: dict[str, str] | None,
+        normalizer,
+        data_context,
+        config,
+    ) -> list[str] | None:
+        """Return the gold-standard two-part split for a given token, if one exists."""
+        raw = token.translate(config.hyphens_apostrophes_tr)
+        for i in range(1, len(raw)):
+            a, b = raw[:i], raw[i:]
+
+            if len(a) == 1 and len(b) > MAX_UNBALANCED_SPLIT_REST_LENGTH:
+                continue
+            if len(b) == 1 and len(a) > MAX_UNBALANCED_SPLIT_REST_LENGTH:
+                continue
+
+            norm_a, norm_b = StringManipulationUtils._get_normalized_parts(a, b, normalized_cache, normalizer)
+            if norm_a not in HIGH_CONFIDENCE_ANCHORS or norm_b not in HIGH_CONFIDENCE_ANCHORS:
+                continue
+            if not StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
+                continue
+            if not StringManipulationUtils.is_plausible_chinese_split(norm_a, norm_b, data_context, config):
+                continue
+
+            return [a, b]
+
+        return None
+
+    @staticmethod
+    def _should_skip_splitting(
+        token: str,
+        normalized_cache: dict[str, str] | None,
+        normalizer,
+        data_context,
+    ) -> bool:
         """Check early exit conditions that prevent splitting - optimized validation chain."""
         # Early exit for very short tokens - no point splitting < 3 chars
-        if len(token) < 3:
+        if len(token) < MIN_SPLIT_TOKEN_LENGTH:
             return True
 
         # Get normalized form once - use eager cache for performance
@@ -136,15 +174,52 @@ class StringManipulationUtils:
 
         # Optimized validation chain: combine multiple checks with OR short-circuit
         original_lower = token.lower()
+        is_surname = tok_normalized in data_context.surnames_normalized
 
         return (
             # Don't split known surnames
-            tok_normalized in data_context.surnames_normalized or
+            is_surname or
             # Don't split HIGH_CONFIDENCE_ANCHORS - they should remain intact
             tok_normalized in HIGH_CONFIDENCE_ANCHORS or
             # Don't split existing valid Chinese given name components
             data_context.is_given_name(tok_normalized) or
             data_context.is_given_name(original_lower)
+        )
+
+    @staticmethod
+    def split_surname_like_given_name(
+        token: str,
+        normalized_cache: dict[str, str] | None,
+        data_context,
+        normalizer,
+        config,
+    ) -> list[str] | None:
+        """Split a given-position token that collides with a surname only on gold evidence."""
+        if not data_context or len(token) < MIN_SPLIT_TOKEN_LENGTH:
+            return None
+
+        if normalized_cache and token in normalized_cache:
+            tok_normalized = StringManipulationUtils.remove_spaces(normalized_cache[token])
+        else:
+            tok_normalized = StringManipulationUtils.remove_spaces(normalizer.norm(token))
+
+        original_lower = token.lower()
+        if tok_normalized not in data_context.surnames_normalized:
+            return None
+        if (
+            original_lower in COMPOUND_VARIANTS
+            or original_lower in data_context.compound_original_format_map
+            or tok_normalized in COMPOUND_VARIANTS
+            or tok_normalized in data_context.compound_original_format_map
+        ):
+            return None
+
+        return StringManipulationUtils._high_confidence_given_split(
+            token,
+            normalized_cache,
+            normalizer,
+            data_context,
+            config,
         )
 
     @staticmethod

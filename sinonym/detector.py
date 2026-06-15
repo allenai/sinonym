@@ -178,6 +178,7 @@ from sinonym.services import (
     NameFormattingService,
     NameParsingService,
     NormalizationService,
+    NormalizedInput,
     ParseResult,
     PinyinCacheService,
     ServiceContext,
@@ -244,6 +245,102 @@ class ChineseNameDetector:
             # Initialize services
             self._initialize_services()
 
+    def _is_surname_group(self, tokens: list[str], normalized_cache: dict[str, str]) -> bool:
+        """Return whether a romanized Han token group is a surname component."""
+        if len(tokens) == 1:
+            token = tokens[0]
+            normalized = self._normalizer.get_normalized(token, normalized_cache)
+            return self._data.is_surname(token, normalized)
+
+        normalized_tokens = [self._normalizer.get_normalized(token, normalized_cache) for token in tokens]
+        spaced = " ".join(normalized_tokens)
+        compact = "".join(normalized_tokens)
+
+        return (
+            spaced in self._data.compound_surnames
+            or spaced in self._data.compound_surnames_normalized
+            or compact in self._data.compound_original_format_map
+        )
+
+    def _has_only_cjk_token_groups(self, normalized_input: NormalizedInput) -> bool:
+        """Return whether separator-delimited input tokens are all CJK characters."""
+        return len(normalized_input.tokens) > 1 and all(
+            token and all(self._config.cjk_pattern.search(char) for char in token)
+            for token in normalized_input.tokens
+        )
+
+    def _format_parse_result(
+        self,
+        surname_tokens: list[str],
+        given_tokens: list[str],
+        normalized_input: NormalizedInput,
+        original_order: list[str],
+    ) -> ParseResult:
+        """Format parsed components and attach stable structured name fields."""
+        formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
+            self._formatting_service.format_name_output_with_tokens(
+                surname_tokens,
+                given_tokens,
+                normalized_input.norm_map,
+                normalized_input.compound_metadata,
+            )
+        )
+        parsed = ParsedName(
+            surname=surname_str,
+            given_name=given_str,
+            surname_tokens=surname_final,
+            given_tokens=given_final,
+            middle_name=" ".join(middle_tokens) if middle_tokens else "",
+            middle_tokens=middle_tokens,
+            order=["given", "middle", "surname"],
+        )
+        parsed_original_order = ParsedName(
+            surname=surname_str,
+            given_name=given_str,
+            surname_tokens=surname_final,
+            given_tokens=given_final,
+            middle_name=" ".join(middle_tokens) if middle_tokens else "",
+            middle_tokens=middle_tokens,
+            order=original_order,
+        )
+        return ParseResult.success_with_name(
+            formatted_name,
+            parsed=parsed,
+            parsed_original_order=parsed_original_order,
+        )
+
+    def _normalize_spaced_all_chinese_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
+        """Parse all-Han names whose whitespace already separates name components."""
+        if (
+            len(normalized_input.tokens) != self._config.min_tokens_required
+            or len(normalized_input.roman_tokens) <= self._config.min_tokens_required
+        ):
+            return None
+
+        first_group = self._cache_service.han_to_pinyin_fast(normalized_input.tokens[0])
+        last_group = self._cache_service.han_to_pinyin_fast(normalized_input.tokens[1])
+        if not first_group or not last_group:
+            return None
+
+        first_is_surname = self._is_surname_group(first_group, normalized_input.norm_map)
+        last_is_surname = self._is_surname_group(last_group, normalized_input.norm_map)
+
+        if last_is_surname and not first_is_surname:
+            surname_tokens = last_group
+            given_tokens = first_group
+            original_order = ["given", "surname"]
+        elif first_is_surname:
+            surname_tokens = first_group
+            given_tokens = last_group
+            original_order = ["surname", "given"]
+        else:
+            return None
+
+        try:
+            return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
+        except ValueError as e:
+            return ParseResult.failure(str(e))
+
     # Public API methods
     def get_cache_info(self) -> CacheInfo:
         """Get cache information."""
@@ -290,6 +387,11 @@ class ChineseNameDetector:
             return non_chinese_result
 
         # Try parsing in both orders - for all-Chinese inputs, choose best scoring parse
+
+        if self._has_only_cjk_token_groups(normalized_input):
+            grouped_result = self._normalize_spaced_all_chinese_name(normalized_input)
+            if grouped_result is not None:
+                return grouped_result
 
         if is_all_chinese and len(normalized_input.roman_tokens) == self._config.min_tokens_required:
             # For all-Chinese 2-token inputs, ALWAYS assume surname-first order

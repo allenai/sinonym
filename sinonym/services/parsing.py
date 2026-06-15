@@ -18,6 +18,10 @@ from sinonym.utils.string_manipulation import StringManipulationUtils
 if TYPE_CHECKING:
     from sinonym.services.normalization import CompoundMetadata
 
+LOW_FREQUENCY_SURNAME_MAX = 500.0
+GIVEN_FIRST_SURNAME_FREQ_RATIO_MIN = 50.0
+GIVEN_FIRST_ORDER_PRESERVATION_BONUS = 4.0
+
 
 class NameParsingService:
     """Service for parsing Chinese names into surname and given name components."""
@@ -617,6 +621,12 @@ class NameParsingService:
 
                 if is_ambiguous:
                     order_preservation_bonus = 1.0  # Strong bonus for preserving original order in ambiguous cases
+                elif self._has_guarded_given_first_surname_ratio(
+                    surname_tokens[0],
+                    given_tokens[0],
+                    normalized_cache,
+                ):
+                    order_preservation_bonus = GIVEN_FIRST_ORDER_PRESERVATION_BONUS
         if not is_all_chinese and len(tokens) == 3 and len(surname_tokens) == 1 and len(given_tokens) == 2:
             # Narrow extension for hard 3-token given-first cases:
             # only apply when surname-last is materially more plausible than surname-first.
@@ -723,6 +733,39 @@ class NameParsingService:
 
         freq_ratio = max(surname_freq, given_freq) / min(surname_freq, given_freq)
         return freq_ratio < 5.0  # Ambiguous if frequencies are within 5x of each other
+
+    def _has_guarded_given_first_surname_ratio(
+        self,
+        surname_token: str,
+        given_token: str,
+        normalized_cache: dict[str, str],
+    ) -> bool:
+        """Return whether surname frequencies strongly support given-first order."""
+        if "-" in given_token or self._is_compound_surname_token(given_token, normalized_cache):
+            return False
+
+        surname_key = self._surname_key([surname_token], normalized_cache)
+        given_as_surname_key = self._surname_key([given_token], normalized_cache)
+
+        if not (
+            self._data.is_surname(surname_token, surname_key)
+            and self._data.is_surname(given_token, given_as_surname_key)
+        ):
+            return False
+
+        given_surname_freq = self._data.get_surname_freq(given_as_surname_key)
+        surname_freq = self._data.get_surname_freq(surname_key)
+        if not (0 < given_surname_freq < LOW_FREQUENCY_SURNAME_MAX):
+            return False
+
+        return surname_freq / given_surname_freq > GIVEN_FIRST_SURNAME_FREQ_RATIO_MIN
+
+    def _is_compound_surname_token(self, token: str, _normalized_cache: dict[str, str]) -> bool:
+        """Return whether a single token is a known compact/camelCase compound surname."""
+        token_key = token.strip().lower()
+        return token_key in COMPOUND_VARIANTS or (
+            "-" in token_key and token_key in self._data.compound_hyphen_map
+        )
 
     def _surname_key(self, surname_tokens: list[str], normalized_cache: dict[str, str]) -> str:
         """Convert surname tokens to lookup key, preferring Chinese characters when available."""
