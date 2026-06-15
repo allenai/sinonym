@@ -69,7 +69,10 @@ class BatchAnalysisService:
             # Normalize once and reuse
             normalized_input = normalizer.apply(name)
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
-                name, normalized_input, data,
+                name,
+                normalized_input,
+                data,
+                allow_guarded_given_first_bonus=False,
             )
             name_candidates.append((name, candidates, best_candidate, normalized_input.compound_metadata))
 
@@ -119,7 +122,10 @@ class BatchAnalysisService:
             # Normalize once for format detection (compound_metadata not needed)
             normalized_input = normalizer.apply(name)
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
-                name, normalized_input, data,
+                name,
+                normalized_input,
+                data,
+                allow_guarded_given_first_bonus=False,
             )
             name_candidates.append((name, candidates, best_candidate, None))  # No compound_metadata needed for format detection
 
@@ -181,7 +187,12 @@ class BatchAnalysisService:
         )
 
     def _analyze_individual_name_with_normalized(
-        self, name: str, normalized_input, _data,
+        self,
+        name: str,
+        normalized_input,
+        _data,
+        *,
+        allow_guarded_given_first_bonus: bool = True,
     ) -> tuple[list[ParseCandidate], ParseCandidate | None]:
         """Analyze a single name using pre-computed normalized input."""
         tokens = list(normalized_input.roman_tokens)
@@ -218,8 +229,9 @@ class BatchAnalysisService:
                 given_tokens,
                 tokens,
                 normalized_input.norm_map,
-                False,
-                original_compound_format,
+                is_all_chinese=False,
+                original_compound_format=original_compound_format,
+                allow_guarded_given_first_bonus=allow_guarded_given_first_bonus,
             )
 
             # Determine the format of this parse

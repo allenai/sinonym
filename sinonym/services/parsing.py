@@ -114,7 +114,13 @@ class NameParsingService:
             given_tokens = order[given_slice]
             if given_tokens:
                 # Check if this parse would have a reasonable score
-                score = self.calculate_parse_score(surname_tokens, given_tokens, order, normalized_cache, False)
+                score = self.calculate_parse_score(
+                    surname_tokens,
+                    given_tokens,
+                    order,
+                    normalized_cache,
+                    is_all_chinese=False,
+                )
 
                 # Western name detection pattern
                 has_single_letter_given = any(len(token) == 1 for token in given_tokens)
@@ -163,7 +169,13 @@ class NameParsingService:
             surname_tokens = [surname_token]
             given_tokens = order[given_slice]
             if given_tokens:
-                score = self.calculate_parse_score(surname_tokens, given_tokens, order, normalized_cache, False)
+                score = self.calculate_parse_score(
+                    surname_tokens,
+                    given_tokens,
+                    order,
+                    normalized_cache,
+                    is_all_chinese=False,
+                )
 
                 has_single_letter_given = any(len(token) == 1 for token in given_tokens)
                 has_multi_syllable_tokens = any(len(token) > 3 for token in order)
@@ -250,8 +262,8 @@ class NameParsingService:
                 given_tokens,
                 tokens,
                 normalized_cache,
-                False,
-                original_compound_format,
+                is_all_chinese=False,
+                original_compound_format=original_compound_format,
                 score_cache=score_cache,
             )
 
@@ -355,8 +367,8 @@ class NameParsingService:
                 given_tokens,
                 tokens,
                 normalized_cache,
-                False,
-                original_compound_format,
+                is_all_chinese=False,
+                original_compound_format=original_compound_format,
                 score_cache=score_cache,
             )
 
@@ -540,9 +552,11 @@ class NameParsingService:
         given_tokens: list[str],
         tokens: list[str],
         normalized_cache: dict[str, str],
+        *,
         is_all_chinese: bool = False,
         original_compound_format: str | None = None,
         score_cache: dict[str, dict] | None = None,
+        allow_guarded_given_first_bonus: bool = True,
     ) -> float:
         """Calculate unified score for a parse candidate."""
         if not given_tokens:
@@ -621,7 +635,7 @@ class NameParsingService:
 
                 if is_ambiguous:
                     order_preservation_bonus = 1.0  # Strong bonus for preserving original order in ambiguous cases
-                elif self._has_guarded_given_first_surname_ratio(
+                elif allow_guarded_given_first_bonus and self._has_guarded_given_first_surname_ratio(
                     surname_tokens[0],
                     given_tokens[0],
                     normalized_cache,

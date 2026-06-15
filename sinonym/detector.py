@@ -262,6 +262,10 @@ class ChineseNameDetector:
             or compact in self._data.compound_original_format_map
         )
 
+    def _is_compound_surname_group(self, tokens: list[str], normalized_cache: dict[str, str]) -> bool:
+        """Return whether a romanized Han token group is a compound surname."""
+        return len(tokens) > 1 and self._is_surname_group(tokens, normalized_cache)
+
     def _has_only_cjk_token_groups(self, normalized_input: NormalizedInput) -> bool:
         """Return whether separator-delimited input tokens are all CJK characters."""
         return len(normalized_input.tokens) > 1 and all(
@@ -331,8 +335,9 @@ class ChineseNameDetector:
         else:
             first_is_surname = self._is_surname_group(first_group, normalized_input.norm_map)
             last_is_surname = self._is_surname_group(last_group, normalized_input.norm_map)
+            last_is_compound_surname = self._is_compound_surname_group(last_group, normalized_input.norm_map)
 
-            if last_is_surname and not first_is_surname:
+            if last_is_surname and (not first_is_surname or last_is_compound_surname):
                 surname_tokens = last_group
                 given_tokens = first_group
                 original_order = ["given", "surname"]
@@ -552,8 +557,8 @@ class ChineseNameDetector:
                     given_tokens,
                     original_tokens,
                     normalized_input.norm_map,
-                    False,
-                    original_compound_surname,
+                    is_all_chinese=False,
+                    original_compound_format=original_compound_surname,
                 )
                 used_original = order_tokens == original_tokens
 

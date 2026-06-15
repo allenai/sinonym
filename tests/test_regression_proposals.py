@@ -140,6 +140,20 @@ def test_guarded_low_frequency_surname_ratio_preserves_given_first_order(detecto
         assert result.result == expected
 
 
+def test_batch_format_detection_ignores_isolated_low_frequency_surname_ratio(detector):
+    names = ["Diao Wang", "Bian Li", "Cen Zhang", "Luan Wang", "Rao Li"]
+    expected_results = ["Wang Diao", "Li Bian", "Zhang Cen", "Wang Luan", "Li Rao"]
+
+    pattern = detector.detect_batch_format(names)
+    batch = detector.analyze_name_batch(names)
+
+    assert pattern.dominant_format == NameFormat.SURNAME_FIRST
+    assert pattern.threshold_met
+    assert batch.format_pattern.dominant_format == NameFormat.SURNAME_FIRST
+    assert [result.result for result in batch.results] == expected_results
+    assert all(result.parsed_original_order.order == ["surname", "given"] for result in batch.results)
+
+
 def test_guarded_low_frequency_surname_ratio_keeps_compound_and_common_surname_boundaries(detector):
     cases = {
         "Men Hao": "Hao Men",
@@ -164,6 +178,19 @@ def test_given_context_gold_split_bypasses_surname_guard(detector):
         result = detector.normalize_name(raw_name)
         assert result.success
         assert result.result == expected
+
+
+def test_given_context_gold_split_is_used_by_string_formatter(detector):
+    normalized = detector._normalizer.apply("Junjie Fang")
+
+    formatted = detector._formatting_service.format_name_output(
+        ["Fang"],
+        ["Junjie"],
+        normalized.norm_map,
+        {},
+    )
+
+    assert formatted == "Jun-Jie Fang"
 
 
 def test_given_context_gold_split_keeps_ambiguous_non_gold_tokens_unsplit(detector):
@@ -450,6 +477,32 @@ def test_spaced_all_chinese_given_first_preserves_group_boundary(detector):
     assert result.result == "Zeng-You Ye"
     assert result.parsed.surname == "Ye"
     assert result.parsed.given_name == "Zeng-You"
+    assert result.parsed_original_order.order == ["given", "surname"]
+
+
+def test_spaced_all_chinese_regular_surname_first_preserves_group_boundary(detector):
+    result = detector.normalize_name("\u674e \u660e\u534e")
+
+    assert result.success
+    assert result.result == "Ming-Hua Li"
+    assert result.parsed.surname == "Li"
+    assert result.parsed.given_name == "Ming-Hua"
+    assert result.parsed_original_order.order == ["surname", "given"]
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("\u738b \u6b27\u9633", "Wang Ou Yang"),
+        ("\u674e \u6b27\u9633", "Li Ou Yang"),
+        ("\u6797 \u8bf8\u845b", "Lin Zhu Ge"),
+    ],
+)
+def test_spaced_all_chinese_prefers_trailing_compound_surname(detector, raw_name, expected):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
     assert result.parsed_original_order.order == ["given", "surname"]
 
 
