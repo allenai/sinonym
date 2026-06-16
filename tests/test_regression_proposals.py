@@ -154,6 +154,16 @@ def test_batch_format_detection_ignores_isolated_low_frequency_surname_ratio(det
     assert all(result.parsed_original_order.order == ["surname", "given"] for result in batch.results)
 
 
+def test_batch_preserves_homogeneous_guarded_given_first_ratio_names(detector):
+    names = ["Bei Yu", "Lecheng Zheng", "Yuxuan Dong", "Xun Zhou"]
+    expected_results = ["Bei Yu", "Lecheng Zheng", "Yuxuan Dong", "Xun Zhou"]
+
+    batch = detector.analyze_name_batch(names)
+
+    assert [result.result for result in batch.results] == expected_results
+    assert all(result.parsed_original_order.order == ["given", "surname"] for result in batch.results)
+
+
 def test_guarded_low_frequency_surname_ratio_keeps_compound_and_common_surname_boundaries(detector):
     cases = {
         "Men Hao": "Hao Men",
@@ -178,6 +188,16 @@ def test_given_context_gold_split_bypasses_surname_guard(detector):
         result = detector.normalize_name(raw_name)
         assert result.success
         assert result.result == expected
+
+
+def test_batch_preserves_homogeneous_given_context_gold_splits(detector):
+    names = ["Junjie Fang", "Junjie Peng", "Junjie Ye"]
+    expected_results = ["Jun-Jie Fang", "Jun-Jie Peng", "Jun-Jie Ye"]
+
+    batch = detector.analyze_name_batch(names)
+
+    assert [result.result for result in batch.results] == expected_results
+    assert all(result.parsed_original_order.order == ["given", "surname"] for result in batch.results)
 
 
 def test_given_context_gold_split_is_used_by_string_formatter(detector):
