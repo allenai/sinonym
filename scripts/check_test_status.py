@@ -13,7 +13,7 @@ import re
 import subprocess
 import sys
 
-EXPECTED_FAILURES = 52
+EXPECTED_FAILURES = 44
 
 
 def _safe_for_console(value: object) -> str:

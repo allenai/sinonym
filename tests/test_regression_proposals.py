@@ -125,6 +125,124 @@ def test_three_token_order_preservation_regression(detector):
     assert clear.result == "Wei-Ming Zhang"
 
 
+def test_guarded_low_frequency_surname_ratio_preserves_given_first_order(detector):
+    cases = {
+        "Bei Yu": "Bei Yu",
+        "Lecheng Zheng": "Lecheng Zheng",
+        "Yuxuan Dong": "Yuxuan Dong",
+        "Xun Zhou": "Xun Zhou",
+        "mi zhang": "Mi Zhang",
+    }
+
+    for raw_name, expected in cases.items():
+        result = detector.normalize_name(raw_name)
+        assert result.success
+        assert result.result == expected
+
+
+def test_batch_format_detection_ignores_isolated_low_frequency_surname_ratio(detector):
+    names = ["Diao Wang", "Bian Li", "Cen Zhang", "Luan Wang", "Rao Li"]
+    expected_results = ["Wang Diao", "Li Bian", "Zhang Cen", "Wang Luan", "Li Rao"]
+
+    pattern = detector.detect_batch_format(names)
+    batch = detector.analyze_name_batch(names)
+
+    assert pattern.dominant_format == NameFormat.SURNAME_FIRST
+    assert pattern.threshold_met
+    assert batch.format_pattern.dominant_format == NameFormat.SURNAME_FIRST
+    assert [result.result for result in batch.results] == expected_results
+    assert all(result.parsed_original_order.order == ["surname", "given"] for result in batch.results)
+
+
+def test_batch_preserves_homogeneous_guarded_given_first_ratio_names(detector):
+    names = ["Bei Yu", "Lecheng Zheng", "Yuxuan Dong", "Xun Zhou"]
+    expected_results = ["Bei Yu", "Lecheng Zheng", "Yuxuan Dong", "Xun Zhou"]
+
+    batch = detector.analyze_name_batch(names)
+
+    assert [result.result for result in batch.results] == expected_results
+    assert all(result.parsed_original_order.order == ["given", "surname"] for result in batch.results)
+
+
+def test_guarded_low_frequency_surname_ratio_keeps_compound_and_common_surname_boundaries(detector):
+    cases = {
+        "Men Hao": "Hao Men",
+        "Ouyang Xiu": "Xiu Ouyang",
+        "Murong Xue": "Xue Murong",
+    }
+
+    for raw_name, expected in cases.items():
+        result = detector.normalize_name(raw_name)
+        assert result.success
+        assert result.result == expected
+
+
+def test_given_context_gold_split_bypasses_surname_guard(detector):
+    cases = {
+        "Junjie Fang": "Jun-Jie Fang",
+        "Junjie Peng": "Jun-Jie Peng",
+        "Junjie Ye": "Jun-Jie Ye",
+    }
+
+    for raw_name, expected in cases.items():
+        result = detector.normalize_name(raw_name)
+        assert result.success
+        assert result.result == expected
+
+
+def test_batch_preserves_homogeneous_given_context_gold_splits(detector):
+    names = ["Junjie Fang", "Junjie Peng", "Junjie Ye"]
+    expected_results = ["Jun-Jie Fang", "Jun-Jie Peng", "Jun-Jie Ye"]
+
+    batch = detector.analyze_name_batch(names)
+
+    assert [result.result for result in batch.results] == expected_results
+    assert all(result.parsed_original_order.order == ["given", "surname"] for result in batch.results)
+
+
+def test_given_context_gold_split_is_used_by_string_formatter(detector):
+    normalized = detector._normalizer.apply("Junjie Fang")
+
+    formatted = detector._formatting_service.format_name_output(
+        ["Fang"],
+        ["Junjie"],
+        normalized.norm_map,
+        {},
+    )
+
+    assert formatted == "Jun-Jie Fang"
+
+
+def test_given_context_gold_split_keeps_ambiguous_non_gold_tokens_unsplit(detector):
+    splitter = StringManipulationUtils.split_concatenated_name
+    data = detector._data
+    normalizer = detector._normalizer
+    config = detector._config
+
+    junjie = normalizer.apply("Junjie")
+    assert splitter("Junjie", junjie.norm_map, data, normalizer, config) is None
+    assert StringManipulationUtils.split_surname_like_given_name(
+        "Junjie",
+        junjie.norm_map,
+        data,
+        normalizer,
+        config,
+    ) == ["Jun", "jie"]
+
+    for token in ["Yuxuan", "Lecheng"]:
+        normalized = normalizer.apply(token)
+        assert (
+            StringManipulationUtils.split_surname_like_given_name(
+                token,
+                normalized.norm_map,
+                data,
+                normalizer,
+                config,
+            )
+            is None
+        )
+
+
 def test_two_token_format_alignment_tie_break_is_directional(detector):
     parsing = detector._parsing_service
 
@@ -370,6 +488,58 @@ def test_han_conversion_parity_across_all_chinese_flag(detector):
         all_chinese_path = normalizer._process_mixed_tokens(tokens, is_all_chinese=True)
         mixed_path = normalizer._process_mixed_tokens(tokens, is_all_chinese=False)
         assert all_chinese_path == mixed_path
+
+
+def test_spaced_all_chinese_given_first_preserves_group_boundary(detector):
+    result = detector.normalize_name("\u589e\u53cb  \u53f6")
+
+    assert result.success
+    assert result.result == "Zeng-You Ye"
+    assert result.parsed.surname == "Ye"
+    assert result.parsed.given_name == "Zeng-You"
+    assert result.parsed_original_order.order == ["given", "surname"]
+
+
+def test_spaced_all_chinese_regular_surname_first_preserves_group_boundary(detector):
+    result = detector.normalize_name("\u674e \u660e\u534e")
+
+    assert result.success
+    assert result.result == "Ming-Hua Li"
+    assert result.parsed.surname == "Li"
+    assert result.parsed.given_name == "Ming-Hua"
+    assert result.parsed_original_order.order == ["surname", "given"]
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("\u738b \u6b27\u9633", "Wang Ou Yang"),
+        ("\u674e \u6b27\u9633", "Li Ou Yang"),
+        ("\u6797 \u8bf8\u845b", "Lin Zhu Ge"),
+    ],
+)
+def test_spaced_all_chinese_prefers_trailing_compound_surname(detector, raw_name, expected):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+    assert result.parsed_original_order.order == ["given", "surname"]
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("\u53f8 \u9a6c\u534e", "Hua Si Ma"),
+        ("\u6b27 \u9633\u660e", "Ming Ou Yang"),
+        ("\u8bf8 \u845b\u4eae", "Liang Zhu Ge"),
+    ],
+)
+def test_spaced_all_chinese_preserves_compound_surname_boundary(detector, raw_name, expected):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+    assert result.parsed_original_order.order == ["surname", "given"]
 
 
 def test_name_data_structures_mapping_fields_are_immutable(detector):

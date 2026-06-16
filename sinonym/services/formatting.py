@@ -86,6 +86,14 @@ class NameFormattingService:
                 self._normalizer,
                 self._config,
             )
+            if not split:
+                split = StringManipulationUtils.split_surname_like_given_name(
+                    token,
+                    normalized_cache,
+                    self._data,
+                    self._normalizer,
+                    self._config,
+                )
             if split:
                 parts.extend(split)
             # Final validation: accept if it's a valid Chinese token
@@ -217,8 +225,20 @@ class NameFormattingService:
                 continue
 
             split = StringManipulationUtils.split_concatenated_name(
-                token, normalized_cache, self._data, self._normalizer, self._config,
+                token,
+                normalized_cache,
+                self._data,
+                self._normalizer,
+                self._config,
             )
+            if not split:
+                split = StringManipulationUtils.split_surname_like_given_name(
+                    token,
+                    normalized_cache,
+                    self._data,
+                    self._normalizer,
+                    self._config,
+                )
             if split:
                 parts.extend(split)
             elif self._normalizer.is_valid_given_name_token(token, normalized_cache):

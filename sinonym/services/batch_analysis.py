@@ -8,6 +8,7 @@ improve parsing accuracy for ambiguous individual names.
 
 from __future__ import annotations
 
+from statistics import median
 from typing import TYPE_CHECKING
 
 from sinonym.coretypes import (
@@ -19,6 +20,12 @@ from sinonym.coretypes import (
     ParseResult,
 )
 from sinonym.coretypes.results import ParsedName
+
+GUARDED_GIVEN_FIRST_BATCH_MIN_SHARE = 0.75
+GIVEN_NAME_SHAPE_MIN_SHARE = 0.5
+ULTRA_LOW_FIRST_SURNAME_MEDIAN_MAX = 130.0
+LONG_GIVEN_NAME_TOKEN_MIN_LENGTH = 6
+TWO_TOKEN_NAME_LENGTH = 2
 
 if TYPE_CHECKING:
     from sinonym.services.ethnicity import EthnicityClassificationService
@@ -69,9 +76,14 @@ class BatchAnalysisService:
             # Normalize once and reuse
             normalized_input = normalizer.apply(name)
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
-                name, normalized_input, data,
+                name,
+                normalized_input,
+                data,
+                allow_guarded_given_first_bonus=False,
             )
             name_candidates.append((name, candidates, best_candidate, normalized_input.compound_metadata))
+
+        name_candidates = self._promote_guarded_given_first_batch_votes(name_candidates, normalizer, data)
 
         # Phase 2: Detect the dominant format pattern
         format_pattern = self._detect_format_pattern(name_candidates)
@@ -119,9 +131,14 @@ class BatchAnalysisService:
             # Normalize once for format detection (compound_metadata not needed)
             normalized_input = normalizer.apply(name)
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
-                name, normalized_input, data,
+                name,
+                normalized_input,
+                data,
+                allow_guarded_given_first_bonus=False,
             )
             name_candidates.append((name, candidates, best_candidate, None))  # No compound_metadata needed for format detection
+
+        name_candidates = self._promote_guarded_given_first_batch_votes(name_candidates, normalizer, data)
 
         return self._detect_format_pattern(name_candidates)
 
@@ -181,7 +198,12 @@ class BatchAnalysisService:
         )
 
     def _analyze_individual_name_with_normalized(
-        self, name: str, normalized_input, _data,
+        self,
+        name: str,
+        normalized_input,
+        _data,
+        *,
+        allow_guarded_given_first_bonus: bool = True,
     ) -> tuple[list[ParseCandidate], ParseCandidate | None]:
         """Analyze a single name using pre-computed normalized input."""
         tokens = list(normalized_input.roman_tokens)
@@ -218,8 +240,9 @@ class BatchAnalysisService:
                 given_tokens,
                 tokens,
                 normalized_input.norm_map,
-                False,
-                original_compound_format,
+                is_all_chinese=False,
+                original_compound_format=original_compound_format,
+                allow_guarded_given_first_bonus=allow_guarded_given_first_bonus,
             )
 
             # Determine the format of this parse
@@ -239,6 +262,136 @@ class BatchAnalysisService:
 
         best_candidate = candidates[0] if candidates else None
         return candidates, best_candidate
+
+    def _promote_guarded_given_first_batch_votes(
+        self,
+        name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]],
+        normalizer,
+        data,
+    ) -> list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]]:
+        """Promote contested given-first votes when batch-level shape evidence supports them."""
+        participant_count = sum(1 for _name, candidates, best_candidate, _ in name_candidates if candidates and best_candidate)
+        if participant_count == 0:
+            return name_candidates
+
+        promoted, first_surname_freqs, given_shape_count = self._collect_guarded_given_first_promotions(
+            name_candidates,
+            normalizer,
+            data,
+        )
+
+        if not self._should_promote_guarded_given_first_votes(
+            participant_count,
+            promoted,
+            first_surname_freqs,
+            given_shape_count,
+        ):
+            return name_candidates
+
+        adjusted = list(name_candidates)
+        for index, promoted_candidate in promoted:
+            name, candidates, _best_candidate, compound_metadata = adjusted[index]
+            adjusted[index] = (name, candidates, promoted_candidate, compound_metadata)
+        return adjusted
+
+    def _collect_guarded_given_first_promotions(
+        self,
+        name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]],
+        normalizer,
+        data,
+    ) -> tuple[list[tuple[int, ParseCandidate]], list[float], int]:
+        """Collect given-first candidates that only become best under individual guarded scoring."""
+        promoted: list[tuple[int, ParseCandidate]] = []
+        first_surname_freqs: list[float] = []
+        given_shape_count = 0
+
+        for index, (name, candidates, best_candidate, _compound_metadata) in enumerate(name_candidates):
+            promotion = self._guarded_given_first_promotion(name, candidates, best_candidate, normalizer, data)
+            if promotion is None:
+                continue
+
+            promoted_candidate, first_token, first_norm = promotion
+            promoted.append((index, promoted_candidate))
+            first_surname_freqs.append(data.get_surname_freq(first_norm))
+            if self._has_given_name_shape(first_token):
+                given_shape_count += 1
+
+        return promoted, first_surname_freqs, given_shape_count
+
+    def _guarded_given_first_promotion(
+        self,
+        name: str,
+        candidates: list[ParseCandidate],
+        best_candidate: ParseCandidate | None,
+        normalizer,
+        data,
+    ) -> tuple[ParseCandidate, str, str] | None:
+        """Return the promoted given-first candidate and first-token evidence, if any."""
+        if not candidates or best_candidate is None or best_candidate.format != NameFormat.SURNAME_FIRST:
+            return None
+
+        normalized_input = normalizer.apply(name)
+        tokens = list(normalized_input.roman_tokens)
+        if len(tokens) != TWO_TOKEN_NAME_LENGTH:
+            return None
+
+        _individual_candidates, individual_best = self._analyze_individual_name_with_normalized(
+            name,
+            normalized_input,
+            data,
+            allow_guarded_given_first_bonus=True,
+        )
+        if individual_best is None or individual_best.format != NameFormat.GIVEN_FIRST:
+            return None
+
+        promoted_candidate = self._matching_given_first_candidate(candidates, individual_best)
+        if promoted_candidate is None:
+            return None
+
+        first_token = tokens[0]
+        first_norm = normalizer.get_normalized(first_token, normalized_input.norm_map).replace(" ", "")
+        return promoted_candidate, first_token, first_norm
+
+    @staticmethod
+    def _matching_given_first_candidate(
+        candidates: list[ParseCandidate],
+        individual_best: ParseCandidate,
+    ) -> ParseCandidate | None:
+        """Find the no-bonus candidate that matches the individual guarded winner."""
+        return next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate.format == NameFormat.GIVEN_FIRST
+                and candidate.surname_tokens == individual_best.surname_tokens
+                and candidate.given_tokens == individual_best.given_tokens
+            ),
+            None,
+        )
+
+    @staticmethod
+    def _should_promote_guarded_given_first_votes(
+        participant_count: int,
+        promoted: list[tuple[int, ParseCandidate]],
+        first_surname_freqs: list[float],
+        given_shape_count: int,
+    ) -> bool:
+        """Return whether guarded given-first votes have enough batch-level support."""
+        if not promoted or len(promoted) / participant_count < GUARDED_GIVEN_FIRST_BATCH_MIN_SHARE:
+            return False
+
+        has_shape_evidence = given_shape_count / len(promoted) >= GIVEN_NAME_SHAPE_MIN_SHARE
+        has_ultra_low_first_surname_evidence = (
+            bool(first_surname_freqs)
+            and median(first_surname_freqs) < ULTRA_LOW_FIRST_SURNAME_MEDIAN_MAX
+        )
+        return has_shape_evidence or has_ultra_low_first_surname_evidence
+
+    @staticmethod
+    def _has_given_name_shape(token: str) -> bool:
+        """Return whether a token has independent shape evidence for given-name position."""
+        raw = token.replace("-", "").replace("'", "")
+        return len(raw) >= LONG_GIVEN_NAME_TOKEN_MIN_LENGTH
 
     def _determine_parse_format(
         self, surname_tokens: list[str], _given_tokens: list[str], original_tokens: list[str],

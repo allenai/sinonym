@@ -5,7 +5,7 @@ Utility scripts for benchmarking, profiling, testing, and model training.
 ## Active Scripts
 
 ### `check_test_status.py`
-Runs the full test suite and reports individual test case failures with detailed diagnostics. Runs performance tests separately, then exits 0/1 based on whether the failure count matches the expected baseline (`EXPECTED_FAILURES = 52`). Improvements (fewer failures) also pass; regressions fail.
+Runs the full test suite and reports individual test case failures with detailed diagnostics. Runs performance tests separately, then exits 0/1 based on whether the failure count matches the expected baseline configured in `scripts/check_test_status.py`. Improvements (fewer failures) also pass; regressions fail.
 
 ```bash
 uv run python scripts/check_test_status.py
