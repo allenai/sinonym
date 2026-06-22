@@ -22,14 +22,10 @@ class FormatPattern(BaseModel):
 
 class Prediction(BaseModel):
     success: bool = Field(description="Whether the name was recognized as Chinese")
-    result: str = Field(
-        description="Normalized name in 'Given-Name Surname' format, or empty on failure"
-    )
     error_message: Optional[str] = Field(default=None, description="Reason for failure")
     given_name: Optional[str] = Field(default=None)
     surname: Optional[str] = Field(default=None)
     middle_name: Optional[str] = Field(default=None)
-    original_compound_surname: Optional[str] = Field(default=None)
     confidence: Optional[float] = Field(
         default=None, description="per-name confidence (softmax over candidate scores)"
     )
@@ -94,7 +90,6 @@ class Predictor:
     def _to_prediction(self, parse_result) -> Prediction:
         return Prediction(
             success=parse_result.success,
-            result=parse_result.result if isinstance(parse_result.result, str) else "",
             error_message=parse_result.error_message,
             given_name=parse_result.parsed.given_name if parse_result.parsed else None,
             surname=parse_result.parsed.surname if parse_result.parsed else None,
@@ -103,7 +98,6 @@ class Predictor:
                 if parse_result.parsed and parse_result.parsed.middle_name
                 else None
             ),
-            original_compound_surname=parse_result.original_compound_surname,
         )
 
     def _to_format_pattern(self, pattern) -> FormatPattern:
@@ -159,12 +153,11 @@ class Predictor:
     # ---- timo entrypoint --------------------------------------------------
 
     def predict_batch(self, instances: List[Instance]) -> List[Prediction]:
-        """timo HTTP entrypoint. One Prediction per instance.
+        """timo HTTP entrypoint. Analyzes the whole batch jointly.
 
-        Always runs batch analysis (cross-name format detection on). Each Prediction
-        carries the normalized result plus per-name `confidence` and the shared batch
-        `format_pattern` (replicated per row — timo has no batch-level response slot).
-        Clients read whichever fields they need.
+        Names are processed together (cross-batch order detection), returning one
+        Prediction per name (index-aligned) with surname/given_name/middle_name,
+        per-name `confidence`, and the shared `format_pattern` (same on every row).
         """
         if not instances:
             return []
