@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sinonym"
-version = "0.2.5"
+version = "0.2.7"
 description = "Chinese Name Detection and Normalization Module"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -43,6 +43,9 @@ dev = [
 test = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+]
+timo = [
+    "pydantic>=1.10,<2",
 ]
 
 [project.urls]
