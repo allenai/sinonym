@@ -66,9 +66,10 @@ class BatchAnalysisService:
     def __init__(
         self,
         parsing_service: NameParsingService,
-        individual_parser: Callable[[str], ParseResult],
         ethnicity_service: EthnicityClassificationService | None = None,
         format_threshold: float = 0.55,
+        *,
+        individual_parser: Callable[[str], ParseResult] | None = None,
         input_failure: Callable[[str], ParseResult | None] | None = None,
     ):
         self._parsing_service = parsing_service
@@ -137,6 +138,8 @@ class BatchAnalysisService:
             results = self._apply_batch_format(
                 name_candidates,
                 format_pattern.dominant_format,
+                normalizer,
+                data,
                 formatting_service,
             )
             improvements = self._find_improvements(name_candidates, results)
@@ -219,7 +222,14 @@ class BatchAnalysisService:
             normalized_input = normalizer.apply(name)
             representation = self._script_representation(normalizer, normalized_input)
             if not self._is_batch_format_participant(representation):
-                results.append(self._locked_representation_result(name))
+                results.append(
+                    self._locked_representation_result(
+                        name,
+                        normalized_input,
+                        data,
+                        formatting_service,
+                    ),
+                )
                 name_candidates.append((name, [], None, normalized_input.compound_metadata, representation))
                 continue
 
@@ -602,6 +612,8 @@ class BatchAnalysisService:
         self,
         name_candidates: list[NameCandidateEntry],
         target_format: NameFormat,
+        normalizer,
+        data,
         formatting_service,
     ) -> list[ParseResult]:
         """Apply the detected batch format by selecting best candidate matching the format."""
@@ -617,7 +629,15 @@ class BatchAnalysisService:
                 continue
 
             if not self._is_batch_format_participant(representation):
-                results.append(self._locked_representation_result(name))
+                normalized_input = normalizer.apply(name)
+                results.append(
+                    self._locked_representation_result(
+                        name,
+                        normalized_input,
+                        data,
+                        formatting_service,
+                    ),
+                )
                 continue
 
             # Find candidates that match the target format
@@ -722,9 +742,35 @@ class BatchAnalysisService:
         _name, candidates, best_candidate, _compound_metadata, representation = entry
         return bool(candidates and best_candidate and self._is_batch_format_participant(representation))
 
-    def _locked_representation_result(self, name: str) -> ParseResult:
+    def _locked_representation_result(
+        self,
+        name: str,
+        normalized_input,
+        data,
+        formatting_service,
+    ) -> ParseResult:
         """Return a structural individual parse for records outside the Latin batch cohort."""
-        return self._individual_parser(name)
+        if self._individual_parser is not None:
+            return self._individual_parser(name)
+
+        candidates, best_candidate = self._analyze_individual_name_with_normalized(
+            name,
+            normalized_input,
+            data,
+        )
+        if best_candidate is None and self._ethnicity_service is not None:
+            eth = self._ethnicity_service.classify_ethnicity(
+                normalized_input.roman_tokens,
+                normalized_input.norm_map,
+                name,
+            )
+            if eth.success is False:
+                return eth
+        return self._format_best_candidate(
+            best_candidate,
+            formatting_service,
+            normalized_input.compound_metadata,
+        )
 
     def _format_best_candidate(
         self,

@@ -16,7 +16,7 @@ import pytest
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.coretypes import NameFormat, ParseCandidate
 from sinonym.resources import open_csv_reader, resource_path
-from sinonym.services.batch_analysis import LATIN_ONLY_REPRESENTATION
+from sinonym.services.batch_analysis import LATIN_ONLY_REPRESENTATION, BatchAnalysisService
 from sinonym.services.non_person import NON_PERSON_FAILURE_REASON
 from sinonym.services.normalization import CompoundMetadata
 from sinonym.utils.string_manipulation import StringManipulationUtils
@@ -474,6 +474,21 @@ def test_batch_format_votes_ignore_weak_candidate_gaps_and_duplicate_names(detec
     assert stats.surname_first_preferences == 0
     assert stats.given_first_preferences == 2
     assert stats.names_with_candidates == 2
+
+
+def test_batch_analysis_service_old_constructor_signature_still_works(detector):
+    service = BatchAnalysisService(detector._parsing_service, detector._ethnicity_service)
+
+    pattern = service.detect_batch_format(["Xin Liu", "Yang Li"], detector._normalizer, detector._data)
+    fallback_batch = service.analyze_name_batch(
+        ["\u5f20Wei"],
+        detector._normalizer,
+        detector._data,
+        detector._formatting_service,
+    )
+
+    assert pattern.total_count == 2
+    assert fallback_batch.results[0].success
 
 
 def test_single_chinese_participant_does_not_meet_batch_application_threshold(detector):

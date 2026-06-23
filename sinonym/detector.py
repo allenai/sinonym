@@ -244,8 +244,8 @@ class ChineseNameDetector:
             self._non_person_input_service = NonPersonInputDetectionService(self._config, self._normalizer, self._data)
             self._batch_analysis_service = BatchAnalysisService(
                 self._parsing_service,
-                self.normalize_name,
                 ethnicity_service=self._ethnicity_service,
+                individual_parser=self.normalize_name,
                 input_failure=self._initial_input_failure,
             )
 
