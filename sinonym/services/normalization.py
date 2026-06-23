@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import string
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from sinonym.chinese_names_data import VALID_CHINESE_RIMES
 from sinonym.text_processing import CompoundDetector, TextNormalizer, TextPreprocessor
@@ -18,6 +18,18 @@ from sinonym.utils.thread_cache import ThreadLocalCache
 
 if TYPE_CHECKING:
     from sinonym.coretypes import ChineseNameConfig
+
+ScriptRepresentation = Literal["latin_only", "han_only", "bilingual_aligned", "mixed_script"]
+MIN_BILINGUAL_ALIGNMENT_PAIRS = 2
+
+
+@dataclass(frozen=True)
+class BilingualTokenPair:
+    """Explicit Roman/Han token alignment from bilingual author-name strings."""
+
+    roman_token: str
+    han_token: str
+    han_pinyin: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -251,6 +263,80 @@ class NormalizationService:
         if han_tokens:
             return han_tokens
         return roman_tokens_original
+
+    def classify_script_representation(self, normalized_input: NormalizedInput) -> ScriptRepresentation:
+        """Classify script provenance for batch convention voting."""
+        has_han = any(self._is_han_token(token) for token in normalized_input.tokens)
+        has_roman = any(self._is_roman_token(token) for token in normalized_input.tokens)
+
+        if not has_han:
+            return "latin_only"
+        if not has_roman:
+            return "han_only"
+        if self.aligned_bilingual_pairs(normalized_input) is not None:
+            return "bilingual_aligned"
+        return "mixed_script"
+
+    def aligned_bilingual_pairs(self, normalized_input: NormalizedInput) -> tuple[BilingualTokenPair, ...] | None:
+        """Return explicit alternating Roman/Han pairs when the alignment is unambiguous."""
+        pairs: list[BilingualTokenPair] = []
+        tokens = list(normalized_input.tokens)
+        index = 0
+
+        while index < len(tokens):
+            if index + 1 >= len(tokens):
+                return None
+
+            first = tokens[index]
+            second = tokens[index + 1]
+
+            if self._is_roman_token(first) and self._is_han_token(second):
+                roman_token = self._clean_roman_token(first)
+                han_token = second
+            elif self._is_han_token(first) and self._is_roman_token(second):
+                roman_token = self._clean_roman_token(second)
+                han_token = first
+            else:
+                return None
+
+            han_pinyin = tuple(self._cache_service.han_to_pinyin_fast(han_token))
+            if not roman_token or not han_pinyin or not self._roman_matches_han_token(roman_token, han_pinyin):
+                return None
+
+            pairs.append(BilingualTokenPair(roman_token=roman_token, han_token=han_token, han_pinyin=han_pinyin))
+            index += 2
+
+        return tuple(pairs) if len(pairs) >= MIN_BILINGUAL_ALIGNMENT_PAIRS else None
+
+    def _is_han_token(self, token: str) -> bool:
+        """Return whether the whole token is CJK characters."""
+        return bool(token) and all(self._config.cjk_pattern.search(char) for char in token)
+
+    def _is_roman_token(self, token: str) -> bool:
+        """Return whether the token carries Roman letters and no CJK characters."""
+        return bool(
+            token
+            and self._config.ascii_alpha_pattern.search(token)
+            and not self._config.cjk_pattern.search(token),
+        )
+
+    def _clean_roman_token(self, token: str) -> str:
+        """Clean a Roman token without changing its source capitalization."""
+        return self._config.clean_roman_pattern.sub("", token)
+
+    def _roman_matches_han_token(self, roman_token: str, han_pinyin: tuple[str, ...]) -> bool:
+        """Return whether a Roman token is the pinyin equivalent of a Han token group."""
+        roman_norm = self._text_normalizer.normalize_token(roman_token).replace(" ", "")
+        han_norm = "".join(self._text_normalizer.normalize_token(part) for part in han_pinyin)
+        if roman_norm == han_norm:
+            return True
+
+        if "-" in roman_token:
+            roman_parts = StringManipulationUtils.split_and_clean_hyphens(roman_token)
+            roman_parts_norm = [self._text_normalizer.normalize_token(part) for part in roman_parts]
+            return tuple(roman_parts_norm) == han_pinyin
+
+        return False
 
     def is_valid_chinese_phonetics(self, token: str) -> bool:
         """Check if a token could plausibly be Chinese based on phonetic structure."""

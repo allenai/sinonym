@@ -362,7 +362,9 @@ Batch processing requires a minimum of 2 names and works best with 5+ names for 
 
 **Unambiguous Names**: Some names have only one possible parsing format (e.g., compound given names like "Wei‑Qi Wang"). Batch processing never forces such names into the detected pattern and never raises. These names keep their best individual parse while other Chinese names benefit from the jointly detected order.
 
-**Confidence (Advisory Only)**: Batch detection computes a dominant format and a confidence value, but there is no confidence threshold gating. Results are always returned. The confidence is informational (e.g., for logging/UX) and is not used to raise errors.
+**Batch Application Threshold**: Batch detection computes a dominant format and confidence value, then applies the batch format only when the vote is decisive, at least two Latin-only Chinese names participate, and confidence clears the configured threshold. When that threshold is not met, names are processed individually and the detected pattern is still returned as metadata.
+
+**Script Cohorts**: Latin-only names vote in and receive Latin batch formatting. Han-only, explicitly aligned Han/Roman, and other mixed-script names are parsed from their own script evidence so a Latin batch convention does not flip their order.
 
 ### Batch Processing with Mixed Name Types
 
@@ -385,7 +387,7 @@ mixed_names = [
 
 result = detector.analyze_name_batch(mixed_names)
 
-# Format detection uses only the 8 Chinese names
+# Format detection uses only the 8 Latin-only Chinese names
 # If 7 prefer GIVEN_FIRST vs 1 SURNAME_FIRST = 87.5% confidence
 # GIVEN_FIRST pattern is applied to Chinese names; non‑Chinese names return clear failures
 
@@ -411,8 +413,8 @@ for i, (name, result_obj) in enumerate(zip(mixed_names, result.results)):
 
 **Key Benefits:**
 - **Maintains input-output correspondence**: Results array matches input array length and order
-- **Robust format detection**: Only valid Chinese names contribute to pattern detection
-- **Consistent formatting**: All Chinese names get the same detected format applied
+- **Robust format detection**: Only valid Latin-only Chinese names contribute to Latin batch pattern detection
+- **Consistent formatting**: Latin-only Chinese names get the detected format applied when the batch signal is strong enough
 - **Clear failure reporting**: Non-Chinese names are clearly marked as failed with error messages
 
 ## Development

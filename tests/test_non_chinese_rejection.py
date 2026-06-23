@@ -24,6 +24,8 @@ NON_CHINESE_TEST_CASES = [
     ("John Smith", (False, "should_be_rejected")),
     ("Maria Garcia", (False, "should_be_rejected")),
     ("Kim Min Soo", (False, "should_be_rejected")),
+    ("Min Soo Lee", (False, "should_be_rejected")),
+    ("Sung Soo Jung", (False, "should_be_rejected")),
     ("Nguyen Van Anh", (False, "should_be_rejected")),
     ("Le Mai Anh", (False, "should_be_rejected")),
     ("Tran Thi Lan", (False, "should_be_rejected")),

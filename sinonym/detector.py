@@ -177,6 +177,7 @@ from sinonym.services import (
     NameDataStructures,
     NameFormattingService,
     NameParsingService,
+    NonPersonInputDetectionService,
     NormalizationService,
     NormalizedInput,
     ParseResult,
@@ -184,6 +185,8 @@ from sinonym.services import (
     ServiceContext,
 )
 from sinonym.services.process_pool import PersistentMultiprocessNormalizer, normalize_names_multiprocess
+
+BILINGUAL_SURNAME_STRENGTH_RATIO_MIN = 5.0
 
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CHINESE NAME DETECTOR CLASS
@@ -205,6 +208,7 @@ class ChineseNameDetector:
         self._ethnicity_service: EthnicityClassificationService | None = None
         self._parsing_service: NameParsingService | None = None
         self._formatting_service: NameFormattingService | None = None
+        self._non_person_input_service: NonPersonInputDetectionService | None = None
         self._batch_analysis_service: BatchAnalysisService | None = None
         self._batch_threshold_lock = threading.Lock()
 
@@ -231,9 +235,12 @@ class ChineseNameDetector:
             self._ethnicity_service = EthnicityClassificationService(context)
             self._parsing_service = NameParsingService(context, weights=self._weights)
             self._formatting_service = NameFormattingService(context)
+            self._non_person_input_service = NonPersonInputDetectionService(self._config, self._normalizer, self._data)
             self._batch_analysis_service = BatchAnalysisService(
                 self._parsing_service,
+                self.normalize_name,
                 ethnicity_service=self._ethnicity_service,
+                input_failure_reason=self._non_person_input_service.failure_reason,
             )
 
     def _ensure_initialized(self) -> None:
@@ -313,6 +320,48 @@ class ChineseNameDetector:
             parsed_original_order=parsed_original_order,
         )
 
+    def _normalize_aligned_bilingual_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
+        """Parse explicit Roman/Han aligned names using Han surname identity."""
+        pairs = self._normalizer.aligned_bilingual_pairs(normalized_input)
+        if pairs is None:
+            return None
+
+        surname_strengths = [self._bilingual_pair_surname_strength(pair) for pair in pairs]
+        best_strength = max(surname_strengths)
+        if best_strength <= 0:
+            return None
+
+        best_index = surname_strengths.index(best_strength)
+        next_best = max((strength for index, strength in enumerate(surname_strengths) if index != best_index), default=0.0)
+        if next_best > 0 and best_strength / next_best < BILINGUAL_SURNAME_STRENGTH_RATIO_MIN:
+            return None
+        if best_index not in (0, len(pairs) - 1):
+            return None
+
+        surname_tokens = [pairs[best_index].roman_token]
+        given_tokens = [pair.roman_token for index, pair in enumerate(pairs) if index != best_index]
+        original_order = ["surname", "given"] if best_index == 0 else ["given", "surname"]
+
+        try:
+            return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
+        except ValueError as e:
+            return ParseResult.failure(str(e))
+
+    def _bilingual_pair_surname_strength(self, pair) -> float:
+        """Return surname strength from the Han side of an aligned bilingual pair."""
+        han_freq = self._data.get_surname_freq(pair.han_token)
+        if len(pair.han_pinyin) == 1:
+            pinyin_freq = self._data.get_surname_freq(pair.han_pinyin[0])
+            return max(han_freq, pinyin_freq)
+
+        pinyin_key = " ".join(pair.han_pinyin)
+        compact_key = "".join(pair.han_pinyin)
+        return max(
+            han_freq,
+            self._data.get_surname_freq(pinyin_key),
+            self._data.get_surname_freq(compact_key),
+        )
+
     def _normalize_spaced_all_chinese_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
         """Parse all-Han names whose whitespace already separates name components."""
         if (
@@ -358,6 +407,27 @@ class ChineseNameDetector:
         """Get cache information."""
         return self._cache_service.get_cache_info()
 
+    def _initial_input_failure(self, raw_name: str) -> ParseResult | None:
+        """Return an early failure before normalization, or initialize services."""
+        if not raw_name or len(raw_name) > self._config.max_name_length:
+            return ParseResult.failure("invalid input length")
+
+        if all(c in string.punctuation + string.whitespace for c in raw_name):
+            return ParseResult.failure("name contains only punctuation/whitespace")
+
+        if self._normalizer._text_preprocessor.contains_non_chinese_scripts(raw_name):
+            return ParseResult.failure("contains non-Chinese characters")
+
+        self._ensure_initialized()
+
+        if self._non_person_input_service is None:
+            return None
+
+        non_person_reason = self._non_person_input_service.failure_reason(raw_name)
+        if non_person_reason is None:
+            return None
+        return ParseResult.failure(non_person_reason)
+
     def normalize_name(self, raw_name: str) -> ParseResult:
         """
         Main API method: Detect if a name is Chinese and normalize it.
@@ -366,18 +436,9 @@ class ChineseNameDetector:
         - success=True, result=formatted_name if Chinese name detected
         - success=False, error_message=reason if not Chinese name
         """
-        # Input validation
-        if not raw_name or len(raw_name) > self._config.max_name_length:
-            return ParseResult.failure("invalid input length")
-
-        if all(c in string.punctuation + string.whitespace for c in raw_name):
-            return ParseResult.failure("name contains only punctuation/whitespace")
-
-        # Early rejection for non-Chinese scripts
-        if self._normalizer._text_preprocessor.contains_non_chinese_scripts(raw_name):
-            return ParseResult.failure("contains non-Chinese characters")
-
-        self._ensure_initialized()
+        initial_failure = self._initial_input_failure(raw_name)
+        if initial_failure is not None:
+            return initial_failure
 
         # Use new normalization service for cleaner pipeline
         normalized_input = self._normalizer.apply(raw_name)
@@ -397,6 +458,10 @@ class ChineseNameDetector:
 
         if non_chinese_result.success is False:
             return non_chinese_result
+
+        aligned_bilingual_result = self._normalize_aligned_bilingual_name(normalized_input)
+        if aligned_bilingual_result is not None:
+            return aligned_bilingual_result
 
         # Try parsing in both orders - for all-Chinese inputs, choose best scoring parse
 

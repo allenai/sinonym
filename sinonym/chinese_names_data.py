@@ -1059,7 +1059,12 @@ KOREAN_AMBIGUOUS_PATTERNS = frozenset(
 KOREAN_GIVEN_PAIRS = frozenset(
     {
         ("soo", "jin"),  # 수진 - very common Korean name
+        ("min", "soo"),  # 민수 - very common Korean name
         ("min", "jung"),  # 민정 - very common Korean name
+        ("soo", "jung"),  # 수정 - very common Korean name
+        ("heung", "min"),  # 흥민 - Korean name pattern
+        ("ye", "jin"),  # 예진 - very common Korean name
+        ("ha", "young"),  # 하영 - very common Korean name
         ("ji", "min"),  # 지민 - very common Korean name
         ("hoon", "ki"),  # 훈기 - Korean name pattern
         ("young", "ho"),  # 영호 - Korean name pattern

@@ -5,6 +5,8 @@ __pycache__/
 .claude
 claude_scripts/
 data_backup/
+scratch/
+.pytest_failures.txt
 
 # C extensions
 *.so

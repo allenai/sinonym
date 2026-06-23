@@ -16,6 +16,8 @@ import pytest
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.coretypes import NameFormat, ParseCandidate
 from sinonym.resources import open_csv_reader, resource_path
+from sinonym.services.batch_analysis import LATIN_ONLY_REPRESENTATION
+from sinonym.services.non_person import NON_PERSON_FAILURE_REASON
 from sinonym.services.normalization import CompoundMetadata
 from sinonym.utils.string_manipulation import StringManipulationUtils
 from tests import conftest as tests_conftest
@@ -67,6 +69,33 @@ def test_korean_hyphenated_overlap_regression(detector):
     rejected = detector.normalize_name("Kim Min-jun")
     assert not rejected.success
 
+
+def test_korean_curated_pairs_are_format_normalized(detector):
+    rejected_names = [
+        "Son Ye-jin",
+        "Ye-Jin Son",
+        "Son Ye Jin",
+        "Ye Jin Son",
+        "Son Heung-min",
+        "Heung-Min Son",
+        "Son Heung Min",
+        "Heung Min Son",
+        "Ha Young Lee",
+    ]
+
+    for name in rejected_names:
+        result = detector.normalize_name(name)
+        assert not result.success, name
+        assert result.error_message == "Korean structural patterns detected"
+
+    accepted_controls = {
+        "Min-Hung Lee": "Min-Hung Lee",
+        "Jung Chi-Wai": "Chi-Wai Jung",
+    }
+    for name, expected in accepted_controls.items():
+        result = detector.normalize_name(name)
+        assert result.success, name
+        assert result.result == expected
 
 def test_korean_overlapping_ambiguous_branch_stays_bounded(detector):
     normalized = detector._normalizer.apply("Ha Min Lee")
@@ -390,6 +419,114 @@ def test_low_confidence_batch_preserves_detected_format_metadata(detector):
     assert batch.format_pattern == detected
 
 
+def test_exact_vote_tie_does_not_meet_batch_application_threshold(detector):
+    names = ["Mai Liao", "Xin Liu"]
+
+    detected = detector.detect_batch_format(names)
+    batch = detector.analyze_name_batch(names)
+
+    assert detected.surname_first_count == 1
+    assert detected.given_first_count == 1
+    assert detected.total_count == 2
+    assert not detected.threshold_met
+    assert batch.format_pattern == detected
+    assert [result.result for result in batch.results] == [detector.normalize_name(name).result for name in names]
+
+
+def test_single_chinese_participant_does_not_meet_batch_application_threshold(detector):
+    names = ["Mai Liao", "John Smith", "Mary Johnson"]
+
+    detected = detector.detect_batch_format(names)
+    batch = detector.analyze_name_batch(names)
+
+    assert detected.total_count == 1
+    assert not detected.threshold_met
+    assert batch.format_pattern == detected
+
+
+def test_strong_given_first_batch_still_overrides_ambiguous_name(detector):
+    names = ["Mai Liao", "Xin Liu", "Yang Li", "Wei Li", "Yan Mo"]
+
+    batch = detector.analyze_name_batch(names)
+
+    assert batch.format_pattern.dominant_format == NameFormat.GIVEN_FIRST
+    assert batch.format_pattern.threshold_met
+    assert batch.results[0].result == "Mai Liao"
+
+
+def test_batch_does_not_apply_latin_format_to_spaced_han_name(detector):
+    han_name = "\u67f3 \u71d5\u6885"
+    names = [han_name, "Xin Liu", "Yang Li", "Wei Zhang", "Ming Wang"]
+
+    individual = detector.normalize_name(han_name)
+    batch = detector.analyze_name_batch(names)
+
+    assert individual.success
+    assert individual.result == "Yan-Mei Liu"
+    assert batch.format_pattern.total_count == 4
+    assert batch.results[0].result == individual.result
+    assert batch.results[0].parsed_original_order.order == ["surname", "given"]
+
+
+def test_batch_does_not_flip_compact_han_from_latin_votes(detector):
+    han_name = "\u738b\u674e"
+    names = [han_name, "Ming Li", "Wei Zhang"]
+
+    individual = detector.normalize_name(han_name)
+    batch = detector.analyze_name_batch(names)
+
+    assert individual.success
+    assert individual.result == "Li Wang"
+    assert batch.format_pattern.total_count == 2
+    assert batch.results[0].result == individual.result
+    assert batch.results[0].parsed_original_order.order == ["surname", "given"]
+
+
+def test_aligned_bilingual_pairs_use_han_identity(detector):
+    given_first = detector.normalize_name("Mi \u5bc6 Jiang \u848b")
+    surname_first = detector.normalize_name("\u9ad8 Gao \u9759 Jing")
+
+    assert given_first.success
+    assert given_first.result == "Mi Jiang"
+    assert given_first.parsed_original_order.order == ["given", "surname"]
+
+    assert surname_first.success
+    assert surname_first.result == "Jing Gao"
+    assert surname_first.parsed_original_order.order == ["surname", "given"]
+
+
+def test_non_person_inputs_are_rejected_before_parsing(detector):
+    cases = [
+        "\u5ef6\u5b89\u5927\u5b66 \u7269\u7406\u4e0e\u7535\u5b50\u4fe1\u606f\u5b66\u9662",
+        "Tian Qiang Zhou Hui Zhu Rui",
+    ]
+
+    for raw_name in cases:
+        result = detector.normalize_name(raw_name)
+        assert not result.success
+        assert result.error_message == NON_PERSON_FAILURE_REASON
+
+
+def test_non_person_batch_rows_do_not_vote(detector):
+    raw_name = "Tian Qiang Zhou Hui Zhu Rui"
+    names = [raw_name, "Xin Liu", "Yang Li", "Wei Li"]
+
+    detected = detector.detect_batch_format(names)
+    batch = detector.analyze_name_batch(names)
+
+    assert detected.total_count == 3
+    assert batch.format_pattern.total_count == 3
+    assert not batch.results[0].success
+    assert batch.results[0].error_message == NON_PERSON_FAILURE_REASON
+
+
+def test_non_person_author_list_gate_does_not_split_accented_person_name(detector):
+    result = detector.normalize_name("Y\u00ec Xi\u00e1ng J. W\u00e1ng")
+
+    if not result.success:
+        assert result.error_message != NON_PERSON_FAILURE_REASON
+
+
 def test_korean_specific_token_signal_is_capped(detector):
     ethnicity_service = detector._ethnicity_service
     tokens = ("Ha", "Young", "Lee")
@@ -435,7 +572,7 @@ def test_batch_tie_break_heuristics_use_normalized_tokenization(detector):
         original_compound_format=None,
     )
     names = ["XinLiu", "YangLi", "WeiLi"]
-    name_candidates = [(name, [dummy_candidate], dummy_candidate, None) for name in names]
+    name_candidates = [(name, [dummy_candidate], dummy_candidate, None, LATIN_ONLY_REPRESENTATION) for name in names]
 
     assert all(len(name.split()) == 1 for name in names)
     dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(name_candidates)

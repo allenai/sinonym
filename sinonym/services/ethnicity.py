@@ -263,37 +263,64 @@ class EthnicityClassificationService:
             "has_thi_pattern": False,
         }
 
-        # Single pass through all tokens
-        for i, token in enumerate(tokens):
-            token_lower = token.lower()
+        self._collect_single_token_patterns(tokens, analysis)
+        analysis["korean_given_pairs"] = self._korean_given_pairs(tokens)
+        return analysis
 
-            # Check for hyphenated patterns
+    @staticmethod
+    def _collect_single_token_patterns(tokens: tuple[str, ...], analysis: dict) -> None:
+        """Collect per-token ethnicity pattern signals."""
+        for token in tokens:
+            token_lower = token.lower()
             if "-" in token:
                 parts = token.split("-")
                 if len(parts) == 2:
                     analysis["hyphenated_tokens"].append((parts[0].lower(), parts[1].lower()))
 
-            # Check for Vietnamese "Thi" pattern
             if token_lower in ["thi", "thị"]:
                 analysis["has_thi_pattern"] = True
-
-            # Categorize tokens by pattern type
             if token_lower in KOREAN_SPECIFIC_PATTERNS:
                 analysis["korean_specific_tokens"].append(token_lower)
             elif token_lower in KOREAN_AMBIGUOUS_PATTERNS:
                 analysis["korean_ambiguous_tokens"].append(token_lower)
-
             if token_lower in VIETNAMESE_GIVEN_PATTERNS:
                 analysis["vietnamese_tokens"].append(token_lower)
 
-        # Check for Korean given name pairs (skip surname)
-        given_tokens = [token.lower() for token in tokens[1:]]
-        for i in range(len(given_tokens) - 1):
-            pair = (given_tokens[i], given_tokens[i + 1])
-            if pair in KOREAN_GIVEN_PAIRS:
-                analysis["korean_given_pairs"].append(pair)
+    def _korean_given_pairs(self, tokens: tuple[str, ...]) -> list[tuple[str, str]]:
+        """Return Korean given-name pairs under plausible surname positions."""
+        seen_pairs = set()
+        pairs: list[tuple[str, str]] = []
+        for given_tokens in self._candidate_korean_given_sequences(tokens):
+            for i in range(len(given_tokens) - 1):
+                pair = (given_tokens[i], given_tokens[i + 1])
+                if pair in KOREAN_GIVEN_PAIRS and pair not in seen_pairs:
+                    pairs.append(pair)
+                    seen_pairs.add(pair)
+        return pairs
 
-        return analysis
+    @staticmethod
+    def _candidate_korean_given_sequences(tokens: tuple[str, ...]) -> list[list[str]]:
+        """Return plausible given-token spans for Korean pair detection."""
+        def split_given_tokens(given_tokens: tuple[str, ...]) -> list[str]:
+            split_tokens: list[str] = []
+            for token in given_tokens:
+                split_tokens.extend(part.lower() for part in token.split("-") if part)
+            return split_tokens
+
+        candidate_given_sequences = [split_given_tokens(tokens[1:])]
+        last_token = StringManipulationUtils.remove_spaces(tokens[-1]).lower() if tokens else ""
+        if len(tokens) >= 2 and last_token in OVERLAPPING_KOREAN_SURNAMES:
+            candidate_given_sequences.append(split_given_tokens(tokens[:-1]))
+
+        return candidate_given_sequences
+
+    @staticmethod
+    def _has_trailing_overlapping_korean_surname(tokens: tuple[str, ...]) -> bool:
+        """Return whether a final token can be a Korean surname."""
+        return bool(
+            tokens
+            and StringManipulationUtils.remove_spaces(tokens[-1]).lower() in OVERLAPPING_KOREAN_SURNAMES,
+        )
 
     def _calculate_non_chinese_patterns_unified(
         self,
@@ -325,8 +352,11 @@ class EthnicityClassificationService:
         normalized_cache: dict[str, str] | None = None,
     ) -> float:
         """Calculate Korean score from pre-computed analysis."""
-        # Early returns for definitive cases
-        if analysis["surname_type"] == "chinese_only":
+        # Early returns for definitive cases. Strong Korean given-pair evidence
+        # with a trailing overlapping Korean surname must still be scored.
+        if analysis["surname_type"] == "chinese_only" and not (
+            self._has_trailing_overlapping_korean_surname(tokens) and analysis["korean_given_pairs"]
+        ):
             return 0.0  # Block Korean scoring for non-overlapping Chinese surnames
         if analysis["surname_type"] == "korean_only":
             return 10.0  # Definitive Korean evidence

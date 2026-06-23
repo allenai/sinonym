@@ -8,6 +8,7 @@ improve parsing accuracy for ambiguous individual names.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from statistics import median
 from typing import TYPE_CHECKING
 
@@ -26,8 +27,32 @@ GIVEN_NAME_SHAPE_MIN_SHARE = 0.5
 ULTRA_LOW_FIRST_SURNAME_MEDIAN_MAX = 130.0
 LONG_GIVEN_NAME_TOKEN_MIN_LENGTH = 6
 TWO_TOKEN_NAME_LENGTH = 2
+BATCH_PARTICIPANT_MIN = 2
+LATIN_ONLY_REPRESENTATION = "latin_only"
+REJECTED_INPUT_REPRESENTATION = "rejected_input"
+
+NameCandidateEntry = tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None, str]
+
+
+@dataclass
+class BatchVoteStats:
+    """Vote totals used to detect a batch-wide name order."""
+
+    surname_first_preferences: int = 0
+    given_first_preferences: int = 0
+    surname_first_weight: float = 0.0
+    given_first_weight: float = 0.0
+    total_weight: float = 0.0
+    names_with_candidates: int = 0
+
+    @property
+    def total_preferences(self) -> int:
+        """Return total format votes."""
+        return self.surname_first_preferences + self.given_first_preferences
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from sinonym.services.ethnicity import EthnicityClassificationService
     from sinonym.services.parsing import NameParsingService
 
@@ -38,12 +63,16 @@ class BatchAnalysisService:
     def __init__(
         self,
         parsing_service: NameParsingService,
+        individual_parser: Callable[[str], ParseResult],
         ethnicity_service: EthnicityClassificationService | None = None,
         format_threshold: float = 0.55,
+        input_failure_reason: Callable[[str], str | None] | None = None,
     ):
         self._parsing_service = parsing_service
         self._ethnicity_service = ethnicity_service
         self._format_threshold = format_threshold  # Minimum threshold for format detection
+        self._individual_parser = individual_parser
+        self._input_failure_reason = input_failure_reason
 
     def analyze_name_batch(
         self,
@@ -70,18 +99,24 @@ class BatchAnalysisService:
             return self._process_individually(names, normalizer, data, formatting_service)
 
         # Phase 1: Analyze each name individually and collect all parse candidates
-        name_candidates = []  # List of (name, candidates, best_candidate, compound_metadata)
+        name_candidates: list[NameCandidateEntry] = []
 
         for name in names:
+            input_failure = self._input_failure(name)
+            if input_failure is not None:
+                name_candidates.append((name, [], None, {}, REJECTED_INPUT_REPRESENTATION))
+                continue
+
             # Normalize once and reuse
             normalized_input = normalizer.apply(name)
+            representation = self._script_representation(normalizer, normalized_input)
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
                 name,
                 normalized_input,
                 data,
                 allow_guarded_given_first_bonus=False,
             )
-            name_candidates.append((name, candidates, best_candidate, normalized_input.compound_metadata))
+            name_candidates.append((name, candidates, best_candidate, normalized_input.compound_metadata, representation))
 
         name_candidates = self._promote_guarded_given_first_batch_votes(name_candidates, normalizer, data)
 
@@ -126,17 +161,23 @@ class BatchAnalysisService:
         Returns:
             BatchFormatPattern indicating the dominant format and confidence
         """
-        name_candidates = []
+        name_candidates: list[NameCandidateEntry] = []
         for name in names:
+            input_failure = self._input_failure(name)
+            if input_failure is not None:
+                name_candidates.append((name, [], None, None, REJECTED_INPUT_REPRESENTATION))
+                continue
+
             # Normalize once for format detection (compound_metadata not needed)
             normalized_input = normalizer.apply(name)
+            representation = self._script_representation(normalizer, normalized_input)
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
                 name,
                 normalized_input,
                 data,
                 allow_guarded_given_first_bonus=False,
             )
-            name_candidates.append((name, candidates, best_candidate, None))  # No compound_metadata needed for format detection
+            name_candidates.append((name, candidates, best_candidate, None, representation))
 
         name_candidates = self._promote_guarded_given_first_batch_votes(name_candidates, normalizer, data)
 
@@ -145,15 +186,24 @@ class BatchAnalysisService:
     def _process_individually(self, names: list[str], normalizer, data, formatting_service) -> BatchParseResult:
         """Process names individually when batch is too small."""
         results = []
-        name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]] = []
+        name_candidates: list[NameCandidateEntry] = []
 
         for name in names:
+            input_failure = self._input_failure(name)
+            if input_failure is not None:
+                results.append(input_failure)
+                name_candidates.append((name, [], None, {}, REJECTED_INPUT_REPRESENTATION))
+                continue
+
             # Normalize once and reuse
             normalized_input = normalizer.apply(name)
+            representation = self._script_representation(normalizer, normalized_input)
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
                 name, normalized_input, data,
             )
-            if best_candidate is None and self._ethnicity_service is not None:
+            if not self._is_batch_format_participant(representation):
+                results.append(self._locked_representation_result(name))
+            elif best_candidate is None and self._ethnicity_service is not None:
                 eth = self._ethnicity_service.classify_ethnicity(
                     normalized_input.roman_tokens,
                     normalized_input.norm_map,
@@ -173,7 +223,7 @@ class BatchAnalysisService:
                         best_candidate, formatting_service, normalized_input.compound_metadata,
                     ),
                 )
-            name_candidates.append((name, candidates, best_candidate, normalized_input.compound_metadata))
+            name_candidates.append((name, candidates, best_candidate, normalized_input.compound_metadata, representation))
 
         # Create a dummy format pattern for small batches or non-participant fallbacks
         format_pattern = BatchFormatPattern(
@@ -265,12 +315,16 @@ class BatchAnalysisService:
 
     def _promote_guarded_given_first_batch_votes(
         self,
-        name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]],
+        name_candidates: list[NameCandidateEntry],
         normalizer,
         data,
-    ) -> list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]]:
+    ) -> list[NameCandidateEntry]:
         """Promote contested given-first votes when batch-level shape evidence supports them."""
-        participant_count = sum(1 for _name, candidates, best_candidate, _ in name_candidates if candidates and best_candidate)
+        participant_count = sum(
+            1
+            for entry in name_candidates
+            if self._candidate_entry_participates(entry)
+        )
         if participant_count == 0:
             return name_candidates
 
@@ -290,13 +344,13 @@ class BatchAnalysisService:
 
         adjusted = list(name_candidates)
         for index, promoted_candidate in promoted:
-            name, candidates, _best_candidate, compound_metadata = adjusted[index]
-            adjusted[index] = (name, candidates, promoted_candidate, compound_metadata)
+            name, candidates, _best_candidate, compound_metadata, representation = adjusted[index]
+            adjusted[index] = (name, candidates, promoted_candidate, compound_metadata, representation)
         return adjusted
 
     def _collect_guarded_given_first_promotions(
         self,
-        name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]],
+        name_candidates: list[NameCandidateEntry],
         normalizer,
         data,
     ) -> tuple[list[tuple[int, ParseCandidate]], list[float], int]:
@@ -305,7 +359,11 @@ class BatchAnalysisService:
         first_surname_freqs: list[float] = []
         given_shape_count = 0
 
-        for index, (name, candidates, best_candidate, _compound_metadata) in enumerate(name_candidates):
+        for index, entry in enumerate(name_candidates):
+            name, candidates, best_candidate, _compound_metadata, representation = entry
+            if not self._is_batch_format_participant(representation):
+                continue
+
             promotion = self._guarded_given_first_promotion(name, candidates, best_candidate, normalizer, data)
             if promotion is None:
                 continue
@@ -418,46 +476,10 @@ class BatchAnalysisService:
         # Default to surname-first for unclear cases
         return NameFormat.SURNAME_FIRST
 
-    def _detect_format_pattern(self, name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]]) -> BatchFormatPattern:
+    def _detect_format_pattern(self, name_candidates: list[NameCandidateEntry]) -> BatchFormatPattern:
         """Detect the dominant format pattern with simple vote counting and confidence-weighted tie-breaking."""
-        surname_first_preferences = 0
-        given_first_preferences = 0
-        surname_first_weight = 0.0
-        given_first_weight = 0.0
-        total_weight = 0.0
-        names_with_candidates = 0
-
-        # Count format preferences and collect confidence data for tie-breaking
-        for _name, candidates, best_candidate, _ in name_candidates:
-            if not candidates or not best_candidate:
-                continue
-
-            names_with_candidates += 1
-
-            # Calculate confidence gap between top two candidates
-            if len(candidates) >= 2:
-                # Sort by score (highest first)
-                sorted_candidates = sorted(candidates, key=lambda x: x.score, reverse=True)
-                confidence_gap = sorted_candidates[0].score - sorted_candidates[1].score
-
-                # Weight by confidence gap - higher gap = more influence
-                # Minimum weight of 0.1 to ensure all names have some influence
-                weight = max(0.1, confidence_gap * 2)
-            else:
-                # Single candidate gets maximum weight
-                weight = 1.0
-
-            total_weight += weight
-
-            # Add weighted vote for the best candidate's format
-            if best_candidate.format == NameFormat.SURNAME_FIRST:
-                surname_first_preferences += 1
-                surname_first_weight += weight
-            elif best_candidate.format == NameFormat.GIVEN_FIRST:
-                given_first_preferences += 1
-                given_first_weight += weight
-
-        if names_with_candidates == 0:
+        stats = self._collect_batch_vote_stats(name_candidates)
+        if stats.names_with_candidates == 0:
             return BatchFormatPattern(
                 dominant_format=NameFormat.MIXED,
                 confidence=0.0,
@@ -467,51 +489,76 @@ class BatchAnalysisService:
                 threshold_met=False,
             )
 
-        # Primary decision: simple vote counting (original behavior)
-        total_preferences = surname_first_preferences + given_first_preferences
-
-        if surname_first_preferences > given_first_preferences:
-            # Clear winner by vote count
-            dominant_format = NameFormat.SURNAME_FIRST
-            confidence = surname_first_preferences / total_preferences
-        elif given_first_preferences > surname_first_preferences:
-            # Clear winner by vote count
-            dominant_format = NameFormat.GIVEN_FIRST
-            confidence = given_first_preferences / total_preferences
-        # Exact tie in vote count - use confidence-weighted tie-breaking
-        elif total_weight > 0:
-            surname_first_confidence = surname_first_weight / total_weight
-            given_first_confidence = given_first_weight / total_weight
-
-            if surname_first_confidence > given_first_confidence:
-                dominant_format = NameFormat.SURNAME_FIRST
-                confidence = surname_first_confidence
-            elif given_first_confidence > surname_first_confidence:
-                dominant_format = NameFormat.GIVEN_FIRST
-                confidence = given_first_confidence
-            else:
-                # Still tied even with confidence weighting - use heuristics
-                dominant_format = self._apply_tie_breaking_heuristics(name_candidates)
-                confidence = 0.5
-        else:
-            # Fallback to heuristics if confidence calculation fails
-            dominant_format = self._apply_tie_breaking_heuristics(name_candidates)
-            confidence = 0.5
-
-        threshold_met = confidence >= self._format_threshold
+        dominant_format, confidence = self._dominant_format_and_confidence(stats, name_candidates)
+        has_decisive_vote = stats.surname_first_preferences != stats.given_first_preferences
+        has_multiple_participants = stats.names_with_candidates >= BATCH_PARTICIPANT_MIN
+        threshold_met = confidence >= self._format_threshold and has_decisive_vote and has_multiple_participants
 
         return BatchFormatPattern(
             dominant_format=dominant_format,
             confidence=confidence,
-            surname_first_count=surname_first_preferences,
-            given_first_count=given_first_preferences,
-            total_count=names_with_candidates,
+            surname_first_count=stats.surname_first_preferences,
+            given_first_count=stats.given_first_preferences,
+            total_count=stats.names_with_candidates,
             threshold_met=threshold_met,
         )
 
+    def _collect_batch_vote_stats(self, name_candidates: list[NameCandidateEntry]) -> BatchVoteStats:
+        """Count candidate format votes and confidence weights."""
+        stats = BatchVoteStats()
+
+        for entry in name_candidates:
+            _name, candidates, best_candidate, _compound_metadata, representation = entry
+            if not self._is_batch_format_participant(representation) or not candidates or not best_candidate:
+                continue
+
+            weight = self._candidate_vote_weight(candidates)
+            stats.names_with_candidates += 1
+            stats.total_weight += weight
+
+            if best_candidate.format == NameFormat.SURNAME_FIRST:
+                stats.surname_first_preferences += 1
+                stats.surname_first_weight += weight
+            elif best_candidate.format == NameFormat.GIVEN_FIRST:
+                stats.given_first_preferences += 1
+                stats.given_first_weight += weight
+
+        return stats
+
+    @staticmethod
+    def _candidate_vote_weight(candidates: list[ParseCandidate]) -> float:
+        """Return vote weight from the confidence gap between top candidates."""
+        if len(candidates) < 2:
+            return 1.0
+
+        sorted_candidates = sorted(candidates, key=lambda x: x.score, reverse=True)
+        confidence_gap = sorted_candidates[0].score - sorted_candidates[1].score
+        return max(0.1, confidence_gap * 2)
+
+    def _dominant_format_and_confidence(
+        self,
+        stats: BatchVoteStats,
+        name_candidates: list[NameCandidateEntry],
+    ) -> tuple[NameFormat, float]:
+        """Return dominant batch format and confidence from collected votes."""
+        if stats.surname_first_preferences > stats.given_first_preferences:
+            return NameFormat.SURNAME_FIRST, stats.surname_first_preferences / stats.total_preferences
+        if stats.given_first_preferences > stats.surname_first_preferences:
+            return NameFormat.GIVEN_FIRST, stats.given_first_preferences / stats.total_preferences
+        if stats.total_weight <= 0:
+            return self._apply_tie_breaking_heuristics(name_candidates), 0.5
+
+        surname_first_confidence = stats.surname_first_weight / stats.total_weight
+        given_first_confidence = stats.given_first_weight / stats.total_weight
+        if surname_first_confidence > given_first_confidence:
+            return NameFormat.SURNAME_FIRST, surname_first_confidence
+        if given_first_confidence > surname_first_confidence:
+            return NameFormat.GIVEN_FIRST, given_first_confidence
+        return self._apply_tie_breaking_heuristics(name_candidates), 0.5
+
     def _apply_batch_format(
         self,
-        name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]],
+        name_candidates: list[NameCandidateEntry],
         target_format: NameFormat,
         formatting_service,
     ) -> list[ParseResult]:
@@ -520,7 +567,17 @@ class BatchAnalysisService:
         unambiguous_names = []
 
         # Process all names in one pass - check for unambiguous names and apply format
-        for name, candidates, best_candidate, compound_metadata in name_candidates:
+        for entry in name_candidates:
+            name, candidates, best_candidate, compound_metadata, representation = entry
+            input_failure = self._input_failure(name)
+            if input_failure is not None:
+                results.append(input_failure)
+                continue
+
+            if not self._is_batch_format_participant(representation):
+                results.append(self._locked_representation_result(name))
+                continue
+
             # Find candidates that match the target format
             matching_candidates = [c for c in candidates if c.format == target_format]
 
@@ -539,21 +596,15 @@ class BatchAnalysisService:
             # If no candidate could be selected (likely non-Chinese), try to return
             # a specific ethnicity-based failure to mirror single-name behavior.
             if selected_candidate is None and self._ethnicity_service is not None:
-                try:
-                    normalizer = getattr(self._parsing_service, "_normalizer", None)
-                    if normalizer is not None:
-                        normalized_input = normalizer.apply(name)
-                        eth = self._ethnicity_service.classify_ethnicity(
-                            normalized_input.roman_tokens,
-                            normalized_input.norm_map,
-                            name,
-                        )
-                        if eth.success is False:
-                            results.append(eth)
-                            continue
-                except Exception:
-                    # Fall back to generic failure formatting below
-                    pass
+                normalized_input = self._parsing_service._normalizer.apply(name)
+                eth = self._ethnicity_service.classify_ethnicity(
+                    normalized_input.roman_tokens,
+                    normalized_input.norm_map,
+                    name,
+                )
+                if eth.success is False:
+                    results.append(eth)
+                    continue
 
             result = self._candidate_to_parse_result(
                 selected_candidate, formatting_service, compound_metadata,
@@ -562,55 +613,78 @@ class BatchAnalysisService:
 
         return results
 
-    def _apply_tie_breaking_heuristics(self, name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]]) -> NameFormat:
+    def _apply_tie_breaking_heuristics(self, name_candidates: list[NameCandidateEntry]) -> NameFormat:
         """Apply secondary heuristics for tie-breaking when confidence-weighted voting fails."""
-        # Heuristic 1: Surname strength analysis
         surname_first_strength = 0
         given_first_strength = 0
 
-        for name, candidates, best_candidate, _ in name_candidates:
-            if not candidates or not best_candidate:
+        for entry in name_candidates:
+            name, candidates, best_candidate, _compound_metadata, representation = entry
+            if not self._candidate_entry_participates((name, candidates, best_candidate, _compound_metadata, representation)):
                 continue
 
-            try:
-                normalized_input = self._parsing_service._normalizer.apply(name)
-                tokens = list(normalized_input.roman_tokens)
-            except Exception:
-                tokens = name.split()
-            if len(tokens) != 2:
+            tokens = self._two_token_name_tokens(name)
+            if tokens is None:
                 continue
 
             first_token, second_token = tokens
-            first_key = self._parsing_service._normalizer.norm(first_token)
-            second_key = self._parsing_service._normalizer.norm(second_token)
+            surname_first_strength += self._surname_position_strength(first_token)
+            given_first_strength += self._surname_position_strength(second_token)
 
-            # Get surname frequencies for both positions
-            first_as_surname = self._parsing_service._data.get_surname_freq(first_key, 0)
-            second_as_surname = self._parsing_service._data.get_surname_freq(second_key, 0)
-
-            # Evaluate surname-first hypothesis: first token should be strong surname
-            if first_as_surname > 1000:  # Strong surname threshold
-                surname_first_strength += 2
-            elif first_as_surname > 100:  # Medium surname
-                surname_first_strength += 1
-
-            # Evaluate given-first hypothesis: second token should be strong surname
-            if second_as_surname > 1000:  # Strong surname threshold
-                given_first_strength += 2
-            elif second_as_surname > 100:  # Medium surname
-                given_first_strength += 1
-
-        # Heuristic 2: Cultural default (surname-first is traditional Chinese ordering)
-        # Add small bias toward surname-first as tiebreaker
         surname_first_strength += 0.5
 
-        # Decision based on heuristic strength
         if surname_first_strength > given_first_strength:
             return NameFormat.SURNAME_FIRST
         if given_first_strength > surname_first_strength:
             return NameFormat.GIVEN_FIRST
-        # Final fallback: use cultural default
         return NameFormat.SURNAME_FIRST
+
+    def _two_token_name_tokens(self, name: str) -> list[str] | None:
+        """Return normalized roman tokens for two-token tie-break analysis."""
+        normalized_input = self._parsing_service._normalizer.apply(name)
+        tokens = list(normalized_input.roman_tokens)
+        if len(tokens) != TWO_TOKEN_NAME_LENGTH:
+            return None
+        return tokens
+
+    def _surname_position_strength(self, token: str) -> int:
+        """Return coarse surname-frequency strength for a token position."""
+        key = self._parsing_service._normalizer.norm(token)
+        surname_freq = self._parsing_service._data.get_surname_freq(key, 0)
+        if surname_freq > 1000:
+            return 2
+        if surname_freq > 100:
+            return 1
+        return 0
+
+    @staticmethod
+    def _script_representation(normalizer, normalized_input) -> str:
+        """Return the script cohort used for batch convention voting."""
+        return normalizer.classify_script_representation(normalized_input)
+
+    @staticmethod
+    def _is_batch_format_participant(representation: str) -> bool:
+        """Return whether the record should vote in and receive Latin batch format."""
+        return representation == LATIN_ONLY_REPRESENTATION
+
+    def _input_failure(self, name: str) -> ParseResult | None:
+        """Return an early input failure, if one is configured and matches."""
+        if self._input_failure_reason is None:
+            return None
+
+        reason = self._input_failure_reason(name)
+        if reason is None:
+            return None
+        return ParseResult.failure(reason)
+
+    def _candidate_entry_participates(self, entry) -> bool:
+        """Return whether a candidate entry contributes to batch format detection."""
+        _name, candidates, best_candidate, _compound_metadata, representation = entry
+        return bool(candidates and best_candidate and self._is_batch_format_participant(representation))
+
+    def _locked_representation_result(self, name: str) -> ParseResult:
+        """Return a structural individual parse for records outside the Latin batch cohort."""
+        return self._individual_parser(name)
 
     def _format_best_candidate(
         self, best_candidate: ParseCandidate | None, formatting_service, compound_metadata,
@@ -679,12 +753,18 @@ class BatchAnalysisService:
             return ParseResult.failure(str(e))
 
     def _find_improvements(
-        self, name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]], batch_results: list[ParseResult],
+        self, name_candidates: list[NameCandidateEntry], batch_results: list[ParseResult],
     ) -> list[int]:
         """Find indices of names that were improved by batch processing."""
         improvements = []
 
-        for i, ((name, candidates, best_candidate, _compound_metadata), batch_result) in enumerate(zip(name_candidates, batch_results, strict=False)):
+        for i, (entry, batch_result) in enumerate(
+            zip(name_candidates, batch_results, strict=False),
+        ):
+            name, candidates, best_candidate, _compound_metadata, representation = entry
+            if not self._is_batch_format_participant(representation):
+                continue
+
             if not best_candidate or not batch_result.success:
                 continue
 
@@ -699,14 +779,17 @@ class BatchAnalysisService:
                 tokens = name.split()
                 if len(tokens) == 2:
                     # Simple heuristic: check if the order was changed
-                    expected_individual = f"{best_candidate.given_tokens[0].capitalize()} {best_candidate.surname_tokens[0].capitalize()}"
+                    expected_individual = (
+                        f"{best_candidate.given_tokens[0].capitalize()} "
+                        f"{best_candidate.surname_tokens[0].capitalize()}"
+                    )
                     if expected_individual != batch_result.result:
                         improvements.append(i)
 
         return improvements
 
     def _build_individual_analyses(
-        self, name_candidates: list[tuple[str, list[ParseCandidate], ParseCandidate | None, dict | None]],
+        self, name_candidates: list[NameCandidateEntry],
     ) -> list[IndividualAnalysis]:
         """Build IndividualAnalysis entries with a simple confidence per name.
 
@@ -718,7 +801,8 @@ class BatchAnalysisService:
         import math
 
         analyses: list[IndividualAnalysis] = []
-        for name, candidates, best_candidate, _ in name_candidates:
+        for entry in name_candidates:
+            name, candidates, best_candidate, _compound_metadata, _representation = entry
             if not candidates or best_candidate is None:
                 analyses.append(
                     IndividualAnalysis(

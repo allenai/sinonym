@@ -33,7 +33,6 @@ CHINESE_NAME_TEST_CASES = [
     ("Li Hualiang", (True, "Hua-Liang Li")),
     ("Li Lili", (True, "Li-Li Li")),
     ("Liu Yuehua", (True, "Yue-Hua Liu")),
-    ("Min Soo Lee", (True, "Min-Soo Lee")),
     ("Tu Youyou", (True, "You-You Tu")),
     ("Wang Kang", (True, "Kang Wang")),
     ("Wang Nini", (True, "Ni-Ni Wang")),
