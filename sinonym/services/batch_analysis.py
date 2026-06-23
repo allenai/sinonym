@@ -17,6 +17,7 @@ from sinonym.coretypes import (
     BatchParseResult,
     IndividualAnalysis,
     NameFormat,
+    NameOrderEvidence,
     ParseCandidate,
     ParseResult,
 )
@@ -50,6 +51,7 @@ class BatchVoteStats:
     def total_preferences(self) -> int:
         """Return total format votes."""
         return self.surname_first_preferences + self.given_first_preferences
+
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -146,10 +148,18 @@ class BatchAnalysisService:
                 format_pattern=format_pattern,
                 individual_analyses=individual_fallback.individual_analyses,
                 improvements=[],
+                name_order_evidence=individual_fallback.name_order_evidence,
             )
 
         # Build per-name analysis details
         individual_analyses = self._build_individual_analyses(name_candidates)
+        name_order_evidence = self._build_name_order_evidence(
+            name_candidates,
+            results,
+            normalizer,
+            data,
+            format_pattern,
+        )
 
         return BatchParseResult(
             names=names,
@@ -157,6 +167,7 @@ class BatchAnalysisService:
             format_pattern=format_pattern,
             individual_analyses=individual_analyses,
             improvements=improvements,
+            name_order_evidence=name_order_evidence,
         )
 
     def detect_batch_format(self, names: list[str], normalizer, data) -> BatchFormatPattern:
@@ -213,7 +224,9 @@ class BatchAnalysisService:
                 continue
 
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
-                name, normalized_input, data,
+                name,
+                normalized_input,
+                data,
             )
             if best_candidate is None and self._ethnicity_service is not None:
                 eth = self._ethnicity_service.classify_ethnicity(
@@ -226,13 +239,17 @@ class BatchAnalysisService:
                 else:
                     results.append(
                         self._format_best_candidate(
-                            best_candidate, formatting_service, normalized_input.compound_metadata,
+                            best_candidate,
+                            formatting_service,
+                            normalized_input.compound_metadata,
                         ),
                     )
             else:
                 results.append(
                     self._format_best_candidate(
-                        best_candidate, formatting_service, normalized_input.compound_metadata,
+                        best_candidate,
+                        formatting_service,
+                        normalized_input.compound_metadata,
                     ),
                 )
             name_candidates.append((name, candidates, best_candidate, normalized_input.compound_metadata, representation))
@@ -250,6 +267,13 @@ class BatchAnalysisService:
         )
 
         individual_analyses = self._build_individual_analyses(name_candidates)
+        name_order_evidence = self._build_name_order_evidence(
+            name_candidates,
+            results,
+            normalizer,
+            data,
+            format_pattern,
+        )
 
         return BatchParseResult(
             names=names,
@@ -257,6 +281,7 @@ class BatchAnalysisService:
             format_pattern=format_pattern,
             individual_analyses=individual_analyses,
             improvements=[],
+            name_order_evidence=name_order_evidence,
         )
 
     def _analyze_individual_name_with_normalized(
@@ -332,11 +357,7 @@ class BatchAnalysisService:
         data,
     ) -> list[NameCandidateEntry]:
         """Promote contested given-first votes when batch-level shape evidence supports them."""
-        participant_count = sum(
-            1
-            for entry in name_candidates
-            if self._candidate_entry_participates(entry)
-        )
+        participant_count = sum(1 for entry in name_candidates if self._candidate_entry_participates(entry))
         if participant_count == 0:
             return name_candidates
 
@@ -452,8 +473,7 @@ class BatchAnalysisService:
 
         has_shape_evidence = given_shape_count / len(promoted) >= GIVEN_NAME_SHAPE_MIN_SHARE
         has_ultra_low_first_surname_evidence = (
-            bool(first_surname_freqs)
-            and median(first_surname_freqs) < ULTRA_LOW_FIRST_SURNAME_MEDIAN_MAX
+            bool(first_surname_freqs) and median(first_surname_freqs) < ULTRA_LOW_FIRST_SURNAME_MEDIAN_MAX
         )
         return has_shape_evidence or has_ultra_low_first_surname_evidence
 
@@ -464,7 +484,10 @@ class BatchAnalysisService:
         return len(raw) >= LONG_GIVEN_NAME_TOKEN_MIN_LENGTH
 
     def _determine_parse_format(
-        self, surname_tokens: list[str], _given_tokens: list[str], original_tokens: list[str],
+        self,
+        surname_tokens: list[str],
+        _given_tokens: list[str],
+        original_tokens: list[str],
     ) -> NameFormat:
         """Determine if a parse follows surname-first or given-first format."""
         if not surname_tokens or not original_tokens:
@@ -626,7 +649,9 @@ class BatchAnalysisService:
                     continue
 
             result = self._candidate_to_parse_result(
-                selected_candidate, formatting_service, compound_metadata,
+                selected_candidate,
+                formatting_service,
+                compound_metadata,
             )
             results.append(result)
 
@@ -702,15 +727,23 @@ class BatchAnalysisService:
         return self._individual_parser(name)
 
     def _format_best_candidate(
-        self, best_candidate: ParseCandidate | None, formatting_service, compound_metadata,
+        self,
+        best_candidate: ParseCandidate | None,
+        formatting_service,
+        compound_metadata,
     ) -> ParseResult:
         """Format the best candidate from an individual analysis."""
         return self._candidate_to_parse_result(
-            best_candidate, formatting_service, compound_metadata,
+            best_candidate,
+            formatting_service,
+            compound_metadata,
         )
 
     def _candidate_to_parse_result(
-        self, candidate: ParseCandidate | None, formatting_service, compound_metadata,
+        self,
+        candidate: ParseCandidate | None,
+        formatting_service,
+        compound_metadata,
     ) -> ParseResult:
         """Convert a ParseCandidate to a ParseResult using the real formatting service."""
         if not candidate:
@@ -768,7 +801,9 @@ class BatchAnalysisService:
             return ParseResult.failure(str(e))
 
     def _find_improvements(
-        self, name_candidates: list[NameCandidateEntry], batch_results: list[ParseResult],
+        self,
+        name_candidates: list[NameCandidateEntry],
+        batch_results: list[ParseResult],
     ) -> list[int]:
         """Find indices of names that were improved by batch processing."""
         improvements = []
@@ -795,16 +830,183 @@ class BatchAnalysisService:
                 if len(tokens) == 2:
                     # Simple heuristic: check if the order was changed
                     expected_individual = (
-                        f"{best_candidate.given_tokens[0].capitalize()} "
-                        f"{best_candidate.surname_tokens[0].capitalize()}"
+                        f"{best_candidate.given_tokens[0].capitalize()} {best_candidate.surname_tokens[0].capitalize()}"
                     )
                     if expected_individual != batch_result.result:
                         improvements.append(i)
 
         return improvements
 
+    def _build_name_order_evidence(
+        self,
+        name_candidates: list[NameCandidateEntry],
+        results: list[ParseResult],
+        normalizer,
+        data,
+        format_pattern: BatchFormatPattern,
+    ) -> list[NameOrderEvidence]:
+        """Build aligned per-name evidence for external batch-context routing."""
+        evidence: list[NameOrderEvidence] = []
+        batch_format_applied = format_pattern.threshold_met and format_pattern.total_count > 0
+
+        for entry, result in zip(name_candidates, results, strict=False):
+            name, _candidates, best_candidate, _compound_metadata, representation = entry
+            normalized_input = normalizer.apply(name)
+            raw_tokens = list(normalized_input.roman_tokens)
+            first_freq, last_freq = self._endpoint_surname_frequencies(raw_tokens, normalizer, data)
+            selected_format = self._format_from_parse_result(result)
+            individual_format = best_candidate.format if best_candidate else NameFormat.MIXED
+            selected_position = self._selected_surname_position(result, raw_tokens, normalizer)
+            selected_freq, alternate_freq, selected_ratio = self._selected_endpoint_frequency_evidence(
+                selected_position,
+                first_freq,
+                last_freq,
+            )
+            all_caps_tokens = self._all_caps_tokens(raw_tokens)
+            batch_participant = self._is_batch_format_participant(representation)
+            name_batch_applied = batch_format_applied and batch_participant
+            batch_changed_format = (
+                name_batch_applied
+                and NameFormat.MIXED not in {individual_format, selected_format}
+                and individual_format != selected_format
+            )
+
+            evidence.append(
+                NameOrderEvidence(
+                    raw_name=name,
+                    raw_tokens=raw_tokens,
+                    raw_token_count=len(raw_tokens),
+                    script_representation=representation,
+                    batch_participant=batch_participant,
+                    batch_applied=name_batch_applied,
+                    batch_changed_format=batch_changed_format,
+                    individual_format=individual_format,
+                    selected_format=selected_format,
+                    selected_surname_position=selected_position,
+                    first_token_surname_frequency=first_freq,
+                    last_token_surname_frequency=last_freq,
+                    selected_surname_frequency=selected_freq,
+                    alternate_endpoint_surname_frequency=alternate_freq,
+                    selected_over_alternate_surname_frequency_ratio=selected_ratio,
+                    has_all_caps_token=bool(all_caps_tokens),
+                    all_caps_tokens=all_caps_tokens,
+                ),
+            )
+
+        return evidence
+
+    @staticmethod
+    def _format_from_parse_result(result: ParseResult) -> NameFormat:
+        """Return the selected order encoded on a successful parse result."""
+        if not result.success or result.parsed_original_order is None:
+            return NameFormat.MIXED
+
+        order = result.parsed_original_order.order
+        if order and order[0] == "surname":
+            return NameFormat.SURNAME_FIRST
+        if order and order[-1] == "surname":
+            return NameFormat.GIVEN_FIRST
+        return NameFormat.MIXED
+
+    def _selected_surname_position(self, result: ParseResult, raw_tokens: list[str], normalizer) -> str:
+        """Return where the selected surname appears in the normalized input."""
+        position = "unknown"
+        if not result.success or result.parsed_original_order is None:
+            return position
+
+        surname_tokens = result.parsed_original_order.surname_tokens
+        if not surname_tokens or not raw_tokens:
+            return position
+
+        normalized_raw_tokens = [normalizer.norm(token) for token in raw_tokens]
+        selected_surname = "".join(normalizer.norm(token) for token in surname_tokens)
+        selected_format = self._format_from_parse_result(result)
+        if (
+            selected_surname
+            and selected_format == NameFormat.SURNAME_FIRST
+            and self._window_joins_to(
+                normalized_raw_tokens,
+                selected_surname,
+                0,
+                len(normalized_raw_tokens),
+            )
+        ):
+            position = "first"
+        elif (
+            selected_surname
+            and selected_format == NameFormat.GIVEN_FIRST
+            and self._suffix_joins_to(
+                normalized_raw_tokens,
+                selected_surname,
+            )
+        ):
+            position = "last"
+        elif selected_surname and self._internal_window_joins_to(normalized_raw_tokens, selected_surname):
+            position = "internal"
+        return position
+
+    @staticmethod
+    def _window_joins_to(tokens: list[str], target: str, start: int, max_end: int) -> bool:
+        """Return whether any token window starting at start joins to target."""
+        return any("".join(tokens[start:end]) == target for end in range(start + 1, max_end + 1))
+
+    @staticmethod
+    def _suffix_joins_to(tokens: list[str], target: str) -> bool:
+        """Return whether any token suffix joins to target."""
+        return any("".join(tokens[start:]) == target for start in range(len(tokens)))
+
+    @staticmethod
+    def _internal_window_joins_to(tokens: list[str], target: str) -> bool:
+        """Return whether any non-endpoint token window joins to target."""
+        for start in range(1, len(tokens) - 1):
+            for end in range(start + 1, len(tokens)):
+                if "".join(tokens[start:end]) == target:
+                    return True
+        return False
+
+    @staticmethod
+    def _endpoint_surname_frequencies(raw_tokens: list[str], normalizer, data) -> tuple[float | None, float | None]:
+        """Return surname frequencies for the first and last normalized tokens."""
+        if not raw_tokens:
+            return None, None
+
+        first_freq = float(data.get_surname_freq(normalizer.norm(raw_tokens[0]), 0))
+        last_freq = float(data.get_surname_freq(normalizer.norm(raw_tokens[-1]), 0))
+        return first_freq, last_freq
+
+    @staticmethod
+    def _selected_endpoint_frequency_evidence(
+        selected_position: str,
+        first_freq: float | None,
+        last_freq: float | None,
+    ) -> tuple[float | None, float | None, float | None]:
+        """Return selected endpoint frequency, alternate frequency, and selected/alternate ratio."""
+        if selected_position == "first":
+            selected_freq = first_freq
+            alternate_freq = last_freq
+        elif selected_position == "last":
+            selected_freq = last_freq
+            alternate_freq = first_freq
+        else:
+            return None, None, None
+
+        if selected_freq is None or alternate_freq is None or alternate_freq <= 0:
+            return selected_freq, alternate_freq, None
+        return selected_freq, alternate_freq, selected_freq / alternate_freq
+
+    @staticmethod
+    def _all_caps_tokens(raw_tokens: list[str]) -> list[str]:
+        """Return source tokens that carry an all-caps cue."""
+        all_caps = []
+        for token in raw_tokens:
+            letters_only = "".join(char for char in token if char.isalpha())
+            if len(letters_only) > 1 and letters_only.isupper():
+                all_caps.append(token)
+        return all_caps
+
     def _build_individual_analyses(
-        self, name_candidates: list[NameCandidateEntry],
+        self,
+        name_candidates: list[NameCandidateEntry],
     ) -> list[IndividualAnalysis]:
         """Build IndividualAnalysis entries with a simple confidence per name.
 

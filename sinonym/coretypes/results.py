@@ -4,6 +4,7 @@ Result types for Chinese name processing.
 This module contains result classes that provide Scala-friendly error handling
 and immutable data structures.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -21,6 +22,7 @@ class ParsedName:
     Component labels remain stable: `surname`/`given_name` always identify
     those components regardless of `order`.
     """
+
     surname: str
     given_name: str
     surname_tokens: list[str]
@@ -29,7 +31,7 @@ class ParsedName:
     middle_name: str = ""
     middle_tokens: list[str] = field(default_factory=list)
     # Component order helper (values drawn from {"given","middle","surname"})
-    order: list[str] = field(default_factory=lambda: ["given", "middle", "surname"]) 
+    order: list[str] = field(default_factory=lambda: ["given", "middle", "surname"])
 
 
 @dataclass(frozen=True)
@@ -148,14 +150,16 @@ class CacheInfo:
 
 class NameFormat(Enum):
     """Name format enumeration for batch processing."""
+
     SURNAME_FIRST = "surname_first"  # Chinese style: "Zhang Wei"
-    GIVEN_FIRST = "given_first"      # Western style: "Wei Zhang"
-    MIXED = "mixed"                  # No clear pattern
+    GIVEN_FIRST = "given_first"  # Western style: "Wei Zhang"
+    MIXED = "mixed"  # No clear pattern
 
 
 @dataclass(frozen=True)
 class ParseCandidate:
     """Individual parse candidate with scoring details."""
+
     surname_tokens: list[str]
     given_tokens: list[str]
     score: float
@@ -166,6 +170,7 @@ class ParseCandidate:
 @dataclass(frozen=True)
 class IndividualAnalysis:
     """Detailed analysis of a single name with all candidates."""
+
     raw_name: str
     candidates: list[ParseCandidate]
     best_candidate: ParseCandidate | None
@@ -173,21 +178,62 @@ class IndividualAnalysis:
 
 
 @dataclass(frozen=True)
+class NameOrderEvidence:
+    """Per-name evidence useful for choosing between batch contexts.
+
+    These fields describe observable parser evidence. They intentionally do not
+    encode a PP/VYS routing policy so downstream callers can apply their own
+    decision rules without depending on private sinonym internals.
+    """
+
+    raw_name: str = ""
+    raw_tokens: list[str] = field(default_factory=list)
+    raw_token_count: int = 0
+    script_representation: str = ""
+    batch_participant: bool = False
+    batch_applied: bool = False
+    batch_changed_format: bool = False
+    individual_format: NameFormat = NameFormat.MIXED
+    selected_format: NameFormat = NameFormat.MIXED
+    selected_surname_position: str = "unknown"
+    first_token_surname_frequency: float | None = None
+    last_token_surname_frequency: float | None = None
+    selected_surname_frequency: float | None = None
+    alternate_endpoint_surname_frequency: float | None = None
+    selected_over_alternate_surname_frequency_ratio: float | None = None
+    has_all_caps_token: bool = False
+    all_caps_tokens: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class BatchFormatPattern:
     """Detected formatting pattern for a batch of names."""
+
     dominant_format: NameFormat
     confidence: float  # Percentage of names following dominant format
     surname_first_count: int
     given_first_count: int
     total_count: int
     threshold_met: bool  # Whether confidence >= threshold (e.g., 67%)
+    vote_margin_count: int = field(init=False)
+    vote_margin: float = field(init=False)
+
+    def __post_init__(self) -> None:
+        margin_count = abs(self.surname_first_count - self.given_first_count)
+        object.__setattr__(self, "vote_margin_count", margin_count)
+        if self.total_count <= 0:
+            object.__setattr__(self, "vote_margin", 0.0)
+            return
+        object.__setattr__(self, "vote_margin", margin_count / self.total_count)
 
 
 @dataclass(frozen=True)
 class BatchParseResult:
     """Complete batch processing result."""
+
     names: list[str]
     results: list[ParseResult]
     format_pattern: BatchFormatPattern
     individual_analyses: list[IndividualAnalysis]
     improvements: list[int]  # Indices of names improved by batch processing
+    name_order_evidence: list[NameOrderEvidence] = field(default_factory=list)

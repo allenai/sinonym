@@ -166,7 +166,13 @@ import logging
 import string
 import threading
 
-from sinonym.coretypes import BatchFormatPattern, BatchParseResult
+from sinonym.coretypes import (
+    BatchFormatPattern,
+    BatchParseResult,
+    IndividualAnalysis,
+    NameFormat,
+    NameOrderEvidence,
+)
 from sinonym.coretypes.results import ParsedName
 from sinonym.services import (
     BatchAnalysisService,
@@ -917,8 +923,6 @@ class ChineseNameDetector:
         individual_results: list[ParseResult],
     ) -> BatchParseResult:
         """Create a fallback BatchParseResult when batch analysis is not available."""
-        from sinonym.coretypes import BatchFormatPattern, IndividualAnalysis, NameFormat
-
         # Create dummy format pattern
         format_pattern = BatchFormatPattern(
             dominant_format=NameFormat.MIXED,
@@ -940,6 +944,7 @@ class ChineseNameDetector:
                     confidence=0.0,
                 ),
             )
+        name_order_evidence = [NameOrderEvidence(raw_name=name) for name in names]
 
         return BatchParseResult(
             names=names,
@@ -947,4 +952,5 @@ class ChineseNameDetector:
             format_pattern=format_pattern,
             individual_analyses=individual_analyses,
             improvements=[],
+            name_order_evidence=name_order_evidence,
         )

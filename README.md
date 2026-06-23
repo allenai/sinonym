@@ -303,7 +303,9 @@ result = detector.analyze_name_batch([
 ])
 print(f"Format detected: {result.format_pattern.dominant_format}")
 print(f"Confidence: {result.format_pattern.confidence:.1%}")
+print(f"Vote margin: {result.format_pattern.vote_margin:.1%}")
 print(f"Improved names: {len(result.improvements)}")
+print(result.name_order_evidence[0].selected_surname_position)
 
 # Quick format detection without full processing
 pattern = detector.detect_batch_format([
@@ -319,6 +321,36 @@ results = detector.process_name_batch([
 for result in results:
     print(f"Processed: {result.result}")
 ```
+
+Use `analyze_name_batch()` when you need to choose between two batch contexts
+such as paper-level and source/venue/year-level runs. `process_name_batch()`
+returns only the final `ParseResult` list and intentionally drops the routing
+evidence.
+
+`BatchFormatPattern` exposes batch-level convention evidence:
+
+- `dominant_format`, `confidence`, and `threshold_met`
+- `surname_first_count`, `given_first_count`, and `total_count`
+- `vote_margin_count` and `vote_margin`
+
+`BatchParseResult.name_order_evidence` is aligned with `names` and `results`.
+Each `NameOrderEvidence` contains stable evidence for external context-routing
+rules:
+
+- token shape: `raw_tokens`, `raw_token_count`, `has_all_caps_token`,
+  `all_caps_tokens`
+- batch behavior: `script_representation`, `batch_participant`,
+  `batch_applied`, `batch_changed_format`
+- order choices: `individual_format`, `selected_format`,
+  `selected_surname_position`
+- endpoint frequency evidence: `first_token_surname_frequency`,
+  `last_token_surname_frequency`, `selected_surname_frequency`,
+  `alternate_endpoint_surname_frequency`,
+  `selected_over_alternate_surname_frequency_ratio`
+
+Caller-owned metadata such as source, venue, and year is not inferred by
+sinonym. Keep that metadata beside the PP/VYS batch calls and combine it with
+the emitted evidence in the external router.
 
 ### Persistent Multi-Process Processing
 
