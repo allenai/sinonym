@@ -1,7 +1,16 @@
+# ruff: noqa: INP001
+
 import os
 from pathlib import Path
 
 from scripts.check_test_status import format_fail_log_line
+
+
+def _current_pytest_nodeid() -> str:
+    """Return the pytest node id for the active test, if available."""
+    current_test = os.getenv("PYTEST_CURRENT_TEST", "")
+    nodeid, _separator, _phase = current_test.rpartition(" ")
+    return nodeid or current_test
 
 
 def log_failure(  # noqa: PLR0913
@@ -26,6 +35,7 @@ def log_failure(  # noqa: PLR0913
         with Path(path).open("a", encoding="utf-8") as f:
             line = format_fail_log_line(
                 {
+                    "nodeid": _current_pytest_nodeid(),
                     "label": label,
                     "name": name,
                     "expected_success": expected_success,

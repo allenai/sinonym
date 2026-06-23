@@ -18,6 +18,7 @@ from pathlib import Path
 
 EXPECTED_FAILURES = 44
 FAIL_LOG_FIELDS = (
+    "nodeid",
     "label",
     "name",
     "expected_success",
@@ -143,40 +144,56 @@ def _matches_known_failure_label(message: str | None, known_labels: list[str]) -
     return any(_normalized_label(label).startswith(normalized_fragment) for label in known_labels)
 
 
-def _nodeid_matches_known_failure_label(nodeid: str, known_labels: list[str]) -> bool:
-    if not known_labels:
-        return False
-
-    path_part, _, function_part = nodeid.partition("::")
-    path_stem = Path(path_part).stem
-    fragments = [path_stem, function_part.split("[", 1)[0]]
-
-    for fragment in fragments:
-        normalized_fragment = _normalized_label(fragment.removeprefix("test_").replace("_", " "))
-        if not normalized_fragment:
-            continue
-        for label in known_labels:
-            label_base = _summary_label_base(label)
-            if label_base.startswith(normalized_fragment) or normalized_fragment.startswith(label_base):
-                return True
-
-    return False
-
-
 def _is_truncated_assertion_message(message: str | None) -> bool:
     """Return whether pytest reported only a duplicate/truncated assertion summary."""
     if message is None:
         return True
 
     stripped = message.strip()
-    return stripped in {"...", "\u2026"}
+    return stripped in {"", "...", "\u2026"}
 
 
-def extract_unaggregated_assertion_failures(output: str, known_labels: list[str] | None = None) -> list[dict[str, str]]:
-    """Extract pytest assertion failures not represented by aggregate counts."""
+def _is_truncated_assertion_summary(message: str) -> bool:
+    """Return whether pytest truncated the AssertionError class name itself."""
+    stripped = message.strip()
+    if not stripped.endswith(("...", "\u2026")):
+        return False
+
+    prefix = re.split(r"\.\.\.|\u2026", stripped, maxsplit=1)[0].strip(": ")
+    return "assertionerror".startswith(prefix.lower())
+
+
+def _is_duplicate_logged_assertion_summary(
+    nodeid: str,
+    message: str,
+    known_labels: list[str],
+    logged_nodeids: set[str],
+) -> bool:
+    """Return whether a pytest summary duplicates exact-nodeid fail-log rows."""
+    if nodeid not in logged_nodeids:
+        return False
+    if _is_truncated_assertion_summary(message):
+        return True
+    if not message.startswith("AssertionError"):
+        return False
+
+    assertion_message = message.removeprefix("AssertionError").removeprefix(":").strip()
+    return _is_truncated_assertion_message(assertion_message) or _matches_known_failure_label(
+        assertion_message,
+        known_labels,
+    )
+
+
+def extract_unaggregated_pytest_failures(
+    output: str,
+    known_labels: list[str] | None = None,
+    logged_nodeids: set[str] | None = None,
+) -> list[dict[str, str]]:
+    """Extract pytest failures/errors not represented by aggregate counts."""
     known_labels = known_labels or []
+    logged_nodeids = logged_nodeids or set()
     failures: dict[str, dict[str, str]] = {}
-    summary_pattern = re.compile(r"^FAILED\s+(.+?)\s+-\s+AssertionError(?::\s*(.*))?$")
+    summary_pattern = re.compile(r"^(FAILED|ERROR)\s+(.+?)\s+-\s+(.+?)\s*$")
 
     for line in output.splitlines():
         match = summary_pattern.match(line.strip())
@@ -184,17 +201,21 @@ def extract_unaggregated_assertion_failures(output: str, known_labels: list[str]
             continue
         if _failure_count_match(line):
             continue
-        nodeid, message = match.groups()
-        if _matches_known_failure_label(message, known_labels):
-            continue
-        if _is_truncated_assertion_message(message) and _nodeid_matches_known_failure_label(nodeid, known_labels):
+        status, nodeid, message = match.groups()
+        if _is_duplicate_logged_assertion_summary(nodeid, message, known_labels, logged_nodeids):
             continue
         failures[nodeid] = {
             "name": nodeid,
-            "message": message or "AssertionError",
+            "message": message,
+            "status": status,
         }
 
     return list(failures.values())
+
+
+def extract_unaggregated_assertion_failures(output: str, known_labels: list[str] | None = None) -> list[dict[str, str]]:
+    """Backward-compatible wrapper for unaggregated pytest failure extraction."""
+    return extract_unaggregated_pytest_failures(output, known_labels)
 
 
 def read_fail_log_path_from_output(output: str) -> str | None:
@@ -227,6 +248,8 @@ def parse_fail_log_line(line: str) -> dict | None:
         return None
 
     if not isinstance(entry, dict) or set(entry) != set(FAIL_LOG_FIELDS):
+        return None
+    if not isinstance(entry["nodeid"], str):
         return None
     if not isinstance(entry["label"], str):
         return None
@@ -312,10 +335,11 @@ def combine_failure_sources(logged: list[str], output: str) -> dict:
 
     known_labels = [failure["name"] for failure in aggregate_counts]
     known_labels.extend(logged_counts)
-    unaggregated_assertions = extract_unaggregated_assertion_failures(output, known_labels)
+    logged_nodeids = {entry["nodeid"] for entry in parsed_entries if entry["nodeid"]}
+    unaggregated_pytest_failures = extract_unaggregated_pytest_failures(output, known_labels, logged_nodeids)
     aggregate_only_total = sum(failure["failures"] for failure in aggregate_only)
     aggregate_deficit_total = sum(failure["failures"] for failure in aggregate_deficits)
-    total_failures = len(logged) + aggregate_only_total + aggregate_deficit_total + len(unaggregated_assertions)
+    total_failures = len(logged) + aggregate_only_total + aggregate_deficit_total + len(unaggregated_pytest_failures)
 
     return {
         "logged_counts": logged_counts,
@@ -324,7 +348,8 @@ def combine_failure_sources(logged: list[str], output: str) -> dict:
         "aggregate_only": aggregate_only,
         "aggregate_deficits": aggregate_deficits,
         "aggregate_covered": aggregate_covered,
-        "unaggregated_assertions": unaggregated_assertions,
+        "unaggregated_assertions": unaggregated_pytest_failures,
+        "unaggregated_pytest_failures": unaggregated_pytest_failures,
         "total_failures": total_failures,
     }
 
@@ -416,7 +441,7 @@ def main():  # noqa: C901, PLR0912, PLR0915
     malformed_entries = failure_report["malformed_entries"]
     aggregate_only = failure_report["aggregate_only"]
     aggregate_deficits = failure_report["aggregate_deficits"]
-    unaggregated_assertions = failure_report["unaggregated_assertions"]
+    unaggregated_pytest_failures = failure_report["unaggregated_pytest_failures"]
     total_failures = failure_report["total_failures"]
 
     if total_failures:
@@ -438,9 +463,9 @@ def main():  # noqa: C901, PLR0912, PLR0915
                     f"    {failure['name']}: {failure['failures']} additional failures "
                     f"({failure['reported_failures']} reported, {failure['logged_failures']} in fail log)",
                 )
-        if unaggregated_assertions:
-            print("  From unaggregated pytest assertion failures:")
-            for failure in unaggregated_assertions:
+        if unaggregated_pytest_failures:
+            print("  From unaggregated pytest failures/errors:")
+            for failure in unaggregated_pytest_failures:
                 print(f"    {failure['name']}: 1 failure")
         if malformed_entries:
             print("  Malformed fail-log entries:")
@@ -470,7 +495,7 @@ def main():  # noqa: C901, PLR0912, PLR0915
                 )
             print("=" * 70)
 
-        if aggregate_only or aggregate_deficits or unaggregated_assertions:
+        if aggregate_only or aggregate_deficits or unaggregated_pytest_failures:
             print("\n" + "=" * 70)
             print("DETAILED FAILURES (not in fail log):")
             print("=" * 70)
@@ -482,14 +507,14 @@ def main():  # noqa: C901, PLR0912, PLR0915
                     f"  [{failure['name']}] {failure['failures']} additional aggregate failures "
                     f"beyond fail-log labels: {labels}",
                 )
-            for failure in unaggregated_assertions:
+            for failure in unaggregated_pytest_failures:
                 message = _safe_for_console(failure["message"])
                 print(f"  [{failure['name']}] {message}")
             print("=" * 70)
     else:
         print("\nNo assertion failures found.")
         if pytest_returncode not in (0, None):
-            print("(Pytest exited non-zero without parseable AssertionError failures.)")
+            print("(Pytest exited non-zero without parseable expected failure counts.)")
 
     # Check performance tests
     print("\n" + "=" * 70)

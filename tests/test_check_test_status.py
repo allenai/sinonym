@@ -10,9 +10,14 @@ DEFICIT_ONLY_TOTAL = 2
 EXPECTED_WITH_EXTRA_ASSERTION_TOTAL = 2
 
 
-def _log_line(label: str, name: str = "Example Name") -> str:
+def _log_line(
+    label: str,
+    name: str = "Example Name",
+    nodeid: str = "tests/test_example.py::test_example",
+) -> str:
     return check_test_status.format_fail_log_line(
         {
+            "nodeid": nodeid,
             "label": label,
             "name": name,
             "expected_success": True,
@@ -23,11 +28,15 @@ def _log_line(label: str, name: str = "Example Name") -> str:
     )
 
 
+def _baseline_log_lines() -> list[str]:
+    return [_log_line("Expected bucket", str(index)) for index in range(check_test_status.EXPECTED_FAILURES)]
+
+
 def test_combines_logged_and_unlogged_aggregate_failures_without_double_counting():
     logged = [
-        _log_line("Basic Chinese name tests", "A"),
-        _log_line("Basic Chinese name tests", "B"),
-        _log_line("Middle name individual (formatted)", "C"),
+        _log_line("Basic Chinese name tests", "A", "tests/test_basic_chinese_names.py::test_basic"),
+        _log_line("Basic Chinese name tests", "B", "tests/test_basic_chinese_names.py::test_basic"),
+        _log_line("Middle name individual (formatted)", "C", "tests/test_middle_names.py::test_middle"),
     ]
     output = (
         "E AssertionError: Basic Chinese name tests: 2 failures out of 10 tests\n"
@@ -59,13 +68,33 @@ def test_counts_aggregate_deficit_when_fail_log_is_incomplete():
 
 
 def test_skips_ellipsis_summary_when_nodeid_matches_logged_bucket():
-    logged = [_log_line("Name formatting tests", "A")]
+    logged = [_log_line("Name formatting tests", "A", "tests/test_name_formatting.py::test_name_formatting")]
     output = "FAILED tests/test_name_formatting.py::test_name_formatting - AssertionError: ..."
 
     report = check_test_status.combine_failure_sources(logged, output)
 
     assert report["total_failures"] == 1
     assert report["unaggregated_assertions"] == []
+
+
+def test_skips_truncated_assertion_class_when_nodeid_matches_logged_bucket():
+    logged = [_log_line("Basic Chinese name tests", "A", "tests/test_basic_chinese_names.py::test_basic_chinese_names")]
+    output = "FAILED tests/test_basic_chinese_names.py::test_basic_chinese_names - AssertionErro..."
+
+    report = check_test_status.combine_failure_sources(logged, output)
+
+    assert report["total_failures"] == 1
+    assert report["unaggregated_pytest_failures"] == []
+
+
+def test_counts_truncated_assertion_class_when_nodeid_is_not_logged():
+    logged = [_log_line("Basic Chinese name tests", "A", "tests/test_basic_chinese_names.py::test_basic_chinese_names")]
+    output = "FAILED tests/test_other.py::test_other - AssertionErro..."
+
+    report = check_test_status.combine_failure_sources(logged, output)
+
+    assert report["total_failures"] == EXPECTED_WITH_EXTRA_ASSERTION_TOTAL
+    assert report["unaggregated_pytest_failures"][0]["name"] == "tests/test_other.py::test_other"
 
 
 def test_counts_unaggregated_assertion_failure():
@@ -78,13 +107,46 @@ def test_counts_unaggregated_assertion_failure():
 
 
 def test_counts_real_assertion_in_same_node_as_logged_bucket():
-    logged = [_log_line("Name formatting tests", "A")]
+    logged = [_log_line("Name formatting tests", "A", "tests/test_name_formatting.py::test_name_formatting")]
     output = "FAILED tests/test_name_formatting.py::test_name_formatting - AssertionError: assert 1 == 2"
 
     report = check_test_status.combine_failure_sources(logged, output)
 
     assert report["total_failures"] == EXPECTED_WITH_EXTRA_ASSERTION_TOTAL
     assert report["unaggregated_assertions"][0]["name"] == "tests/test_name_formatting.py::test_name_formatting"
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        "ERROR tests/test_new.py::test_new - ValueError: boom",
+        "FAILED tests/test_new.py::test_new - ValueError: boom",
+    ],
+)
+def test_counts_unaggregated_pytest_errors_beyond_expected_baseline(output):
+    report = check_test_status.combine_failure_sources(_baseline_log_lines(), output)
+
+    assert report["total_failures"] == check_test_status.EXPECTED_FAILURES + 1
+    assert report["unaggregated_pytest_failures"][0]["name"] == "tests/test_new.py::test_new"
+
+    exit_code, message = check_test_status.status_exit_decision(
+        report["total_failures"],
+        perf_passed=True,
+        pytest_returncode=1,
+        malformed_entries=report["malformed_entries"],
+    )
+    assert exit_code == 1
+    assert "Too many failures" in message
+
+
+def test_counts_non_assertion_failure_even_when_node_matches_logged_bucket():
+    logged = [_log_line("Name formatting tests", "A", "tests/test_name_formatting.py::test_name_formatting")]
+    output = "FAILED tests/test_name_formatting.py::test_name_formatting - ValueError: boom"
+
+    report = check_test_status.combine_failure_sources(logged, output)
+
+    assert report["total_failures"] == EXPECTED_WITH_EXTRA_ASSERTION_TOTAL
+    assert report["unaggregated_pytest_failures"][0]["message"] == "ValueError: boom"
 
 
 @pytest.mark.parametrize("pytest_returncode", [None, 2])
