@@ -1,5 +1,7 @@
 # ruff: noqa: INP001
 
+from pathlib import Path
+
 import pytest
 
 from scripts import check_test_status
@@ -30,6 +32,15 @@ def _log_line(
 
 def _baseline_log_lines() -> list[str]:
     return [_log_line("Expected bucket", str(index)) for index in range(check_test_status.EXPECTED_FAILURES)]
+
+
+def test_sdist_includes_check_test_status_dependency_for_packaged_tests():
+    pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    sdist_section = pyproject.split("[tool.hatch.build.targets.sdist]", maxsplit=1)[1]
+    sdist_section = sdist_section.split("\n[", maxsplit=1)[0]
+
+    assert '"tests"' in sdist_section
+    assert '"scripts/check_test_status.py"' in sdist_section
 
 
 def test_combines_logged_and_unlogged_aggregate_failures_without_double_counting():

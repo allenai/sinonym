@@ -529,6 +529,24 @@ def test_batch_does_not_flip_compact_han_from_latin_votes(detector):
     assert batch.individual_analyses[0].best_candidate is None
 
 
+def test_batch_does_not_treat_compact_mixed_han_roman_as_latin_only(detector):
+    mixed_name = "\u5f20Wei"
+    names = [mixed_name, "Xin Liu", "Yang Li", "Wei Li", "Yan Mo"]
+
+    individual = detector.normalize_name(mixed_name)
+    batch = detector.analyze_name_batch(names)
+    evidence = batch.name_order_evidence[0]
+
+    assert individual.success
+    assert individual.result == "Wei Zhang"
+    assert batch.results[0].result == individual.result
+    assert evidence.script_representation == "mixed_script"
+    assert evidence.batch_participant is False
+    assert evidence.batch_applied is False
+    assert batch.individual_analyses[0].candidates == []
+    assert batch.individual_analyses[0].best_candidate is None
+
+
 def test_aligned_bilingual_pairs_use_han_identity(detector):
     given_first = detector.normalize_name("Mi \u5bc6 Jiang \u848b")
     surname_first = detector.normalize_name("\u9ad8 Gao \u9759 Jing")
@@ -565,6 +583,20 @@ def test_non_person_batch_rows_do_not_vote(detector):
     assert batch.format_pattern.total_count == 3
     assert not batch.results[0].success
     assert batch.results[0].error_message == NON_PERSON_FAILURE_REASON
+
+
+def test_rejected_latin_batch_rows_are_not_marked_batch_participants(detector):
+    names = ["John Smith", "Wang An", "Yan Li", "Wu Gang"]
+
+    batch = detector.analyze_name_batch(names)
+    evidence = batch.name_order_evidence[0]
+
+    assert batch.format_pattern.threshold_met
+    assert not batch.results[0].success
+    assert evidence.script_representation == "latin_only"
+    assert evidence.batch_participant is False
+    assert evidence.batch_applied is False
+    assert evidence.batch_changed_format is False
 
 
 @pytest.mark.parametrize("raw_name", ["", "   ", "!!!", "A" * 201])

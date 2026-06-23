@@ -60,6 +60,7 @@ include = [
 include = [
     "sinonym",
     "tests",
+    "scripts/check_test_status.py",
     "README.md",
     "pyproject.toml",
 ]

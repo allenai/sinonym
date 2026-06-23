@@ -266,16 +266,23 @@ class NormalizationService:
 
     def classify_script_representation(self, normalized_input: NormalizedInput) -> ScriptRepresentation:
         """Classify script provenance for batch convention voting."""
-        has_han = any(self._is_han_token(token) for token in normalized_input.tokens)
-        has_roman = any(self._is_roman_token(token) for token in normalized_input.tokens)
+        has_han = any(
+            self._config.cjk_pattern.search(char)
+            for token in normalized_input.tokens
+            for char in token
+        )
+        has_roman = any(
+            self._config.ascii_alpha_pattern.search(token)
+            for token in normalized_input.tokens
+        )
 
-        if not has_han:
-            return "latin_only"
-        if not has_roman:
+        if has_han and has_roman:
+            if self.aligned_bilingual_pairs(normalized_input) is not None:
+                return "bilingual_aligned"
+            return "mixed_script"
+        if has_han:
             return "han_only"
-        if self.aligned_bilingual_pairs(normalized_input) is not None:
-            return "bilingual_aligned"
-        return "mixed_script"
+        return "latin_only"
 
     def aligned_bilingual_pairs(self, normalized_input: NormalizedInput) -> tuple[BilingualTokenPair, ...] | None:
         """Return explicit alternating Roman/Han pairs when the alignment is unambiguous."""

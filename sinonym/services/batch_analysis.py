@@ -863,8 +863,8 @@ class BatchAnalysisService:
                 last_freq,
             )
             all_caps_tokens = self._all_caps_tokens(raw_tokens)
-            batch_participant = self._is_batch_format_participant(representation)
-            name_batch_applied = batch_format_applied and batch_participant
+            batch_participant = self._candidate_entry_participates(entry)
+            name_batch_applied = batch_format_applied and batch_participant and result.success
             batch_changed_format = (
                 name_batch_applied
                 and NameFormat.MIXED not in {individual_format, selected_format}
