@@ -240,7 +240,7 @@ class ChineseNameDetector:
                 self._parsing_service,
                 self.normalize_name,
                 ethnicity_service=self._ethnicity_service,
-                input_failure_reason=self._non_person_input_service.failure_reason,
+                input_failure=self._initial_input_failure,
             )
 
     def _ensure_initialized(self) -> None:

@@ -28,6 +28,7 @@ ULTRA_LOW_FIRST_SURNAME_MEDIAN_MAX = 130.0
 LONG_GIVEN_NAME_TOKEN_MIN_LENGTH = 6
 TWO_TOKEN_NAME_LENGTH = 2
 BATCH_PARTICIPANT_MIN = 2
+BATCH_FORMAT_MIN_VOTE_WEIGHT = 0.5
 LATIN_ONLY_REPRESENTATION = "latin_only"
 REJECTED_INPUT_REPRESENTATION = "rejected_input"
 
@@ -66,13 +67,13 @@ class BatchAnalysisService:
         individual_parser: Callable[[str], ParseResult],
         ethnicity_service: EthnicityClassificationService | None = None,
         format_threshold: float = 0.55,
-        input_failure_reason: Callable[[str], str | None] | None = None,
+        input_failure: Callable[[str], ParseResult | None] | None = None,
     ):
         self._parsing_service = parsing_service
         self._ethnicity_service = ethnicity_service
         self._format_threshold = format_threshold  # Minimum threshold for format detection
         self._individual_parser = individual_parser
-        self._input_failure_reason = input_failure_reason
+        self._input_failure_callback = input_failure
 
     def analyze_name_batch(
         self,
@@ -110,6 +111,10 @@ class BatchAnalysisService:
             # Normalize once and reuse
             normalized_input = normalizer.apply(name)
             representation = self._script_representation(normalizer, normalized_input)
+            if not self._is_batch_format_participant(representation):
+                name_candidates.append((name, [], None, normalized_input.compound_metadata, representation))
+                continue
+
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
                 name,
                 normalized_input,
@@ -171,6 +176,10 @@ class BatchAnalysisService:
             # Normalize once for format detection (compound_metadata not needed)
             normalized_input = normalizer.apply(name)
             representation = self._script_representation(normalizer, normalized_input)
+            if not self._is_batch_format_participant(representation):
+                name_candidates.append((name, [], None, None, representation))
+                continue
+
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
                 name,
                 normalized_input,
@@ -198,12 +207,15 @@ class BatchAnalysisService:
             # Normalize once and reuse
             normalized_input = normalizer.apply(name)
             representation = self._script_representation(normalizer, normalized_input)
+            if not self._is_batch_format_participant(representation):
+                results.append(self._locked_representation_result(name))
+                name_candidates.append((name, [], None, normalized_input.compound_metadata, representation))
+                continue
+
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
                 name, normalized_input, data,
             )
-            if not self._is_batch_format_participant(representation):
-                results.append(self._locked_representation_result(name))
-            elif best_candidate is None and self._ethnicity_service is not None:
+            if best_candidate is None and self._ethnicity_service is not None:
                 eth = self._ethnicity_service.classify_ethnicity(
                     normalized_input.roman_tokens,
                     normalized_input.norm_map,
@@ -506,13 +518,20 @@ class BatchAnalysisService:
     def _collect_batch_vote_stats(self, name_candidates: list[NameCandidateEntry]) -> BatchVoteStats:
         """Count candidate format votes and confidence weights."""
         stats = BatchVoteStats()
+        seen_vote_names: set[str] = set()
 
         for entry in name_candidates:
-            _name, candidates, best_candidate, _compound_metadata, representation = entry
+            name, candidates, best_candidate, _compound_metadata, representation = entry
             if not self._is_batch_format_participant(representation) or not candidates or not best_candidate:
                 continue
+            vote_name_key = name.casefold().strip()
+            if vote_name_key in seen_vote_names:
+                continue
+            seen_vote_names.add(vote_name_key)
 
             weight = self._candidate_vote_weight(candidates)
+            if weight < BATCH_FORMAT_MIN_VOTE_WEIGHT:
+                continue
             stats.names_with_candidates += 1
             stats.total_weight += weight
 
@@ -669,13 +688,9 @@ class BatchAnalysisService:
 
     def _input_failure(self, name: str) -> ParseResult | None:
         """Return an early input failure, if one is configured and matches."""
-        if self._input_failure_reason is None:
+        if self._input_failure_callback is None:
             return None
-
-        reason = self._input_failure_reason(name)
-        if reason is None:
-            return None
-        return ParseResult.failure(reason)
+        return self._input_failure_callback(name)
 
     def _candidate_entry_participates(self, entry) -> bool:
         """Return whether a candidate entry contributes to batch format detection."""

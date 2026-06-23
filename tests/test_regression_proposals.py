@@ -433,6 +433,49 @@ def test_exact_vote_tie_does_not_meet_batch_application_threshold(detector):
     assert [result.result for result in batch.results] == [detector.normalize_name(name).result for name in names]
 
 
+def test_batch_format_votes_ignore_weak_candidate_gaps_and_duplicate_names(detector):
+    weak_surname_first = ParseCandidate(
+        surname_tokens=["li"],
+        given_tokens=["wei"],
+        score=1.0,
+        format=NameFormat.SURNAME_FIRST,
+        original_compound_format=None,
+    )
+    weak_given_first = ParseCandidate(
+        surname_tokens=["wei"],
+        given_tokens=["li"],
+        score=0.9,
+        format=NameFormat.GIVEN_FIRST,
+        original_compound_format=None,
+    )
+    strong_given_first = ParseCandidate(
+        surname_tokens=["zhang"],
+        given_tokens=["ming"],
+        score=1.0,
+        format=NameFormat.GIVEN_FIRST,
+        original_compound_format=None,
+    )
+    strong_surname_first = ParseCandidate(
+        surname_tokens=["ming"],
+        given_tokens=["zhang"],
+        score=0.6,
+        format=NameFormat.SURNAME_FIRST,
+        original_compound_format=None,
+    )
+    entries = [
+        ("Li Wei", [weak_surname_first, weak_given_first], weak_surname_first, None, LATIN_ONLY_REPRESENTATION),
+        ("Ming Zhang", [strong_given_first, strong_surname_first], strong_given_first, None, LATIN_ONLY_REPRESENTATION),
+        ("ming zhang", [strong_given_first, strong_surname_first], strong_given_first, None, LATIN_ONLY_REPRESENTATION),
+        ("Yan Wang", [strong_given_first, strong_surname_first], strong_given_first, None, LATIN_ONLY_REPRESENTATION),
+    ]
+
+    stats = detector._batch_analysis_service._collect_batch_vote_stats(entries)
+
+    assert stats.surname_first_preferences == 0
+    assert stats.given_first_preferences == 2
+    assert stats.names_with_candidates == 2
+
+
 def test_single_chinese_participant_does_not_meet_batch_application_threshold(detector):
     names = ["Mai Liao", "John Smith", "Mary Johnson"]
 
@@ -466,6 +509,8 @@ def test_batch_does_not_apply_latin_format_to_spaced_han_name(detector):
     assert batch.format_pattern.total_count == 4
     assert batch.results[0].result == individual.result
     assert batch.results[0].parsed_original_order.order == ["surname", "given"]
+    assert batch.individual_analyses[0].candidates == []
+    assert batch.individual_analyses[0].best_candidate is None
 
 
 def test_batch_does_not_flip_compact_han_from_latin_votes(detector):
@@ -480,6 +525,8 @@ def test_batch_does_not_flip_compact_han_from_latin_votes(detector):
     assert batch.format_pattern.total_count == 2
     assert batch.results[0].result == individual.result
     assert batch.results[0].parsed_original_order.order == ["surname", "given"]
+    assert batch.individual_analyses[0].candidates == []
+    assert batch.individual_analyses[0].best_candidate is None
 
 
 def test_aligned_bilingual_pairs_use_han_identity(detector):
@@ -518,6 +565,17 @@ def test_non_person_batch_rows_do_not_vote(detector):
     assert batch.format_pattern.total_count == 3
     assert not batch.results[0].success
     assert batch.results[0].error_message == NON_PERSON_FAILURE_REASON
+
+
+@pytest.mark.parametrize("raw_name", ["", "   ", "!!!", "A" * 201])
+def test_batch_initial_failures_match_individual_failures(detector, raw_name):
+    individual = detector.normalize_name(raw_name)
+    batch = detector.analyze_name_batch([raw_name, "Li Wei", "Zhang Ming", "Wang Hao"])
+
+    result = batch.results[0]
+    assert not individual.success
+    assert not result.success
+    assert result.error_message == individual.error_message
 
 
 def test_non_person_author_list_gate_does_not_split_accented_person_name(detector):
