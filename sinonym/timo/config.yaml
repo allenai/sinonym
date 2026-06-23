@@ -1,0 +1,12 @@
+config_version: 0.0.1
+model_variants:
+  sinonym_v1:
+    instance: sinonym.timo.interface.Instance
+    prediction: sinonym.timo.interface.Prediction
+    predictor: sinonym.timo.interface.Predictor
+    predictor_config: sinonym.timo.interface.PredictorConfig
+    artifacts_s3_path: null
+    python_version: "3.10"
+    cuda: False
+    integration_test: sinonym.timo.integration_test.TestIntegration
+    docker_run_commands: []
