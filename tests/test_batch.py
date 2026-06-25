@@ -82,7 +82,7 @@ def test_threshold_boundary_cases(detector):
 
     assert pattern.total_count == 3
     # With current weights, likely all will be given-first
-    if pattern.confidence >= 0.67:
+    if pattern.decision_confidence >= 0.67:
         assert pattern.threshold_met is True
 
 
@@ -124,6 +124,10 @@ def test_batch_format_pattern_exposes_vote_margin(detector):
     pattern = detector.detect_batch_format(names)
 
     assert pattern.total_count == 4
+    assert pattern.voting_count == pattern.surname_first_count + pattern.given_first_count
+    assert pattern.confidence == pytest.approx(
+        max(pattern.surname_first_count, pattern.given_first_count) / pattern.total_count,
+    )
     assert pattern.vote_margin_count == abs(pattern.surname_first_count - pattern.given_first_count)
     assert pattern.vote_margin == pytest.approx(pattern.vote_margin_count / pattern.total_count)
 

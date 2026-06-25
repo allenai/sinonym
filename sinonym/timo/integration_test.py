@@ -55,7 +55,7 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(len(summary.results), 2)
         self.assertEqual(
             summary.format_pattern.threshold_met,
-            summary.format_pattern.confidence >= 0.9,
+            summary.format_pattern.decision_confidence >= 0.9,
         )
 
     def test_detect_batch_format(self):

@@ -30,6 +30,7 @@ LONG_GIVEN_NAME_TOKEN_MIN_LENGTH = 6
 TWO_TOKEN_NAME_LENGTH = 2
 BATCH_PARTICIPANT_MIN = 2
 BATCH_FORMAT_MIN_VOTE_WEIGHT = 0.5
+BATCH_FORMAT_DIRECTION_MIN_CONFIDENCE = 0.5
 LATIN_ONLY_REPRESENTATION = "latin_only"
 REJECTED_INPUT_REPRESENTATION = "rejected_input"
 
@@ -46,6 +47,8 @@ class BatchVoteStats:
     given_first_weight: float = 0.0
     total_weight: float = 0.0
     names_with_candidates: int = 0
+    unopposed_surname_first_preferences: int = 0
+    unopposed_given_first_preferences: int = 0
 
     @property
     def total_preferences(self) -> int:
@@ -131,7 +134,7 @@ class BatchAnalysisService:
         # Phase 2: Detect the dominant format pattern
         format_pattern = self._detect_format_pattern(name_candidates)
 
-        # Phase 3: Apply batch formatting only when the dominant pattern confidence
+        # Phase 3: Apply batch formatting only when the dominant pattern decision confidence
         # clears the configured threshold. Otherwise, fall back to individual
         # processing to avoid over-applying a weak batch signal.
         if format_pattern.total_count > 0 and format_pattern.threshold_met:
@@ -534,10 +537,28 @@ class BatchAnalysisService:
                 threshold_met=False,
             )
 
-        dominant_format, confidence = self._dominant_format_and_confidence(stats, name_candidates)
+        dominant_format, decision_confidence = self._dominant_format_and_confidence(stats, name_candidates)
+        confidence = self._count_confidence(stats, dominant_format)
         has_decisive_vote = stats.surname_first_preferences != stats.given_first_preferences
+        has_unopposed_dominant_vote = (
+            (
+                dominant_format == NameFormat.SURNAME_FIRST
+                and stats.unopposed_surname_first_preferences > 0
+            )
+            or (
+                dominant_format == NameFormat.GIVEN_FIRST
+                and stats.unopposed_given_first_preferences > 0
+            )
+        )
+        has_confident_direction = decision_confidence > BATCH_FORMAT_DIRECTION_MIN_CONFIDENCE and (
+            has_decisive_vote or has_unopposed_dominant_vote
+        )
         has_multiple_participants = stats.names_with_candidates >= BATCH_PARTICIPANT_MIN
-        threshold_met = confidence >= self._format_threshold and has_decisive_vote and has_multiple_participants
+        threshold_met = (
+            decision_confidence >= self._format_threshold
+            and has_confident_direction
+            and has_multiple_participants
+        )
 
         return BatchFormatPattern(
             dominant_format=dominant_format,
@@ -546,6 +567,7 @@ class BatchAnalysisService:
             given_first_count=stats.given_first_preferences,
             total_count=stats.names_with_candidates,
             threshold_met=threshold_met,
+            decision_confidence=decision_confidence,
         )
 
     def _collect_batch_vote_stats(self, name_candidates: list[NameCandidateEntry]) -> BatchVoteStats:
@@ -561,21 +583,36 @@ class BatchAnalysisService:
             if vote_name_key in seen_vote_names:
                 continue
             seen_vote_names.add(vote_name_key)
+            stats.names_with_candidates += 1
 
             weight = self._candidate_vote_weight(candidates)
             if weight < BATCH_FORMAT_MIN_VOTE_WEIGHT:
                 continue
-            stats.names_with_candidates += 1
             stats.total_weight += weight
 
             if best_candidate.format == NameFormat.SURNAME_FIRST:
                 stats.surname_first_preferences += 1
                 stats.surname_first_weight += weight
+                if len(candidates) == 1:
+                    stats.unopposed_surname_first_preferences += 1
             elif best_candidate.format == NameFormat.GIVEN_FIRST:
                 stats.given_first_preferences += 1
                 stats.given_first_weight += weight
+                if len(candidates) == 1:
+                    stats.unopposed_given_first_preferences += 1
 
         return stats
+
+    @staticmethod
+    def _count_confidence(stats: BatchVoteStats, dominant_format: NameFormat) -> float:
+        """Return count-based dominant confidence over all candidate participants."""
+        if stats.names_with_candidates <= 0:
+            return 0.0
+        if dominant_format == NameFormat.SURNAME_FIRST:
+            return stats.surname_first_preferences / stats.names_with_candidates
+        if dominant_format == NameFormat.GIVEN_FIRST:
+            return stats.given_first_preferences / stats.names_with_candidates
+        return 0.0
 
     @staticmethod
     def _candidate_vote_weight(candidates: list[ParseCandidate]) -> float:

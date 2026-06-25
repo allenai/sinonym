@@ -8,14 +8,9 @@ This module contains tests for compound and multi-syllable Chinese names includi
 - Complex name splitting patterns
 """
 
-import sys
-from pathlib import Path
+import pytest
 
-# Add the parent directory to path to import sinonym
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from sinonym import ChineseNameDetector
-from tests._fail_log import log_failure
+from tests._case_assertions import assert_normalized_name
 
 # Test cases for compound and multi-syllable names
 CHINESE_NAME_TEST_CASES = [
@@ -39,33 +34,7 @@ CHINESE_NAME_TEST_CASES = [
 ]
 
 
-def test_compound_names(detector):
+@pytest.mark.parametrize(("input_name", "expected"), CHINESE_NAME_TEST_CASES)
+def test_compound_names(detector, input_name, expected):
     """Test compound and multi-syllable Chinese names."""
-
-    passed = 0
-    failed = 0
-
-    for input_name, expected in CHINESE_NAME_TEST_CASES:
-        result = detector.normalize_name(input_name)
-        # Convert ParseResult to tuple format for comparison
-        result_tuple = (result.success, result.result if result.success else result.error_message)
-
-        if result_tuple == expected:
-            passed += 1
-        else:
-            failed += 1
-            expected_success, expected_name = expected
-            actual = result.result if result.success else result.error_message
-            print(
-                f"FAILED: '{input_name}': expected ({expected_success}, '{expected_name}'), got ({result.success}, '{actual}')",
-            )
-            log_failure("Compound name tests", input_name, expected_success, expected_name, result.success, actual)
-
-    if failed:
-        print(f"Compound name tests: {failed} failures out of {len(CHINESE_NAME_TEST_CASES)} tests")
-    assert failed == 0, f"Compound name tests: {failed} failures out of {len(CHINESE_NAME_TEST_CASES)} tests"
-    print(f"Compound name tests: {passed} passed, {failed} failed")
-
-
-if __name__ == "__main__":
-    test_compound_names()
+    assert_normalized_name(detector, input_name, expected)

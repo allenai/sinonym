@@ -7,17 +7,12 @@ Validates that trailing single-letter initials in Chinese names are:
 - Not merged into the last given token
 
 Covers both individual and batch processing paths and integrates with the
-shared failure log consumed by scripts/check_test_status.py.
+JUnit failure counting consumed by scripts/check_test_status.py.
 """
 
-import sys
-from pathlib import Path
+import pytest
 
-# Ensure package import works when running tests directly
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from sinonym import ChineseNameDetector
-from tests._fail_log import log_failure
+from tests._case_assertions import assert_middle_name_result
 
 MIDDLE_NAME_INDIVIDUAL_CASES = [
     (
@@ -86,147 +81,23 @@ MIDDLE_NAME_INDIVIDUAL_CASES = [
 ]
 
 
-def test_middle_name_individual(detector):
-
-    passed = 0
-    failed = 0
-
-    for raw, exp in MIDDLE_NAME_INDIVIDUAL_CASES:
-        res = detector.normalize_name(raw)
-
-        if not res.success:
-            failed += 1
-            actual = res.error_message
-            log_failure("Middle name individual (formatted)", raw, True, exp["formatted"], res.success, actual)
-            continue
-
-        # 1) Check formatted string
-        if res.result != exp["formatted"]:
-            failed += 1
-            log_failure("Middle name individual (formatted)", raw, True, exp["formatted"], res.success, res.result)
-        else:
-            passed += 1
-
-        # 2) Check parsed tokens and components
-        parsed = res.parsed
-        if not parsed:
-            failed += 1
-            log_failure("Middle name individual (parsed missing)", raw, True, "parsed present", res.success, "parsed missing")
-            continue
-
-        # given_tokens should not include the middle initial(s)
-        if parsed.given_tokens != exp["given_tokens"]:
-            failed += 1
-            log_failure(
-                "Middle name individual (given_tokens)",
-                raw,
-                True,
-                str(exp["given_tokens"]),
-                res.success,
-                str(parsed.given_tokens),
-            )
-
-        # middle_tokens should contain the single-letter initial(s)
-        if parsed.middle_tokens != exp["middle_tokens"]:
-            failed += 1
-            log_failure(
-                "Middle name individual (middle_tokens)",
-                raw,
-                True,
-                str(exp["middle_tokens"]),
-                res.success,
-                str(parsed.middle_tokens),
-            )
-
-        # Surname string should match expected
-        if parsed.surname != exp["surname"]:
-            failed += 1
-            log_failure(
-                "Middle name individual (surname)",
-                raw,
-                True,
-                exp["surname"],
-                res.success,
-                parsed.surname,
-            )
-
-    if failed:
-        print(f"Middle name individual tests: {failed} failures out of {len(MIDDLE_NAME_INDIVIDUAL_CASES)} tests")
-    assert failed == 0, f"Middle name individual tests: {failed} failures out of {len(MIDDLE_NAME_INDIVIDUAL_CASES)} tests"
-    print(f"Middle name individual tests: {passed} passed, {failed} failed")
-
-
-def test_middle_name_batch(detector):
-
+@pytest.fixture(scope="module")
+def middle_name_batch(detector):
     names = [raw for raw, _ in MIDDLE_NAME_INDIVIDUAL_CASES]
-    expected = [exp for _, exp in MIDDLE_NAME_INDIVIDUAL_CASES]
+    return detector.analyze_name_batch(names)
 
-    passed = 0
-    failed = 0
 
-    batch = detector.analyze_name_batch(names)
+@pytest.mark.parametrize(("raw", "expected"), MIDDLE_NAME_INDIVIDUAL_CASES)
+def test_middle_name_individual(detector, raw, expected):
+    assert_middle_name_result(detector.normalize_name(raw), raw, expected)
 
-    # Validate each result
-    for i, (raw, exp) in enumerate(MIDDLE_NAME_INDIVIDUAL_CASES):
-        res = batch.results[i]
 
-        if not res.success:
-            failed += 1
-            actual = res.error_message
-            log_failure("Middle name batch (formatted)", raw, True, exp["formatted"], res.success, actual)
-            continue
-
-        # 1) Formatted string
-        if res.result != exp["formatted"]:
-            failed += 1
-            log_failure("Middle name batch (formatted)", raw, True, exp["formatted"], res.success, res.result)
-        else:
-            passed += 1
-
-        # 2) Parsed tokens
-        parsed = res.parsed
-        if not parsed:
-            failed += 1
-            log_failure("Middle name batch (parsed missing)", raw, True, "parsed present", res.success, "parsed missing")
-            continue
-
-        if parsed.given_tokens != exp["given_tokens"]:
-            failed += 1
-            log_failure(
-                "Middle name batch (given_tokens)",
-                raw,
-                True,
-                str(exp["given_tokens"]),
-                res.success,
-                str(parsed.given_tokens),
-            )
-
-        if parsed.middle_tokens != exp["middle_tokens"]:
-            failed += 1
-            log_failure(
-                "Middle name batch (middle_tokens)",
-                raw,
-                True,
-                str(exp["middle_tokens"]),
-                res.success,
-                str(parsed.middle_tokens),
-            )
-
-        if parsed.surname != exp["surname"]:
-            failed += 1
-            log_failure(
-                "Middle name batch (surname)",
-                raw,
-                True,
-                exp["surname"],
-                res.success,
-                parsed.surname,
-            )
-
-    if failed:
-        print(f"Middle name batch tests: {failed} failures out of {len(MIDDLE_NAME_INDIVIDUAL_CASES)} tests")
-    assert failed == 0, f"Middle name batch tests: {failed} failures out of {len(MIDDLE_NAME_INDIVIDUAL_CASES)} tests"
-    print(f"Middle name batch tests: {passed} passed, {failed} failed")
+@pytest.mark.parametrize(
+    ("index", "raw", "expected"),
+    [(index, raw, expected) for index, (raw, expected) in enumerate(MIDDLE_NAME_INDIVIDUAL_CASES)],
+)
+def test_middle_name_batch(middle_name_batch, index, raw, expected):
+    assert_middle_name_result(middle_name_batch.results[index], raw, expected)
 
 
 # Additional mixed-script / all-Han with Roman middle initial cases
@@ -288,69 +159,23 @@ MIDDLE_NAME_MIXED_CASES = [
 ]
 
 
-def test_middle_name_mixed_individual_and_batch(detector):
-
-    # Individual
-    ind_failed = 0
-    for raw, exp in MIDDLE_NAME_MIXED_CASES:
-        res = detector.normalize_name(raw)
-        if not res.success:
-            ind_failed += 1
-            log_failure("Middle name mixed individual (formatted)", raw, True, exp["formatted"], res.success, res.error_message)
-            continue
-        if res.result != exp["formatted"]:
-            ind_failed += 1
-            log_failure("Middle name mixed individual (formatted)", raw, True, exp["formatted"], res.success, res.result)
-            continue
-        parsed = res.parsed
-        if not parsed:
-            ind_failed += 1
-            log_failure("Middle name mixed individual (parsed missing)", raw, True, "parsed present", res.success, "parsed missing")
-            continue
-        if parsed.given_tokens != exp["given_tokens"]:
-            ind_failed += 1
-            log_failure("Middle name mixed individual (given_tokens)", raw, True, str(exp["given_tokens"]), res.success, str(parsed.given_tokens))
-        if parsed.middle_tokens != exp["middle_tokens"]:
-            ind_failed += 1
-            log_failure("Middle name mixed individual (middle_tokens)", raw, True, str(exp["middle_tokens"]), res.success, str(parsed.middle_tokens))
-        if parsed.surname != exp["surname"]:
-            ind_failed += 1
-            log_failure("Middle name mixed individual (surname)", raw, True, exp["surname"], res.success, parsed.surname)
-
-    assert ind_failed == 0, f"Middle name mixed individual tests: {ind_failed} failures out of {len(MIDDLE_NAME_MIXED_CASES)} tests"
-
-    # Batch
+@pytest.fixture(scope="module")
+def middle_name_mixed_batch(detector):
     names = [raw for raw, _ in MIDDLE_NAME_MIXED_CASES]
-    expected = [exp for _, exp in MIDDLE_NAME_MIXED_CASES]
-    batch = detector.analyze_name_batch(names)
+    return detector.analyze_name_batch(names)
 
-    batch_failed = 0
-    for i, (raw, exp) in enumerate(MIDDLE_NAME_MIXED_CASES):
-        res = batch.results[i]
-        if not res.success:
-            batch_failed += 1
-            log_failure("Middle name mixed batch (formatted)", raw, True, exp["formatted"], res.success, res.error_message)
-            continue
-        if res.result != exp["formatted"]:
-            batch_failed += 1
-            log_failure("Middle name mixed batch (formatted)", raw, True, exp["formatted"], res.success, res.result)
-            continue
-        parsed = res.parsed
-        if not parsed:
-            batch_failed += 1
-            log_failure("Middle name mixed batch (parsed missing)", raw, True, "parsed present", res.success, "parsed missing")
-            continue
-        if parsed.given_tokens != exp["given_tokens"]:
-            batch_failed += 1
-            log_failure("Middle name mixed batch (given_tokens)", raw, True, str(exp["given_tokens"]), res.success, str(parsed.given_tokens))
-        if parsed.middle_tokens != exp["middle_tokens"]:
-            batch_failed += 1
-            log_failure("Middle name mixed batch (middle_tokens)", raw, True, str(exp["middle_tokens"]), res.success, str(parsed.middle_tokens))
-        if parsed.surname != exp["surname"]:
-            batch_failed += 1
-            log_failure("Middle name mixed batch (surname)", raw, True, exp["surname"], res.success, parsed.surname)
 
-    assert batch_failed == 0, f"Middle name mixed batch tests: {batch_failed} failures out of {len(MIDDLE_NAME_MIXED_CASES)} tests"
+@pytest.mark.parametrize(("raw", "expected"), MIDDLE_NAME_MIXED_CASES)
+def test_middle_name_mixed_individual(detector, raw, expected):
+    assert_middle_name_result(detector.normalize_name(raw), raw, expected)
+
+
+@pytest.mark.parametrize(
+    ("index", "raw", "expected"),
+    [(index, raw, expected) for index, (raw, expected) in enumerate(MIDDLE_NAME_MIXED_CASES)],
+)
+def test_middle_name_mixed_batch(middle_name_mixed_batch, index, raw, expected):
+    assert_middle_name_result(middle_name_mixed_batch.results[index], raw, expected)
 
 
 def test_middle_initial_leading_between_surname_and_given(detector):

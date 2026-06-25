@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
-from sinonym.chinese_names_data import COMPOUND_VARIANTS
+from sinonym.chinese_names_data import COMPOUND_VARIANTS, OVERLAPPING_KOREAN_SURNAMES
 from sinonym.coretypes import ParseResult
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 LOW_FREQUENCY_SURNAME_MAX = 500.0
 GIVEN_FIRST_SURNAME_FREQ_RATIO_MIN = 50.0
 GIVEN_FIRST_ORDER_PRESERVATION_BONUS = 4.0
+RARE_TRAILING_OVERLAPPING_SURNAME_MAX = 100.0
 
 
 class NameParsingService:
@@ -646,10 +647,12 @@ class NameParsingService:
             # only apply when surname-last is materially more plausible than surname-first.
             if given_tokens == tokens[0:2] and surname_tokens[0] == tokens[2]:
                 first_norm = self._normalizer.get_normalized(tokens[0], normalized_cache)
+                second_norm = self._normalizer.get_normalized(tokens[1], normalized_cache)
                 last_norm = self._normalizer.get_normalized(tokens[2], normalized_cache)
                 first_is_surname = self._data.is_surname(tokens[0], first_norm)
                 last_is_surname = self._data.is_surname(tokens[2], last_norm)
                 first_is_given = self._data.is_given_name(first_norm)
+                second_is_given = self._data.is_given_name(second_norm)
                 last_is_given = self._data.is_given_name(last_norm)
                 first_surname_freq = self._data.get_surname_freq(first_norm)
                 last_surname_freq = self._data.get_surname_freq(last_norm)
@@ -666,6 +669,16 @@ class NameParsingService:
                     and freq_ratio <= 3.0
                 ):
                     order_preservation_bonus = max(order_preservation_bonus, 0.5)
+                elif (
+                    first_is_surname
+                    and last_is_surname
+                    and first_is_given
+                    and second_is_given
+                    and first_surname_freq > last_surname_freq
+                    and 0 < last_surname_freq <= RARE_TRAILING_OVERLAPPING_SURNAME_MAX
+                    and StringManipulationUtils.remove_spaces(last_norm) in OVERLAPPING_KOREAN_SURNAMES
+                ):
+                    order_preservation_bonus = max(order_preservation_bonus, 1.0)
 
         # Percentile rank-based scoring for surnames only
         surname_rank_bonus = 0.0

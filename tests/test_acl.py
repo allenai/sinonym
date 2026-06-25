@@ -5,14 +5,12 @@ This module contains tests for all author names from ACL 2025 accepted papers.
 Tests the sinonym library against real-world academic author names.
 """
 
-import sys
-from pathlib import Path
+import pytest
 
-# Add the parent directory to path to import sinonym
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from sinonym.resources import read_text
+from tests._case_assertions import assert_normalized_name, assert_rejected
 
-from sinonym import ChineseNameDetector
-from tests._fail_log import log_failure
+ACL_SAMPLE_DETECTED_LIMIT = 25
 
 # Ground truth: manually verified Chinese names from ACL 2025
 ACL_CHINESE_NAMES = [
@@ -327,108 +325,51 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
 ]
 
 
-def test_acl_chinese_names(detector):
+@pytest.mark.parametrize(("input_name", "expected_output"), ACL_CHINESE_NAMES)
+def test_acl_chinese_names(detector, input_name, expected_output):
     """Test that known Chinese names from ACL 2025 are correctly detected."""
-
-    failed = 0
-
-    for input_name, expected_output in ACL_CHINESE_NAMES:
-        result = detector.normalize_name(input_name)
-        if not result.success or result.result != expected_output:
-            failed += 1
-            # Uniform failure line format for status parser
-            actual = result.result if result.success else result.error_message
-            print(f"FAILED: '{input_name}': expected (True, '{expected_output}'), got ({result.success}, '{actual}')")
-            log_failure("ACL Chinese name tests", input_name, True, expected_output, result.success, actual)
-
-    assert failed == 0, f"ACL Chinese name tests: {failed} failures out of {len(ACL_CHINESE_NAMES)} tests"
+    assert_normalized_name(detector, input_name, (True, expected_output))
 
 
-def test_acl_non_chinese_names(detector):
+@pytest.mark.parametrize("name", ACL_NON_CHINESE_NAMES)
+def test_acl_non_chinese_names(detector, name):
     """Test that known non-Chinese names from ACL 2025 are correctly rejected."""
-
-    failed = 0
-
-    for name in ACL_NON_CHINESE_NAMES:
-        result = detector.normalize_name(name)
-        if result.success:
-            failed += 1
-            # Uniform failure line format for status parser
-            print(f"FAILED: '{name}': expected (False, 'should_be_rejected'), got (True, '{result.result}')")
-            log_failure("ACL non-Chinese rejection tests", name, False, "should_be_rejected", True, result.result)
-
-    assert failed == 0, f"ACL non-Chinese rejection tests: {failed} failures out of {len(ACL_NON_CHINESE_NAMES)} tests"
+    assert_rejected(detector, name)
 
 
-def test_acl_order_preservation(detector):
+@pytest.mark.parametrize(("input_name", "expected_output"), ACL_ORDER_PRESERVATION_TEST_CASES)
+def test_acl_order_preservation(detector, input_name, expected_output):
     """Test that ACL names in Given-Surname format are not flipped."""
-
-    failed = 0
-
-    for input_name, expected_output in ACL_ORDER_PRESERVATION_TEST_CASES:
-        result = detector.normalize_name(input_name)
-        expected_success = True
-        if not result.success or result.result != expected_output:
-            failed += 1
-            actual = result.result if result.success else result.error_message
-            print(
-                f"FAILED: '{input_name}': expected ({expected_success}, '{expected_output}'), got ({result.success}, '{actual}')",
-            )
-            log_failure("ACL order preservation tests", input_name, True, expected_output, result.success, actual)
-
-    assert (
-        failed == 0
-    ), f"ACL order preservation tests: {failed} failures out of {len(ACL_ORDER_PRESERVATION_TEST_CASES)} tests"
+    assert_normalized_name(detector, input_name, (True, expected_output))
 
 
 def analyze_acl_2025_authors(detector):
     """Analyze all ACL 2025 author names (not a test, just analysis)."""
-
-    # Read all author names from the extracted file
-    from sinonym.resources import read_text
 
     authors_text = read_text("acl_2025_authors.txt")
     authors = [line.strip() for line in authors_text.splitlines() if line.strip()]
 
     chinese_names = []
     non_chinese_names = []
-    errors = []
 
     for author in authors:
-        try:
-            result = detector.normalize_name(author)
-            if result.success:
-                chinese_names.append((author, result.result))
-            else:
-                non_chinese_names.append((author, result.error_message))
-        except Exception as e:
-            errors.append((author, str(e)))
+        result = detector.normalize_name(author)
+        if result.success:
+            chinese_names.append((author, result.result))
+        else:
+            non_chinese_names.append((author, result.error_message))
 
     print("\n=== ACL 2025 Author Name Analysis ===")
     print(f"Total authors processed: {len(authors)}")
     print(f"Chinese names detected: {len(chinese_names)}")
     print(f"Non-Chinese names: {len(non_chinese_names)}")
-    print(f"Errors: {len(errors)}")
+    print("Errors: 0")
 
     if chinese_names:
         print("\n=== Sample Detected Chinese Names ===")
-        for original, normalized in sorted(chinese_names)[:25]:  # Show first 25
+        for original, normalized in sorted(chinese_names)[:ACL_SAMPLE_DETECTED_LIMIT]:
             print(f"  {original} → {normalized}")
-        if len(chinese_names) > 25:
-            print(f"  ... and {len(chinese_names) - 25} more")
+        if len(chinese_names) > ACL_SAMPLE_DETECTED_LIMIT:
+            print(f"  ... and {len(chinese_names) - ACL_SAMPLE_DETECTED_LIMIT} more")
 
-    if errors:
-        print(f"\n=== Errors ({len(errors)}) ===")
-        for author, error in errors[:10]:  # Show first 10 errors
-            print(f"  {author}: {error}")
-        if len(errors) > 10:
-            print(f"  ... and {len(errors) - 10} more errors")
-
-    return len(errors) == 0  # Return success status
-
-
-if __name__ == "__main__":
-    test_acl_chinese_names()
-    test_acl_non_chinese_names()
-    test_acl_order_preservation()
-    analyze_acl_2025_authors()
+    return True

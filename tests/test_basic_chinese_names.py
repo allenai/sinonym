@@ -5,14 +5,9 @@ This module contains tests for simple, common Chinese name patterns.
 Tests basic surname + given name combinations and common Chinese names.
 """
 
-import sys
-from pathlib import Path
+import pytest
 
-# Add the parent directory to path to import sinonym
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from sinonym import ChineseNameDetector
-from tests._fail_log import log_failure
+from tests._case_assertions import assert_normalized_name
 
 # Basic Chinese names with simple patterns
 CHINESE_NAME_TEST_CASES = [
@@ -131,33 +126,7 @@ CHINESE_NAME_TEST_CASES = [
 ]
 
 
-def test_basic_chinese_names(detector):
+@pytest.mark.parametrize(("input_name", "expected"), CHINESE_NAME_TEST_CASES)
+def test_basic_chinese_names(detector, input_name, expected):
     """Test basic Chinese names with simple patterns."""
-
-    passed = 0
-    failed = 0
-
-    for input_name, expected in CHINESE_NAME_TEST_CASES:
-        result = detector.normalize_name(input_name)
-        # Convert ParseResult to tuple format for comparison
-        result_tuple = (result.success, result.result if result.success else result.error_message)
-
-        if result_tuple == expected:
-            passed += 1
-        else:
-            failed += 1
-            expected_success, expected_name = expected
-            actual = result.result if result.success else result.error_message
-            print(
-                f"FAILED: '{input_name}': expected ({expected_success}, '{expected_name}'), got ({result.success}, '{actual}')",
-            )
-            log_failure("Basic Chinese name tests", input_name, expected_success, expected_name, result.success, actual)
-
-    if failed:
-        print(f"Basic Chinese name tests: {failed} failures out of {len(CHINESE_NAME_TEST_CASES)} tests")
-    assert failed == 0, f"Basic Chinese name tests: {failed} failures out of {len(CHINESE_NAME_TEST_CASES)} tests"
-    print(f"Basic Chinese name tests: {passed} passed, {failed} failed")
-
-
-if __name__ == "__main__":
-    test_basic_chinese_names()
+    assert_normalized_name(detector, input_name, expected)

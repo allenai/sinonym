@@ -1,4 +1,4 @@
-# ruff: noqa: INP001, PLR2004, SLF001
+# ruff: noqa: PLR2004, SLF001
 """Regression tests that implement the proposals tracked in TEST_PROPOSAL.md."""
 
 from __future__ import annotations
@@ -81,6 +81,7 @@ def test_korean_curated_pairs_are_format_normalized(detector):
         "Son Heung Min",
         "Heung Min Son",
         "Ha Young Lee",
+        "Sung Soo Jung",
     ]
 
     for name in rejected_names:
@@ -96,6 +97,20 @@ def test_korean_curated_pairs_are_format_normalized(detector):
         result = detector.normalize_name(name)
         assert result.success, name
         assert result.result == expected
+
+
+def test_chinese_given_first_name_with_trailing_na_is_not_rejected_as_korean(detector):
+    normalized = detector._normalizer.apply("Yu Bin Na")
+    analysis = detector._ethnicity_service._analyze_tokens_for_patterns(normalized.roman_tokens)
+
+    assert analysis["surname_type"] == "chinese_only"
+    assert analysis["korean_given_pairs"] == []
+
+    result = detector.normalize_name("Yu Bin Na")
+    assert result.success
+    assert result.result == "Yu-Bin Na"
+    assert result.parsed_original_order.order == ["given", "surname"]
+
 
 def test_korean_overlapping_ambiguous_branch_stays_bounded(detector):
     normalized = detector._normalizer.apply("Ha Min Lee")
@@ -473,7 +488,7 @@ def test_batch_format_votes_ignore_weak_candidate_gaps_and_duplicate_names(detec
 
     assert stats.surname_first_preferences == 0
     assert stats.given_first_preferences == 2
-    assert stats.names_with_candidates == 2
+    assert stats.names_with_candidates == 3
 
 
 def test_batch_analysis_service_old_constructor_signature_still_works(detector):
@@ -510,6 +525,27 @@ def test_strong_given_first_batch_still_overrides_ambiguous_name(detector):
     assert batch.format_pattern.dominant_format == NameFormat.GIVEN_FIRST
     assert batch.format_pattern.threshold_met
     assert batch.results[0].result == "Mai Liao"
+
+
+@pytest.mark.parametrize(
+    ("names", "expected_results"),
+    [
+        (["Li Yang Hsu", "Hanwei Cao"], ["Li-Yang Hsu", "Han-Wei Cao"]),
+        (["Yunbo Hu", "Chu Zhang"], ["Yun-Bo Hu", "Chu Zhang"]),
+        (["J. Liu", "Jing Wan"], ["J Liu", "Jing Wan"]),
+        (["Qinggong Ping", "Su Wang"], ["Qing-Gong Ping", "Su Wang"]),
+    ],
+)
+def test_batch_format_uses_weighted_tie_break_with_weak_participants(detector, names, expected_results):
+    batch = detector.analyze_name_batch(names)
+
+    assert batch.format_pattern.total_count == 2
+    assert batch.format_pattern.dominant_format == NameFormat.GIVEN_FIRST
+    assert batch.format_pattern.confidence == pytest.approx(0.5)
+    assert batch.format_pattern.decision_confidence >= 0.55
+    assert batch.format_pattern.decision_confidence >= batch.format_pattern.confidence
+    assert batch.format_pattern.threshold_met
+    assert [result.result for result in batch.results] == expected_results
 
 
 def test_batch_does_not_apply_latin_format_to_spaced_han_name(detector):
@@ -565,6 +601,8 @@ def test_batch_does_not_treat_compact_mixed_han_roman_as_latin_only(detector):
 def test_aligned_bilingual_pairs_use_han_identity(detector):
     given_first = detector.normalize_name("Mi \u5bc6 Jiang \u848b")
     surname_first = detector.normalize_name("\u9ad8 Gao \u9759 Jing")
+    han_only_given_first = detector.normalize_name("\u7acb Li \u9a6c Ma")
+    roman_first_given_first = detector.normalize_name("Wang \u65fa Tian \u7530")
 
     assert given_first.success
     assert given_first.result == "Mi Jiang"
@@ -573,6 +611,34 @@ def test_aligned_bilingual_pairs_use_han_identity(detector):
     assert surname_first.success
     assert surname_first.result == "Jing Gao"
     assert surname_first.parsed_original_order.order == ["surname", "given"]
+
+    assert han_only_given_first.success
+    assert han_only_given_first.result == "Li Ma"
+    assert han_only_given_first.parsed_original_order.order == ["given", "surname"]
+
+    assert roman_first_given_first.success
+    assert roman_first_given_first.result == "Wang Tian"
+    assert roman_first_given_first.parsed_original_order.order == ["given", "surname"]
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected", "expected_order"),
+    [
+        ("\u5434\u65ed WU Xu", "Xu Wu", ["surname", "given"]),
+        ("\u90ed\u4e3d GUO Li", "Li Guo", ["surname", "given"]),
+        ("\u5f20\u6d0b ZHANG Yang", "Yang Zhang", ["surname", "given"]),
+        ("\u5f90\u601d\u5fd7 XU Sizhi", "Si-Zhi Xu", ["surname", "given"]),
+        ("\u7acb\u9a6c Li Ma", "Li Ma", ["given", "surname"]),
+        ("\u65fa\u7530 Wang Tian", "Wang Tian", ["given", "surname"]),
+        ("\u5bc6\u848b Mi Jiang", "Mi Jiang", ["given", "surname"]),
+    ],
+)
+def test_compact_han_roman_transliteration_uses_han_order(detector, raw_name, expected, expected_order):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+    assert result.parsed_original_order.order == expected_order
 
 
 def test_non_person_inputs_are_rejected_before_parsing(detector):

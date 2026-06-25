@@ -1,47 +1,50 @@
 #!/usr/bin/env python3
-"""
-Script to check test status and count individual test case failures.
+"""Run the test suite and count real pytest failures from JUnit XML."""
 
-This script runs all tests and counts the individual test case failures
-(not just the number of test functions that fail), and also checks if
-performance tests pass.
-"""
+from __future__ import annotations
 
-import json
 import os
-import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from pathlib import Path
 
 EXPECTED_FAILURES = 44
-FAIL_LOG_FIELDS = (
-    "nodeid",
-    "label",
-    "name",
-    "expected_success",
-    "expected_output",
-    "actual_success",
-    "actual_output",
-)
 PYTEST_BASELINE_RETURN_CODES = {0, 1}
-INVALID_FAIL_LOG_ENTRY_MESSAGE = "failure log entry has invalid fields"
-
-FAILURE_COUNT_PATTERNS = (
-    re.compile(
-        r"AssertionError:\s*([^:]+):\s*(\d+)\s+failures?\s+out\s+of\s+(\d+)\s+tests?",
-    ),
-    re.compile(
-        r"([^:]+):\s*(\d+)\s+failures?\s+out\s+of\s+(\d+)\s+tests?",
-    ),
-)
 
 
 class UvNotFoundError(OSError):
+    """Raised when uv is not available on PATH."""
+
     def __init__(self) -> None:
         super().__init__("uv executable not found on PATH")
+
+
+class JunitReadError(RuntimeError):
+    """Raised when pytest did not produce readable JUnit XML."""
+
+    def __init__(self, junit_path: Path, error: Exception) -> None:
+        message = f"could not read JUnit XML at {junit_path}: {error}"
+        super().__init__(message)
+
+
+@dataclass(frozen=True)
+class FailureDetail:
+    """One failed or errored pytest testcase."""
+
+    nodeid: str
+    kind: str
+    message: str
+
+
+@dataclass(frozen=True)
+class PytestRunResult:
+    """Captured pytest execution result."""
+
+    returncode: int | None
 
 
 def _uv_executable() -> str:
@@ -58,30 +61,25 @@ def _safe_for_console(value: object) -> str:
     return text.encode(encoding, errors="backslashreplace").decode(encoding, errors="replace")
 
 
-def run_tests():
-    """Run all tests and capture output."""
+def run_tests(junit_path: Path) -> PytestRunResult:
+    """Run non-performance tests and write a JUnit XML report."""
     env = os.environ.copy()
     env["PYTHONHASHSEED"] = "0"
-    # Ensure UTF-8 encoding on all platforms
     env["PYTHONIOENCODING"] = "utf-8"
 
     try:
-        # Prepare failure log path for this run
-        fail_log = Path(tempfile.mkdtemp(prefix="sinonym-pytest-failures-")) / "failures.jsonl"
-
-        env["SINONYM_FAIL_LOG"] = str(fail_log)
-
         result = subprocess.run(  # noqa: S603
             [
                 _uv_executable(),
                 "run",
                 "pytest",
                 "-q",
-                "-s",
                 "tests/",
                 "--ignore=tests/test_performance.py",
                 "--disable-warnings",
                 "--maxfail=0",
+                "--junitxml",
+                str(junit_path),
             ],
             check=False,
             capture_output=True,
@@ -92,281 +90,70 @@ def run_tests():
         )
     except subprocess.TimeoutExpired:
         print("Tests timed out after 300 seconds")
-        return "", None
+        return PytestRunResult(returncode=None)
     except OSError as e:
         print(f"Error running tests: {e}")
-        return "", None
-    else:
-        # Append path to combined output for downstream consumers
-        combined = result.stdout + result.stderr
-        if fail_log.exists():
-            combined += f"\n__FAIL_LOG_PATH__={fail_log}\n"
-        return combined, result.returncode
+        return PytestRunResult(returncode=None)
+
+    return PytestRunResult(returncode=result.returncode)
 
 
-def _failure_count_match(line: str) -> re.Match[str] | None:
-    for pattern in FAILURE_COUNT_PATTERNS:
-        match = pattern.search(line)
-        if match:
-            return match
-    return None
+def _tag_name(element: ET.Element) -> str:
+    """Return an XML tag name without a namespace."""
+    return element.tag.rsplit("}", maxsplit=1)[-1]
 
 
-def extract_failure_counts(output):
-    """Extract individual test case failure counts from test output."""
-    failure_details = {}  # Use dict to deduplicate by test name
-
-    # Split output into lines and process each one
-    for line in output.split("\n"):
-        match = _failure_count_match(line)
-        if match:
-            test_name, failures, total = match.groups()
-            test_name = test_name.strip()
-            # Use dict to automatically deduplicate by test name
-            failure_details[test_name] = {
-                "name": test_name,
-                "failures": int(failures),
-                "total": int(total),
-            }
-
-    return list(failure_details.values())
+def _testcase_nodeid(testcase: ET.Element) -> str:
+    """Return a readable pytest-ish node id for a JUnit testcase."""
+    classname = testcase.attrib.get("classname", "")
+    name = testcase.attrib.get("name", "")
+    if classname and name:
+        return f"{classname}::{name}"
+    return name or classname or "<unknown testcase>"
 
 
-def _matches_known_failure_label(message: str | None, known_labels: list[str]) -> bool:
-    if not message:
-        return False
-
-    label_fragment = re.split(r":|\.\.\.|\u2026", message, maxsplit=1)[0]
-    normalized_fragment = _normalized_label(label_fragment)
-    if not normalized_fragment:
-        return False
-
-    return any(_normalized_label(label).startswith(normalized_fragment) for label in known_labels)
+def _failure_children(testcase: ET.Element) -> list[ET.Element]:
+    """Return failure/error children for one testcase."""
+    return [child for child in testcase if _tag_name(child) in {"failure", "error"}]
 
 
-def _is_truncated_assertion_message(message: str | None) -> bool:
-    """Return whether pytest reported only a duplicate/truncated assertion summary."""
-    if message is None:
-        return True
-
-    stripped = message.strip()
-    return stripped in {"", "...", "\u2026"}
-
-
-def _is_truncated_assertion_summary(message: str) -> bool:
-    """Return whether pytest truncated the AssertionError class name itself."""
-    stripped = message.strip()
-    if not stripped.endswith(("...", "\u2026")):
-        return False
-
-    prefix = re.split(r"\.\.\.|\u2026", stripped, maxsplit=1)[0].strip(": ")
-    return "assertionerror".startswith(prefix.lower())
-
-
-def _is_duplicate_logged_assertion_summary(
-    nodeid: str,
-    message: str,
-    known_labels: list[str],
-    logged_nodeids: set[str],
-) -> bool:
-    """Return whether a pytest summary duplicates exact-nodeid fail-log rows."""
-    if nodeid not in logged_nodeids:
-        return False
-    if _is_truncated_assertion_summary(message):
-        return True
-    if not message.startswith("AssertionError"):
-        return False
-
-    assertion_message = message.removeprefix("AssertionError").removeprefix(":").strip()
-    return _is_truncated_assertion_message(assertion_message) or _matches_known_failure_label(
-        assertion_message,
-        known_labels,
-    )
-
-
-def extract_unaggregated_pytest_failures(
-    output: str,
-    known_labels: list[str] | None = None,
-    logged_nodeids: set[str] | None = None,
-) -> list[dict[str, str]]:
-    """Extract pytest failures/errors not represented by aggregate counts."""
-    known_labels = known_labels or []
-    logged_nodeids = logged_nodeids or set()
-    failures: dict[str, dict[str, str]] = {}
-    summary_pattern = re.compile(r"^(FAILED|ERROR)\s+(.+?)\s+-\s+(.+?)\s*$")
-
-    for line in output.splitlines():
-        match = summary_pattern.match(line.strip())
-        if not match:
-            continue
-        if _failure_count_match(line):
-            continue
-        status, nodeid, message = match.groups()
-        if _is_duplicate_logged_assertion_summary(nodeid, message, known_labels, logged_nodeids):
-            continue
-        failures[nodeid] = {
-            "name": nodeid,
-            "message": message,
-            "status": status,
-        }
-
-    return list(failures.values())
-
-
-def extract_unaggregated_assertion_failures(output: str, known_labels: list[str] | None = None) -> list[dict[str, str]]:
-    """Backward-compatible wrapper for unaggregated pytest failure extraction."""
-    return extract_unaggregated_pytest_failures(output, known_labels)
-
-
-def read_fail_log_path_from_output(output: str) -> str | None:
-    for line in output.splitlines():
-        if line.strip().startswith("__FAIL_LOG_PATH__="):
-            return line.strip().split("=", 1)[1]
-    return None
-
-
-def read_fail_log(path: str) -> list[str]:
+def read_junit_failures(junit_path: Path) -> list[FailureDetail]:
+    """Read failed or errored testcases from a pytest JUnit XML report."""
     try:
-        with Path(path).open(encoding="utf-8") as f:
-            return [ln.rstrip("\n") for ln in f]
-    except OSError:
-        return []
+        root = ET.parse(junit_path).getroot()  # noqa: S314 - local XML emitted by this pytest run.
+    except (OSError, ET.ParseError) as e:
+        raise JunitReadError(junit_path, e) from e
 
-
-def format_fail_log_line(entry: dict) -> str:
-    """Serialize one failure-log entry as JSONL."""
-    if set(entry) != set(FAIL_LOG_FIELDS):
-        raise ValueError(INVALID_FAIL_LOG_ENTRY_MESSAGE)
-    return json.dumps({field: entry[field] for field in FAIL_LOG_FIELDS}, ensure_ascii=False)
-
-
-def parse_fail_log_line(line: str) -> dict | None:
-    """Parse one failure-log line, returning None when the line is malformed."""
-    try:
-        entry = json.loads(line)
-    except json.JSONDecodeError:
-        return None
-
-    if not isinstance(entry, dict) or set(entry) != set(FAIL_LOG_FIELDS):
-        return None
-    if not isinstance(entry["nodeid"], str):
-        return None
-    if not isinstance(entry["label"], str):
-        return None
-    return entry
-
-
-def parse_fail_log(logged: list[str]) -> tuple[dict[str, int], list[dict], list[str]]:
-    """Parse shared failure log lines into aggregate and detailed views."""
-    by_label: dict[str, int] = {}
-    parsed_entries: list[dict] = []
-    malformed_entries: list[str] = []
-
-    for ln in logged:
-        parsed_entry = parse_fail_log_line(ln)
-        if parsed_entry is None:
-            malformed_entries.append(ln)
-            continue
-        label = parsed_entry["label"]
-        by_label[label] = by_label.get(label, 0) + 1
-        parsed_entries.append(parsed_entry)
-
-    return by_label, parsed_entries, malformed_entries
-
-
-def _normalized_label(label: str) -> str:
-    return re.sub(r"\s+", " ", label.strip().lower())
-
-
-def _summary_label_base(label: str) -> str:
-    normalized = _normalized_label(label)
-    return re.sub(r"\s+tests?$", "", normalized)
-
-
-def _matching_logged_labels(summary_label: str, logged_counts: dict[str, int]) -> list[str]:
-    """Find fail-log labels that represent the same aggregate pytest summary."""
-    summary_normalized = _normalized_label(summary_label)
-    summary_base = _summary_label_base(summary_label)
-    matches: list[str] = []
-
-    for logged_label in logged_counts:
-        logged_normalized = _normalized_label(logged_label)
-        if logged_normalized == summary_normalized:
-            return [logged_label]
-        if logged_normalized.startswith((f"{summary_base} ", f"{summary_base}(")):
-            matches.append(logged_label)
-
-    return matches
-
-
-def combine_failure_sources(logged: list[str], output: str) -> dict:
-    """Combine fail-log entries and pytest assertion summaries without double-counting."""
-    logged_counts, parsed_entries, malformed_entries = parse_fail_log(logged)
-    aggregate_counts = extract_failure_counts(output)
-    aggregate_only: list[dict] = []
-    aggregate_deficits: list[dict] = []
-    aggregate_covered: list[dict] = []
-
-    for failure in aggregate_counts:
-        matching_labels = _matching_logged_labels(failure["name"], logged_counts)
-        if not matching_labels:
-            aggregate_only.append(failure)
+    failures: list[FailureDetail] = []
+    for testcase in root.iter():
+        if _tag_name(testcase) != "testcase":
             continue
 
-        logged_count = sum(logged_counts[label] for label in matching_labels)
-        if failure["failures"] > logged_count:
-            aggregate_deficits.append(
-                {
-                    **failure,
-                    "failures": failure["failures"] - logged_count,
-                    "reported_failures": failure["failures"],
-                    "logged_failures": logged_count,
-                    "logged_labels": matching_labels,
-                },
-            )
-        else:
-            aggregate_covered.append(
-                {
-                    **failure,
-                    "logged_failures": logged_count,
-                    "logged_labels": matching_labels,
-                },
-            )
+        children = _failure_children(testcase)
+        if not children:
+            continue
 
-    known_labels = [failure["name"] for failure in aggregate_counts]
-    known_labels.extend(logged_counts)
-    logged_nodeids = {entry["nodeid"] for entry in parsed_entries if entry["nodeid"]}
-    unaggregated_pytest_failures = extract_unaggregated_pytest_failures(output, known_labels, logged_nodeids)
-    aggregate_only_total = sum(failure["failures"] for failure in aggregate_only)
-    aggregate_deficit_total = sum(failure["failures"] for failure in aggregate_deficits)
-    total_failures = len(logged) + aggregate_only_total + aggregate_deficit_total + len(unaggregated_pytest_failures)
+        first = children[0]
+        failures.append(
+            FailureDetail(
+                nodeid=_testcase_nodeid(testcase),
+                kind=_tag_name(first),
+                message=first.attrib.get("message", "").strip(),
+            ),
+        )
 
-    return {
-        "logged_counts": logged_counts,
-        "parsed_entries": parsed_entries,
-        "malformed_entries": malformed_entries,
-        "aggregate_only": aggregate_only,
-        "aggregate_deficits": aggregate_deficits,
-        "aggregate_covered": aggregate_covered,
-        "unaggregated_assertions": unaggregated_pytest_failures,
-        "unaggregated_pytest_failures": unaggregated_pytest_failures,
-        "total_failures": total_failures,
-    }
+    return failures
 
 
-## Removed per-file execution helpers
-
-
-def check_performance_tests():
-    """Run performance tests separately and check if they pass."""
+def check_performance_tests() -> tuple[bool, str]:
+    """Run performance tests separately and return whether they pass."""
     env = os.environ.copy()
     env["PYTHONHASHSEED"] = "0"
-    # Ensure UTF-8 encoding on all platforms
     env["PYTHONIOENCODING"] = "utf-8"
 
     try:
         result = subprocess.run(  # noqa: S603
-            [_uv_executable(), "run", "pytest", "tests/test_performance.py", "-v"],
+            [_uv_executable(), "run", "pytest", "tests/test_performance.py", "-q"],
             check=False,
             capture_output=True,
             text=True,
@@ -374,13 +161,12 @@ def check_performance_tests():
             env=env,
             timeout=30,
         )
-
-        # Check if tests passed
-        if result.returncode == 0:
-            return True, result.stdout
-        return False, result.stdout + result.stderr
     except (OSError, subprocess.TimeoutExpired) as e:
         return False, str(e)
+
+    if result.returncode == 0:
+        return True, result.stdout
+    return False, result.stdout + result.stderr
 
 
 def status_exit_decision(
@@ -388,168 +174,107 @@ def status_exit_decision(
     *,
     perf_passed: bool,
     pytest_returncode: int | None,
-    malformed_entries: list[str],
+    junit_error: str | None = None,
 ) -> tuple[int, str]:
     """Return process exit code and final status message."""
     if pytest_returncode is None:
         exit_code = 1
-        message = "Test execution failed before pytest returned a status."
+        status_message = "Test execution failed before pytest returned a status."
+    elif junit_error is not None:
+        exit_code = 1
+        status_message = junit_error
     elif pytest_returncode not in PYTEST_BASELINE_RETURN_CODES:
         exit_code = 1
-        message = f"Pytest execution failed with exit code {pytest_returncode}."
+        status_message = f"Pytest execution failed with exit code {pytest_returncode}."
     elif pytest_returncode == 1 and total_failures == 0:
         exit_code = 1
-        message = "Pytest failed without parseable expected failure counts."
+        status_message = "Pytest failed without JUnit-reported failures."
     elif pytest_returncode == 0 and total_failures > 0:
         exit_code = 1
-        message = "Parsed failure output even though pytest exited successfully."
-    elif malformed_entries:
-        exit_code = 1
-        message = f"Fail log has {len(malformed_entries)} malformed entries."
+        status_message = "JUnit reported failures even though pytest exited successfully."
     elif not perf_passed:
         exit_code = 1
-        message = "Performance tests failed!"
+        status_message = "Performance tests failed!"
     elif total_failures > EXPECTED_FAILURES:
         exit_code = 1
-        message = f"REGRESSION! Too many failures ({total_failures} > EXPECTED_FAILURES)"
+        status_message = f"REGRESSION! Too many failures ({total_failures} > EXPECTED_FAILURES)"
     elif total_failures == EXPECTED_FAILURES:
         exit_code = 0
-        message = "Tests are at expected baseline (EXPECTED_FAILURES failures, performance OK)"
+        status_message = "Tests are at expected baseline (EXPECTED_FAILURES failures, performance OK)"
     else:
         exit_code = 0
-        message = f"IMPROVEMENT! Tests are better than baseline ({total_failures} < EXPECTED_FAILURES failures, performance OK)"
+        status_message = (
+            f"IMPROVEMENT! Tests are better than baseline ({total_failures} < EXPECTED_FAILURES failures, performance OK)"
+        )
 
-    return exit_code, message
+    return exit_code, status_message
 
 
-def main():  # noqa: C901, PLR0912, PLR0915
+def _print_failures(failures: list[FailureDetail]) -> None:
+    """Print a compact failure report."""
+    if not failures:
+        print("\nNo test failures found.")
+        return
+
+    print("\n" + "=" * 70)
+    print("PYTEST FAILURES / ERRORS")
+    print("=" * 70)
+    for index, failure in enumerate(failures, start=1):
+        message = f": {failure.message}" if failure.message else ""
+        print(f"{index:4d}. [{failure.kind}] {_safe_for_console(failure.nodeid)}{_safe_for_console(message)}")
+    print("-" * 70)
+    print(f"TOTAL PYTEST FAILURES / ERRORS: {len(failures)}")
+    print("=" * 70)
+
+
+def main() -> None:
+    """Run status checks and exit according to the configured baseline."""
     print("=" * 70)
     print("SINONYM TEST STATUS CHECKER")
     print("=" * 70)
 
-    # Run all tests
-    print("\nRunning all tests...")
-    output, pytest_returncode = run_tests()
+    with tempfile.TemporaryDirectory(prefix="sinonym-pytest-status-") as tmpdir:
+        junit_path = Path(tmpdir) / "pytest.xml"
 
-    # Combine explicit failure log entries with assertion summaries from pytest
-    # output. Some aggregate tests do not write to SINONYM_FAIL_LOG.
-    fail_log_path = read_fail_log_path_from_output(output)
-    logged = read_fail_log(fail_log_path) if fail_log_path else []
-    failure_report = combine_failure_sources(logged, output)
-    logged_counts = failure_report["logged_counts"]
-    parsed_entries = failure_report["parsed_entries"]
-    malformed_entries = failure_report["malformed_entries"]
-    aggregate_only = failure_report["aggregate_only"]
-    aggregate_deficits = failure_report["aggregate_deficits"]
-    unaggregated_pytest_failures = failure_report["unaggregated_pytest_failures"]
-    total_failures = failure_report["total_failures"]
+        print("\nRunning non-performance tests...")
+        test_run = run_tests(junit_path)
 
-    if total_failures:
-        print("\n" + "=" * 70)
-        print("INDIVIDUAL TEST CASE FAILURES (aggregated counts):")
-        print("=" * 70)
+        junit_error = None
+        failures: list[FailureDetail] = []
+        if test_run.returncode is not None:
+            try:
+                failures = read_junit_failures(junit_path)
+            except JunitReadError as e:
+                junit_error = str(e)
 
-        if logged_counts:
-            print("  From fail log:")
-            for label in sorted(logged_counts):
-                count = logged_counts[label]
-                print(f"    {label}: {count} failures")
-        if aggregate_only or aggregate_deficits:
-            print("  From pytest assertion summaries:")
-            for failure in aggregate_only:
-                print(f"    {failure['name']}: {failure['failures']}/{failure['total']} failures")
-            for failure in aggregate_deficits:
-                print(
-                    f"    {failure['name']}: {failure['failures']} additional failures "
-                    f"({failure['reported_failures']} reported, {failure['logged_failures']} in fail log)",
-                )
-        if unaggregated_pytest_failures:
-            print("  From unaggregated pytest failures/errors:")
-            for failure in unaggregated_pytest_failures:
-                print(f"    {failure['name']}: 1 failure")
-        if malformed_entries:
-            print("  Malformed fail-log entries:")
-            print(f"    {len(malformed_entries)} failures")
-        print("-" * 70)
-        print(f"TOTAL INDIVIDUAL TEST CASE FAILURES: {total_failures}")
-        # Cross-check aggregated total against raw log length
-        if logged and total_failures != len(logged):
-            print("NOTE: Total includes failures not present in the raw fail log.")
-            print(f"  Combined: {total_failures} vs Raw fail log: {len(logged)}")
-        print("=" * 70)
+        _print_failures(failures)
 
-        # Print detailed list of every failing case from the log
-        if parsed_entries:
-            print("\n" + "=" * 70)
-            print("DETAILED FAILURES (from fail log):")
-            print("=" * 70)
-            for i, e in enumerate(parsed_entries, start=1):
-                label = _safe_for_console(e["label"])
-                name = _safe_for_console(e["name"])
-                expected_output = _safe_for_console(e["expected_output"])
-                actual_output = _safe_for_console(e["actual_output"])
-                print(
-                    f"{i:4d}. [{label}] {name} | "
-                    f"expected_success={e['expected_success']} actual_success={e['actual_success']} | "
-                    f"expected={expected_output} | actual={actual_output}",
-                )
-            print("=" * 70)
-
-        if aggregate_only or aggregate_deficits or unaggregated_pytest_failures:
-            print("\n" + "=" * 70)
-            print("DETAILED FAILURES (not in fail log):")
-            print("=" * 70)
-            for failure in aggregate_only:
-                print(f"  [{failure['name']}] {failure['failures']}/{failure['total']} aggregate failures")
-            for failure in aggregate_deficits:
-                labels = ", ".join(failure["logged_labels"])
-                print(
-                    f"  [{failure['name']}] {failure['failures']} additional aggregate failures "
-                    f"beyond fail-log labels: {labels}",
-                )
-            for failure in unaggregated_pytest_failures:
-                message = _safe_for_console(failure["message"])
-                print(f"  [{failure['name']}] {message}")
-            print("=" * 70)
-    else:
-        print("\nNo assertion failures found.")
-        if pytest_returncode not in (0, None):
-            print("(Pytest exited non-zero without parseable expected failure counts.)")
-
-    # Check performance tests
     print("\n" + "=" * 70)
     print("PERFORMANCE TEST STATUS:")
     print("=" * 70)
-
     perf_passed, perf_output = check_performance_tests()
-
     if perf_passed:
         print("Performance tests PASSED")
-
-        # Try to extract performance metrics
-        if "microseconds per name" in perf_output:
-            lines = perf_output.split("\n")
-            for line in lines:
-                if "microseconds per name" in line or "names/second" in line:
-                    print(_safe_for_console(f"  {line.strip()}"))
+        for line in perf_output.splitlines():
+            if "microseconds per name" in line or "names/second" in line:
+                print(_safe_for_console(f"  {line.strip()}"))
     else:
         print("Performance tests FAILED")
         print("Performance test output:")
         print(_safe_for_console(perf_output))
 
-    # Final summary
+    total_failures = len(failures)
     print("\n" + "=" * 70)
     print("SUMMARY:")
     print("=" * 70)
-    print(f"Individual test case failures: {total_failures}")
+    print(f"Pytest failures/errors: {total_failures}")
     print(f"Performance tests: {'PASSED' if perf_passed else 'FAILED'}")
 
-    # Exit code based on status (updated baseline to EXPECTED_FAILURES after config improvements)
     exit_code, status_message = status_exit_decision(
         total_failures,
         perf_passed=perf_passed,
-        pytest_returncode=pytest_returncode,
-        malformed_entries=malformed_entries,
+        pytest_returncode=test_run.returncode,
+        junit_error=junit_error,
     )
     print(f"\n{status_message}")
     sys.exit(exit_code)

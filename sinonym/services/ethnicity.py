@@ -264,7 +264,7 @@ class EthnicityClassificationService:
         }
 
         self._collect_single_token_patterns(tokens, analysis)
-        analysis["korean_given_pairs"] = self._korean_given_pairs(tokens)
+        analysis["korean_given_pairs"] = self._korean_given_pairs(tokens, analysis["surname_type"])
         return analysis
 
     @staticmethod
@@ -286,11 +286,11 @@ class EthnicityClassificationService:
             if token_lower in VIETNAMESE_GIVEN_PATTERNS:
                 analysis["vietnamese_tokens"].append(token_lower)
 
-    def _korean_given_pairs(self, tokens: tuple[str, ...]) -> list[tuple[str, str]]:
+    def _korean_given_pairs(self, tokens: tuple[str, ...], surname_type: str) -> list[tuple[str, str]]:
         """Return Korean given-name pairs under plausible surname positions."""
         seen_pairs = set()
         pairs: list[tuple[str, str]] = []
-        for given_tokens in self._candidate_korean_given_sequences(tokens):
+        for given_tokens in self._candidate_korean_given_sequences(tokens, surname_type):
             for i in range(len(given_tokens) - 1):
                 pair = (given_tokens[i], given_tokens[i + 1])
                 if pair in KOREAN_GIVEN_PAIRS and pair not in seen_pairs:
@@ -299,7 +299,7 @@ class EthnicityClassificationService:
         return pairs
 
     @staticmethod
-    def _candidate_korean_given_sequences(tokens: tuple[str, ...]) -> list[list[str]]:
+    def _candidate_korean_given_sequences(tokens: tuple[str, ...], surname_type: str) -> list[list[str]]:
         """Return plausible given-token spans for Korean pair detection."""
         def split_given_tokens(given_tokens: tuple[str, ...]) -> list[str]:
             split_tokens: list[str] = []
@@ -307,7 +307,10 @@ class EthnicityClassificationService:
                 split_tokens.extend(part.lower() for part in token.split("-") if part)
             return split_tokens
 
-        candidate_given_sequences = [split_given_tokens(tokens[1:])]
+        candidate_given_sequences = []
+        if surname_type in {"korean_only", "korean_overlapping", "none"}:
+            candidate_given_sequences.append(split_given_tokens(tokens[1:]))
+
         last_token = StringManipulationUtils.remove_spaces(tokens[-1]).lower() if tokens else ""
         if len(tokens) >= 2 and last_token in OVERLAPPING_KOREAN_SURNAMES:
             candidate_given_sequences.append(split_given_tokens(tokens[:-1]))

@@ -210,15 +210,22 @@ class BatchFormatPattern:
     """Detected formatting pattern for a batch of names."""
 
     dominant_format: NameFormat
-    confidence: float  # Percentage of names following dominant format
+    confidence: float  # dominant_count / total_count using count-based votes
     surname_first_count: int
     given_first_count: int
     total_count: int
-    threshold_met: bool  # Whether confidence >= threshold (e.g., 67%)
+    threshold_met: bool  # Whether decision_confidence cleared the batch application gate
+    decision_confidence: float = 0.0  # Score used for threshold_met; may use weighted tie-breaking
     vote_margin_count: int = field(init=False)
     vote_margin: float = field(init=False)
+    voting_count: int = field(init=False)
 
     def __post_init__(self) -> None:
+        voting_count = self.surname_first_count + self.given_first_count
+        object.__setattr__(self, "voting_count", voting_count)
+        if self.decision_confidence == 0.0 and self.confidence > 0.0:
+            object.__setattr__(self, "decision_confidence", self.confidence)
+
         margin_count = abs(self.surname_first_count - self.given_first_count)
         object.__setattr__(self, "vote_margin_count", margin_count)
         if self.total_count <= 0:

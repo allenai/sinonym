@@ -208,6 +208,7 @@ author_list = ["Zhang Wei", "Li Ming", "Wang Xiaoli", "Liu Jiaming", "Feng Cha"]
 batch_result = detector.analyze_name_batch(author_list)
 print(f"Format detected: {batch_result.format_pattern.dominant_format}")
 print(f"Confidence: {batch_result.format_pattern.confidence:.1%}")
+print(f"Decision confidence: {batch_result.format_pattern.decision_confidence:.1%}")
 # Expected Output: Format detected: NameFormat.SURNAME_FIRST, Confidence: 94%
 
 for i, result in enumerate(batch_result.results):
@@ -220,7 +221,7 @@ unknown_format_list = ["Wei Zhang", "Ming Li", "Xiaoli Wang"]
 pattern = detector.detect_batch_format(unknown_format_list)
 if pattern.threshold_met:
     print(f"Consistent {pattern.dominant_format} formatting detected")
-    print(f"Safe to process as batch with {pattern.confidence:.1%} confidence")
+    print(f"Safe to process as batch with {pattern.decision_confidence:.1%} decision confidence")
 else:
     print("Mixed formatting detected - process individually")
 
@@ -280,7 +281,7 @@ When processing multiple names together, Sinonym:
 
 1.  **Detects Format Patterns**: Analyzes the entire batch to identify whether names follow a surname-first (e.g., "Zhang Wei") or given-first (e.g., "Wei Zhang") pattern
 2.  **Aggregates Evidence**: Uses frequency statistics across all names to build confidence in the detected pattern
-3.  **Applies Consistent Formatting**: When confidence exceeds 67%, applies the detected pattern to improve parsing of ambiguous individual names
+3.  **Applies Consistent Formatting**: When `decision_confidence` exceeds the configured threshold, applies the detected pattern to improve parsing of ambiguous individual names
 4.  **Tracks Improvements**: Identifies which names benefit from batch context vs. individual processing
 
 ### Key Benefits
@@ -303,6 +304,7 @@ result = detector.analyze_name_batch([
 ])
 print(f"Format detected: {result.format_pattern.dominant_format}")
 print(f"Confidence: {result.format_pattern.confidence:.1%}")
+print(f"Decision confidence: {result.format_pattern.decision_confidence:.1%}")
 print(f"Vote margin: {result.format_pattern.vote_margin:.1%}")
 print(f"Improved names: {len(result.improvements)}")
 print(result.name_order_evidence[0].selected_surname_position)
@@ -330,8 +332,9 @@ evidence.
 `BatchFormatPattern` exposes batch-level convention evidence:
 
 - `dominant_format`, `confidence`, and `threshold_met`
+- `decision_confidence`, the score used by the batch-application gate
 - `surname_first_count`, `given_first_count`, and `total_count`
-- `vote_margin_count` and `vote_margin`
+- `voting_count`, `vote_margin_count`, and `vote_margin`
 
 `BatchParseResult.name_order_evidence` is aligned with `names` and `results`.
 Each `NameOrderEvidence` contains stable evidence for external context-routing
@@ -394,7 +397,7 @@ Batch processing requires a minimum of 2 names and works best with 5+ names for 
 
 **Unambiguous Names**: Some names have only one possible parsing format (e.g., compound given names like "Wei‑Qi Wang"). Batch processing never forces such names into the detected pattern and never raises. These names keep their best individual parse while other Chinese names benefit from the jointly detected order.
 
-**Batch Application Threshold**: Batch detection computes a dominant format and confidence value, then applies the batch format only when the vote is decisive, at least two Latin-only Chinese names participate, and confidence clears the configured threshold. When that threshold is not met, names are processed individually and the detected pattern is still returned as metadata.
+**Batch Application Threshold**: Batch detection keeps count-based evidence (`confidence`, counts, and vote margin) separate from the application decision (`decision_confidence`). Batch formatting is applied only when the direction is confident, at least two Latin-only Chinese names participate, and `decision_confidence` clears the configured threshold. Weak participants can count toward the participant minimum without contributing a direction vote.
 
 **Script Cohorts**: Latin-only names vote in and receive Latin batch formatting. Han-only, explicitly aligned Han/Roman, and other mixed-script names are parsed from their own script evidence so a Latin batch convention does not flip their order.
 

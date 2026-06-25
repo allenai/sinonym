@@ -77,6 +77,15 @@ class TestTimoInterface(unittest.TestCase):
         self.assertIn('"success": true', json_str)
         self.assertIn('"confidence":', json_str)
 
+    def test_format_pattern_exposes_batch_decision_confidence(self):
+        summary = self.predictor.score_name_batch(["J. Liu", "Jing Wan"])
+        pattern = summary.format_pattern
+
+        self.assertEqual(pattern.confidence, 0.5)
+        self.assertGreaterEqual(pattern.decision_confidence, pattern.confidence)
+        self.assertEqual(pattern.voting_count, pattern.surname_first_count + pattern.given_first_count)
+        self.assertTrue(pattern.threshold_met)
+
     def test_compound_surname(self):
         results = self.predictor.predict_batch([Instance(name="Ouyang Ming")])
         if results[0].success:

@@ -14,10 +14,12 @@ class FormatPattern(BaseModel):
 
     dominant_format: str = Field(description="surname_first | given_first | mixed")
     confidence: float = Field(description="dominant_count / total_count")
+    decision_confidence: float = Field(description="score used to decide threshold_met")
     surname_first_count: int
     given_first_count: int
     total_count: int
-    threshold_met: bool = Field(description="confidence >= format_threshold")
+    voting_count: int = Field(description="count of names contributing a confident direction vote")
+    threshold_met: bool = Field(description="decision_confidence >= format_threshold plus gating checks")
 
 
 class Prediction(BaseModel):
@@ -104,9 +106,11 @@ class Predictor:
         return FormatPattern(
             dominant_format=pattern.dominant_format.value,
             confidence=pattern.confidence,
+            decision_confidence=pattern.decision_confidence,
             surname_first_count=pattern.surname_first_count,
             given_first_count=pattern.given_first_count,
             total_count=pattern.total_count,
+            voting_count=pattern.voting_count,
             threshold_met=pattern.threshold_met,
         )
 

@@ -357,8 +357,7 @@ class ChineseNameDetector:
         """Return surname strength from the Han side of an aligned bilingual pair."""
         han_freq = self._data.get_surname_freq(pair.han_token)
         if len(pair.han_pinyin) == 1:
-            pinyin_freq = self._data.get_surname_freq(pair.han_pinyin[0])
-            return max(han_freq, pinyin_freq)
+            return han_freq
 
         pinyin_key = " ".join(pair.han_pinyin)
         compact_key = "".join(pair.han_pinyin)
@@ -367,6 +366,145 @@ class ChineseNameDetector:
             self._data.get_surname_freq(pinyin_key),
             self._data.get_surname_freq(compact_key),
         )
+
+    def _normalize_compact_han_roman_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
+        """Parse compact Han names followed by an exact Roman transliteration."""
+        compact_components = self._compact_han_roman_components(normalized_input)
+        if compact_components is None:
+            return None
+        surname_tokens, given_tokens, original_order = compact_components
+
+        try:
+            return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
+        except ValueError as e:
+            return ParseResult.failure(str(e))
+
+    def _compact_han_roman_components(
+        self,
+        normalized_input: NormalizedInput,
+    ) -> tuple[list[str], list[str], list[str]] | None:
+        """Return parsed components for exact compact Han/Roman transliterations."""
+        han_groups = [token for token in normalized_input.tokens if self._is_source_han_token(token)]
+        roman_tokens = [
+            clean_token
+            for token in normalized_input.tokens
+            if self._is_source_roman_token(token)
+            for clean_token in [self._clean_source_roman_token(token)]
+            if clean_token
+        ]
+
+        source_token_count = len(han_groups) + len(roman_tokens)
+        if len(han_groups) == 1 and source_token_count == len(normalized_input.tokens) and roman_tokens:
+            han_group = han_groups[0]
+            han_pinyin = tuple(self._cache_service.han_to_pinyin_fast(han_group))
+            if (
+                len(han_pinyin) >= self._config.min_tokens_required
+                and self._roman_tokens_match_han_pinyin(roman_tokens, han_pinyin)
+            ):
+                surname_pinyin_length = self._han_surname_prefix_length(han_group, han_pinyin)
+                if 0 < surname_pinyin_length < len(han_pinyin):
+                    split_tokens = self._split_roman_tokens_for_han_prefix(
+                        roman_tokens,
+                        han_pinyin,
+                        surname_pinyin_length,
+                    )
+                    if split_tokens is not None:
+                        surname_tokens, given_tokens = split_tokens
+                        return surname_tokens, given_tokens, ["surname", "given"]
+
+                surname_pinyin_length = self._han_surname_suffix_length(han_group, han_pinyin)
+                if 0 < surname_pinyin_length < len(han_pinyin):
+                    split_tokens = self._split_roman_tokens_for_han_suffix(
+                        roman_tokens,
+                        han_pinyin,
+                        surname_pinyin_length,
+                    )
+                    if split_tokens is not None:
+                        given_tokens, surname_tokens = split_tokens
+                        return surname_tokens, given_tokens, ["given", "surname"]
+        return None
+
+    def _is_source_han_token(self, token: str) -> bool:
+        """Return whether a source token is entirely CJK."""
+        return bool(token) and all(self._config.cjk_pattern.search(char) for char in token)
+
+    def _is_source_roman_token(self, token: str) -> bool:
+        """Return whether a source token has Roman letters and no CJK characters."""
+        return bool(
+            token
+            and self._config.ascii_alpha_pattern.search(token)
+            and not self._config.cjk_pattern.search(token),
+        )
+
+    def _clean_source_roman_token(self, token: str) -> str:
+        """Clean a source Roman token while preserving source capitalization."""
+        return self._config.clean_roman_pattern.sub("", token)
+
+    def _roman_tokens_match_han_pinyin(self, roman_tokens: list[str], han_pinyin: tuple[str, ...]) -> bool:
+        """Return whether Roman source tokens exactly transliterate the Han pinyin."""
+        roman_joined = "".join(self._normalizer.norm(token) for token in roman_tokens)
+        han_joined = "".join(self._normalizer.norm(token) for token in han_pinyin)
+        return roman_joined == han_joined
+
+    def _han_surname_prefix_length(self, han_group: str, han_pinyin: tuple[str, ...]) -> int:
+        """Return the Han surname prefix length in pinyin tokens."""
+        if len(han_pinyin) >= self._config.min_tokens_required:
+            first_two_pinyin = list(han_pinyin[:2])
+            first_two_han = han_group[:2]
+            if self._data.get_surname_freq(first_two_han) > 0 or self._is_compound_surname_group(first_two_pinyin, {}):
+                return 2
+
+        first_han = han_group[0]
+        if self._data.get_surname_freq(first_han) > 0:
+            return 1
+        return 0
+
+    def _han_surname_suffix_length(self, han_group: str, han_pinyin: tuple[str, ...]) -> int:
+        """Return the Han surname suffix length in pinyin tokens."""
+        if len(han_pinyin) >= self._config.min_tokens_required:
+            last_two_pinyin = list(han_pinyin[-2:])
+            last_two_han = han_group[-2:]
+            if self._data.get_surname_freq(last_two_han) > 0 or self._is_compound_surname_group(last_two_pinyin, {}):
+                return 2
+
+        last_han = han_group[-1]
+        if self._data.get_surname_freq(last_han) > 0:
+            return 1
+        return 0
+
+    def _split_roman_tokens_for_han_prefix(
+        self,
+        roman_tokens: list[str],
+        han_pinyin: tuple[str, ...],
+        prefix_length: int,
+    ) -> tuple[list[str], list[str]] | None:
+        """Split Roman tokens at the boundary matching a Han pinyin prefix."""
+        prefix_target = "".join(self._normalizer.norm(token) for token in han_pinyin[:prefix_length])
+        current = ""
+        for index, token in enumerate(roman_tokens, start=1):
+            current += self._normalizer.norm(token)
+            if current == prefix_target:
+                return roman_tokens[:index], roman_tokens[index:]
+            if not prefix_target.startswith(current):
+                return None
+        return None
+
+    def _split_roman_tokens_for_han_suffix(
+        self,
+        roman_tokens: list[str],
+        han_pinyin: tuple[str, ...],
+        suffix_length: int,
+    ) -> tuple[list[str], list[str]] | None:
+        """Split Roman tokens at the boundary matching a Han pinyin suffix."""
+        suffix_target = "".join(self._normalizer.norm(token) for token in han_pinyin[-suffix_length:])
+        current = ""
+        for index in range(len(roman_tokens) - 1, -1, -1):
+            current = self._normalizer.norm(roman_tokens[index]) + current
+            if current == suffix_target:
+                return roman_tokens[:index], roman_tokens[index:]
+            if not suffix_target.endswith(current):
+                return None
+        return None
 
     def _normalize_spaced_all_chinese_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
         """Parse all-Han names whose whitespace already separates name components."""
@@ -468,6 +606,10 @@ class ChineseNameDetector:
         aligned_bilingual_result = self._normalize_aligned_bilingual_name(normalized_input)
         if aligned_bilingual_result is not None:
             return aligned_bilingual_result
+
+        compact_han_roman_result = self._normalize_compact_han_roman_name(normalized_input)
+        if compact_han_roman_result is not None:
+            return compact_han_roman_result
 
         # Try parsing in both orders - for all-Chinese inputs, choose best scoring parse
 
@@ -801,12 +943,13 @@ class ChineseNameDetector:
             format_threshold: Minimum percentage (0.0-1.0) required for format detection
 
         Returns:
-            BatchFormatPattern indicating the dominant format and confidence
+            BatchFormatPattern indicating the dominant format, count confidence,
+            and decision confidence used for batch application
 
         Example:
             pattern = detector.detect_batch_format(["Zhang Wei", "Li Ming", "Wang Xiaoli"])
             if pattern.threshold_met:
-                print(f"Detected {pattern.dominant_format} with {pattern.confidence:.1%} confidence")
+                print(f"Detected {pattern.dominant_format} with {pattern.decision_confidence:.1%} confidence")
         """
         self._ensure_initialized()
 
