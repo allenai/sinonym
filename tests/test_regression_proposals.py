@@ -621,6 +621,71 @@ def test_aligned_bilingual_pairs_use_han_identity(detector):
     assert roman_first_given_first.parsed_original_order.order == ["given", "surname"]
 
 
+def test_ambiguous_aligned_single_char_pairs_do_not_force_frequency_flip(detector):
+    raw_name = "Lin \u6797 Gu \u8c37"
+
+    individual = detector.normalize_name(raw_name)
+    batch = detector.analyze_name_batch([raw_name, "Ming Li", "Wei Zhang"])
+
+    assert individual.success
+    assert individual.result == "Lin Gu"
+    assert individual.parsed.surname == "Gu"
+    assert individual.parsed.given_name == "Lin"
+    assert individual.parsed_original_order.order == ["given", "surname"]
+    assert batch.results[0].result == individual.result
+
+
+def test_weak_roman_han_pair_uses_source_order_for_reported_single_char_flip(detector):
+    result = detector.normalize_name("Zhong \u949f Shi \u65f6")
+
+    assert result.success
+    assert result.result == "Zhong Shi"
+    assert result.parsed.surname == "Shi"
+    assert result.parsed.given_name == "Zhong"
+    assert result.parsed_original_order.order == ["given", "surname"]
+
+
+def test_strong_first_surname_roman_han_pair_keeps_han_identity(detector):
+    result = detector.normalize_name("Zhang \u5f20 Wei \u4f1f")
+
+    assert result.success
+    assert result.result == "Wei Zhang"
+    assert result.parsed.surname == "Zhang"
+    assert result.parsed.given_name == "Wei"
+    assert result.parsed_original_order.order == ["surname", "given"]
+
+
+def test_zero_last_surname_signal_roman_han_pair_keeps_han_identity(detector):
+    result = detector.normalize_name("Hong \u6d2a Yan \u8273")
+
+    assert result.success
+    assert result.result == "Yan Hong"
+    assert result.parsed.surname == "Hong"
+    assert result.parsed.given_name == "Yan"
+    assert result.parsed_original_order.order == ["surname", "given"]
+
+
+def test_han_roman_aligned_single_char_pairs_keep_han_order(detector):
+    result = detector.normalize_name("\u5b89 An \u9759 Jing")
+
+    assert result.success
+    assert result.result == "Jing An"
+    assert result.parsed.surname == "An"
+    assert result.parsed.given_name == "Jing"
+    assert result.parsed_original_order.order == ["surname", "given"]
+
+
+def test_aligned_bilingual_compound_surname_preserves_compact_roman_token(detector):
+    result = detector.normalize_name("\u5efa Jian \u6b27\u9633 Ouyang")
+
+    assert result.success
+    assert result.result == "Jian Ouyang"
+    assert result.parsed.surname == "Ouyang"
+    assert result.parsed.surname_tokens == ["Ouyang"]
+    assert result.parsed.given_name == "Jian"
+    assert result.parsed_original_order.order == ["given", "surname"]
+
+
 @pytest.mark.parametrize(
     ("raw_name", "expected", "expected_order"),
     [

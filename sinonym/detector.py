@@ -193,6 +193,8 @@ from sinonym.services import (
 from sinonym.services.process_pool import PersistentMultiprocessNormalizer, normalize_names_multiprocess
 
 BILINGUAL_SURNAME_STRENGTH_RATIO_MIN = 5.0
+BILINGUAL_ROMAN_HAN_SOURCE_ORDER_RATIO_MAX = 12.0
+BILINGUAL_ENDPOINT_PAIR_COUNT = 2
 
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CHINESE NAME DETECTOR CLASS
@@ -333,6 +335,19 @@ class ChineseNameDetector:
             return None
 
         surname_strengths = [self._bilingual_pair_surname_strength(pair) for pair in pairs]
+        source_order_result = self._normalize_weak_roman_han_pair_order(normalized_input, pairs, surname_strengths)
+        if source_order_result is not None:
+            return source_order_result
+
+        return self._normalize_bilingual_pairs_by_han_identity(normalized_input, pairs, surname_strengths)
+
+    def _normalize_bilingual_pairs_by_han_identity(
+        self,
+        normalized_input: NormalizedInput,
+        pairs,
+        surname_strengths: list[float],
+    ) -> ParseResult | None:
+        """Parse aligned bilingual pairs by the strongest Han surname signal."""
         best_strength = max(surname_strengths)
         if best_strength <= 0:
             return None
@@ -352,6 +367,58 @@ class ChineseNameDetector:
             return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
         except ValueError as e:
             return ParseResult.failure(str(e))
+
+    def _normalize_weak_roman_han_pair_order(
+        self,
+        normalized_input: NormalizedInput,
+        pairs,
+        surname_strengths: list[float],
+    ) -> ParseResult | None:
+        """Use source order for weak two-pair Latin-Han annotations."""
+        if len(pairs) != BILINGUAL_ENDPOINT_PAIR_COUNT or any(len(pair.han_pinyin) != 1 for pair in pairs):
+            return None
+        if not self._is_roman_han_bilingual_pair_input(normalized_input):
+            return None
+
+        first_strength, last_strength = surname_strengths
+        use_source_order = False
+        if last_strength > 0:
+            stronger = max(first_strength, last_strength)
+            weaker = min(first_strength, last_strength)
+            use_source_order = last_strength >= first_strength or stronger / weaker < BILINGUAL_ROMAN_HAN_SOURCE_ORDER_RATIO_MAX
+
+        if not use_source_order:
+            return None
+
+        surname_tokens = [pairs[-1].roman_token]
+        given_tokens = [pair.roman_token for pair in pairs[:-1]]
+        try:
+            return self._format_parse_result(surname_tokens, given_tokens, normalized_input, ["given", "surname"])
+        except ValueError as e:
+            return ParseResult.failure(str(e))
+
+    def _is_roman_han_bilingual_pair_input(self, normalized_input: NormalizedInput) -> bool:
+        """Return whether the source is exactly two Roman-Han aligned pairs."""
+        tokens = list(normalized_input.tokens)
+        if len(tokens) != BILINGUAL_ENDPOINT_PAIR_COUNT * 2:
+            return False
+
+        return all(
+            self._is_roman_source_token(tokens[index]) and self._is_han_source_token(tokens[index + 1])
+            for index in range(0, len(tokens), 2)
+        )
+
+    def _is_han_source_token(self, token: str) -> bool:
+        """Return whether the original source token is entirely CJK."""
+        return bool(token) and all(self._config.cjk_pattern.search(char) for char in token)
+
+    def _is_roman_source_token(self, token: str) -> bool:
+        """Return whether the original source token contains Roman letters and no CJK."""
+        return bool(
+            token
+            and self._config.ascii_alpha_pattern.search(token)
+            and not self._config.cjk_pattern.search(token),
+        )
 
     def _bilingual_pair_surname_strength(self, pair) -> float:
         """Return surname strength from the Han side of an aligned bilingual pair."""
