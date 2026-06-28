@@ -5,11 +5,8 @@ from pydantic import BaseModel, BaseSettings, Field
 from sinonym.detector import ChineseNameDetector
 
 
-class ImmutableModel(BaseModel):
-    """Immutable Pydantic model for TIMO response contracts."""
-
-    class Config:
-        allow_mutation = False
+class TimoModel(BaseModel):
+    """Base Pydantic model for TIMO request and response contracts."""
 
 
 class NameFormatValue(str, Enum):
@@ -40,11 +37,11 @@ class SurnamePositionValue(str, Enum):
     UNKNOWN = "unknown"
 
 
-class Instance(ImmutableModel):
+class Instance(TimoModel):
     name: str = Field(description="Name string to detect/normalize as Chinese")
 
 
-class FormatPattern(ImmutableModel):
+class FormatPattern(TimoModel):
     """Batch-level order detection (surname-first vs given-first)."""
 
     dominant_format: NameFormatValue
@@ -57,7 +54,7 @@ class FormatPattern(ImmutableModel):
     threshold_met: bool = Field(description="decision_confidence >= format_threshold plus gating checks")
 
 
-class Prediction(ImmutableModel):
+class Prediction(TimoModel):
     success: bool = Field(description="Whether the name was recognized as Chinese")
     error_message: str | None = Field(default=None, description="Reason for failure")
     given_name: str | None = Field(default=None)
@@ -67,28 +64,28 @@ class Prediction(ImmutableModel):
     format_pattern: FormatPattern | None = Field(default=None, description="shared batch order pattern (same on every row)")
 
 
-class Candidate(ImmutableModel):
-    surname_tokens: tuple[str, ...]
-    given_tokens: tuple[str, ...]
+class Candidate(TimoModel):
+    surname_tokens: list[str]
+    given_tokens: list[str]
     score: float
     format: NameFormatValue
     original_compound_format: str | None = None
 
 
-class IndividualAnalysis(ImmutableModel):
+class IndividualAnalysis(TimoModel):
     """Per-name analysis, pre batch-override."""
 
     raw_name: str
-    candidates: tuple[Candidate, ...]
+    candidates: list[Candidate]
     best_candidate: Candidate | None = None
     confidence: float = Field(description="softmax over candidate scores for best candidate")
 
 
-class NameOrderEvidence(ImmutableModel):
+class NameOrderEvidence(TimoModel):
     """Per-name evidence aligned with batch names and results."""
 
     raw_name: str
-    raw_tokens: tuple[str, ...]
+    raw_tokens: list[str]
     raw_token_count: int
     script_representation: ScriptRepresentationValue
     batch_participant: bool
@@ -103,27 +100,27 @@ class NameOrderEvidence(ImmutableModel):
     alternate_endpoint_surname_frequency: float | None = None
     selected_over_alternate_surname_frequency_ratio: float | None = None
     has_all_caps_token: bool
-    all_caps_tokens: tuple[str, ...]
+    all_caps_tokens: list[str]
 
 
-class BatchPrediction(ImmutableModel):
+class BatchPrediction(TimoModel):
     """Full result of analyze_name_batch."""
 
-    names: tuple[str, ...]
-    results: tuple[Prediction, ...]
+    names: list[str]
+    results: list[Prediction]
     format_pattern: FormatPattern
-    individual_analyses: tuple[IndividualAnalysis, ...]
-    improvements: tuple[int, ...] = Field(description="indices of names changed by batch context")
-    name_order_evidence: tuple[NameOrderEvidence, ...]
+    individual_analyses: list[IndividualAnalysis]
+    improvements: list[int] = Field(description="indices of names changed by batch context")
+    name_order_evidence: list[NameOrderEvidence]
 
 
-class BatchSummary(ImmutableModel):
+class BatchSummary(TimoModel):
     """Trimmed analyze_name_batch result: drops candidates, keeps per-name confidence only."""
 
-    names: tuple[str, ...]
-    results: tuple[Prediction, ...]
+    names: list[str]
+    results: list[Prediction]
     format_pattern: FormatPattern
-    confidences: tuple[float, ...] = Field(description="per-name confidence from individual_analyses, aligned with results")
+    confidences: list[float] = Field(description="per-name confidence from individual_analyses, aligned with results")
 
 
 class PredictorConfig(BaseSettings):
@@ -172,8 +169,8 @@ class Predictor:
 
     def _to_candidate(self, candidate) -> Candidate:
         return Candidate(
-            surname_tokens=tuple(candidate.surname_tokens),
-            given_tokens=tuple(candidate.given_tokens),
+            surname_tokens=list(candidate.surname_tokens),
+            given_tokens=list(candidate.given_tokens),
             score=candidate.score,
             format=candidate.format.value,
             original_compound_format=candidate.original_compound_format,
@@ -182,7 +179,7 @@ class Predictor:
     def _to_individual_analysis(self, analysis) -> IndividualAnalysis:
         return IndividualAnalysis(
             raw_name=analysis.raw_name,
-            candidates=tuple(self._to_candidate(c) for c in analysis.candidates),
+            candidates=[self._to_candidate(c) for c in analysis.candidates],
             best_candidate=(self._to_candidate(analysis.best_candidate) if analysis.best_candidate is not None else None),
             confidence=analysis.confidence,
         )
@@ -190,7 +187,7 @@ class Predictor:
     def _to_name_order_evidence(self, evidence) -> NameOrderEvidence:
         return NameOrderEvidence(
             raw_name=evidence.raw_name,
-            raw_tokens=tuple(evidence.raw_tokens),
+            raw_tokens=list(evidence.raw_tokens),
             raw_token_count=evidence.raw_token_count,
             script_representation=evidence.script_representation or ScriptRepresentationValue.UNKNOWN.value,
             batch_participant=evidence.batch_participant,
@@ -205,25 +202,25 @@ class Predictor:
             alternate_endpoint_surname_frequency=evidence.alternate_endpoint_surname_frequency,
             selected_over_alternate_surname_frequency_ratio=(evidence.selected_over_alternate_surname_frequency_ratio),
             has_all_caps_token=evidence.has_all_caps_token,
-            all_caps_tokens=tuple(evidence.all_caps_tokens),
+            all_caps_tokens=list(evidence.all_caps_tokens),
         )
 
     def _to_batch_prediction(self, batch_result) -> BatchPrediction:
         return BatchPrediction(
-            names=tuple(batch_result.names),
-            results=tuple(self._to_prediction(r) for r in batch_result.results),
+            names=list(batch_result.names),
+            results=[self._to_prediction(r) for r in batch_result.results],
             format_pattern=self._to_format_pattern(batch_result.format_pattern),
-            individual_analyses=tuple(self._to_individual_analysis(a) for a in batch_result.individual_analyses),
-            improvements=tuple(batch_result.improvements),
-            name_order_evidence=tuple(self._to_name_order_evidence(e) for e in batch_result.name_order_evidence),
+            individual_analyses=[self._to_individual_analysis(a) for a in batch_result.individual_analyses],
+            improvements=list(batch_result.improvements),
+            name_order_evidence=[self._to_name_order_evidence(e) for e in batch_result.name_order_evidence],
         )
 
     def _to_batch_summary(self, batch_result) -> BatchSummary:
         return BatchSummary(
-            names=tuple(batch_result.names),
-            results=tuple(self._to_prediction(r) for r in batch_result.results),
+            names=list(batch_result.names),
+            results=[self._to_prediction(r) for r in batch_result.results],
             format_pattern=self._to_format_pattern(batch_result.format_pattern),
-            confidences=tuple(a.confidence for a in batch_result.individual_analyses),
+            confidences=[a.confidence for a in batch_result.individual_analyses],
         )
 
     # ---- timo entrypoint --------------------------------------------------

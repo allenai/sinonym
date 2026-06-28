@@ -115,11 +115,11 @@ def test_compound_surname(predictor: Predictor):
     assert results[0].surname == "Ouyang"
 
 
-def test_prediction_models_are_immutable_and_enum_typed(predictor: Predictor):
+def test_prediction_models_keep_mutable_backwards_compatible_shapes_and_enum_typed(predictor: Predictor):
     results = predictor.predict_batch([Instance(name="Li Wei"), Instance(name="Zhang Ming")])
 
-    with pytest.raises(TypeError):
-        results[0].format_pattern.dominant_format = "mutated"
+    results[0].format_pattern.threshold_met = False
+    assert results[0].format_pattern.threshold_met is False
     assert isinstance(results[1].format_pattern.dominant_format, NameFormatValue)
     assert results[1].format_pattern.dominant_format == NameFormatValue.SURNAME_FIRST
 
@@ -134,6 +134,26 @@ def test_prediction_models_are_immutable_and_enum_typed(predictor: Predictor):
             voting_count=0,
             threshold_met=False,
         )
+
+
+def test_batch_models_keep_list_shaped_python_api(predictor: Predictor):
+    names = ["Li Wei", "Wang Weiming"]
+
+    summary = predictor.score_name_batch(names)
+    batch = predictor.analyze_name_batch(names)
+
+    assert summary.names == names
+    assert isinstance(summary.names, list)
+    assert isinstance(summary.results, list)
+    assert isinstance(summary.confidences, list)
+    assert isinstance(batch.names, list)
+    assert isinstance(batch.results, list)
+    assert isinstance(batch.individual_analyses, list)
+    assert isinstance(batch.improvements, list)
+    assert isinstance(batch.name_order_evidence, list)
+    assert isinstance(batch.name_order_evidence[0].raw_tokens, list)
+    assert isinstance(batch.name_order_evidence[0].all_caps_tokens, list)
+    assert isinstance(batch.individual_analyses[0].candidates, list)
 
 
 def test_empty_batch(predictor: Predictor):

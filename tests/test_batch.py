@@ -158,6 +158,36 @@ def test_name_order_evidence_supports_external_context_routing(detector):
     )
 
 
+def test_name_order_evidence_uses_selected_compound_surname_span_frequency(detector):
+    """Spaced compound selected surnames use the whole surname span for frequency evidence."""
+    names = ["Zhu Ge Liang", "Ou Yang Wei"]
+
+    result = detector.analyze_name_batch(names, format_threshold=0.0)
+
+    zhu_ge_evidence = result.name_order_evidence[0]
+    zhu_ge_parse = result.results[0].parsed_original_order
+    assert zhu_ge_parse is not None
+    assert zhu_ge_parse.surname_tokens == ["Zhu", "Ge"]
+    assert zhu_ge_evidence.selected_surname_position == "first"
+    assert zhu_ge_evidence.selected_surname_frequency is not None
+    assert zhu_ge_evidence.selected_surname_frequency != zhu_ge_evidence.first_token_surname_frequency
+    assert zhu_ge_evidence.alternate_endpoint_surname_frequency is not None
+    assert zhu_ge_evidence.alternate_endpoint_surname_frequency != zhu_ge_evidence.last_token_surname_frequency
+    assert zhu_ge_evidence.selected_over_alternate_surname_frequency_ratio is None
+
+    trailing_result = detector.analyze_name_batch(["Liang Zhu Ge", "Wei Ou Yang"], format_threshold=0.0)
+    trailing_zhu_ge_evidence = trailing_result.name_order_evidence[0]
+    trailing_zhu_ge_parse = trailing_result.results[0].parsed_original_order
+    assert trailing_zhu_ge_parse is not None
+    assert trailing_zhu_ge_parse.surname_tokens == ["Zhu", "Ge"]
+    assert trailing_zhu_ge_evidence.selected_surname_position == "last"
+    assert trailing_zhu_ge_evidence.selected_surname_frequency is not None
+    assert trailing_zhu_ge_evidence.selected_surname_frequency != trailing_zhu_ge_evidence.last_token_surname_frequency
+    assert trailing_zhu_ge_evidence.alternate_endpoint_surname_frequency is not None
+    assert trailing_zhu_ge_evidence.alternate_endpoint_surname_frequency != trailing_zhu_ge_evidence.first_token_surname_frequency
+    assert trailing_zhu_ge_evidence.selected_over_alternate_surname_frequency_ratio is None
+
+
 def test_name_order_evidence_exposes_all_caps_cue(detector):
     """All-caps source tokens are exposed without changing the parse decision."""
     names = ["Ren Qing FENG", "Li Ying DU", "Zhen Quan GUO"]

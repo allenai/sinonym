@@ -35,6 +35,8 @@ STRONG_CJK_NON_PERSON_MARKERS = (
     "学部",
 )
 
+STANDALONE_CJK_NON_PERSON_MARKERS = frozenset(STRONG_CJK_NON_PERSON_MARKERS)
+
 
 class NonPersonInputDetectionService:
     """Detect obvious organization or multi-author cells before name parsing."""
@@ -57,10 +59,33 @@ class NonPersonInputDetectionService:
 
     def _has_cjk_non_person_marker(self, raw_name: str) -> bool:
         """Return whether a CJK string contains strong organization/editor evidence."""
-        cjk_chars = sum(1 for char in raw_name if self._config.cjk_pattern.search(char))
+        cjk_chunks = self._cjk_chunks(raw_name)
+        if any(chunk in STANDALONE_CJK_NON_PERSON_MARKERS for chunk in cjk_chunks):
+            return True
+
+        cjk_chars = sum(len(chunk) for chunk in cjk_chunks)
         return cjk_chars >= MIN_CJK_NON_PERSON_CHARS and any(
             marker in raw_name for marker in STRONG_CJK_NON_PERSON_MARKERS
         )
+
+    def _cjk_chunks(self, raw_name: str) -> list[str]:
+        """Return contiguous CJK runs split by non-CJK separators."""
+        chunks: list[str] = []
+        current: list[str] = []
+
+        for char in raw_name:
+            if self._config.cjk_pattern.search(char):
+                current.append(char)
+                continue
+
+            if current:
+                chunks.append("".join(current))
+                current = []
+
+        if current:
+            chunks.append("".join(current))
+
+        return chunks
 
     def _has_latin_author_list_shape(self, raw_name: str) -> bool:
         """Return whether a Latin string looks like several Chinese author names collapsed together."""

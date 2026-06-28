@@ -742,6 +742,42 @@ def test_non_person_inputs_are_rejected_before_parsing(detector):
         assert result.error_message == NON_PERSON_FAILURE_REASON
 
 
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "\u7269\u7406\u7cfb",
+        "\u5b9e\u9a8c\u5ba4",
+        "\u7814\u7a76\u6240",
+        "\u5b66\u9662",
+        "\u5927\u5b66",
+        "\u516c\u53f8",
+        "\u5f20\u4f1f(\u7269\u7406\u7cfb)",
+    ],
+)
+def test_short_standalone_cjk_non_person_markers_are_rejected(detector, raw_name):
+    result = detector.normalize_name(raw_name)
+
+    assert not result.success
+    assert result.error_message == NON_PERSON_FAILURE_REASON
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("\u5f20\u4f1f", "Wei Zhang"),
+        ("\u738b\u529b", "Li Wang"),
+        ("\u6b27\u9633\u4fee", "Xiu Ou Yang"),
+        ("\u5f20 \u4f1f", "Wei Zhang"),
+        ("\u5f20\u4f1f Zhang Wei", "Wei Zhang"),
+    ],
+)
+def test_short_cjk_non_person_marker_gate_preserves_person_names(detector, raw_name, expected):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success, f"{raw_name!r}: expected accepted name, got {result.error_message!r}"
+    assert result.result == expected
+
+
 def test_non_person_batch_rows_do_not_vote(detector):
     raw_name = "Tian Qiang Zhou Hui Zhu Rui"
     names = [raw_name, "Xin Liu", "Yang Li", "Wei Li"]

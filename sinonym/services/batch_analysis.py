@@ -78,6 +78,21 @@ class BatchCandidateEntry:
         )
 
 
+@dataclass(frozen=True)
+class SurnameEndpointSpan:
+    """Matched raw-token span for surname endpoint evidence."""
+
+    position: str
+    start: int
+    end: int
+    lookup_key: str
+
+    @property
+    def width(self) -> int:
+        """Return the number of raw tokens covered by the span."""
+        return self.end - self.start
+
+
 @dataclass
 class BatchVoteStats:
     """Vote totals used to detect a batch-wide name order."""
@@ -945,14 +960,24 @@ class BatchAnalysisService:
         for entry, result in zip(name_candidates, results, strict=False):
             normalized_input = normalizer.apply(entry.name)
             raw_tokens = list(normalized_input.roman_tokens)
+            normalized_raw_tokens = [normalizer.norm(token) for token in raw_tokens]
             first_freq, last_freq = self._endpoint_surname_frequencies(raw_tokens, normalizer, data)
             selected_format = self._format_from_parse_result(result)
             individual_format = entry.best_candidate.format if entry.best_candidate else NameFormat.MIXED
-            selected_position = self._selected_surname_position(result, raw_tokens, normalizer)
+            selected_span = self._selected_surname_span(
+                result,
+                raw_tokens,
+                normalized_raw_tokens,
+                normalizer,
+                normalized_input.compound_metadata,
+            )
+            selected_position = selected_span.position if selected_span is not None else "unknown"
             selected_freq, alternate_freq, selected_ratio = self._selected_endpoint_frequency_evidence(
-                selected_position,
-                first_freq,
-                last_freq,
+                selected_span,
+                raw_tokens,
+                normalized_raw_tokens,
+                normalized_input.compound_metadata,
+                data,
             )
             all_caps_tokens = self._all_caps_tokens(raw_tokens)
             batch_participant = self._candidate_entry_participates(entry)
@@ -1000,52 +1025,90 @@ class BatchAnalysisService:
             return NameFormat.GIVEN_FIRST
         return NameFormat.MIXED
 
-    def _selected_surname_position(self, result: ParseResult, raw_tokens: list[str], normalizer) -> str:
-        """Return where the selected surname appears in the normalized input."""
-        position = "unknown"
+    def _selected_surname_span(
+        self,
+        result: ParseResult,
+        raw_tokens: list[str],
+        normalized_raw_tokens: list[str],
+        normalizer,
+        compound_metadata,
+    ) -> SurnameEndpointSpan | None:
+        """Return the selected surname's matched span in the normalized input."""
         if not result.success or result.parsed_original_order is None:
-            return position
+            return None
 
         surname_tokens = result.parsed_original_order.surname_tokens
         if not surname_tokens or not raw_tokens:
-            return position
+            return None
 
-        normalized_raw_tokens = [normalizer.norm(token) for token in raw_tokens]
-        selected_surname = "".join(normalizer.norm(token) for token in surname_tokens)
+        normalized_surname_tokens = [normalizer.norm(token) for token in surname_tokens]
+        selected_surname = "".join(normalized_surname_tokens)
         selected_format = self._format_from_parse_result(result)
-        if (
-            selected_surname
-            and selected_format == NameFormat.SURNAME_FIRST
-            and self._window_joins_to(
-                normalized_raw_tokens,
-                selected_surname,
-                0,
-                len(normalized_raw_tokens),
+        if selected_surname and selected_format == NameFormat.SURNAME_FIRST:
+            for end in range(1, len(normalized_raw_tokens) + 1):
+                if "".join(normalized_raw_tokens[:end]) == selected_surname:
+                    lookup_key = self._selected_surname_lookup_key(
+                        normalized_surname_tokens,
+                        raw_tokens,
+                        0,
+                        end,
+                        compound_metadata,
+                    )
+                    return SurnameEndpointSpan("first", 0, end, lookup_key)
+
+        if selected_surname and selected_format == NameFormat.GIVEN_FIRST:
+            for start in range(len(normalized_raw_tokens)):
+                if "".join(normalized_raw_tokens[start:]) == selected_surname:
+                    lookup_key = self._selected_surname_lookup_key(
+                        normalized_surname_tokens,
+                        raw_tokens,
+                        start,
+                        len(raw_tokens),
+                        compound_metadata,
+                    )
+                    return SurnameEndpointSpan(
+                        "last",
+                        start,
+                        len(raw_tokens),
+                        lookup_key,
+                    )
+
+        if selected_surname and self._internal_window_joins_to(normalized_raw_tokens, selected_surname):
+            return SurnameEndpointSpan(
+                position="internal",
+                start=-1,
+                end=-1,
+                lookup_key=self._selected_surname_lookup_key(
+                    normalized_surname_tokens,
+                    raw_tokens,
+                    0,
+                    None,
+                    compound_metadata,
+                ),
             )
-        ):
-            position = "first"
-        elif (
-            selected_surname
-            and selected_format == NameFormat.GIVEN_FIRST
-            and self._suffix_joins_to(
-                normalized_raw_tokens,
-                selected_surname,
-            )
-        ):
-            position = "last"
-        elif selected_surname and self._internal_window_joins_to(normalized_raw_tokens, selected_surname):
-            position = "internal"
-        return position
+        return None
 
     @staticmethod
-    def _window_joins_to(tokens: list[str], target: str, start: int, max_end: int) -> bool:
-        """Return whether any token window starting at start joins to target."""
-        return any("".join(tokens[start:end]) == target for end in range(start + 1, max_end + 1))
-
-    @staticmethod
-    def _suffix_joins_to(tokens: list[str], target: str) -> bool:
-        """Return whether any token suffix joins to target."""
-        return any("".join(tokens[start:]) == target for start in range(len(tokens)))
+    def _selected_surname_lookup_key(
+        normalized_surname_tokens: list[str],
+        raw_tokens: list[str],
+        start: int,
+        end: int | None,
+        compound_metadata,
+    ) -> str:
+        """Return a surname lookup key for the selected parsed surname."""
+        if end is not None:
+            compound_target = BatchAnalysisService._compound_target_for_span(
+                raw_tokens,
+                start,
+                end,
+                compound_metadata,
+            )
+            if compound_target is not None:
+                return compound_target
+        if len(normalized_surname_tokens) > 1:
+            return " ".join(normalized_surname_tokens)
+        return normalized_surname_tokens[0]
 
     @staticmethod
     def _internal_window_joins_to(tokens: list[str], target: str) -> bool:
@@ -1057,6 +1120,23 @@ class BatchAnalysisService:
         return False
 
     @staticmethod
+    def _compound_target_for_span(raw_tokens: list[str], start: int, end: int, compound_metadata) -> str | None:
+        """Return the shared compound target for a raw span when metadata identifies one."""
+        if compound_metadata is None or not (0 <= start < end <= len(raw_tokens)):
+            return None
+
+        target: str | None = None
+        for token in raw_tokens[start:end]:
+            meta = compound_metadata.get(token)
+            if not meta or not meta.is_compound or not meta.compound_target:
+                return None
+            if target is None:
+                target = meta.compound_target
+            elif target != meta.compound_target:
+                return None
+        return target
+
+    @staticmethod
     def _endpoint_surname_frequencies(raw_tokens: list[str], normalizer, data) -> tuple[float | None, float | None]:
         """Return surname frequencies for the first and last normalized tokens."""
         if not raw_tokens:
@@ -1066,25 +1146,86 @@ class BatchAnalysisService:
         last_freq = float(data.get_surname_freq(normalizer.norm(raw_tokens[-1]), 0))
         return first_freq, last_freq
 
-    @staticmethod
     def _selected_endpoint_frequency_evidence(
-        selected_position: str,
-        first_freq: float | None,
-        last_freq: float | None,
+        self,
+        selected_span: SurnameEndpointSpan | None,
+        raw_tokens: list[str],
+        normalized_raw_tokens: list[str],
+        compound_metadata,
+        data,
     ) -> tuple[float | None, float | None, float | None]:
         """Return selected endpoint frequency, alternate frequency, and selected/alternate ratio."""
-        if selected_position == "first":
-            selected_freq = first_freq
-            alternate_freq = last_freq
-        elif selected_position == "last":
-            selected_freq = last_freq
-            alternate_freq = first_freq
-        else:
+        if selected_span is None or selected_span.position not in {"first", "last"}:
             return None, None, None
+
+        selected_freq = float(data.get_surname_freq(selected_span.lookup_key, 0))
+        alternate_span = self._alternate_endpoint_span(
+            selected_span,
+            raw_tokens,
+            normalized_raw_tokens,
+            compound_metadata,
+        )
+        alternate_freq = None
+        if alternate_span is not None:
+            alternate_freq = float(data.get_surname_freq(alternate_span.lookup_key, 0))
 
         if selected_freq is None or alternate_freq is None or alternate_freq <= 0:
             return selected_freq, alternate_freq, None
         return selected_freq, alternate_freq, selected_freq / alternate_freq
+
+    def _alternate_endpoint_span(
+        self,
+        selected_span: SurnameEndpointSpan,
+        raw_tokens: list[str],
+        normalized_raw_tokens: list[str],
+        compound_metadata,
+    ) -> SurnameEndpointSpan | None:
+        """Return the opposite endpoint span using the selected raw span width."""
+        if selected_span.width <= 0 or selected_span.width > len(raw_tokens):
+            return None
+
+        if selected_span.position == "first":
+            start = len(raw_tokens) - selected_span.width
+            end = len(raw_tokens)
+            position = "last"
+        elif selected_span.position == "last":
+            start = 0
+            end = selected_span.width
+            position = "first"
+        else:
+            return None
+
+        lookup_key = self._raw_surname_span_lookup_key(
+            raw_tokens,
+            normalized_raw_tokens,
+            start,
+            end,
+            compound_metadata,
+        )
+        return SurnameEndpointSpan(position, start, end, lookup_key)
+
+    @staticmethod
+    def _raw_surname_span_lookup_key(
+        raw_tokens: list[str],
+        normalized_raw_tokens: list[str],
+        start: int,
+        end: int,
+        compound_metadata,
+    ) -> str:
+        """Return a surname lookup key for a raw endpoint span."""
+        compound_target = BatchAnalysisService._compound_target_for_span(
+            raw_tokens,
+            start,
+            end,
+            compound_metadata,
+        )
+        if compound_target is not None:
+            return compound_target
+
+        normalized_span = normalized_raw_tokens[start:end]
+        if len(normalized_span) > 1:
+            return " ".join(normalized_span)
+        return normalized_span[0]
 
     @staticmethod
     def _all_caps_tokens(raw_tokens: list[str]) -> list[str]:

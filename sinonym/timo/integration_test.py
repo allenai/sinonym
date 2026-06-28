@@ -44,7 +44,7 @@ class TestIntegration(unittest.TestCase):
     def test_score_name_batch(self):
         names = ["Li Wei", "Wang Weiming"]
         summary = self.predictor.score_name_batch(names)
-        self.assertEqual(summary.names, tuple(names))
+        self.assertEqual(summary.names, names)
         self.assertEqual(len(summary.results), 2)
         self.assertEqual(len(summary.confidences), 2)
         self.assertIsNotNone(summary.format_pattern.dominant_format)
