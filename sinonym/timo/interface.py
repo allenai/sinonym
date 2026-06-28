@@ -28,6 +28,7 @@ class ScriptRepresentationValue(str, Enum):
     BILINGUAL_ALIGNED = "bilingual_aligned"
     MIXED_SCRIPT = "mixed_script"
     REJECTED_INPUT = "rejected_input"
+    UNKNOWN = "unknown"
 
 
 class SurnamePositionValue(str, Enum):
@@ -191,7 +192,7 @@ class Predictor:
             raw_name=evidence.raw_name,
             raw_tokens=tuple(evidence.raw_tokens),
             raw_token_count=evidence.raw_token_count,
-            script_representation=evidence.script_representation,
+            script_representation=evidence.script_representation or ScriptRepresentationValue.UNKNOWN.value,
             batch_participant=evidence.batch_participant,
             batch_applied=evidence.batch_applied,
             batch_changed_format=evidence.batch_changed_format,

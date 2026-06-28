@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from scripts.name_order_routing_rules import route_pp_abstain_rows, route_pp_vys_abstain_rows
@@ -11,6 +13,7 @@ def _pp_vys_row(**overrides):
         "pp_selected_format": "surname_first",
         "vys_selected_format": "surname_first",
         "pp_batch_total_count": 0,
+        "pp_batch_confidence": 0,
         "pp_selected_surname_frequency_ratio": 0,
     }
     row.update(overrides)
@@ -33,6 +36,12 @@ def _pp_abstain_row(**overrides):
     }
     row.update(overrides)
     return row
+
+
+def test_name_order_routing_script_is_in_sdist_include():
+    pyproject_text = Path("pyproject.toml").read_text(encoding="utf-8")
+
+    assert '"scripts/name_order_routing_rules.py"' in pyproject_text
 
 
 def test_pp_vys_abstain_rule_keeps_existing_vys_agreements():
@@ -209,4 +218,74 @@ def test_pp_vys_abstain_rule_allows_empty_ratio_sentinel():
         ],
     )
 
-    assert routed[0]["router_prediction"] == "abstain"
+    assert routed[0]["router_prediction"] == "vys"
+    assert routed[0]["router_reason"] == "old_new_vys"
+
+
+def test_pp_vys_abstain_rule_applies_effective_plus_vys_override():
+    routed = route_pp_vys_abstain_rows(
+        [
+            _pp_vys_row(
+                old_prediction="pp",
+                new_prediction="abstain",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+                pp_batch_total_count=2,
+                pp_selected_surname_frequency_ratio=0.5,
+            ),
+        ],
+    )
+
+    assert routed[0]["router_prediction"] == "vys"
+    assert routed[0]["router_reason"] == "pp_abstain_two_vote_small_ratio_vys"
+
+
+def test_pp_vys_abstain_rule_applies_effective_plus_pp_overrides():
+    routed = route_pp_vys_abstain_rows(
+        [
+            _pp_vys_row(
+                old_prediction="vys",
+                new_prediction="pp",
+                new_reason="endpoint_frequency_strongly_favors_pp",
+                pp_batch_total_count=2,
+                pp_batch_confidence=0.85,
+            ),
+            _pp_vys_row(
+                old_prediction="pp",
+                new_prediction="vys",
+                new_reason="strong_vys_batch_context",
+                pp_batch_total_count=6,
+            ),
+            _pp_vys_row(
+                old_prediction="vys",
+                new_prediction="vys",
+                new_reason="strong_vys_batch_context",
+                pp_batch_total_count=7,
+                pp_selected_surname_frequency_ratio=3,
+            ),
+            _pp_vys_row(
+                old_prediction="vys",
+                new_prediction="vys",
+                new_reason="strong_vys_batch_context",
+                pp_batch_total_count=3,
+                pp_selected_surname_frequency_ratio=8,
+            ),
+            _pp_vys_row(
+                old_prediction="vys",
+                new_prediction="pp",
+                new_reason="endpoint_frequency_strongly_favors_pp",
+                pp_batch_total_count=1,
+                pp_batch_confidence=0.5,
+                pp_selected_surname_frequency_ratio=101,
+            ),
+        ],
+    )
+
+    assert [row["router_prediction"] for row in routed] == ["pp", "pp", "pp", "pp", "pp"]
+    assert [row["router_reason"] for row in routed] == [
+        "endpoint_pp_high_conf_two_vote",
+        "larger_pp_paper_overrides_vys_batch",
+        "strong_vys_large_pp_count_ratio_looks_pp",
+        "strong_vys_three_vote_mid_ratio_pp",
+        "endpoint_pp_low_count_low_conf_very_high_ratio",
+    ]

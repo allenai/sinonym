@@ -189,7 +189,7 @@ class NameOrderEvidence:
     raw_name: str = ""
     raw_tokens: list[str] = field(default_factory=list)
     raw_token_count: int = 0
-    script_representation: str = ""
+    script_representation: str = "unknown"
     batch_participant: bool = False
     batch_applied: bool = False
     batch_changed_format: bool = False

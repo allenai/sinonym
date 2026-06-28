@@ -62,6 +62,7 @@ include = [
     "sinonym",
     "tests",
     "scripts/check_test_status.py",
+    "scripts/name_order_routing_rules.py",
     "README.md",
     "pyproject.toml",
 ]

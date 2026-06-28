@@ -34,10 +34,10 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
     assert len(rows) == PP_VYS_FIXTURE_ROWS
     assert len(decisive) == PP_VYS_DECISIVE_ROWS
     assert confusion == {
-        ("pp", "pp"): 379,
-        ("pp", "vys"): 95,
-        ("vys", "pp"): 29,
-        ("vys", "vys"): 466,
+        ("pp", "pp"): 399,
+        ("pp", "vys"): 75,
+        ("vys", "pp"): 28,
+        ("vys", "vys"): 467,
     }
 
 

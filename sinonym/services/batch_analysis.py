@@ -23,6 +23,7 @@ from sinonym.coretypes import (
     ParseResult,
 )
 from sinonym.coretypes.results import ParsedName
+from sinonym.services.order_metadata import original_component_order
 
 GUARDED_GIVEN_FIRST_BATCH_MIN_SHARE = 0.75
 GIVEN_NAME_SHAPE_MIN_SHARE = 0.5
@@ -874,30 +875,16 @@ class BatchAnalysisService:
                 middle_tokens=middle_tokens,
                 order=["given", "middle", "surname"],
             )
-            # Determine original order from candidate format and assign fields
-            if candidate.format == NameFormat.GIVEN_FIRST:
-                order_list = ["given"] + (["middle"] if middle_tokens else []) + ["surname"]
-                parsed_original_order = ParsedName(
-                    surname=surname_str,
-                    given_name=given_str,
-                    surname_tokens=surname_final,
-                    given_tokens=given_final,
-                    middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                    middle_tokens=middle_tokens,
-                    order=order_list,
-                )
-            else:
-                order_list = ["surname"] + (["middle"] if middle_tokens else []) + ["given"]
-                # Original: surname-first → preserve component labels and annotate order only
-                parsed_original_order = ParsedName(
-                    surname=surname_str,
-                    given_name=given_str,
-                    surname_tokens=surname_final,
-                    given_tokens=given_final,
-                    middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                    middle_tokens=middle_tokens,
-                    order=order_list,
-                )
+            order_list = original_component_order(candidate.format, candidate.given_tokens, middle_tokens)
+            parsed_original_order = ParsedName(
+                surname=surname_str,
+                given_name=given_str,
+                surname_tokens=surname_final,
+                given_tokens=given_final,
+                middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                middle_tokens=middle_tokens,
+                order=order_list,
+            )
             return ParseResult.success_with_name(
                 formatted_name,
                 parsed=parsed,

@@ -201,3 +201,24 @@ def test_middle_initial_leading_between_surname_and_given(detector):
     assert por.given_name == "Wei"
     assert por.surname == "Li"
     assert por.middle_tokens == ["A"]
+
+
+def test_middle_initial_trailing_after_given_preserves_original_order(detector):
+    raw = "Li Wei A."
+    res = detector.normalize_name(raw)
+
+    assert res.success, f"Expected success, got error: {res.error_message}"
+    assert res.result == "Wei A Li"
+    assert res.parsed_original_order is not None
+    assert res.parsed_original_order.order == ["surname", "given", "middle"]
+
+
+def test_middle_initial_trailing_batch_preserves_original_order(detector):
+    names = ["Li Wei A.", "Zhang Ming F."]
+    batch = detector.analyze_name_batch(names)
+
+    assert [result.result for result in batch.results] == ["Wei A Li", "Ming F Zhang"]
+    assert [result.parsed_original_order.order for result in batch.results] == [
+        ["surname", "given", "middle"],
+        ["surname", "given", "middle"],
+    ]

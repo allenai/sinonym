@@ -191,6 +191,7 @@ from sinonym.services import (
     PinyinCacheService,
     ServiceContext,
 )
+from sinonym.services.order_metadata import original_component_order
 from sinonym.services.process_pool import PersistentMultiprocessNormalizer, normalize_names_multiprocess
 
 BILINGUAL_SURNAME_STRENGTH_RATIO_MIN = 5.0
@@ -287,8 +288,7 @@ class ChineseNameDetector:
     def _has_only_cjk_token_groups(self, normalized_input: NormalizedInput) -> bool:
         """Return whether separator-delimited input tokens are all CJK characters."""
         return len(normalized_input.tokens) > 1 and all(
-            token and all(self._config.cjk_pattern.search(char) for char in token)
-            for token in normalized_input.tokens
+            token and all(self._config.cjk_pattern.search(char) for char in token) for token in normalized_input.tokens
         )
 
     def _format_parse_result(
@@ -418,9 +418,7 @@ class ChineseNameDetector:
     def _is_roman_source_token(self, token: str) -> bool:
         """Return whether the original source token contains Roman letters and no CJK."""
         return bool(
-            token
-            and self._config.ascii_alpha_pattern.search(token)
-            and not self._config.cjk_pattern.search(token),
+            token and self._config.ascii_alpha_pattern.search(token) and not self._config.cjk_pattern.search(token),
         )
 
     def _bilingual_pair_surname_strength(self, pair) -> float:
@@ -467,9 +465,8 @@ class ChineseNameDetector:
         if len(han_groups) == 1 and source_token_count == len(normalized_input.tokens) and roman_tokens:
             han_group = han_groups[0]
             han_pinyin = tuple(self._cache_service.han_to_pinyin_fast(han_group))
-            if (
-                len(han_pinyin) >= self._config.min_tokens_required
-                and self._roman_tokens_match_han_pinyin(roman_tokens, han_pinyin)
+            if len(han_pinyin) >= self._config.min_tokens_required and self._roman_tokens_match_han_pinyin(
+                roman_tokens, han_pinyin
             ):
                 surname_pinyin_length = self._han_surname_prefix_length(han_group, han_pinyin)
                 if 0 < surname_pinyin_length < len(han_pinyin):
@@ -501,9 +498,7 @@ class ChineseNameDetector:
     def _is_source_roman_token(self, token: str) -> bool:
         """Return whether a source token has Roman letters and no CJK characters."""
         return bool(
-            token
-            and self._config.ascii_alpha_pattern.search(token)
-            and not self._config.cjk_pattern.search(token),
+            token and self._config.ascii_alpha_pattern.search(token) and not self._config.cjk_pattern.search(token),
         )
 
     def _clean_source_roman_token(self, token: str) -> str:
@@ -901,35 +896,19 @@ class ChineseNameDetector:
                         elif order_tokens[-1].lower() == joined_surname:
                             is_surname_last_in_this_order = True
 
-                    if used_original:
-                        original_is_given_first = is_surname_last_in_this_order
-                    else:
-                        original_is_given_first = is_surname_first_in_this_order
+                    original_is_given_first = is_surname_last_in_this_order if used_original else is_surname_first_in_this_order
 
-                    if original_is_given_first:
-                        order_list = ["given"] + (["middle"] if middle_tokens else []) + ["surname"]
-                        # Keep labels as-is
-                        parsed_original_order = ParsedName(
-                            surname=surname_str,
-                            given_name=given_str,
-                            surname_tokens=surname_final,
-                            given_tokens=given_final,
-                            middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                            middle_tokens=middle_tokens,
-                            order=order_list,
-                        )
-                    else:
-                        order_list = ["surname"] + (["middle"] if middle_tokens else []) + ["given"]
-                        # Original: surname-first → keep labels stable and annotate order only
-                        parsed_original_order = ParsedName(
-                            surname=surname_str,
-                            given_name=given_str,
-                            surname_tokens=surname_final,
-                            given_tokens=given_final,
-                            middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                            middle_tokens=middle_tokens,
-                            order=order_list,
-                        )
+                    original_format = NameFormat.GIVEN_FIRST if original_is_given_first else NameFormat.SURNAME_FIRST
+                    order_list = original_component_order(original_format, given_tokens, middle_tokens)
+                    parsed_original_order = ParsedName(
+                        surname=surname_str,
+                        given_name=given_str,
+                        surname_tokens=surname_final,
+                        given_tokens=given_final,
+                        middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                        middle_tokens=middle_tokens,
+                        order=order_list,
+                    )
 
                     return ParseResult.success_with_name(
                         formatted_name,

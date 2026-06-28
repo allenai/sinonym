@@ -1,7 +1,15 @@
 import pytest
 from pydantic import ValidationError
 
-from sinonym.timo.interface import FormatPattern, Instance, NameFormatValue, Prediction, Predictor, PredictorConfig
+from sinonym.timo.interface import (
+    FormatPattern,
+    Instance,
+    NameFormatValue,
+    Prediction,
+    Predictor,
+    PredictorConfig,
+    ScriptRepresentationValue,
+)
 
 EXPECTED_BATCH_CONTEXT_RESULT_COUNT = 3
 TIE_CONFIDENCE = 0.5
@@ -131,3 +139,16 @@ def test_prediction_models_are_immutable_and_enum_typed(predictor: Predictor):
 def test_empty_batch(predictor: Predictor):
     results = predictor.predict_batch([])
     assert len(results) == 0
+
+
+def test_analyze_name_batch_handles_detector_fallback_evidence(predictor: Predictor):
+    detector = object.__getattribute__(predictor, "_detector")
+    original_service = object.__getattribute__(detector, "_batch_analysis_service")
+    object.__setattr__(detector, "_batch_analysis_service", None)
+    try:
+        result = predictor.analyze_name_batch(["Li Wei"])
+    finally:
+        object.__setattr__(detector, "_batch_analysis_service", original_service)
+
+    assert len(result.name_order_evidence) == 1
+    assert result.name_order_evidence[0].script_representation == ScriptRepresentationValue.UNKNOWN

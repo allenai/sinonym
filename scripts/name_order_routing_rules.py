@@ -18,6 +18,7 @@ import csv
 import json
 import math
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -42,6 +43,7 @@ PP_VYS_ABSTAIN_REQUIRED_COLUMNS = (
     "pp_selected_format",
     "vys_selected_format",
     "pp_batch_total_count",
+    "pp_batch_confidence",
     "pp_selected_surname_frequency_ratio",
 )
 
@@ -73,6 +75,38 @@ PP_VYS_LOW_RATIO_MAX = 5.0
 PP_VYS_ALLOWED_RATIO_LOW_MAX = 1.0
 PP_VYS_ALLOWED_RATIO_HIGH_MIN = 5.0
 PP_VYS_ALLOWED_RATIO_HIGH_MAX = 20.0
+PP_VYS_TINY_RATIO_MAX = 0.1
+PP_VYS_MEDIUM_RATIO_MAX = 5.0
+PP_VYS_HIGH_RATIO_MAX = 100.0
+PP_VYS_HIGH_CONFIDENCE_MIN = 0.85
+PP_VYS_LARGER_PAPER_VOTES_MIN = 6
+PP_VYS_TOTAL_BUCKET_ZERO_ONE_MAX = 1
+PP_VYS_TOTAL_BUCKET_TWO_MAX = 2
+PP_VYS_TOTAL_BUCKET_THREE_MAX = 3
+PP_VYS_TOTAL_BUCKET_FIVE_MAX = 5
+PP_VYS_TOTAL_BUCKET_TEN_MAX = 10
+PP_VYS_CONF_BUCKET_LOW_MAX = 0.50
+PP_VYS_CONF_BUCKET_MID_MAX = 0.70
+
+
+@dataclass(frozen=True)
+class PPVysFeatures:
+    """Parsed feature values for one PP/VYS/abstain routing row."""
+
+    ratio: float
+    pp_batch_total_count: float
+    pp_batch_confidence: float
+    old_prediction: str
+    new_prediction: str
+    new_reason: str
+    input_order_candidate: str
+    pp_total_bucket: str
+    pp_conf_bucket: str
+    pp_ratio_bucket: str
+    old_new_vys: bool
+    old_pp_new_vys: bool
+    old_vys_new_abstain: bool
+    old_vys_new_pp: bool
 
 
 def route_pp_vys_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
@@ -84,85 +118,189 @@ def route_pp_vys_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
     - `router_prediction`
     - `router_reason`
     """
-    output: list[MutableRow] = []
-    for row in rows:
-        _require_columns(row, PP_VYS_ABSTAIN_REQUIRED_COLUMNS)
-        routed = dict(row)
-        ratio = _optional_float(row, "pp_selected_surname_frequency_ratio", default=0.0)
-        pp_batch_total_count = _required_float(row, "pp_batch_total_count")
-        old_prediction = _required_string(row, "old_prediction", allowed=("pp", "vys"))
-        new_prediction = _required_string(row, "new_prediction", allowed=PREDICTION_VALUES)
-        new_reason = _required_string(row, "new_reason", allowed=PP_VYS_REASON_VALUES)
+    return [_route_pp_vys_abstain_row(row) for row in rows]
 
-        input_order_candidate = _input_order_candidate(row)
-        route: Route = "pp"
-        reason = "default_pp"
 
-        old_new_vys = old_prediction == "vys" and new_prediction == "vys"
-        old_pp_new_vys = old_prediction == "pp" and new_prediction == "vys"
-        old_vys_new_abstain = old_prediction == "vys" and new_prediction in {"abstain", "not_person"}
-        old_vys_new_pp = old_prediction == "vys" and new_prediction == "pp"
+def _route_pp_vys_abstain_row(row: Row) -> MutableRow:
+    _require_columns(row, PP_VYS_ABSTAIN_REQUIRED_COLUMNS)
+    features = _pp_vys_features(row)
+    route, reason = _base_pp_vys_route(features)
+    override = _effective_plus_override(features)
+    if override is not None:
+        route, reason = override
 
-        if old_new_vys:
-            route = "vys"
-            reason = "old_new_vys"
-        if old_pp_new_vys:
-            route = "vys"
-            reason = "old_pp_new_vys"
-        if old_vys_new_abstain:
-            route = "vys"
-            reason = "old_vys_new_abstain"
-        if old_vys_new_pp:
-            route = "vys"
-            reason = "old_vys_new_pp_default_vys"
+    routed = dict(row)
+    routed["input_order_candidate"] = features.input_order_candidate
+    routed["router_prediction"] = route
+    routed["router_reason"] = reason
+    return routed
 
-        endpoint_pp_with_real_paper_votes = (
-            old_vys_new_pp
-            and new_reason == "endpoint_frequency_strongly_favors_pp"
-            and pp_batch_total_count >= PP_VYS_REAL_PAPER_VOTES_MIN
+
+def _pp_vys_features(row: Row) -> PPVysFeatures:
+    ratio = _optional_float(row, "pp_selected_surname_frequency_ratio", default=math.nan)
+    pp_batch_total_count = _required_float(row, "pp_batch_total_count")
+    pp_batch_confidence = _required_float(row, "pp_batch_confidence")
+    old_prediction = _required_string(row, "old_prediction", allowed=("pp", "vys"))
+    new_prediction = _required_string(row, "new_prediction", allowed=PREDICTION_VALUES)
+    new_reason = _required_string(row, "new_reason", allowed=PP_VYS_REASON_VALUES)
+    old_new_vys = old_prediction == "vys" and new_prediction == "vys"
+    old_pp_new_vys = old_prediction == "pp" and new_prediction == "vys"
+    old_vys_new_abstain = old_prediction == "vys" and new_prediction in {"abstain", "not_person"}
+    old_vys_new_pp = old_prediction == "vys" and new_prediction == "pp"
+
+    return PPVysFeatures(
+        ratio=ratio,
+        pp_batch_total_count=pp_batch_total_count,
+        pp_batch_confidence=pp_batch_confidence,
+        old_prediction=old_prediction,
+        new_prediction=new_prediction,
+        new_reason=new_reason,
+        input_order_candidate=_input_order_candidate(row),
+        pp_total_bucket=_pp_total_bucket(pp_batch_total_count),
+        pp_conf_bucket=_pp_conf_bucket(pp_batch_confidence),
+        pp_ratio_bucket=_pp_ratio_bucket(ratio),
+        old_new_vys=old_new_vys,
+        old_pp_new_vys=old_pp_new_vys,
+        old_vys_new_abstain=old_vys_new_abstain,
+        old_vys_new_pp=old_vys_new_pp,
+    )
+
+
+def _base_pp_vys_route(features: PPVysFeatures) -> tuple[Route, str]:
+    route: Route = "pp"
+    reason = "default_pp"
+
+    base_overrides: tuple[tuple[bool, Route, str], ...] = (
+        (features.old_new_vys, "vys", "old_new_vys"),
+        (features.old_pp_new_vys, "vys", "old_pp_new_vys"),
+        (features.old_vys_new_abstain, "vys", "old_vys_new_abstain"),
+        (features.old_vys_new_pp, "vys", "old_vys_new_pp_default_vys"),
+        (_endpoint_pp_with_real_paper_votes(features), "pp", "endpoint_pp_with_real_paper_votes"),
+        (_strong_pp_allowed_ratio(features), "pp", "strong_pp_allowed_ratio"),
+        (_reliable_input_order_abstain(features), "abstain", "reliable_input_order_abstain"),
+    )
+    for condition, candidate_route, candidate_reason in base_overrides:
+        if condition:
+            route = candidate_route
+            reason = candidate_reason
+    return route, reason
+
+
+def _effective_plus_override(features: PPVysFeatures) -> tuple[Route, str] | None:
+    selected: tuple[Route, str] | None = None
+    overrides: tuple[tuple[bool, Route, str], ...] = (
+        (_pp_abstain_small_ratio_vys(features), "vys", "pp_abstain_two_vote_small_ratio_vys"),
+        (_endpoint_pp_high_conf_two_vote(features), "pp", "endpoint_pp_high_conf_two_vote"),
+        (_pp_context_over_vys_batch_for_larger_papers(features), "pp", "larger_pp_paper_overrides_vys_batch"),
+        (_strong_vys_large_pp_looks_pp(features), "pp", "strong_vys_large_pp_count_ratio_looks_pp"),
+        (_strong_vys_three_vote_mid_ratio_pp(features), "pp", "strong_vys_three_vote_mid_ratio_pp"),
+        (
+            _endpoint_pp_low_count_low_conf_very_high_ratio(features),
+            "pp",
+            "endpoint_pp_low_count_low_conf_very_high_ratio",
+        ),
+    )
+    for condition, route, reason in overrides:
+        if condition:
+            selected = (route, reason)
+    return selected
+
+
+def _endpoint_pp_with_real_paper_votes(features: PPVysFeatures) -> bool:
+    return (
+        features.old_vys_new_pp
+        and features.new_reason == "endpoint_frequency_strongly_favors_pp"
+        and features.pp_batch_total_count >= PP_VYS_REAL_PAPER_VOTES_MIN
+    )
+
+
+def _strong_pp_allowed_ratio(features: PPVysFeatures) -> bool:
+    return (
+        features.old_vys_new_pp
+        and features.new_reason == "strong_pp_paper_context"
+        and (
+            features.ratio <= PP_VYS_ALLOWED_RATIO_LOW_MAX
+            or PP_VYS_ALLOWED_RATIO_HIGH_MIN < features.ratio <= PP_VYS_ALLOWED_RATIO_HIGH_MAX
         )
-        if endpoint_pp_with_real_paper_votes:
-            route = "pp"
-            reason = "endpoint_pp_with_real_paper_votes"
+    )
 
-        strong_pp_allowed_ratio = (
-            old_vys_new_pp
-            and new_reason == "strong_pp_paper_context"
-            and (ratio <= PP_VYS_ALLOWED_RATIO_LOW_MAX or PP_VYS_ALLOWED_RATIO_HIGH_MIN < ratio <= PP_VYS_ALLOWED_RATIO_HIGH_MAX)
-        )
-        if strong_pp_allowed_ratio:
-            route = "pp"
-            reason = "strong_pp_allowed_ratio"
 
-        reliable_input_order_abstain = (
-            (input_order_candidate == "pp" and old_prediction == "pp" and new_prediction == "pp")
-            or (
-                input_order_candidate == "vys"
-                and new_reason == "endpoint_frequency_strongly_favors_vys"
-                and pp_batch_total_count <= PP_VYS_LOW_BATCH_MAX
-            )
-            or (
-                input_order_candidate == "vys"
-                and new_reason == "weak_or_conflicting_evidence"
-                and pp_batch_total_count <= PP_VYS_VERY_LOW_BATCH_MAX
-                and ratio <= PP_VYS_LOW_RATIO_MAX
-            )
-            or (
-                input_order_candidate == "vys"
-                and new_reason == "strong_vys_batch_context"
-                and pp_batch_total_count <= PP_VYS_LOW_BATCH_MAX
-                and ratio <= PP_VYS_LOW_RATIO_MAX
-            )
-        )
-        if reliable_input_order_abstain:
-            route = "abstain"
-            reason = "reliable_input_order_abstain"
+def _reliable_input_order_abstain(features: PPVysFeatures) -> bool:
+    input_pp_old_new_pp = (
+        features.input_order_candidate == "pp" and features.old_prediction == "pp" and features.new_prediction == "pp"
+    )
+    endpoint_vys_small_pp_context = (
+        features.input_order_candidate == "vys"
+        and features.new_reason == "endpoint_frequency_strongly_favors_vys"
+        and features.pp_batch_total_count <= PP_VYS_LOW_BATCH_MAX
+    )
+    weak_vys_small_pp_context = (
+        features.input_order_candidate == "vys"
+        and features.new_reason == "weak_or_conflicting_evidence"
+        and features.pp_batch_total_count <= PP_VYS_VERY_LOW_BATCH_MAX
+        and features.ratio <= PP_VYS_LOW_RATIO_MAX
+    )
+    strong_vys_small_pp_context = (
+        features.input_order_candidate == "vys"
+        and features.new_reason == "strong_vys_batch_context"
+        and features.pp_batch_total_count <= PP_VYS_LOW_BATCH_MAX
+        and features.ratio <= PP_VYS_LOW_RATIO_MAX
+    )
+    return input_pp_old_new_pp or endpoint_vys_small_pp_context or weak_vys_small_pp_context or strong_vys_small_pp_context
 
-        routed["input_order_candidate"] = input_order_candidate
-        routed["router_prediction"] = route
-        routed["router_reason"] = reason
-        output.append(routed)
-    return output
+
+def _pp_abstain_small_ratio_vys(features: PPVysFeatures) -> bool:
+    return (
+        features.old_prediction == "pp"
+        and features.new_prediction in {"abstain", "not_person"}
+        and features.pp_batch_total_count == PP_VYS_LOW_BATCH_MAX
+        and PP_VYS_TINY_RATIO_MAX < features.ratio <= PP_VYS_ALLOWED_RATIO_LOW_MAX
+    )
+
+
+def _endpoint_pp_high_conf_two_vote(features: PPVysFeatures) -> bool:
+    return (
+        features.old_vys_new_pp
+        and features.new_reason == "endpoint_frequency_strongly_favors_pp"
+        and features.pp_batch_total_count == PP_VYS_LOW_BATCH_MAX
+        and features.pp_batch_confidence >= PP_VYS_HIGH_CONFIDENCE_MIN
+    )
+
+
+def _pp_context_over_vys_batch_for_larger_papers(features: PPVysFeatures) -> bool:
+    return (
+        features.old_pp_new_vys
+        and features.new_reason == "strong_vys_batch_context"
+        and features.pp_batch_total_count >= PP_VYS_LARGER_PAPER_VOTES_MIN
+    )
+
+
+def _strong_vys_large_pp_looks_pp(features: PPVysFeatures) -> bool:
+    return (
+        features.old_new_vys
+        and features.new_reason == "strong_vys_batch_context"
+        and features.pp_total_bucket == "6-10"
+        and features.pp_ratio_bucket == "1-5"
+    )
+
+
+def _strong_vys_three_vote_mid_ratio_pp(features: PPVysFeatures) -> bool:
+    return (
+        features.old_new_vys
+        and features.new_reason == "strong_vys_batch_context"
+        and features.pp_batch_total_count == PP_VYS_REAL_PAPER_VOTES_MIN
+        and PP_VYS_ALLOWED_RATIO_HIGH_MIN < features.ratio <= PP_VYS_ALLOWED_RATIO_HIGH_MAX
+    )
+
+
+def _endpoint_pp_low_count_low_conf_very_high_ratio(features: PPVysFeatures) -> bool:
+    return (
+        features.old_vys_new_pp
+        and features.new_reason == "endpoint_frequency_strongly_favors_pp"
+        and features.pp_total_bucket == "0-1"
+        and features.pp_conf_bucket == "<=0.50"
+        and features.pp_ratio_bucket == "100+"
+    )
 
 
 def route_pp_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
@@ -246,6 +384,48 @@ def _input_order_candidate(row: Row) -> str:
     if vys_preserves_input_order and not pp_preserves_input_order:
         return "vys"
     return "unknown"
+
+
+def _pp_total_bucket(value: float) -> str:
+    buckets = (
+        (PP_VYS_TOTAL_BUCKET_ZERO_ONE_MAX, "0-1"),
+        (PP_VYS_TOTAL_BUCKET_TWO_MAX, "2"),
+        (PP_VYS_TOTAL_BUCKET_THREE_MAX, "3"),
+        (PP_VYS_TOTAL_BUCKET_FIVE_MAX, "4-5"),
+        (PP_VYS_TOTAL_BUCKET_TEN_MAX, "6-10"),
+    )
+    for upper_bound, label in buckets:
+        if value <= upper_bound:
+            return label
+    return "11+"
+
+
+def _pp_conf_bucket(value: float) -> str:
+    buckets = (
+        (PP_VYS_CONF_BUCKET_LOW_MAX, "<=0.50"),
+        (PP_VYS_CONF_BUCKET_MID_MAX, "0.50-0.70"),
+        (PP_VYS_HIGH_CONFIDENCE_MIN, "0.70-0.85"),
+    )
+    for upper_bound, label in buckets:
+        if value <= upper_bound:
+            return label
+    return "0.85-1.00"
+
+
+def _pp_ratio_bucket(value: float) -> str:
+    if math.isnan(value):
+        return "missing"
+    buckets = (
+        (PP_VYS_TINY_RATIO_MAX, "<=0.1"),
+        (PP_VYS_ALLOWED_RATIO_LOW_MAX, "0.1-1"),
+        (PP_VYS_MEDIUM_RATIO_MAX, "1-5"),
+        (PP_VYS_ALLOWED_RATIO_HIGH_MAX, "5-20"),
+        (PP_VYS_HIGH_RATIO_MAX, "20-100"),
+    )
+    for upper_bound, label in buckets:
+        if value <= upper_bound:
+            return label
+    return "100+"
 
 
 def _pp_abstain_predicates(row: Row) -> dict[str, bool]:
