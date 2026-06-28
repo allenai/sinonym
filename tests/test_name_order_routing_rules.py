@@ -1,3 +1,6 @@
+import csv
+import runpy
+import sys
 from pathlib import Path
 
 import pytest
@@ -43,6 +46,32 @@ def test_name_order_routing_script_is_in_sdist_include():
     pyproject_text = Path("pyproject.toml").read_text(encoding="utf-8")
 
     assert '"scripts/name_order_routing_rules.py"' in pyproject_text
+
+
+def test_name_order_routing_script_preserves_empty_csv_schema(tmp_path, monkeypatch):
+    input_path = tmp_path / "empty.csv"
+    output_path = tmp_path / "routed.csv"
+    fieldnames = list(_pp_abstain_row())
+    input_path.write_text(",".join(fieldnames) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "scripts/name_order_routing_rules.py",
+            "pp-abstain",
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+        ],
+    )
+    runpy.run_path("scripts/name_order_routing_rules.py", run_name="__main__")
+
+    with output_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        assert reader.fieldnames == [*fieldnames, "router_prediction", "router_reason"]
+        assert list(reader) == []
 
 
 def test_pp_vys_abstain_rule_keeps_existing_vys_agreements():

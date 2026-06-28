@@ -958,6 +958,16 @@ class BatchAnalysisService:
         batch_format_applied = format_pattern.threshold_met and format_pattern.total_count > 0
 
         for entry, result in zip(name_candidates, results, strict=False):
+            if entry.representation == REJECTED_INPUT_REPRESENTATION:
+                evidence.append(
+                    NameOrderEvidence(
+                        raw_name=entry.name,
+                        script_representation=entry.representation,
+                        selected_format=self._format_from_parse_result(result),
+                    ),
+                )
+                continue
+
             normalized_input = normalizer.apply(entry.name)
             raw_tokens = list(normalized_input.roman_tokens)
             normalized_raw_tokens = [normalizer.norm(token) for token in raw_tokens]

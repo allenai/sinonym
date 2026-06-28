@@ -14,7 +14,9 @@ from sinonym.coretypes import (
     BatchParseResult,
     NameFormat,
     NameOrderEvidence,
+    ParseResult,
 )
+from sinonym.services.batch_analysis import BatchAnalysisDependencies, BatchAnalysisOptions, BatchAnalysisService
 
 # ===================================================================
 # BATCH FORMAT DETECTION TESTS
@@ -200,6 +202,40 @@ def test_name_order_evidence_exposes_all_caps_cue(detector):
     assert evidence.has_all_caps_token is True
     assert evidence.all_caps_tokens == ["FENG"]
     assert evidence.batch_applied is False
+
+
+def test_name_order_evidence_does_not_normalize_rejected_input():
+    """Rejected inputs keep evidence aligned without re-running normalization."""
+    service = BatchAnalysisService(
+        parsing_service=None,
+        dependencies=BatchAnalysisDependencies(
+            min_tokens_required=2,
+            individual_parser=lambda _name: ParseResult.failure("unexpected individual parse"),
+            input_failure=lambda _name: ParseResult.failure("invalid input length"),
+        ),
+    )
+
+    class NormalizerThatMustNotRun:
+        def apply(self, _raw_name):
+            pytest.fail("rejected inputs must not be normalized during evidence building")
+
+    rejected_name = "A" * 101
+    result = service.analyze_name_batch(
+        [rejected_name],
+        NormalizerThatMustNotRun(),
+        data=None,
+        formatting_service=None,
+        options=BatchAnalysisOptions(minimum_batch_size=1),
+    )
+
+    assert result.results[0].success is False
+    assert result.results[0].error_message == "invalid input length"
+    evidence = result.name_order_evidence[0]
+    assert evidence.raw_name == rejected_name
+    assert evidence.raw_tokens == []
+    assert evidence.raw_token_count == 0
+    assert evidence.script_representation == "rejected_input"
+    assert evidence.selected_format == NameFormat.MIXED
 
 
 def test_process_name_batch_convenience(detector):
