@@ -51,6 +51,8 @@ class FormatPattern(TimoModel):
     given_first_count: int
     total_count: int
     voting_count: int = Field(description="count of names contributing a confident direction vote")
+    vote_margin_count: int = Field(description="absolute difference between surname-first and given-first votes")
+    vote_margin: float = Field(description="vote_margin_count / total_count")
     threshold_met: bool = Field(description="decision_confidence >= format_threshold plus gating checks")
 
 
@@ -164,6 +166,8 @@ class Predictor:
             given_first_count=pattern.given_first_count,
             total_count=pattern.total_count,
             voting_count=pattern.voting_count,
+            vote_margin_count=pattern.vote_margin_count,
+            vote_margin=pattern.vote_margin,
             threshold_met=pattern.threshold_met,
         )
 

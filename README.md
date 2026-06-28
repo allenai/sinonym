@@ -209,7 +209,10 @@ batch_result = detector.analyze_name_batch(author_list)
 print(f"Format detected: {batch_result.format_pattern.dominant_format}")
 print(f"Confidence: {batch_result.format_pattern.confidence:.1%}")
 print(f"Decision confidence: {batch_result.format_pattern.decision_confidence:.1%}")
-# Expected Output: Format detected: NameFormat.SURNAME_FIRST, Confidence: 94%
+# Expected Output:
+# Format detected: NameFormat.SURNAME_FIRST
+# Confidence: 80.0%
+# Decision confidence: 80.0%
 
 for i, result in enumerate(batch_result.results):
     if result.success:

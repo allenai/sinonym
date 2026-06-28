@@ -90,13 +90,21 @@ def test_threshold_boundary_cases(detector):
 
 def test_small_batch_fallback(detector):
     """Test that small batches fall back correctly."""
-    names = ["Xin Liu", "Yang Li"]  # Only 2 names
+    names = ["Mai Li", "Li Wang"]
 
-    batch_result = detector.analyze_name_batch(names, minimum_batch_size=3)
+    detected_pattern = detector.detect_batch_format(names)
+    batch_result = detector.analyze_name_batch(names, minimum_batch_size=len(names) + 1)
 
     # Should fall back to individual processing
     assert batch_result.format_pattern.threshold_met is False
-    assert len(batch_result.results) == 2
+    assert batch_result.format_pattern.dominant_format == detected_pattern.dominant_format
+    assert batch_result.format_pattern.confidence == detected_pattern.confidence
+    assert batch_result.format_pattern.surname_first_count == detected_pattern.surname_first_count
+    assert batch_result.format_pattern.given_first_count == detected_pattern.given_first_count
+    assert batch_result.format_pattern.total_count == detected_pattern.total_count
+    assert batch_result.format_pattern.decision_confidence == detected_pattern.decision_confidence
+    assert batch_result.name_order_evidence[0].batch_participant is True
+    assert len(batch_result.results) == len(names)
     assert len(batch_result.improvements) == 0
 
 

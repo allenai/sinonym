@@ -5,6 +5,13 @@ import pytest
 from scripts import check_test_status
 
 
+def _expected_failure_details() -> list[check_test_status.FailureDetail]:
+    return [
+        check_test_status.FailureDetail(nodeid, kind, message)
+        for nodeid, kind, message in check_test_status.EXPECTED_FAILURE_SIGNATURES
+    ]
+
+
 def _write_junit(path: Path, body: str) -> None:
     path.write_text(f'<?xml version="1.0" encoding="utf-8"?><testsuite>{body}</testsuite>', encoding="utf-8")
 
@@ -120,14 +127,63 @@ def test_status_detects_regressions_beyond_expected_baseline():
 
 
 def test_status_allows_expected_baseline():
+    expected_failures = _expected_failure_details()
+
     exit_code, message = check_test_status.status_exit_decision(
         total_failures=check_test_status.EXPECTED_FAILURES,
         perf_passed=True,
         pytest_returncode=1,
+        failures=expected_failures,
     )
 
     assert exit_code == 0
     assert "expected baseline" in message
+
+
+def test_status_fails_on_unexpected_failure_with_same_total_count():
+    expected_failures = _expected_failure_details()
+    swapped_failures = [
+        *expected_failures[:-1],
+        check_test_status.FailureDetail(
+            "tests.test_new_regression::test_wrong_output",
+            "failure",
+            "AssertionError: wrong output",
+        ),
+    ]
+
+    exit_code, message = check_test_status.status_exit_decision(
+        total_failures=check_test_status.EXPECTED_FAILURES,
+        perf_passed=True,
+        pytest_returncode=1,
+        failures=swapped_failures,
+    )
+
+    assert exit_code == 1
+    assert "Unexpected pytest failure signatures" in message
+    assert "tests.test_new_regression::test_wrong_output" in message
+
+
+def test_status_fails_on_changed_failure_message_with_same_nodeids():
+    expected_failures = _expected_failure_details()
+    changed_failures = [
+        check_test_status.FailureDetail(
+            expected_failures[0].nodeid,
+            expected_failures[0].kind,
+            "AssertionError: different wrong output",
+        ),
+        *expected_failures[1:],
+    ]
+
+    exit_code, message = check_test_status.status_exit_decision(
+        total_failures=check_test_status.EXPECTED_FAILURES,
+        perf_passed=True,
+        pytest_returncode=1,
+        failures=changed_failures,
+    )
+
+    assert exit_code == 1
+    assert "Unexpected pytest failure signatures" in message
+    assert expected_failures[0].nodeid in message
 
 
 def test_status_allows_improvement():

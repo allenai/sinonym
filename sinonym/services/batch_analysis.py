@@ -279,12 +279,14 @@ class BatchAnalysisService:
         """Process names individually when batch is too small."""
         results = []
         name_candidates: list[BatchCandidateEntry] = []
+        format_candidates: list[BatchCandidateEntry] = []
 
         for name in names:
             input_failure = self._input_failure(name)
             if input_failure is not None:
                 results.append(input_failure)
                 name_candidates.append(BatchCandidateEntry(name, [], None, {}, REJECTED_INPUT_REPRESENTATION))
+                format_candidates.append(BatchCandidateEntry(name, [], None, {}, REJECTED_INPUT_REPRESENTATION))
                 continue
 
             # Normalize once and reuse
@@ -293,8 +295,14 @@ class BatchAnalysisService:
             if not self._is_batch_format_participant(representation):
                 results.append(self._locked_representation_result(name))
                 name_candidates.append(BatchCandidateEntry(name, [], None, normalized_input.compound_metadata, representation))
+                format_candidates.append(BatchCandidateEntry(name, [], None, normalized_input.compound_metadata, representation))
                 continue
 
+            format_candidate_votes, format_best_candidate = self._analyze_individual_name_with_normalized(
+                name,
+                normalized_input,
+                allow_guarded_given_first_bonus=False,
+            )
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
                 name,
                 normalized_input,
@@ -326,17 +334,31 @@ class BatchAnalysisService:
             name_candidates.append(
                 BatchCandidateEntry(name, candidates, best_candidate, normalized_input.compound_metadata, representation),
             )
+            format_candidates.append(
+                BatchCandidateEntry(
+                    name,
+                    format_candidate_votes,
+                    format_best_candidate,
+                    normalized_input.compound_metadata,
+                    representation,
+                ),
+            )
 
-        # Create a dummy format pattern for small batches or non-participant fallbacks
+        format_candidates = self._promote_guarded_given_first_batch_votes(format_candidates, normalizer, data)
+        detected_pattern = self._detect_format_pattern(
+            format_candidates,
+            normalizer,
+            data,
+            self._default_format_threshold,
+        )
         format_pattern = BatchFormatPattern(
-            dominant_format=NameFormat.MIXED,
-            confidence=0.0,
-            surname_first_count=0,
-            given_first_count=0,
-            # total_count counts only Chinese-participant names; in individual fallback,
-            # treat as zero participants to match detect_batch_format semantics.
-            total_count=0,
+            dominant_format=detected_pattern.dominant_format,
+            confidence=detected_pattern.confidence,
+            surname_first_count=detected_pattern.surname_first_count,
+            given_first_count=detected_pattern.given_first_count,
+            total_count=detected_pattern.total_count,
             threshold_met=False,
+            decision_confidence=detected_pattern.decision_confidence,
         )
 
         individual_analyses = self._build_individual_analyses(name_candidates, results)

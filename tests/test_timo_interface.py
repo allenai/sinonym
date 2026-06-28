@@ -105,6 +105,8 @@ def test_format_pattern_exposes_batch_decision_confidence(predictor: Predictor):
     assert pattern.confidence == TIE_CONFIDENCE
     assert pattern.decision_confidence >= pattern.confidence
     assert pattern.voting_count == pattern.surname_first_count + pattern.given_first_count
+    assert pattern.vote_margin_count == abs(pattern.surname_first_count - pattern.given_first_count)
+    assert pattern.vote_margin == pattern.vote_margin_count / pattern.total_count
     assert pattern.threshold_met
 
 
@@ -132,6 +134,8 @@ def test_prediction_models_keep_mutable_backwards_compatible_shapes_and_enum_typ
             given_first_count=0,
             total_count=0,
             voting_count=0,
+            vote_margin_count=0,
+            vote_margin=0.0,
             threshold_met=False,
         )
 

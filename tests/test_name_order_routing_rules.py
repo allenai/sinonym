@@ -2,6 +2,7 @@ import csv
 import runpy
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -372,6 +373,41 @@ def test_pp_vys_abstain_rule_allows_empty_ratio_sentinel():
 
     assert routed[0]["router_prediction"] == "vys"
     assert routed[0]["router_reason"] == "old_new_vys"
+
+
+def test_pp_vys_builder_preserves_missing_ratio_evidence():
+    pp_batch = SimpleNamespace(
+        names=["Wang X"],
+        name_order_evidence=[
+            SimpleNamespace(
+                raw_name="Wang X",
+                selected_format="surname_first",
+                selected_over_alternate_surname_frequency_ratio=None,
+            ),
+        ],
+        format_pattern=SimpleNamespace(total_count=1, decision_confidence=1.0),
+    )
+    vys_batch = SimpleNamespace(
+        names=["Wang X"],
+        name_order_evidence=[SimpleNamespace(selected_format="given_first")],
+    )
+
+    rows = build_pp_vys_abstain_rows(
+        pp_batch,
+        vys_batch,
+        [
+            {
+                "old_prediction": "vys",
+                "new_prediction": "pp",
+                "new_reason": "strong_pp_paper_context",
+            },
+        ],
+    )
+    routed = route_pp_vys_abstain_rows(rows)
+
+    assert rows[0]["pp_selected_surname_frequency_ratio"] is None
+    assert routed[0]["router_prediction"] == "vys"
+    assert routed[0]["router_reason"] == "old_vys_new_pp_default_vys"
 
 
 def test_pp_vys_abstain_rule_applies_effective_plus_vys_override():

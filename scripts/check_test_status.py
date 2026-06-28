@@ -9,11 +9,292 @@ import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-EXPECTED_FAILURES = 44
 PYTEST_BASELINE_RETURN_CODES = {0, 1}
+UNEXPECTED_FAILURE_SAMPLE_SIZE = 5
+EXPECTED_NORMALIZED_NAME_FAILURES = (
+    (
+        "tests.test_acl::test_acl_chinese_names[Tong Zhang-Tong Zhang]",
+        "Tong Zhang",
+        "Tong Zhang",
+        "Zhang Tong",
+    ),
+    (
+        "tests.test_acl::test_acl_chinese_names[Fei Yu-Fei Yu]",
+        "Fei Yu",
+        "Fei Yu",
+        "Yu Fei",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Hao Fei-Hao Fei]",
+        "Hao Fei",
+        "Hao Fei",
+        "Fei Hao",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Hao-Ran Wei-Hao-Ran Wei]",
+        "Hao-Ran Wei",
+        "Hao-Ran Wei",
+        "Wei Hao-Ran",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Haoran Jin-Hao-Ran Jin]",
+        "Haoran Jin",
+        "Hao-Ran Jin",
+        "Haoran Jin",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Haoran Que-Hao-Ran Que]",
+        "Haoran Que",
+        "Hao-Ran Que",
+        "Que Haoran",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Haoran Ye-Hao-Ran Ye]",
+        "Haoran Ye",
+        "Hao-Ran Ye",
+        "Haoran Ye",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Kun Kuang-Kun Kuang]",
+        "Kun Kuang",
+        "Kun Kuang",
+        "Kuang Kun",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Qianlong Du-Qian-Long Du]",
+        "Qianlong Du",
+        "Qian-Long Du",
+        "Du Qianlong",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Qianlong Wang-Qian-Long Wang]",
+        "Qianlong Wang",
+        "Qian-Long Wang",
+        "Wang Qianlong",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Xinlei Chen-Xin-Lei Chen]",
+        "Xinlei Chen",
+        "Xin-Lei Chen",
+        "Chen Xinlei",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Xinlei He-Xin-Lei He]",
+        "Xinlei He",
+        "Xin-Lei He",
+        "He Xinlei",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Yao Shu-Yao Shu]",
+        "Yao Shu",
+        "Yao Shu",
+        "Shu Yao",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Yuwen Wang-Yuwen Wang]",
+        "Yuwen Wang",
+        "Yuwen Wang",
+        "Wang Yuwen",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Yuxuan Gu-Yuxuan Gu]",
+        "Yuxuan Gu",
+        "Yuxuan Gu",
+        "Gu Yuxuan",
+    ),
+    (
+        "tests.test_basic_chinese_names::test_basic_chinese_names[Feng Cha-expected4]",
+        "Feng Cha",
+        "Cha Feng",
+        "Feng Cha",
+    ),
+    (
+        "tests.test_basic_chinese_names::test_basic_chinese_names[He Cha-expected7]",
+        "He Cha",
+        "Cha He",
+        "He Cha",
+    ),
+    (
+        "tests.test_basic_chinese_names::test_basic_chinese_names[Hu Cha-expected9]",
+        "Hu Cha",
+        "Cha Hu",
+        "Hu Cha",
+    ),
+    (
+        "tests.test_basic_chinese_names::test_basic_chinese_names[Li Gong-expected13]",
+        "Li Gong",
+        "Gong Li",
+        "Li Gong",
+    ),
+    (
+        "tests.test_basic_chinese_names::test_basic_chinese_names[Gao Wei-expected45]",
+        "Gao Wei",
+        "Wei Gao",
+        "Gao Wei",
+    ),
+    (
+        "tests.test_basic_chinese_names::test_basic_chinese_names[Kong Kung-expected63]",
+        "Kong Kung",
+        "Kung Kong",
+        "Kong Kung",
+    ),
+    (
+        "tests.test_basic_chinese_names::test_basic_chinese_names[Lu Xun-expected75]",
+        "Lu Xun",
+        "Xun Lu",
+        "Lu Xun",
+    ),
+    (
+        "tests.test_basic_chinese_names::test_basic_chinese_names[Qin Shi-expected80]",
+        "Qin Shi",
+        "Shi Qin",
+        "Qin Shi",
+    ),
+    (
+        "tests.test_basic_chinese_names::test_basic_chinese_names[Zhou Xun-expected110]",
+        "Zhou Xun",
+        "Xun Zhou",
+        "Zhou Xun",
+    ),
+    (
+        "tests.test_compound_names::test_compound_names[Leung Ka Fai-expected7]",
+        "Leung Ka Fai",
+        "Ka-Fai Leung",
+        "Leung-Ka Fai",
+    ),
+    (
+        "tests.test_misc::test_misc_chinese_names[Jin Hua-expected13]",
+        "Jin Hua",
+        "Hua Jin",
+        "Jin Hua",
+    ),
+    (
+        "tests.test_misc::test_misc_chinese_names[Miao Yu-expected21]",
+        "Miao Yu",
+        "Miao Yu",
+        "Yu Miao",
+    ),
+    (
+        "tests.test_misc::test_misc_chinese_names[Yu Miao-expected22]",
+        "Yu Miao",
+        "Miao Yu",
+        "Yu Miao",
+    ),
+    (
+        "tests.test_misc::test_misc_chinese_names[Wen Jing-expected33]",
+        "Wen Jing",
+        "Jing Wen",
+        "Wen Jing",
+    ),
+    (
+        "tests.test_misc::test_misc_chinese_names[Jing Wen-expected34]",
+        "Jing Wen",
+        "Jing Wen",
+        "Wen Jing",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Gui Rui-expected_result6]",
+        "Gui Rui",
+        "Rui Gui",
+        "Gui Rui",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Shu Yao-expected_result13]",
+        "Shu Yao",
+        "Yao Shu",
+        "Shu Yao",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Huang Yu Chang-expected_result19]",
+        "Huang Yu Chang",
+        "Yu-Chang Huang",
+        "Huang-Yu Chang",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Jia Jian Feng-expected_result24]",
+        "Jia Jian Feng",
+        "Jian-Feng Jia",
+        "Jia-Jian Feng",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Fan Jia Liang-expected_result41]",
+        "Fan Jia Liang",
+        "Jia-Liang Fan",
+        "Fan-Jia Liang",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Wei Wen Xing-expected_result48]",
+        "Wei Wen Xing",
+        "Wen-Xing Wei",
+        "Wei-Wen Xing",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Xi Zhao-expected_result79]",
+        "Xi Zhao",
+        "Zhao Xi",
+        "Xi Zhao",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Fu Meng Ting-expected_result86]",
+        "Fu Meng Ting",
+        "Meng-Ting Fu",
+        "Fu-Meng Ting",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[ke chen-expected_result106]",
+        "ke chen",
+        "Ke Chen",
+        "Chen Ke",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[xu feng-expected_result120]",
+        "xu feng",
+        "Feng Xu",
+        "Xu Feng",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[yang guang-expected_result121]",
+        "yang guang",
+        "Guang Yang",
+        "Yang Guang",
+    ),
+    (
+        r"tests.test_mixed_scripts::test_mixed_scripts[Zhou\uff08Mary\uff09Li-expected8]",
+        "Zhou\uff08Mary\uff09Li",
+        "Li Zhou",
+        "Zhou Li",
+    ),
+    (
+        "tests.test_name_formatting::test_name_formatting[JinHua-expected9]",
+        "JinHua",
+        "Hua Jin",
+        "Jin Hua",
+    ),
+    (
+        "tests.test_name_formatting::test_name_formatting[LinShu-expected95]",
+        "LinShu",
+        "Shu Lin",
+        "Lin Shu",
+    ),
+)
+EXPECTED_FAILURES = len(EXPECTED_NORMALIZED_NAME_FAILURES)
+EXPECTED_FAILURE_SIGNATURES = tuple(
+    (
+        nodeid,
+        "failure",
+        f"AssertionError: {raw_name!r}: expected normalized name {expected!r}, got {actual!r}",
+    )
+    for nodeid, raw_name, expected, actual in EXPECTED_NORMALIZED_NAME_FAILURES
+)
+EXPECTED_FAILURE_NODEIDS = tuple(nodeid for nodeid, *_ in EXPECTED_NORMALIZED_NAME_FAILURES)
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 
 class UvNotFoundError(OSError):
@@ -169,14 +450,49 @@ def check_performance_tests() -> tuple[bool, str]:
     return False, result.stdout + result.stderr
 
 
+def _failure_signature(failure: FailureDetail) -> tuple[str, str, str]:
+    """Return the stable fields used to compare a failure with the known baseline."""
+    return failure.nodeid, failure.kind, failure.message
+
+
+def unexpected_failure_signatures(failures: Iterable[FailureDetail]) -> list[FailureDetail]:
+    """Return current failures whose node id, kind, or message is not part of the known baseline."""
+    expected_counts = Counter(EXPECTED_FAILURE_SIGNATURES)
+    unexpected = []
+    for failure in failures:
+        signature = _failure_signature(failure)
+        if expected_counts[signature] > 0:
+            expected_counts[signature] -= 1
+        else:
+            unexpected.append(failure)
+
+    return sorted(unexpected, key=_failure_signature)
+
+
+def _unexpected_failure_sample(failures: list[FailureDetail]) -> str:
+    """Return a concise sample of unexpected failure signatures for the status line."""
+    samples = [
+        f"{failure.nodeid} ({failure.kind}: {failure.message})"
+        for failure in failures[:UNEXPECTED_FAILURE_SAMPLE_SIZE]
+    ]
+    suffix = (
+        ""
+        if len(failures) <= UNEXPECTED_FAILURE_SAMPLE_SIZE
+        else f", ... (+{len(failures) - UNEXPECTED_FAILURE_SAMPLE_SIZE} more)"
+    )
+    return f"{', '.join(samples)}{suffix}"
+
+
 def status_exit_decision(
     total_failures: int,
     *,
     perf_passed: bool,
     pytest_returncode: int | None,
     junit_error: str | None = None,
+    failures: Iterable[FailureDetail] | None = None,
 ) -> tuple[int, str]:
     """Return process exit code and final status message."""
+    unexpected_signatures = unexpected_failure_signatures(failures or ())
     if pytest_returncode is None:
         exit_code = 1
         status_message = "Test execution failed before pytest returned a status."
@@ -192,6 +508,9 @@ def status_exit_decision(
     elif pytest_returncode == 0 and total_failures > 0:
         exit_code = 1
         status_message = "JUnit reported failures even though pytest exited successfully."
+    elif unexpected_signatures:
+        exit_code = 1
+        status_message = f"Unexpected pytest failure signatures: {_unexpected_failure_sample(unexpected_signatures)}"
     elif not perf_passed:
         exit_code = 1
         status_message = "Performance tests failed!"
@@ -275,6 +594,7 @@ def main() -> None:
         perf_passed=perf_passed,
         pytest_returncode=test_run.returncode,
         junit_error=junit_error,
+        failures=failures,
     )
     print(f"\n{status_message}")
     sys.exit(exit_code)

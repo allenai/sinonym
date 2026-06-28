@@ -464,9 +464,7 @@ def build_pp_vys_abstain_rows(
                 "vys_selected_format": _order_format_value(vys_evidence.selected_format, "vys_selected_format"),
                 "pp_batch_total_count": pp_batch_result.format_pattern.total_count,
                 "pp_batch_confidence": pp_batch_result.format_pattern.decision_confidence,
-                "pp_selected_surname_frequency_ratio": _float_or_zero(
-                    pp_evidence.selected_over_alternate_surname_frequency_ratio,
-                ),
+                "pp_selected_surname_frequency_ratio": pp_evidence.selected_over_alternate_surname_frequency_ratio,
             },
         )
     return rows
@@ -913,10 +911,7 @@ def _japanese_probability_for_routing(detector_context: Any, compact_cjk: str) -
 
 
 def _decision_string(decision: PPVysRoutingDecision | Row, column: str, *, allowed: tuple[str, ...]) -> str:
-    if isinstance(decision, Mapping):
-        value = decision.get(column)
-    else:
-        value = getattr(decision, column, None)
+    value = decision.get(column) if isinstance(decision, Mapping) else getattr(decision, column, None)
     if not isinstance(value, str) or value not in allowed:
         message = f"{column} must be one of {', '.join(allowed)}"
         raise ValueError(message)
