@@ -129,12 +129,11 @@ class EthnicityClassificationService:
         # =================================================================
 
         # Check if this is an all-Chinese character input that could be Japanese
-        if (original_text and
-            self._normalizer._text_preprocessor.is_all_chinese_input(original_text) and
-            self._ml_classifier.is_available()):
+        compact_chinese_text = self._normalizer._text_preprocessor.compact_all_chinese_input(original_text)
+        if compact_chinese_text and self._ml_classifier.is_available():
 
             # Use ML classifier to check for Japanese names in Chinese characters
-            ml_result = self._ml_classifier.classify_all_chinese_name(original_text)
+            ml_result = self._ml_classifier.classify_all_chinese_name(compact_chinese_text)
 
             # If ML classifier confidently identifies it as Japanese, reject it
             if ml_result.success is False and "japanese" in ml_result.error_message:

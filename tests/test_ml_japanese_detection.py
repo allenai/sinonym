@@ -51,6 +51,7 @@ ML_JAPANESE_TEST_CASES = [
     ("黒田東彦", (False, "should_be_rejected")),  # Kuroda Haruhiko - Bank of Japan governor
     ("岸田文雄", (False, "should_be_rejected")),  # Kishida Fumio - current Prime Minister
     ("菅義偉", (False, "should_be_rejected")),  # Suga Yoshihide - former Prime Minister
+    ("原田 泰夫", (False, "should_be_rejected")),  # Harada Yasuo - spaced Kanji should still hit ML classifier
 ]
 
 # Chinese control cases that should be accepted (for comparison)
@@ -63,6 +64,8 @@ ML_CHINESE_CONTROL_CASES = [
     ("刘八", (True, "Ba Liu")),  # Common Chinese test name
     ("黄九", (True, "Jiu Huang")),  # Common Chinese test name
     ("周十", (True, "Shi Zhou")),  # Common Chinese test name
+    ("黄 嘉平", (True, "Jia-Ping Huang")),  # Spaced Han Chinese name should remain accepted
+    ("功华 张", (True, "Gong-Hua Zhang")),  # Spaced Han given-surname should use compact text for JP classification
 ]
 
 

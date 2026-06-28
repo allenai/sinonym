@@ -128,23 +128,23 @@ class TextPreprocessor:
             return "title"
         return "mixed"
 
-    def is_all_chinese_input(self, text: str) -> bool:
-        """
-        Detect if input consists entirely of Chinese characters.
-        
-        This helps identify names like "张伟明" that need special processing
-        for surname/given name boundary detection.
-        """
+    def compact_all_chinese_input(self, text: str) -> str:
+        """Return compact CJK text when the input contains only CJK plus separators."""
         if not text or not text.strip():
-            return False
+            return ""
 
-        # Remove whitespace and punctuation for analysis
         cleaned = self._config.sep_pattern.sub("", text.strip())
+        cleaned = self._config.whitespace_pattern.sub("", cleaned)
 
-        # Must have content after cleaning
         if not cleaned:
-            return False
+            return ""
 
+        if not self._contains_only_cjk_chars(cleaned):
+            return ""
+        return cleaned
+
+    def _contains_only_cjk_chars(self, text: str) -> bool:
+        """Return whether every character in text is covered by the CJK pattern."""
         # Check if all remaining characters are CJK - use thread-local character caching for performance
         if not hasattr(self, "_thread_local"):
             import threading
@@ -154,12 +154,29 @@ class TextPreprocessor:
             self._thread_local.cjk_char_cache = {}
 
         cache = self._thread_local.cjk_char_cache
-        for char in cleaned:
+        for char in text:
             if char not in cache:
                 cache[char] = bool(self._config.cjk_pattern.search(char))
             if not cache[char]:
                 return False
         return True
+
+    def is_all_chinese_input(self, text: str) -> bool:
+        """
+        Detect if input consists entirely of Chinese characters.
+
+        This helps identify names like "张伟明" that need special processing
+        for surname/given name boundary detection.
+        """
+        if not text or not text.strip():
+            return False
+
+        # Remove separator punctuation for analysis. Whitespace remains significant
+        # because spaced Han names use separate parsing logic downstream.
+        cleaned = self._config.sep_pattern.sub("", text.strip())
+        if not cleaned:
+            return False
+        return self._contains_only_cjk_chars(cleaned)
 
     def contains_non_chinese_scripts(self, text: str) -> bool:
         """
