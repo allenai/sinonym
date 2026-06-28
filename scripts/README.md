@@ -54,6 +54,15 @@ Trains the Chinese-vs-Japanese name classifier used in production. Downloads Chi
 uv run python scripts/train_ml_classifier_for_chinese_vs_japanese.py
 ```
 
+### `name_order_routing_rules.py`
+Applies the external routing rules for context runs that compare paper-level PP, VYS, and input-order abstain outputs. This is intentionally a script, not `sinonym` package API: it consumes evidence columns emitted beside PP/VYS batch runs and adds `router_prediction` plus `router_reason`.
+CSV and JSONL use only the standard library; Parquet inputs/outputs require pandas plus a Parquet engine in the runtime environment.
+
+```bash
+uv run python scripts/name_order_routing_rules.py pp-vys-abstain --input pp_vys_features.parquet --output routed.parquet
+uv run python scripts/name_order_routing_rules.py pp-abstain --input pp_only_features.parquet --output routed.parquet
+```
+
 ## Abandoned Scripts
 
 These remain for historical reference but are not used by the library. The rule-based parser in `sinonym.services.parsing` replaced the ML approach.
