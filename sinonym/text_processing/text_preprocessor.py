@@ -175,6 +175,7 @@ class TextPreprocessor:
         # Remove separator punctuation for analysis. Whitespace remains significant
         # because spaced Han names use separate parsing logic downstream.
         cleaned = self._config.sep_pattern.sub("", text.strip())
+        cleaned = cleaned.translate(self._config.hyphens_apostrophes_tr)
         if not cleaned:
             return False
         return self._contains_only_cjk_chars(cleaned)

@@ -214,7 +214,11 @@ class NormalizationService:
         for token in mix:
             if self._config.cjk_pattern.search(token):
                 # Convert Han to pinyin. all-Chinese and mixed-script paths share the same behavior.
-                pinyin_tokens = self._cache_service.han_to_pinyin_fast(token)
+                han_token = token
+                if is_all_chinese:
+                    han_token = self._config.sep_pattern.sub("", han_token)
+                    han_token = han_token.translate(self._config.hyphens_apostrophes_tr)
+                pinyin_tokens = self._cache_service.han_to_pinyin_fast(han_token)
                 han_tokens.extend(pinyin_tokens)
             else:
                 # Clean Roman token
