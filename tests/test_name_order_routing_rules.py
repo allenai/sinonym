@@ -2,11 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.name_order_routing_rules import route_pp_abstain_rows, route_pp_vys_abstain_rows
+from sinonym.pipeline.name_order_routing import route_pp_abstain_rows, route_pp_vys_abstain_rows
 
 
 def _pp_vys_row(**overrides):
     row = {
+        "name": "Xi Jiang",
         "old_prediction": "pp",
         "new_prediction": "pp",
         "new_reason": "weak_or_conflicting_evidence",
@@ -289,3 +290,70 @@ def test_pp_vys_abstain_rule_applies_effective_plus_pp_overrides():
         "strong_vys_three_vote_mid_ratio_pp",
         "endpoint_pp_low_count_low_conf_very_high_ratio",
     ]
+
+
+def test_pp_vys_abstain_rule_applies_promoted_name_priors():
+    routed = route_pp_vys_abstain_rows(
+        [
+            _pp_vys_row(
+                name="Chong Pei Pei",
+                old_prediction="vys",
+                new_prediction="vys",
+                new_reason="strong_vys_batch_context",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+            ),
+            _pp_vys_row(
+                name="Ouyang Yu",
+                old_prediction="vys",
+                new_prediction="vys",
+                new_reason="weak_or_conflicting_evidence",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+            ),
+            _pp_vys_row(
+                name="Woo Jin Chung",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+            ),
+            _pp_vys_row(
+                name="Ching Yee Yong",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+            ),
+        ],
+    )
+
+    assert [row["router_prediction"] for row in routed] == ["pp", "pp", "vys", "vys"]
+    assert [row["router_reason"] for row in routed] == [
+        "name_prior_repeated_tail_given_surname_first",
+        "name_prior_ouyang_surname_first",
+        "name_prior_korean_given_first_three_token",
+        "name_prior_cantonese_given_first",
+    ]
+
+
+def test_pp_vys_abstain_rule_does_not_apply_rejected_broad_name_priors():
+    routed = route_pp_vys_abstain_rows(
+        [
+            _pp_vys_row(
+                name="Sima Hay",
+                old_prediction="vys",
+                new_prediction="vys",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+                pp_batch_total_count=6,
+            ),
+            _pp_vys_row(
+                name="Li Wei",
+                old_prediction="vys",
+                new_prediction="vys",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+                pp_batch_total_count=6,
+            ),
+        ],
+    )
+
+    assert [row["router_prediction"] for row in routed] == ["vys", "vys"]
+    assert [row["router_reason"] for row in routed] == ["old_new_vys", "old_new_vys"]

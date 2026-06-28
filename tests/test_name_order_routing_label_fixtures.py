@@ -2,7 +2,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from scripts.name_order_routing_rules import route_pp_abstain_rows, route_pp_vys_abstain_rows
+from sinonym.pipeline.name_order_routing import route_pp_abstain_rows, route_pp_vys_abstain_rows
 
 DATA_DIR = Path("sinonym/data/name_order_routing")
 PP_VYS_FIXTURE_ROWS = 1000
@@ -30,14 +30,21 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
 
     decisive = [row for row in routed if row["decision"] in {"pp", "vys"}]
     confusion = _confusion(decisive, {"pp", "vys"}, "effective_router_prediction")
+    reason_counts = Counter(row["router_reason"] for row in decisive)
 
     assert len(rows) == PP_VYS_FIXTURE_ROWS
     assert len(decisive) == PP_VYS_DECISIVE_ROWS
     assert confusion == {
-        ("pp", "pp"): 399,
-        ("pp", "vys"): 75,
-        ("vys", "pp"): 28,
-        ("vys", "vys"): 467,
+        ("pp", "pp"): 405,
+        ("pp", "vys"): 69,
+        ("vys", "pp"): 24,
+        ("vys", "vys"): 471,
+    }
+    assert {reason: count for reason, count in reason_counts.items() if reason.startswith("name_prior_")} == {
+        "name_prior_cantonese_given_first": 6,
+        "name_prior_korean_given_first_three_token": 34,
+        "name_prior_ouyang_surname_first": 1,
+        "name_prior_repeated_tail_given_surname_first": 5,
     }
 
 
