@@ -164,7 +164,6 @@ data structures and the detector can be safely used from multiple threads.
 
 import logging
 import string
-import threading
 
 from sinonym.coretypes import (
     BatchFormatPattern,
@@ -175,6 +174,8 @@ from sinonym.coretypes import (
 )
 from sinonym.coretypes.results import ParsedName
 from sinonym.services import (
+    BatchAnalysisDependencies,
+    BatchAnalysisOptions,
     BatchAnalysisService,
     CacheInfo,
     ChineseNameConfig,
@@ -218,7 +219,6 @@ class ChineseNameDetector:
         self._formatting_service: NameFormattingService | None = None
         self._non_person_input_service: NonPersonInputDetectionService | None = None
         self._batch_analysis_service: BatchAnalysisService | None = None
-        self._batch_threshold_lock = threading.Lock()
 
         # Initialize data structures
         self._initialize()
@@ -247,8 +247,11 @@ class ChineseNameDetector:
             self._batch_analysis_service = BatchAnalysisService(
                 self._parsing_service,
                 ethnicity_service=self._ethnicity_service,
-                individual_parser=self.normalize_name,
-                input_failure=self._initial_input_failure,
+                dependencies=BatchAnalysisDependencies(
+                    min_tokens_required=self._config.min_tokens_required,
+                    individual_parser=self.normalize_name,
+                    input_failure=self._initial_input_failure,
+                ),
             )
 
     def _ensure_initialized(self) -> None:
@@ -977,22 +980,16 @@ class ChineseNameDetector:
             individual_results = [self.normalize_name(name) for name in names]
             return self._create_fallback_batch_result(names, individual_results)
 
-        with self._batch_threshold_lock:
-            # Configure threshold for this analysis
-            original_threshold = self._batch_analysis_service._format_threshold
-            self._batch_analysis_service._format_threshold = format_threshold
-
-            try:
-                return self._batch_analysis_service.analyze_name_batch(
-                    names,
-                    self._normalizer,
-                    self._data,
-                    self._formatting_service,
-                    minimum_batch_size,
-                )
-            finally:
-                # Restore original threshold
-                self._batch_analysis_service._format_threshold = original_threshold
+        return self._batch_analysis_service.analyze_name_batch(
+            names,
+            self._normalizer,
+            self._data,
+            self._formatting_service,
+            BatchAnalysisOptions(
+                minimum_batch_size=minimum_batch_size,
+                format_threshold=format_threshold,
+            ),
+        )
 
     def detect_batch_format(
         self,
@@ -1033,20 +1030,12 @@ class ChineseNameDetector:
                 threshold_met=False,
             )
 
-        with self._batch_threshold_lock:
-            # Configure threshold for this analysis
-            original_threshold = self._batch_analysis_service._format_threshold
-            self._batch_analysis_service._format_threshold = format_threshold
-
-            try:
-                return self._batch_analysis_service.detect_batch_format(
-                    names,
-                    self._normalizer,
-                    self._data,
-                )
-            finally:
-                # Restore original threshold
-                self._batch_analysis_service._format_threshold = original_threshold
+        return self._batch_analysis_service.detect_batch_format(
+            names,
+            self._normalizer,
+            self._data,
+            format_threshold=format_threshold,
+        )
 
     def process_name_batch(
         self,

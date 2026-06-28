@@ -24,6 +24,16 @@ from typing import Any, Literal
 Route = Literal["pp", "vys", "abstain"]
 Row = Mapping[str, object]
 MutableRow = dict[str, object]
+FORMAT_VALUES = ("surname_first", "given_first", "mixed")
+ORDER_FORMAT_VALUES = ("surname_first", "given_first")
+PREDICTION_VALUES = ("pp", "vys", "abstain", "not_person")
+PP_VYS_REASON_VALUES = (
+    "endpoint_frequency_strongly_favors_pp",
+    "endpoint_frequency_strongly_favors_vys",
+    "strong_pp_paper_context",
+    "strong_vys_batch_context",
+    "weak_or_conflicting_evidence",
+)
 
 PP_VYS_ABSTAIN_REQUIRED_COLUMNS = (
     "old_prediction",
@@ -78,11 +88,11 @@ def route_pp_vys_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
     for row in rows:
         _require_columns(row, PP_VYS_ABSTAIN_REQUIRED_COLUMNS)
         routed = dict(row)
-        ratio = _float(row["pp_selected_surname_frequency_ratio"])
-        pp_batch_total_count = _float(row["pp_batch_total_count"])
-        old_prediction = _string(row["old_prediction"])
-        new_prediction = _string(row["new_prediction"])
-        new_reason = _string(row["new_reason"])
+        ratio = _optional_float(row, "pp_selected_surname_frequency_ratio", default=0.0)
+        pp_batch_total_count = _required_float(row, "pp_batch_total_count")
+        old_prediction = _required_string(row, "old_prediction", allowed=("pp", "vys"))
+        new_prediction = _required_string(row, "new_prediction", allowed=PREDICTION_VALUES)
+        new_reason = _required_string(row, "new_reason", allowed=PP_VYS_REASON_VALUES)
 
         input_order_candidate = _input_order_candidate(row)
         route: Route = "pp"
@@ -215,8 +225,22 @@ def pp_abstain_router(dataframe: Any) -> Any:
 
 
 def _input_order_candidate(row: Row) -> str:
-    pp_preserves_input_order = _string(row["pp_selected_format"]) == "given_first"
-    vys_preserves_input_order = _string(row["vys_selected_format"]) == "given_first"
+    pp_preserves_input_order = (
+        _required_string(
+            row,
+            "pp_selected_format",
+            allowed=ORDER_FORMAT_VALUES,
+        )
+        == "given_first"
+    )
+    vys_preserves_input_order = (
+        _required_string(
+            row,
+            "vys_selected_format",
+            allowed=ORDER_FORMAT_VALUES,
+        )
+        == "given_first"
+    )
     if pp_preserves_input_order and not vys_preserves_input_order:
         return "pp"
     if vys_preserves_input_order and not pp_preserves_input_order:
@@ -225,20 +249,19 @@ def _input_order_candidate(row: Row) -> str:
 
 
 def _pp_abstain_predicates(row: Row) -> dict[str, bool]:
-    pp_result_token_count = _float(row["pp_result_token_count"])
-    batch_total_count = _float(row["batch_total_count"])
-    selected_surname_frequency = _float(row["selected_surname_frequency"])
-    selected_over_alternate_ratio = _float(row["selected_over_alternate_ratio"])
-    raw_tokens = _float(row["raw_tokens"])
-    jp_probability = _float(row["jp_probability"])
-    has_cjk = _bool(row["has_cjk"])
-    has_latin = _bool(row["has_latin"])
-    cjk_has_space = _bool(row["cjk_has_space"])
-    compact_cjk = _string(row["compact_cjk"])
+    pp_result_token_count = _required_float(row, "pp_result_token_count")
+    batch_total_count = _required_float(row, "batch_total_count")
+    selected_surname_frequency = _required_float(row, "selected_surname_frequency")
+    selected_over_alternate_ratio = _required_float(row, "selected_over_alternate_ratio")
+    raw_tokens = _required_float(row, "raw_tokens")
+    jp_probability = _required_float(row, "jp_probability")
+    has_cjk = _required_bool(row, "has_cjk")
+    has_latin = _required_bool(row, "has_latin")
+    cjk_has_space = _required_bool(row, "cjk_has_space")
+    compact_cjk = _optional_string(row, "compact_cjk")
+    selected_format = _required_string(row, "selected_format", allowed=FORMAT_VALUES)
 
-    surname_first_two_token = (
-        pp_result_token_count == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT and _string(row["selected_format"]) == "surname_first"
-    )
+    surname_first_two_token = pp_result_token_count == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT and selected_format == "surname_first"
     weak_zero_batch = batch_total_count == 0 and selected_surname_frequency < PP_ABSTAIN_WEAK_SURNAME_FREQUENCY_MAX
     zero_batch_mixed_long = batch_total_count == 0 and has_cjk and has_latin and raw_tokens >= PP_ABSTAIN_MIXED_LONG_RAW_TOKEN_MIN
     zero_batch_latin_ambiguous_endpoint = (
@@ -261,7 +284,7 @@ def _pp_abstain_predicates(row: Row) -> dict[str, bool]:
     )
     clean_bilingual_given_first = (
         pp_result_token_count == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
-        and _string(row["selected_format"]) == "given_first"
+        and selected_format == "given_first"
         and has_cjk
         and has_latin
         and raw_tokens == PP_ABSTAIN_CLEAN_BILINGUAL_RAW_TOKEN_COUNT
@@ -307,36 +330,74 @@ def _with_routing_columns(dataframe: Any, rows: list[MutableRow], columns: tuple
     return output
 
 
-def _string(value: object) -> str:
+def _is_nan(value: object) -> bool:
+    return isinstance(value, float) and math.isnan(value)
+
+
+def _required_string(row: Row, column: str, *, allowed: tuple[str, ...] | None = None) -> str:
+    value = row[column]
+    if value is None or _is_nan(value):
+        message = f"{column} is required"
+        raise ValueError(message)
+    text = str(value)
+    if text == "":
+        message = f"{column} is required"
+        raise ValueError(message)
+    if allowed is not None and text not in allowed:
+        message = f"{column} must be one of {', '.join(allowed)}"
+        raise ValueError(message)
+    return text
+
+
+def _optional_string(row: Row, column: str) -> str:
+    value = row[column]
     if value is None:
         return ""
-    if isinstance(value, float) and math.isnan(value):
+    if _is_nan(value):
         return ""
     return str(value)
 
 
-def _float(value: object) -> float:
-    if value is None:
-        return 0.0
+def _required_float(row: Row, column: str) -> float:
+    value = row[column]
+    if value is None or _is_nan(value):
+        message = f"{column} must be a finite number"
+        raise ValueError(message)
     try:
         parsed = float(value)
     except (TypeError, ValueError):
-        return 0.0
-    if math.isnan(parsed):
-        return 0.0
+        message = f"{column} must be a finite number"
+        raise ValueError(message) from None
+    if not math.isfinite(parsed):
+        message = f"{column} must be a finite number"
+        raise ValueError(message)
     return parsed
 
 
-def _bool(value: object) -> bool:
+def _optional_float(row: Row, column: str, *, default: float) -> float:
+    value = row[column]
+    if value is None or value == "" or _is_nan(value):
+        return default
+    return _required_float(row, column)
+
+
+def _required_bool(row: Row, column: str) -> bool:
+    value = row[column]
     if isinstance(value, bool):
         return value
-    if value is None:
-        return False
-    if isinstance(value, float) and math.isnan(value):
-        return False
+    if value is None or _is_nan(value):
+        message = f"{column} must be a boolean"
+        raise ValueError(message)
+    if isinstance(value, int | float) and value in {0, 1}:
+        return bool(value)
     if isinstance(value, str):
-        return value.strip().casefold() in {"1", "true", "t", "yes", "y"}
-    return bool(value)
+        normalized = value.strip().casefold()
+        if normalized in {"1", "true", "t", "yes", "y"}:
+            return True
+        if normalized in {"0", "false", "f", "no", "n"}:
+            return False
+    message = f"{column} must be a boolean"
+    raise ValueError(message)
 
 
 def _read_rows(path: Path) -> list[MutableRow]:

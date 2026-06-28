@@ -16,7 +16,7 @@ import pytest
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.coretypes import NameFormat, ParseCandidate
 from sinonym.resources import open_csv_reader, resource_path
-from sinonym.services.batch_analysis import LATIN_ONLY_REPRESENTATION, BatchAnalysisService
+from sinonym.services.batch_analysis import LATIN_ONLY_REPRESENTATION, BatchAnalysisService, BatchCandidateEntry
 from sinonym.services.non_person import NON_PERSON_FAILURE_REASON
 from sinonym.services.normalization import CompoundMetadata
 from sinonym.utils.string_manipulation import StringManipulationUtils
@@ -167,6 +167,16 @@ def test_three_token_order_preservation_regression(detector):
     clear = detector.normalize_name("Zhang Wei Ming")
     assert clear.success
     assert clear.result == "Wei-Ming Zhang"
+
+
+def test_parsed_original_order_keeps_semantic_component_labels(detector):
+    result = detector.normalize_name("Li Wei")
+
+    assert result.success
+    assert result.result == "Wei Li"
+    assert result.parsed_original_order.given_name == "Wei"
+    assert result.parsed_original_order.surname == "Li"
+    assert result.parsed_original_order.order == ["surname", "given"]
 
 
 def test_guarded_low_frequency_surname_ratio_preserves_given_first_order(detector):
@@ -478,10 +488,34 @@ def test_batch_format_votes_ignore_weak_candidate_gaps_and_duplicate_names(detec
         original_compound_format=None,
     )
     entries = [
-        ("Li Wei", [weak_surname_first, weak_given_first], weak_surname_first, None, LATIN_ONLY_REPRESENTATION),
-        ("Ming Zhang", [strong_given_first, strong_surname_first], strong_given_first, None, LATIN_ONLY_REPRESENTATION),
-        ("ming zhang", [strong_given_first, strong_surname_first], strong_given_first, None, LATIN_ONLY_REPRESENTATION),
-        ("Yan Wang", [strong_given_first, strong_surname_first], strong_given_first, None, LATIN_ONLY_REPRESENTATION),
+        BatchCandidateEntry(
+            "Li Wei",
+            [weak_surname_first, weak_given_first],
+            weak_surname_first,
+            None,
+            LATIN_ONLY_REPRESENTATION,
+        ),
+        BatchCandidateEntry(
+            "Ming Zhang",
+            [strong_given_first, strong_surname_first],
+            strong_given_first,
+            None,
+            LATIN_ONLY_REPRESENTATION,
+        ),
+        BatchCandidateEntry(
+            "ming zhang",
+            [strong_given_first, strong_surname_first],
+            strong_given_first,
+            None,
+            LATIN_ONLY_REPRESENTATION,
+        ),
+        BatchCandidateEntry(
+            "Yan Wang",
+            [strong_given_first, strong_surname_first],
+            strong_given_first,
+            None,
+            LATIN_ONLY_REPRESENTATION,
+        ),
     ]
 
     stats = detector._batch_analysis_service._collect_batch_vote_stats(entries)
@@ -491,19 +525,9 @@ def test_batch_format_votes_ignore_weak_candidate_gaps_and_duplicate_names(detec
     assert stats.names_with_candidates == 3
 
 
-def test_batch_analysis_service_old_constructor_signature_still_works(detector):
-    service = BatchAnalysisService(detector._parsing_service, detector._ethnicity_service)
-
-    pattern = service.detect_batch_format(["Xin Liu", "Yang Li"], detector._normalizer, detector._data)
-    fallback_batch = service.analyze_name_batch(
-        ["\u5f20Wei"],
-        detector._normalizer,
-        detector._data,
-        detector._formatting_service,
-    )
-
-    assert pattern.total_count == 2
-    assert fallback_batch.results[0].success
+def test_batch_analysis_service_is_detector_owned(detector):
+    with pytest.raises(TypeError):
+        BatchAnalysisService(detector._parsing_service, detector._ethnicity_service)
 
 
 def test_single_chinese_participant_does_not_meet_batch_application_threshold(detector):
@@ -779,19 +803,28 @@ def test_korean_specific_token_signal_is_capped(detector):
         "has_thi_pattern": False,
     }
     one_token_score = ethnicity_service._calculate_korean_score_from_analysis(
-        base_analysis, tokens, expanded_keys, normalized_cache,
+        base_analysis,
+        tokens,
+        expanded_keys,
+        normalized_cache,
     )
 
     two_token_analysis = dict(base_analysis)
     two_token_analysis["korean_specific_tokens"] = ["young", "seok"]
     two_token_score = ethnicity_service._calculate_korean_score_from_analysis(
-        two_token_analysis, tokens, expanded_keys, normalized_cache,
+        two_token_analysis,
+        tokens,
+        expanded_keys,
+        normalized_cache,
     )
 
     three_token_analysis = dict(base_analysis)
     three_token_analysis["korean_specific_tokens"] = ["young", "seok", "jin"]
     three_token_score = ethnicity_service._calculate_korean_score_from_analysis(
-        three_token_analysis, tokens, expanded_keys, normalized_cache,
+        three_token_analysis,
+        tokens,
+        expanded_keys,
+        normalized_cache,
     )
 
     assert one_token_score == 1.0
@@ -808,10 +841,16 @@ def test_batch_tie_break_heuristics_use_normalized_tokenization(detector):
         original_compound_format=None,
     )
     names = ["XinLiu", "YangLi", "WeiLi"]
-    name_candidates = [(name, [dummy_candidate], dummy_candidate, None, LATIN_ONLY_REPRESENTATION) for name in names]
+    name_candidates = [
+        BatchCandidateEntry(name, [dummy_candidate], dummy_candidate, None, LATIN_ONLY_REPRESENTATION) for name in names
+    ]
 
     assert all(len(name.split()) == 1 for name in names)
-    dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(name_candidates)
+    dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(
+        name_candidates,
+        detector._normalizer,
+        detector._data,
+    )
     assert dominant == NameFormat.GIVEN_FIRST
 
 

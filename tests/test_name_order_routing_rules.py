@@ -1,3 +1,5 @@
+import pytest
+
 from scripts.name_order_routing_rules import route_pp_abstain_rows, route_pp_vys_abstain_rows
 
 
@@ -168,3 +170,43 @@ def test_pp_abstain_rule_applies_spaced_cjk_and_jp_likelihood_guards():
         "spaced_cjk_zero_batch_surname_first",
         "jp_likelihood_060",
     ]
+
+
+def test_pp_abstain_rule_rejects_malformed_feature_values():
+    with pytest.raises(ValueError, match="selected_surname_frequency"):
+        route_pp_abstain_rows([_pp_abstain_row(batch_total_count=0, selected_surname_frequency="not-a-number")])
+
+    with pytest.raises(ValueError, match="has_cjk"):
+        route_pp_abstain_rows([_pp_abstain_row(has_cjk="definitely")])
+
+    with pytest.raises(ValueError, match="selected_format"):
+        route_pp_abstain_rows([_pp_abstain_row(selected_format="sideways")])
+
+
+def test_pp_vys_abstain_rule_rejects_unknown_enums():
+    with pytest.raises(ValueError, match="new_prediction"):
+        route_pp_vys_abstain_rows([_pp_vys_row(new_prediction="maybe")])
+
+    with pytest.raises(ValueError, match="pp_selected_format"):
+        route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_format="mixed")])
+
+    with pytest.raises(ValueError, match="pp_selected_surname_frequency_ratio"):
+        route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_surname_frequency_ratio="not-a-number")])
+
+
+def test_pp_vys_abstain_rule_allows_empty_ratio_sentinel():
+    routed = route_pp_vys_abstain_rows(
+        [
+            _pp_vys_row(
+                old_prediction="vys",
+                new_prediction="vys",
+                new_reason="strong_vys_batch_context",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+                pp_batch_total_count=2,
+                pp_selected_surname_frequency_ratio="",
+            ),
+        ],
+    )
+
+    assert routed[0]["router_prediction"] == "abstain"

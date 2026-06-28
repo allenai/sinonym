@@ -96,6 +96,15 @@ class NameParsingService:
 
         return None
 
+    def generate_parse_options(
+        self,
+        tokens: list[str],
+        normalized_cache: dict[str, str],
+        compound_metadata: dict[str, CompoundMetadata],
+    ) -> list[tuple[list[str], list[str], str | None]]:
+        """Return possible surname/given parses for batch-level scoring."""
+        return self._generate_all_parses_with_format(tokens, normalized_cache, compound_metadata)
+
     def _try_fallback_parse(
         self,
         order: list[str],

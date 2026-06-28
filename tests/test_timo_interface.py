@@ -1,96 +1,133 @@
-import unittest
+import pytest
+from pydantic import ValidationError
 
-from sinonym.timo.interface import Instance, Prediction, Predictor, PredictorConfig
+from sinonym.timo.interface import FormatPattern, Instance, NameFormatValue, Prediction, Predictor, PredictorConfig
+
+EXPECTED_BATCH_CONTEXT_RESULT_COUNT = 3
+TIE_CONFIDENCE = 0.5
 
 
-class TestTimoInterface(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.predictor = Predictor(config=PredictorConfig(), artifacts_dir=".")
+@pytest.fixture(scope="module")
+def predictor() -> Predictor:
+    return Predictor(config=PredictorConfig(), artifacts_dir=".")
 
-    def test_single_chinese_name(self):
-        results = self.predictor.predict_batch([Instance(name="Li Wei")])
-        self.assertEqual(len(results), 1)
-        r = results[0]
-        self.assertTrue(r.success)
-        self.assertIsNotNone(r.surname)
-        self.assertIsNotNone(r.given_name)
-        self.assertIsNotNone(r.confidence)
-        self.assertIsNone(r.error_message)
 
-    def test_chinese_name_characters(self):
-        results = self.predictor.predict_batch([Instance(name="巩俐")])
-        self.assertTrue(results[0].success)
-        self.assertIsNotNone(results[0].surname)
+def test_single_chinese_name(predictor: Predictor):
+    results = predictor.predict_batch([Instance(name="Li Wei")])
+    assert len(results) == 1
+    result = results[0]
+    assert result.success
+    assert result.surname == "Li"
+    assert result.given_name == "Wei"
+    assert result.confidence is not None
+    assert result.error_message is None
 
-    def test_chinese_name_comma_format(self):
-        results = self.predictor.predict_batch([Instance(name="Zhang, Ming")])
-        r = results[0]
-        self.assertTrue(r.success)
-        self.assertIsNotNone(r.surname)
-        self.assertIsNotNone(r.given_name)
 
-    def test_non_chinese_name(self):
-        results = self.predictor.predict_batch([Instance(name="John Smith")])
-        r = results[0]
-        self.assertFalse(r.success)
-        self.assertIsNotNone(r.error_message)
-        self.assertIsNone(r.given_name)
-        self.assertIsNone(r.surname)
+def test_chinese_name_characters(predictor: Predictor):
+    results = predictor.predict_batch([Instance(name="巩俐")])
+    assert results[0].success
+    assert results[0].surname is not None
 
-    def test_empty_string(self):
-        results = self.predictor.predict_batch([Instance(name="")])
-        self.assertFalse(results[0].success)
 
-    def test_whitespace_only(self):
-        results = self.predictor.predict_batch([Instance(name="   ")])
-        self.assertFalse(results[0].success)
+def test_chinese_name_comma_format(predictor: Predictor):
+    results = predictor.predict_batch([Instance(name="Zhang, Ming")])
+    result = results[0]
+    assert result.success
+    assert result.surname is not None
+    assert result.given_name is not None
 
-    def test_batch_with_context(self):
-        instances = [
-            Instance(name="Li Wei"),
-            Instance(name="Wang Weiming"),
-            Instance(name="John Smith"),
-        ]
-        results = self.predictor.predict_batch(instances)
-        self.assertEqual(len(results), 3)
-        self.assertTrue(results[0].success)
-        self.assertTrue(results[1].success)
-        self.assertFalse(results[2].success)
 
-    def test_prediction_is_pydantic_model(self):
-        results = self.predictor.predict_batch([Instance(name="Li Wei")])
-        r = results[0]
-        self.assertIsInstance(r, Prediction)
-        as_dict = r.dict()
-        self.assertIn("success", as_dict)
-        self.assertIn("error_message", as_dict)
-        self.assertIn("given_name", as_dict)
-        self.assertIn("surname", as_dict)
-        self.assertIn("middle_name", as_dict)
-        self.assertIn("confidence", as_dict)
-        self.assertIn("format_pattern", as_dict)
+def test_non_chinese_name(predictor: Predictor):
+    results = predictor.predict_batch([Instance(name="John Smith")])
+    result = results[0]
+    assert not result.success
+    assert result.error_message is not None
+    assert result.given_name is None
+    assert result.surname is None
 
-    def test_prediction_json_serialization(self):
-        results = self.predictor.predict_batch([Instance(name="Li Wei")])
-        json_str = results[0].json()
-        self.assertIn('"success": true', json_str)
-        self.assertIn('"confidence":', json_str)
 
-    def test_format_pattern_exposes_batch_decision_confidence(self):
-        summary = self.predictor.score_name_batch(["J. Liu", "Jing Wan"])
-        pattern = summary.format_pattern
+def test_empty_string(predictor: Predictor):
+    results = predictor.predict_batch([Instance(name="")])
+    assert not results[0].success
 
-        self.assertEqual(pattern.confidence, 0.5)
-        self.assertGreaterEqual(pattern.decision_confidence, pattern.confidence)
-        self.assertEqual(pattern.voting_count, pattern.surname_first_count + pattern.given_first_count)
-        self.assertTrue(pattern.threshold_met)
 
-    def test_compound_surname(self):
-        results = self.predictor.predict_batch([Instance(name="Ouyang Ming")])
-        if results[0].success:
-            self.assertIsNotNone(results[0].surname)
+def test_whitespace_only(predictor: Predictor):
+    results = predictor.predict_batch([Instance(name="   ")])
+    assert not results[0].success
 
-    def test_empty_batch(self):
-        results = self.predictor.predict_batch([])
-        self.assertEqual(len(results), 0)
+
+def test_batch_with_context(predictor: Predictor):
+    instances = [
+        Instance(name="Li Wei"),
+        Instance(name="Wang Weiming"),
+        Instance(name="John Smith"),
+    ]
+    results = predictor.predict_batch(instances)
+    assert len(results) == EXPECTED_BATCH_CONTEXT_RESULT_COUNT
+    assert results[0].success
+    assert results[1].success
+    assert not results[2].success
+
+
+def test_prediction_is_pydantic_model(predictor: Predictor):
+    results = predictor.predict_batch([Instance(name="Li Wei")])
+    result = results[0]
+    assert isinstance(result, Prediction)
+    as_dict = result.dict()
+    assert "success" in as_dict
+    assert "error_message" in as_dict
+    assert "given_name" in as_dict
+    assert "surname" in as_dict
+    assert "middle_name" in as_dict
+    assert "confidence" in as_dict
+    assert "format_pattern" in as_dict
+
+
+def test_prediction_json_serialization(predictor: Predictor):
+    results = predictor.predict_batch([Instance(name="Li Wei")])
+    json_str = results[0].json()
+    assert '"success": true' in json_str
+    assert '"confidence":' in json_str
+
+
+def test_format_pattern_exposes_batch_decision_confidence(predictor: Predictor):
+    summary = predictor.score_name_batch(["J. Liu", "Jing Wan"])
+    pattern = summary.format_pattern
+
+    assert pattern.confidence == TIE_CONFIDENCE
+    assert pattern.decision_confidence >= pattern.confidence
+    assert pattern.voting_count == pattern.surname_first_count + pattern.given_first_count
+    assert pattern.threshold_met
+
+
+def test_compound_surname(predictor: Predictor):
+    results = predictor.predict_batch([Instance(name="Ouyang Ming")])
+    assert results[0].success
+    assert results[0].given_name == "Ming"
+    assert results[0].surname == "Ouyang"
+
+
+def test_prediction_models_are_immutable_and_enum_typed(predictor: Predictor):
+    results = predictor.predict_batch([Instance(name="Li Wei"), Instance(name="Zhang Ming")])
+
+    with pytest.raises(TypeError):
+        results[0].format_pattern.dominant_format = "mutated"
+    assert isinstance(results[1].format_pattern.dominant_format, NameFormatValue)
+    assert results[1].format_pattern.dominant_format == NameFormatValue.SURNAME_FIRST
+
+    with pytest.raises(ValidationError):
+        FormatPattern(
+            dominant_format="sideways",
+            confidence=0.0,
+            decision_confidence=0.0,
+            surname_first_count=0,
+            given_first_count=0,
+            total_count=0,
+            voting_count=0,
+            threshold_met=False,
+        )
+
+
+def test_empty_batch(predictor: Predictor):
+    results = predictor.predict_batch([])
+    assert len(results) == 0

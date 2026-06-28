@@ -245,7 +245,9 @@ When you call `normalize_name`, you get a `ParseResult` with helpful structured 
   - `surname_tokens`, `given_tokens`: normalized, capitalized tokens used to form components
   - `middle_tokens`: trailing single-letter initials extracted from given name, if present
   - `order`: component order descriptor, typically `["given", "middle", "surname"]`
-- `parsed_original_order`: A `ParsedName` aligned to the input’s original order. In this view, the labels are positional: `given` corresponds to the first component(s) in the original input, and `surname` to the last component(s), regardless of the semantic roles used for normalization.
+- `parsed_original_order`: A `ParsedName` with the same semantic `surname` and
+  `given_name` labels as `parsed`, plus an `order` list that records how those
+  components appeared in the input.
 
 Notes:
 - The tokens in `parsed` and `parsed_original_order` are the same normalized tokens; only the conceptual ordering differs via the `order` list.
@@ -258,8 +260,8 @@ res = detector.normalize_name("Li Wei")
 # res.result == "Wei Li"
 # res.parsed.order == ["given", "middle", "surname"]
 # res.parsed_original_order.order == ["surname", "given"]
-# res.parsed_original_order.given_name == "Li"   # first in input
-# res.parsed_original_order.surname == "Wei"     # last in input
+# res.parsed_original_order.given_name == "Wei"
+# res.parsed_original_order.surname == "Li"
 
 res = detector.normalize_name("Chi-Ying F. Huang")
 # res.result == "Chi-Ying F Huang"
