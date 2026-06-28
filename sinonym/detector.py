@@ -323,7 +323,11 @@ class ChineseNameDetector:
             given_tokens=given_final,
             middle_name=" ".join(middle_tokens) if middle_tokens else "",
             middle_tokens=middle_tokens,
-            order=original_order,
+            order=original_component_order(
+                NameFormat.GIVEN_FIRST if original_order and original_order[0] == "given" else NameFormat.SURNAME_FIRST,
+                given_tokens,
+                middle_tokens,
+            ),
         )
         return ParseResult.success_with_name(
             formatted_name,

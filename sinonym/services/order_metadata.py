@@ -27,22 +27,36 @@ def _given_middle_order(given_tokens: list[str], middle_tokens: list[str]) -> li
 
 def _given_middle_labels(given_tokens: list[str]) -> list[str]:
     """Return per-token labels after applying the formatter's initial-peeling rules."""
-    labels = ["given"] * len(given_tokens)
-    if len(given_tokens) > 1:
-        part_lengths = [_token_letter_length(token) for token in given_tokens]
+    given_parts = _given_name_parts(given_tokens)
+    labels = ["given"] * len(given_parts)
+    part_lengths = [_token_letter_length(part) for part in given_parts]
 
-        leading_count = _leading_initial_count(part_lengths)
-        if leading_count > 0 and any(length > 1 for length in part_lengths[leading_count:]):
-            for index in range(leading_count):
-                labels[index] = "middle"
+    leading_count = _leading_initial_count(part_lengths)
+    if leading_count > 0 and any(length > 1 for length in part_lengths[leading_count:]):
+        for index in range(leading_count):
+            labels[index] = "middle"
 
-        remaining_lengths = part_lengths[leading_count:]
-        trailing_count = _trailing_initial_count(remaining_lengths)
-        if trailing_count > 0 and any(length > 1 for length in remaining_lengths[:-trailing_count]):
-            start = len(given_tokens) - trailing_count
-            for index in range(start, len(given_tokens)):
-                labels[index] = "middle"
+    remaining_lengths = part_lengths[leading_count:]
+    trailing_count = _trailing_initial_count(remaining_lengths)
+    if trailing_count > 0 and any(length > 1 for length in remaining_lengths[:-trailing_count]):
+        start = len(given_parts) - trailing_count
+        for index in range(start, len(given_parts)):
+            labels[index] = "middle"
     return labels
+
+
+def _given_name_parts(given_tokens: list[str]) -> list[str]:
+    """Return formatter-equivalent given-name parts for initial detection."""
+    parts: list[str] = []
+    for token in given_tokens:
+        clean_token = token.strip("-")
+        if not clean_token:
+            continue
+        if "-" in clean_token:
+            parts.extend(part.strip() for part in clean_token.split("-") if part.strip())
+        else:
+            parts.append(clean_token)
+    return parts
 
 
 def _leading_initial_count(part_lengths: list[int]) -> int:

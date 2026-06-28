@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sinonym.pipeline.name_order_routing import (
+    PP_ABSTAIN_REQUIRED_COLUMNS,
+    PP_VYS_ABSTAIN_REQUIRED_COLUMNS,
     MutableRow,
     route_pp_abstain_rows,
     route_pp_vys_abstain_rows,
@@ -99,6 +101,16 @@ def _output_fieldnames(input_fieldnames: list[str], rows: list[MutableRow], rout
     return fieldnames
 
 
+def _require_table_columns(fieldnames: list[str], required_columns: tuple[str, ...]) -> None:
+    """Validate header/schema columns before row-level routing runs."""
+    if not fieldnames:
+        return
+    missing = [column for column in required_columns if column not in fieldnames]
+    if missing:
+        message = f"missing required columns: {', '.join(missing)}"
+        raise ValueError(message)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -112,9 +124,11 @@ def main() -> None:
 
     table = _read_rows(args.input)
     if args.regime == "pp-vys-abstain":
+        _require_table_columns(table.fieldnames, PP_VYS_ABSTAIN_REQUIRED_COLUMNS)
         routed = route_pp_vys_abstain_rows(table.rows)
         routing_columns = PP_VYS_ABSTAIN_ROUTING_COLUMNS
     else:
+        _require_table_columns(table.fieldnames, PP_ABSTAIN_REQUIRED_COLUMNS)
         routed = route_pp_abstain_rows(table.rows)
         routing_columns = PP_ABSTAIN_ROUTING_COLUMNS
     _write_rows(routed, args.output, _output_fieldnames(table.fieldnames, routed, routing_columns))

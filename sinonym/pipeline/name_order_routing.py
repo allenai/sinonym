@@ -18,13 +18,20 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
+import numpy as np
+
+from sinonym.coretypes import BatchParseResult, NameFormat, NameOrderEvidence, ParseResult
+
 Route = Literal["pp", "vys", "abstain"]
 Row = Mapping[str, object]
 MutableRow = dict[str, object]
 __all__ = [
     "MutableRow",
+    "PPVysRoutingDecision",
     "Route",
     "Row",
+    "build_pp_abstain_rows",
+    "build_pp_vys_abstain_rows",
     "pp_abstain_router",
     "pp_vys_abstain_router",
     "route_pp_abstain_rows",
@@ -41,6 +48,8 @@ PP_VYS_REASON_VALUES = (
     "strong_vys_batch_context",
     "weak_or_conflicting_evidence",
 )
+PP_NEW_REASON_VALUES = ("endpoint_frequency_strongly_favors_pp", "strong_pp_paper_context")
+VYS_NEW_REASON_VALUES = ("endpoint_frequency_strongly_favors_vys", "strong_vys_batch_context")
 
 PP_VYS_ABSTAIN_REQUIRED_COLUMNS = (
     "name",
@@ -356,6 +365,15 @@ NAME_PRIOR_CANTONESE_GIVEN_SYLLABLES = frozenset(
 
 
 @dataclass(frozen=True)
+class PPVysRoutingDecision:
+    """Caller-owned policy decision fields needed to build one PP/VYS routing row."""
+
+    old_prediction: str
+    new_prediction: str
+    new_reason: str
+
+
+@dataclass(frozen=True)
 class PPVysFeatures:
     """Parsed feature values for one PP/VYS/abstain routing row."""
 
@@ -376,6 +394,82 @@ class PPVysFeatures:
     old_pp_new_vys: bool
     old_vys_new_abstain: bool
     old_vys_new_pp: bool
+
+
+def build_pp_abstain_rows(batch_result: BatchParseResult, detector_context: Any) -> list[MutableRow]:
+    """Build `pp-abstain` router rows from a batch parse result.
+
+    `NameOrderEvidence` contains parser-observable fields, while the router
+    also needs source-script and Japanese-classifier context. The detector
+    context supplies normalization and Japanese probability helpers for those
+    fields.
+    """
+    rows: list[MutableRow] = []
+    for result, evidence in _iter_result_evidence(batch_result):
+        normalized_input = _normalize_for_routing(detector_context, evidence.raw_name)
+        script_representation = _script_representation_for_routing(detector_context, normalized_input, evidence)
+        compact_cjk = _compact_cjk_for_routing(detector_context, evidence.raw_name)
+        rows.append(
+            {
+                "pp_result_token_count": _parse_result_token_count(result),
+                "selected_format": _format_value(evidence.selected_format),
+                "batch_total_count": batch_result.format_pattern.total_count,
+                "selected_surname_frequency": _float_or_zero(evidence.selected_surname_frequency),
+                "selected_over_alternate_ratio": _float_or_zero(
+                    evidence.selected_over_alternate_surname_frequency_ratio,
+                ),
+                "has_cjk": _has_cjk(script_representation),
+                "has_latin": _has_latin(script_representation),
+                "cjk_has_space": script_representation == "han_only" and len(normalized_input.tokens) > 1,
+                "compact_cjk": compact_cjk,
+                "jp_probability": _japanese_probability_for_routing(detector_context, compact_cjk),
+                "raw_tokens": evidence.raw_token_count,
+            },
+        )
+    return rows
+
+
+def build_pp_vys_abstain_rows(
+    pp_batch_result: BatchParseResult,
+    vys_batch_result: BatchParseResult,
+    decisions: Iterable[PPVysRoutingDecision | Row],
+) -> list[MutableRow]:
+    """Build `pp-vys-abstain` router rows from aligned PP and VYS batch results.
+
+    The caller must provide old/new prediction labels and the new prediction
+    reason because those are external policy decisions, not parse evidence.
+    """
+    _require_aligned_batch_results(pp_batch_result, vys_batch_result)
+    decision_rows = list(decisions)
+    if len(decision_rows) != len(pp_batch_result.names):
+        message = "decisions must have one row per batch result"
+        raise ValueError(message)
+
+    rows: list[MutableRow] = []
+    for index, decision in enumerate(decision_rows):
+        pp_evidence = pp_batch_result.name_order_evidence[index]
+        vys_evidence = vys_batch_result.name_order_evidence[index]
+        old_prediction = _decision_string(decision, "old_prediction", allowed=("pp", "vys"))
+        new_prediction = _decision_string(decision, "new_prediction", allowed=PREDICTION_VALUES)
+        new_reason = _decision_string(decision, "new_reason", allowed=PP_VYS_REASON_VALUES)
+        _require_consistent_new_prediction_reason(new_prediction, new_reason)
+
+        rows.append(
+            {
+                "name": pp_evidence.raw_name or pp_batch_result.names[index],
+                "old_prediction": old_prediction,
+                "new_prediction": new_prediction,
+                "new_reason": new_reason,
+                "pp_selected_format": _order_format_value(pp_evidence.selected_format, "pp_selected_format"),
+                "vys_selected_format": _order_format_value(vys_evidence.selected_format, "vys_selected_format"),
+                "pp_batch_total_count": pp_batch_result.format_pattern.total_count,
+                "pp_batch_confidence": pp_batch_result.format_pattern.decision_confidence,
+                "pp_selected_surname_frequency_ratio": _float_or_zero(
+                    pp_evidence.selected_over_alternate_surname_frequency_ratio,
+                ),
+            },
+        )
+    return rows
 
 
 def route_pp_vys_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
@@ -415,6 +509,7 @@ def _pp_vys_features(row: Row) -> PPVysFeatures:
     old_prediction = _required_string(row, "old_prediction", allowed=("pp", "vys"))
     new_prediction = _required_string(row, "new_prediction", allowed=PREDICTION_VALUES)
     new_reason = _required_string(row, "new_reason", allowed=PP_VYS_REASON_VALUES)
+    _require_consistent_new_prediction_reason(new_prediction, new_reason)
     pp_selected_format = _required_string(row, "pp_selected_format", allowed=ORDER_FORMAT_VALUES)
     vys_selected_format = _required_string(row, "vys_selected_format", allowed=ORDER_FORMAT_VALUES)
     old_new_vys = old_prediction == "vys" and new_prediction == "vys"
@@ -441,6 +536,16 @@ def _pp_vys_features(row: Row) -> PPVysFeatures:
         old_vys_new_abstain=old_vys_new_abstain,
         old_vys_new_pp=old_vys_new_pp,
     )
+
+
+def _require_consistent_new_prediction_reason(new_prediction: str, new_reason: str) -> None:
+    """Reject PP/VYS routing rows whose prediction and reason point different ways."""
+    if new_reason in PP_NEW_REASON_VALUES and new_prediction != "pp":
+        message = "new_reason must agree with new_prediction"
+        raise ValueError(message)
+    if new_reason in VYS_NEW_REASON_VALUES and new_prediction != "vys":
+        message = "new_reason must agree with new_prediction"
+        raise ValueError(message)
 
 
 def _base_pp_vys_route(features: PPVysFeatures) -> tuple[Route, str]:
@@ -714,6 +819,110 @@ def pp_abstain_router(dataframe: Any) -> Any:
     return _with_routing_columns(dataframe, rows, ("router_prediction", "router_reason"))
 
 
+def _iter_result_evidence(batch_result: BatchParseResult):
+    if len(batch_result.results) != len(batch_result.name_order_evidence):
+        message = "batch_result must include one NameOrderEvidence row per ParseResult"
+        raise ValueError(message)
+    if len(batch_result.names) != len(batch_result.results):
+        message = "batch_result names and results must have the same length"
+        raise ValueError(message)
+    return zip(batch_result.results, batch_result.name_order_evidence, strict=True)
+
+
+def _require_aligned_batch_results(pp_batch_result: BatchParseResult, vys_batch_result: BatchParseResult) -> None:
+    if pp_batch_result.names != vys_batch_result.names:
+        message = "pp and vys batch results must have aligned names"
+        raise ValueError(message)
+    if len(pp_batch_result.name_order_evidence) != len(pp_batch_result.names):
+        message = "pp batch result must include one NameOrderEvidence row per name"
+        raise ValueError(message)
+    if len(vys_batch_result.name_order_evidence) != len(vys_batch_result.names):
+        message = "vys batch result must include one NameOrderEvidence row per name"
+        raise ValueError(message)
+
+
+def _parse_result_token_count(result: ParseResult) -> int:
+    parsed = result.parsed or result.parsed_original_order
+    if not result.success or parsed is None:
+        return 1
+    return len(parsed.surname_tokens) + len(parsed.given_tokens) + len(parsed.middle_tokens)
+
+
+def _format_value(value: NameFormat | str) -> str:
+    if isinstance(value, NameFormat):
+        return value.value
+    return str(value)
+
+
+def _order_format_value(value: NameFormat | str, column: str) -> str:
+    output = _format_value(value)
+    if output not in ORDER_FORMAT_VALUES:
+        message = f"{column} must be one of {', '.join(ORDER_FORMAT_VALUES)}"
+        raise ValueError(message)
+    return output
+
+
+def _float_or_zero(value: float | None) -> float:
+    if value is None:
+        return 0.0
+    return float(value)
+
+
+def _normalize_for_routing(detector_context: Any, raw_name: str) -> Any:
+    normalizer = getattr(detector_context, "_normalizer", None)
+    if normalizer is None or not hasattr(normalizer, "apply"):
+        message = "detector_context must expose a normalizer with apply()"
+        raise ValueError(message)
+    return normalizer.apply(raw_name)
+
+
+def _script_representation_for_routing(
+    detector_context: Any,
+    normalized_input: Any,
+    evidence: NameOrderEvidence,
+) -> str:
+    normalizer = getattr(detector_context, "_normalizer", None)
+    if normalizer is not None and hasattr(normalizer, "classify_script_representation"):
+        return normalizer.classify_script_representation(normalized_input)
+    return evidence.script_representation
+
+
+def _has_cjk(script_representation: str) -> bool:
+    return script_representation in {"han_only", "bilingual_aligned", "mixed_script"}
+
+
+def _has_latin(script_representation: str) -> bool:
+    return script_representation in {"latin_only", "bilingual_aligned", "mixed_script"}
+
+
+def _compact_cjk_for_routing(detector_context: Any, raw_name: str) -> str:
+    normalizer = getattr(detector_context, "_normalizer", None)
+    preprocessor = getattr(normalizer, "_text_preprocessor", None)
+    if preprocessor is None or not hasattr(preprocessor, "compact_all_chinese_input"):
+        return ""
+    return preprocessor.compact_all_chinese_input(raw_name)
+
+
+def _japanese_probability_for_routing(detector_context: Any, compact_cjk: str) -> float:
+    if not compact_cjk:
+        return 0.0
+    ethnicity_service = getattr(detector_context, "_ethnicity_service", None)
+    if ethnicity_service is None or not hasattr(ethnicity_service, "japanese_probability"):
+        return 0.0
+    return float(ethnicity_service.japanese_probability(compact_cjk))
+
+
+def _decision_string(decision: PPVysRoutingDecision | Row, column: str, *, allowed: tuple[str, ...]) -> str:
+    if isinstance(decision, Mapping):
+        value = decision.get(column)
+    else:
+        value = getattr(decision, column, None)
+    if not isinstance(value, str) or value not in allowed:
+        message = f"{column} must be one of {', '.join(allowed)}"
+        raise ValueError(message)
+    return value
+
+
 def _input_order_candidate(row: Row) -> str:
     pp_preserves_input_order = (
         _required_string(
@@ -921,6 +1130,8 @@ def _required_bool(row: Row, column: str) -> bool:
     value = row[column]
     if isinstance(value, bool):
         return value
+    if isinstance(value, np.bool_):
+        return bool(value)
     if value is None or _is_nan(value):
         message = f"{column} must be a boolean"
         raise ValueError(message)

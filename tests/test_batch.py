@@ -190,6 +190,18 @@ def test_name_order_evidence_uses_selected_compound_surname_span_frequency(detec
     assert trailing_zhu_ge_evidence.selected_over_alternate_surname_frequency_ratio is None
 
 
+@pytest.mark.parametrize("raw_name", ["Szeto Wah", "AuYeung Wah", "Au-Yeung Wah"])
+def test_name_order_evidence_uses_compound_alias_surname_span_frequency(detector, raw_name):
+    result = detector.analyze_name_batch([raw_name])
+
+    evidence = result.name_order_evidence[0]
+    parse = result.results[0].parsed_original_order
+    assert parse is not None
+    assert evidence.selected_surname_position == "first"
+    assert evidence.selected_surname_frequency is not None
+    assert evidence.selected_surname_frequency > 0
+
+
 def test_name_order_evidence_exposes_all_caps_cue(detector):
     """All-caps source tokens are exposed without changing the parse decision."""
     names = ["Ren Qing FENG", "Li Ying DU", "Zhen Quan GUO"]
@@ -312,6 +324,29 @@ def test_single_name_batch(detector):
     assert len(result.results) == 1
     assert result.results[0].success
     assert result.results[0].result == "Xin Liu"
+
+
+def test_non_latin_locked_batch_rows_keep_individual_confidence_and_format(detector):
+    names = ["\u5de9\u4fd0"]
+
+    result = detector.analyze_name_batch(names)
+
+    assert result.results[0].success
+    assert result.individual_analyses[0].confidence == 1.0
+    assert result.name_order_evidence[0].batch_participant is False
+    assert result.name_order_evidence[0].individual_format == result.name_order_evidence[0].selected_format
+    assert result.name_order_evidence[0].individual_format != NameFormat.MIXED
+
+
+def test_duplicate_input_rows_count_as_batch_votes(detector):
+    names = ["Mai Liao", "Xin Liu", "Xin Liu"]
+
+    result = detector.analyze_name_batch(names)
+
+    assert result.format_pattern.total_count == 3
+    assert result.format_pattern.given_first_count == 2
+    assert result.format_pattern.threshold_met
+    assert [row.result for row in result.results] == ["Mai Liao", "Xin Liu", "Xin Liu"]
 
 
 def test_all_rejected_batch(detector):

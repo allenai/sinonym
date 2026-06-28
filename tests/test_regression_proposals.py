@@ -458,7 +458,7 @@ def test_exact_vote_tie_does_not_meet_batch_application_threshold(detector):
     assert [result.result for result in batch.results] == [detector.normalize_name(name).result for name in names]
 
 
-def test_batch_format_votes_ignore_weak_candidate_gaps_and_duplicate_names(detector):
+def test_batch_format_votes_ignore_weak_candidate_gaps_and_count_duplicate_rows(detector):
     weak_surname_first = ParseCandidate(
         surname_tokens=["li"],
         given_tokens=["wei"],
@@ -521,8 +521,8 @@ def test_batch_format_votes_ignore_weak_candidate_gaps_and_duplicate_names(detec
     stats = detector._batch_analysis_service._collect_batch_vote_stats(entries)
 
     assert stats.surname_first_preferences == 0
-    assert stats.given_first_preferences == 2
-    assert stats.names_with_candidates == 3
+    assert stats.given_first_preferences == 3
+    assert stats.names_with_candidates == 4
 
 
 def test_batch_analysis_service_is_detector_owned(detector):
@@ -645,6 +645,27 @@ def test_aligned_bilingual_pairs_use_han_identity(detector):
     assert roman_first_given_first.parsed_original_order.order == ["given", "surname"]
 
 
+@pytest.mark.parametrize("lu_token", ["Lu", "L\u00fc"])
+def test_aligned_bilingual_lu_alias_matches_lv_pinyin(detector, lu_token):
+    result = detector.normalize_name(f"{lu_token} \u5415 Wei \u4f1f")
+
+    assert result.success
+    assert result.result == "Wei Lu"
+    assert result.parsed.surname == "Lu"
+    assert result.parsed.given_name == "Wei"
+    assert result.parsed_original_order.order == ["surname", "given"]
+
+
+def test_aligned_bilingual_middle_initial_preserves_original_order(detector):
+    result = detector.normalize_name("Zhang \u5f20 Wei \u4f1f A \u963f")
+
+    assert result.success
+    assert result.result == "Wei A Zhang"
+    assert result.parsed.middle_tokens == ["A"]
+    assert result.parsed_original_order.middle_tokens == ["A"]
+    assert result.parsed_original_order.order == ["surname", "given", "middle"]
+
+
 def test_ambiguous_aligned_single_char_pairs_do_not_force_frequency_flip(detector):
     raw_name = "Lin \u6797 Gu \u8c37"
 
@@ -751,6 +772,9 @@ def test_non_person_inputs_are_rejected_before_parsing(detector):
         "\u5b66\u9662",
         "\u5927\u5b66",
         "\u516c\u53f8",
+        "\u5317\u4eac\u5927\u5b66",
+        "\u6e05\u534e\u5927\u5b66",
+        "\u5f20\u4f1f\u5927\u5b66",
         "\u5f20\u4f1f(\u7269\u7406\u7cfb)",
     ],
 )

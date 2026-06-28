@@ -222,3 +222,45 @@ def test_middle_initial_trailing_batch_preserves_original_order(detector):
         ["surname", "given", "middle"],
         ["surname", "given", "middle"],
     ]
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected_result", "expected_order", "expected_middle_tokens"),
+    [
+        ("A-wei Zhang", "Wei A Zhang", ["middle", "given", "surname"], ["A"]),
+        ("Wei-A Zhang", "Wei A Zhang", ["given", "middle", "surname"], ["A"]),
+        ("A Wei Zhang", "Wei A Zhang", ["middle", "given", "surname"], ["A"]),
+        ("Wei Zhang", "Wei Zhang", ["given", "surname"], []),
+    ],
+)
+def test_hyphenated_initial_middle_order_preserves_source_position(
+    detector,
+    raw,
+    expected_result,
+    expected_order,
+    expected_middle_tokens,
+):
+    res = detector.normalize_name(raw)
+
+    assert res.success, f"Expected success, got error: {res.error_message}"
+    assert res.result == expected_result
+    assert res.parsed_original_order is not None
+    assert res.parsed_original_order.middle_tokens == expected_middle_tokens
+    assert res.parsed_original_order.order == expected_order
+    assert ("middle" in res.parsed_original_order.order) is bool(res.parsed_original_order.middle_tokens)
+
+
+def test_hyphenated_initial_middle_order_batch_preserves_source_position(detector):
+    names = ["A-wei Zhang", "Wei-A Zhang"]
+    batch = detector.analyze_name_batch(names)
+
+    assert [result.result for result in batch.results] == ["Wei A Zhang", "Wei A Zhang"]
+    assert [result.parsed_original_order.middle_tokens for result in batch.results] == [["A"], ["A"]]
+    assert [result.parsed_original_order.order for result in batch.results] == [
+        ["middle", "given", "surname"],
+        ["given", "middle", "surname"],
+    ]
+    assert [
+        ("middle" in result.parsed_original_order.order) is bool(result.parsed_original_order.middle_tokens)
+        for result in batch.results
+    ] == [True, True]

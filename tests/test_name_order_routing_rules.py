@@ -3,9 +3,18 @@ import runpy
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
-from sinonym.pipeline.name_order_routing import route_pp_abstain_rows, route_pp_vys_abstain_rows
+from sinonym.pipeline.name_order_routing import (
+    PP_ABSTAIN_REQUIRED_COLUMNS,
+    PP_VYS_ABSTAIN_REQUIRED_COLUMNS,
+    PPVysRoutingDecision,
+    build_pp_abstain_rows,
+    build_pp_vys_abstain_rows,
+    route_pp_abstain_rows,
+    route_pp_vys_abstain_rows,
+)
 
 
 def _pp_vys_row(**overrides):
@@ -74,6 +83,87 @@ def test_name_order_routing_script_preserves_empty_csv_schema(tmp_path, monkeypa
         assert list(reader) == []
 
 
+def test_name_order_routing_script_rejects_empty_csv_with_missing_schema(tmp_path, monkeypatch):
+    input_path = tmp_path / "empty.csv"
+    output_path = tmp_path / "routed.csv"
+    input_path.write_text("name\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "scripts/name_order_routing_rules.py",
+            "pp-abstain",
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="missing required columns"):
+        runpy.run_path("scripts/name_order_routing_rules.py", run_name="__main__")
+
+
+def test_pp_abstain_builder_converts_batch_evidence_to_router_rows(detector):
+    batch = detector.analyze_name_batch(["Wang An", "Yan Li", "Wu Gang", "Li Bao"])
+
+    with pytest.raises(ValueError, match="missing required columns"):
+        route_pp_abstain_rows([vars(batch.name_order_evidence[0])])
+
+    rows = build_pp_abstain_rows(batch, detector)
+    routed = route_pp_abstain_rows(rows)
+
+    assert len(rows) == len(batch.names)
+    assert all(set(PP_ABSTAIN_REQUIRED_COLUMNS) <= row.keys() for row in rows)
+    assert all("router_prediction" in row for row in routed)
+
+
+def test_pp_abstain_builder_derives_cjk_context_fields(detector):
+    batch = detector.analyze_name_batch(["\u9ec4 \u5609\u5e73"])
+
+    row = build_pp_abstain_rows(batch, detector)[0]
+
+    assert row["has_cjk"] is True
+    assert row["has_latin"] is False
+    assert row["cjk_has_space"] is True
+    assert row["compact_cjk"] == "\u9ec4\u5609\u5e73"
+    assert isinstance(row["jp_probability"], float)
+
+
+def test_pp_vys_builder_converts_aligned_batch_results_to_router_rows(detector):
+    names = ["Wang An", "Yan Li", "Wu Gang", "Li Bao"]
+    pp_batch = detector.analyze_name_batch(names)
+    vys_batch = detector.analyze_name_batch(names)
+    decisions = [
+        PPVysRoutingDecision(
+            old_prediction="pp",
+            new_prediction="pp",
+            new_reason="weak_or_conflicting_evidence",
+        )
+        for _name in names
+    ]
+
+    rows = build_pp_vys_abstain_rows(pp_batch, vys_batch, decisions)
+    routed = route_pp_vys_abstain_rows(rows)
+
+    assert len(rows) == len(names)
+    assert all(set(PP_VYS_ABSTAIN_REQUIRED_COLUMNS) <= row.keys() for row in rows)
+    assert all("router_prediction" in row for row in routed)
+
+
+def test_pp_vys_builder_rejects_unaligned_batch_results(detector):
+    pp_batch = detector.analyze_name_batch(["Wang An", "Yan Li"])
+    vys_batch = detector.analyze_name_batch(["Wang An", "Wu Gang"])
+    decisions = [
+        PPVysRoutingDecision("pp", "pp", "weak_or_conflicting_evidence"),
+        PPVysRoutingDecision("pp", "pp", "weak_or_conflicting_evidence"),
+    ]
+
+    with pytest.raises(ValueError, match="aligned names"):
+        build_pp_vys_abstain_rows(pp_batch, vys_batch, decisions)
+
+
 def test_pp_vys_abstain_rule_keeps_existing_vys_agreements():
     rows = [
         _pp_vys_row(old_prediction="vys", new_prediction="vys"),
@@ -127,7 +217,7 @@ def test_pp_vys_abstain_rule_routes_reliable_input_order_to_abstain():
             ),
             _pp_vys_row(
                 old_prediction="vys",
-                new_prediction="pp",
+                new_prediction="vys",
                 new_reason="endpoint_frequency_strongly_favors_vys",
                 pp_selected_format="surname_first",
                 vys_selected_format="given_first",
@@ -163,6 +253,24 @@ def test_pp_abstain_rule_accepts_balanced_high_confidence_pp_slices():
         "surname_first_two_token",
         "clean_bilingual_given_first",
     ]
+
+
+def test_pp_abstain_rule_accepts_numpy_bool_scalars():
+    routed = route_pp_abstain_rows(
+        [
+            _pp_abstain_row(
+                has_cjk=np.bool_(True),
+                has_latin=np.bool_(True),
+                cjk_has_space=np.bool_(False),
+                selected_format="given_first",
+                raw_tokens=2,
+                selected_surname_frequency=2500,
+            ),
+        ],
+    )
+
+    assert routed[0]["router_prediction"] == "pp"
+    assert routed[0]["router_reason"] == "clean_bilingual_given_first"
 
 
 def test_pp_abstain_rule_defaults_to_input_order_for_weak_or_ambiguous_zero_batch():
@@ -231,6 +339,20 @@ def test_pp_vys_abstain_rule_rejects_unknown_enums():
 
     with pytest.raises(ValueError, match="pp_selected_surname_frequency_ratio"):
         route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_surname_frequency_ratio="not-a-number")])
+
+
+def test_pp_vys_abstain_rule_rejects_contradictory_new_prediction_reason():
+    with pytest.raises(ValueError, match="new_reason"):
+        route_pp_vys_abstain_rows(
+            [
+                _pp_vys_row(
+                    new_prediction="pp",
+                    new_reason="endpoint_frequency_strongly_favors_vys",
+                    pp_selected_format="surname_first",
+                    vys_selected_format="given_first",
+                ),
+            ],
+        )
 
 
 def test_pp_vys_abstain_rule_allows_empty_ratio_sentinel():

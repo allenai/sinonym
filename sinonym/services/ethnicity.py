@@ -29,7 +29,6 @@ from sinonym.utils.thread_cache import ThreadLocalCache
 # Optional ML Japanese classifier imports - consolidated from separate service
 try:
     import logging
-    from pathlib import Path
 
     # Ensure custom model components are importable when deserializing
     import sinonym.ml_model_components  # noqa: F401
@@ -93,6 +92,21 @@ class _MLJapaneseClassifier:
 
         return self._cache.get_or_compute(name, compute_classification)
 
+    def japanese_probability(self, name: str) -> float:
+        """Return the model probability that an all-Chinese character name is Japanese."""
+        if not self.is_available():
+            return 0.0
+
+        probabilities = self._model.predict_proba([name])[0]
+        classes = list(getattr(self._model, "classes_", ()))
+        if "jp" in classes:
+            return float(probabilities[classes.index("jp")])
+
+        prediction = self._model.predict([name])[0]
+        if prediction == "jp":
+            return float(max(probabilities))
+        return 0.0
+
 
 class EthnicityClassificationService:
     """Service for classifying names by ethnicity using linguistic patterns."""
@@ -112,7 +126,18 @@ class EthnicityClassificationService:
         # Initialize consolidated ML Japanese classifier
         self._ml_classifier = _MLJapaneseClassifier(confidence_threshold=0.8)
 
-    def classify_ethnicity(self, tokens: tuple[str, ...], normalized_cache: dict[str, str], original_text: str = "") -> ParseResult:
+    def japanese_probability(self, compact_chinese_text: str) -> float:
+        """Return the Japanese-class probability for compact all-CJK text."""
+        if not compact_chinese_text:
+            return 0.0
+        return self._ml_classifier.japanese_probability(compact_chinese_text)
+
+    def classify_ethnicity(
+        self,
+        tokens: tuple[str, ...],
+        normalized_cache: dict[str, str],
+        original_text: str = "",
+    ) -> ParseResult:
         """
         Three-tier Chinese vs non-Chinese classification system.
 

@@ -333,17 +333,30 @@ class NormalizationService:
 
     def _roman_matches_han_token(self, roman_token: str, han_pinyin: tuple[str, ...]) -> bool:
         """Return whether a Roman token is the pinyin equivalent of a Han token group."""
-        roman_norm = self._text_normalizer.normalize_token(roman_token).replace(" ", "")
-        han_norm = "".join(self._text_normalizer.normalize_token(part) for part in han_pinyin)
+        roman_norm = self._canonical_pinyin_alignment_text(
+            self._text_normalizer.normalize_token(roman_token).replace(" ", ""),
+        )
+        han_norm = self._canonical_pinyin_alignment_text(
+            "".join(self._text_normalizer.normalize_token(part) for part in han_pinyin),
+        )
         if roman_norm == han_norm:
             return True
 
         if "-" in roman_token:
             roman_parts = StringManipulationUtils.split_and_clean_hyphens(roman_token)
-            roman_parts_norm = [self._text_normalizer.normalize_token(part) for part in roman_parts]
-            return tuple(roman_parts_norm) == han_pinyin
+            roman_parts_norm = [
+                self._canonical_pinyin_alignment_text(self._text_normalizer.normalize_token(part))
+                for part in roman_parts
+            ]
+            han_parts_norm = tuple(self._canonical_pinyin_alignment_text(part) for part in han_pinyin)
+            return tuple(roman_parts_norm) == han_parts_norm
 
         return False
+
+    @staticmethod
+    def _canonical_pinyin_alignment_text(text: str) -> str:
+        """Canonicalize pinyin spellings that differ only by v/umlaut notation."""
+        return text.replace("lv", "lu").replace("nv", "nu")
 
     def is_valid_chinese_phonetics(self, token: str) -> bool:
         """Check if a token could plausibly be Chinese based on phonetic structure."""

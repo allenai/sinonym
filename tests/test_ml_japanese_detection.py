@@ -52,6 +52,7 @@ ML_JAPANESE_TEST_CASES = [
     ("岸田文雄", (False, "should_be_rejected")),  # Kishida Fumio - current Prime Minister
     ("菅義偉", (False, "should_be_rejected")),  # Suga Yoshihide - former Prime Minister
     ("原田 泰夫", (False, "should_be_rejected")),  # Harada Yasuo - spaced Kanji should still hit ML classifier
+    ("\u5c71\u7530-\u592a\u90ce", (False, "should_be_rejected")),  # ASCII hyphen should still hit ML classifier
 ]
 
 # Chinese control cases that should be accepted (for comparison)
@@ -66,6 +67,7 @@ ML_CHINESE_CONTROL_CASES = [
     ("周十", (True, "Shi Zhou")),  # Common Chinese test name
     ("黄 嘉平", (True, "Jia-Ping Huang")),  # Spaced Han Chinese name should remain accepted
     ("功华 张", (True, "Gong-Hua Zhang")),  # Spaced Han given-surname should use compact text for JP classification
+    ("\u5f20\u4f1f-\u660e", (True, "Wei-Ming Zhang")),  # Hyphenated Han Chinese name should remain accepted
 ]
 
 

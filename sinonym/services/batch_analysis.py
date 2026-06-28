@@ -24,6 +24,7 @@ from sinonym.coretypes import (
 )
 from sinonym.coretypes.results import ParsedName
 from sinonym.services.order_metadata import original_component_order
+from sinonym.utils.string_manipulation import StringManipulationUtils
 
 GUARDED_GIVEN_FIRST_BATCH_MIN_SHARE = 0.75
 GIVEN_NAME_SHAPE_MIN_SHARE = 0.5
@@ -216,7 +217,7 @@ class BatchAnalysisService:
             )
 
         # Build per-name analysis details
-        individual_analyses = self._build_individual_analyses(name_candidates)
+        individual_analyses = self._build_individual_analyses(name_candidates, results)
         name_order_evidence = self._build_name_order_evidence(
             name_candidates,
             results,
@@ -338,7 +339,7 @@ class BatchAnalysisService:
             threshold_met=False,
         )
 
-        individual_analyses = self._build_individual_analyses(name_candidates)
+        individual_analyses = self._build_individual_analyses(name_candidates, results)
         name_order_evidence = self._build_name_order_evidence(
             name_candidates,
             results,
@@ -639,15 +640,10 @@ class BatchAnalysisService:
     def _collect_batch_vote_stats(self, name_candidates: list[BatchCandidateEntry]) -> BatchVoteStats:
         """Count candidate format votes and confidence weights."""
         stats = BatchVoteStats()
-        seen_vote_names: set[str] = set()
 
         for entry in name_candidates:
             if not entry.participates:
                 continue
-            vote_name_key = entry.name.casefold().strip()
-            if vote_name_key in seen_vote_names:
-                continue
-            seen_vote_names.add(vote_name_key)
             stats.names_with_candidates += 1
 
             weight = self._candidate_vote_weight(entry.candidates)
@@ -973,7 +969,7 @@ class BatchAnalysisService:
             normalized_raw_tokens = [normalizer.norm(token) for token in raw_tokens]
             first_freq, last_freq = self._endpoint_surname_frequencies(raw_tokens, normalizer, data)
             selected_format = self._format_from_parse_result(result)
-            individual_format = entry.best_candidate.format if entry.best_candidate else NameFormat.MIXED
+            individual_format = entry.best_candidate.format if entry.best_candidate else self._format_from_parse_result(result)
             selected_span = self._selected_surname_span(
                 result,
                 raw_tokens,
@@ -1053,29 +1049,39 @@ class BatchAnalysisService:
 
         normalized_surname_tokens = [normalizer.norm(token) for token in surname_tokens]
         selected_surname = "".join(normalized_surname_tokens)
+        selected_surname_key = (
+            self._selected_compound_surname_lookup_key(surname_tokens, raw_tokens, compound_metadata)
+            or self._selected_surname_lookup_key(
+                normalized_surname_tokens,
+                raw_tokens,
+                0,
+                None,
+                compound_metadata,
+            )
+        )
         selected_format = self._format_from_parse_result(result)
         if selected_surname and selected_format == NameFormat.SURNAME_FIRST:
             for end in range(1, len(normalized_raw_tokens) + 1):
-                if "".join(normalized_raw_tokens[:end]) == selected_surname:
-                    lookup_key = self._selected_surname_lookup_key(
-                        normalized_surname_tokens,
-                        raw_tokens,
-                        0,
-                        end,
-                        compound_metadata,
-                    )
+                lookup_key = self._raw_surname_span_lookup_key(
+                    raw_tokens,
+                    normalized_raw_tokens,
+                    0,
+                    end,
+                    compound_metadata,
+                )
+                if "".join(normalized_raw_tokens[:end]) == selected_surname or lookup_key == selected_surname_key:
                     return SurnameEndpointSpan("first", 0, end, lookup_key)
 
         if selected_surname and selected_format == NameFormat.GIVEN_FIRST:
             for start in range(len(normalized_raw_tokens)):
-                if "".join(normalized_raw_tokens[start:]) == selected_surname:
-                    lookup_key = self._selected_surname_lookup_key(
-                        normalized_surname_tokens,
-                        raw_tokens,
-                        start,
-                        len(raw_tokens),
-                        compound_metadata,
-                    )
+                lookup_key = self._raw_surname_span_lookup_key(
+                    raw_tokens,
+                    normalized_raw_tokens,
+                    start,
+                    len(raw_tokens),
+                    compound_metadata,
+                )
+                if "".join(normalized_raw_tokens[start:]) == selected_surname or lookup_key == selected_surname_key:
                     return SurnameEndpointSpan(
                         "last",
                         start,
@@ -1121,6 +1127,54 @@ class BatchAnalysisService:
         return normalized_surname_tokens[0]
 
     @staticmethod
+    def _selected_compound_surname_lookup_key(
+        surname_tokens: list[str],
+        raw_tokens: list[str],
+        compound_metadata,
+    ) -> str | None:
+        """Return the source compound key when formatter-preserved tokens match it."""
+        if compound_metadata is None:
+            return None
+
+        selected_key = BatchAnalysisService._display_parts_key(surname_tokens)
+        for start in range(len(raw_tokens)):
+            for end in range(start + 1, len(raw_tokens) + 1):
+                compound_target = BatchAnalysisService._compound_target_for_span(
+                    raw_tokens,
+                    start,
+                    end,
+                    compound_metadata,
+                )
+                if compound_target is None:
+                    continue
+                span_parts = BatchAnalysisService._compound_display_parts_for_span(
+                    raw_tokens,
+                    start,
+                    end,
+                    compound_metadata,
+                )
+                if BatchAnalysisService._display_parts_key(span_parts) == selected_key:
+                    return compound_target
+        return None
+
+    @staticmethod
+    def _compound_display_parts_for_span(raw_tokens: list[str], start: int, end: int, compound_metadata) -> list[str]:
+        """Return source-preserving parts for a compound raw span."""
+        if end - start > 1:
+            return raw_tokens[start:end]
+
+        token = raw_tokens[start]
+        meta = compound_metadata.get(token)
+        if meta is not None and meta.is_compound:
+            return StringManipulationUtils.split_compound_token(token, meta)
+        return [token]
+
+    @staticmethod
+    def _display_parts_key(parts: list[str]) -> str:
+        """Return a separator-insensitive key for source-display name parts."""
+        return "".join(char.lower() for part in parts for char in part if char.isalpha())
+
+    @staticmethod
     def _internal_window_joins_to(tokens: list[str], target: str) -> bool:
         """Return whether any non-endpoint token window joins to target."""
         for start in range(1, len(tokens) - 1):
@@ -1136,14 +1190,30 @@ class BatchAnalysisService:
             return None
 
         target: str | None = None
+        has_spaced_compound_part = False
         for token in raw_tokens[start:end]:
             meta = compound_metadata.get(token)
             if not meta or not meta.is_compound or not meta.compound_target:
                 return None
+            has_spaced_compound_part = has_spaced_compound_part or meta.format_type == "spaced"
             if target is None:
                 target = meta.compound_target
             elif target != meta.compound_target:
                 return None
+
+        if target is None:
+            return None
+        if has_spaced_compound_part:
+            for index, token in enumerate(raw_tokens):
+                meta = compound_metadata.get(token)
+                if (
+                    meta
+                    and meta.is_compound
+                    and meta.format_type == "spaced"
+                    and meta.compound_target == target
+                    and not (start <= index < end)
+                ):
+                    return None
         return target
 
     @staticmethod
@@ -1250,6 +1320,7 @@ class BatchAnalysisService:
     def _build_individual_analyses(
         self,
         name_candidates: list[BatchCandidateEntry],
+        results: list[ParseResult],
     ) -> list[IndividualAnalysis]:
         """Build IndividualAnalysis entries with a simple confidence per name.
 
@@ -1259,14 +1330,14 @@ class BatchAnalysisService:
         - Multiple: exp(score_i - max)/sum(exp(score_j - max)) for best candidate
         """
         analyses: list[IndividualAnalysis] = []
-        for entry in name_candidates:
+        for entry, result in zip(name_candidates, results, strict=False):
             if not entry.candidates or entry.best_candidate is None:
                 analyses.append(
                     IndividualAnalysis(
                         raw_name=entry.name,
                         candidates=[],
                         best_candidate=None,
-                        confidence=0.0,
+                        confidence=1.0 if result.success else 0.0,
                     ),
                 )
                 continue

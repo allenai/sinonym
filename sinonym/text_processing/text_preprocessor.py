@@ -135,6 +135,7 @@ class TextPreprocessor:
 
         cleaned = self._config.sep_pattern.sub("", text.strip())
         cleaned = self._config.whitespace_pattern.sub("", cleaned)
+        cleaned = cleaned.translate(self._config.hyphens_apostrophes_tr)
 
         if not cleaned:
             return ""
