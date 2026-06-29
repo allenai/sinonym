@@ -12,6 +12,8 @@ JUnit failure counting consumed by scripts/check_test_status.py.
 
 import pytest
 
+from sinonym.coretypes import NameFormat
+from sinonym.services.order_metadata import original_component_order
 from tests._case_assertions import assert_middle_name_result
 
 MIDDLE_NAME_INDIVIDUAL_CASES = [
@@ -278,3 +280,19 @@ def test_hyphenated_initial_middle_order_batch_preserves_source_position(detecto
         ("middle" in result.parsed_original_order.order) is bool(result.parsed_original_order.middle_tokens)
         for result in batch.results
     ] == [True, True]
+
+
+@pytest.mark.parametrize(
+    ("selected_format", "given_tokens", "middle_tokens", "expected_order"),
+    [
+        (NameFormat.GIVEN_FIRST, ["A"], ["A"], ["given", "middle", "surname"]),
+        (NameFormat.SURNAME_FIRST, ["A", "B"], ["A", "B"], ["surname", "given", "middle"]),
+    ],
+)
+def test_original_component_order_keeps_middle_label_for_all_initial_given_spans(
+    selected_format,
+    given_tokens,
+    middle_tokens,
+    expected_order,
+):
+    assert original_component_order(selected_format, given_tokens, middle_tokens) == expected_order

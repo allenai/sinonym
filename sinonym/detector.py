@@ -165,6 +165,7 @@ data structures and the detector can be safely used from multiple threads.
 import logging
 import string
 
+from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.coretypes import (
     BatchFormatPattern,
     BatchParseResult,
@@ -192,12 +193,14 @@ from sinonym.services import (
     ServiceContext,
 )
 from sinonym.services.order_metadata import original_component_order
-from sinonym.services.process_pool import PersistentMultiprocessNormalizer
+from sinonym.services.process_pool import PersistentMultiprocessNormalizer, validate_multiprocess_options
 
 BILINGUAL_SURNAME_STRENGTH_RATIO_MIN = 5.0
 BILINGUAL_ROMAN_HAN_SOURCE_ORDER_RATIO_MAX = 12.0
 BILINGUAL_ENDPOINT_PAIR_COUNT = 2
 SPACED_HAN_PREFIX_SURNAME_RATIO_MIN = 5.0
+CURATED_COMPOUND_SURNAME_FORMS = frozenset((*COMPOUND_VARIANTS.keys(), *COMPOUND_VARIANTS.values()))
+CompactHanRomanCandidate = tuple[list[str], list[str], list[str], float, bool]
 
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CHINESE NAME DETECTOR CLASS
@@ -285,6 +288,30 @@ class ChineseNameDetector:
     def _is_compound_surname_group(self, tokens: list[str], normalized_cache: dict[str, str]) -> bool:
         """Return whether a romanized Han token group is a compound surname."""
         return len(tokens) > 1 and self._is_surname_group(tokens, normalized_cache)
+
+    def _is_curated_compound_surname_group(self, tokens: list[str], normalized_cache: dict[str, str]) -> bool:
+        """Return whether a romanized Han token group is an explicitly curated compound surname."""
+        if len(tokens) <= 1:
+            return False
+
+        normalized_tokens = [self._normalizer.get_normalized(token, normalized_cache) for token in tokens]
+        spaced = " ".join(normalized_tokens)
+        compact = "".join(normalized_tokens)
+        return spaced in CURATED_COMPOUND_SURNAME_FORMS or compact in CURATED_COMPOUND_SURNAME_FORMS
+
+    def _surname_group_strength(self, pinyin_tokens: list[str] | tuple[str, ...], han_group: str = "") -> float:
+        """Return the strongest surname-frequency signal for a Han/pinyin group."""
+        if not pinyin_tokens:
+            return 0.0
+
+        data = self._data
+        assert data is not None
+        keys = [han_group] if han_group else []
+        if len(pinyin_tokens) == 1 and not han_group:
+            keys.append(pinyin_tokens[0])
+        elif len(pinyin_tokens) > 1:
+            keys.extend((" ".join(pinyin_tokens), "".join(pinyin_tokens)))
+        return max((data.get_surname_freq(key) for key in keys if key), default=0.0)
 
     def _has_only_cjk_token_groups(self, normalized_input: NormalizedInput) -> bool:
         """Return whether separator-delimited input tokens are all CJK characters."""
@@ -471,8 +498,10 @@ class ChineseNameDetector:
             han_group = han_groups[0]
             han_pinyin = tuple(self._cache_service.han_to_pinyin_fast(han_group))
             if len(han_pinyin) >= self._config.min_tokens_required and self._roman_tokens_match_han_pinyin(
-                roman_tokens, han_pinyin
+                roman_tokens,
+                han_pinyin,
             ):
+                prefix_candidate: CompactHanRomanCandidate | None = None
                 surname_pinyin_length = self._han_surname_prefix_length(han_group, han_pinyin)
                 if 0 < surname_pinyin_length < len(han_pinyin):
                     split_tokens = self._split_roman_tokens_for_han_prefix(
@@ -482,8 +511,16 @@ class ChineseNameDetector:
                     )
                     if split_tokens is not None:
                         surname_tokens, given_tokens = split_tokens
-                        return surname_tokens, given_tokens, ["surname", "given"]
+                        prefix_tokens = han_pinyin[:surname_pinyin_length]
+                        prefix_candidate = (
+                            surname_tokens,
+                            given_tokens,
+                            ["surname", "given"],
+                            self._surname_group_strength(prefix_tokens, han_group[:surname_pinyin_length]),
+                            self._is_curated_compound_surname_group(list(prefix_tokens), {}),
+                        )
 
+                suffix_candidate: CompactHanRomanCandidate | None = None
                 surname_pinyin_length = self._han_surname_suffix_length(han_group, han_pinyin)
                 if 0 < surname_pinyin_length < len(han_pinyin):
                     split_tokens = self._split_roman_tokens_for_han_suffix(
@@ -493,8 +530,42 @@ class ChineseNameDetector:
                     )
                     if split_tokens is not None:
                         given_tokens, surname_tokens = split_tokens
-                        return surname_tokens, given_tokens, ["given", "surname"]
+                        suffix_tokens = han_pinyin[-surname_pinyin_length:]
+                        suffix_candidate = (
+                            surname_tokens,
+                            given_tokens,
+                            ["given", "surname"],
+                            self._surname_group_strength(suffix_tokens, han_group[-surname_pinyin_length:]),
+                            self._is_curated_compound_surname_group(list(suffix_tokens), {}),
+                        )
+
+                selected_candidate = self._select_han_roman_candidate(prefix_candidate, suffix_candidate)
+                if selected_candidate is not None:
+                    surname_tokens, given_tokens, original_order, _strength, _is_curated = selected_candidate
+                    return surname_tokens, given_tokens, original_order
         return None
+
+    def _select_han_roman_candidate(
+        self,
+        prefix_candidate: CompactHanRomanCandidate | None,
+        suffix_candidate: CompactHanRomanCandidate | None,
+    ) -> CompactHanRomanCandidate | None:
+        """Choose between viable compact Han/Roman endpoint parses."""
+        if prefix_candidate is None:
+            return suffix_candidate
+        if suffix_candidate is None:
+            return prefix_candidate
+
+        prefix_strength = prefix_candidate[3]
+        suffix_strength = suffix_candidate[3]
+        prefix_is_curated = prefix_candidate[4]
+        suffix_is_curated = suffix_candidate[4]
+
+        if prefix_is_curated != suffix_is_curated:
+            return prefix_candidate if prefix_is_curated else suffix_candidate
+        if suffix_strength >= prefix_strength * BILINGUAL_SURNAME_STRENGTH_RATIO_MIN:
+            return suffix_candidate
+        return prefix_candidate
 
     def _is_source_han_token(self, token: str) -> bool:
         """Return whether a source token is entirely CJK."""
@@ -599,6 +670,18 @@ class ChineseNameDetector:
             first_is_surname = self._is_surname_group(first_group, normalized_input.norm_map)
             last_is_surname = self._is_surname_group(last_group, normalized_input.norm_map)
             last_is_compound_surname = self._is_compound_surname_group(last_group, normalized_input.norm_map)
+            last_compound_surname_wins = last_is_compound_surname and (
+                self._is_curated_compound_surname_group(last_group, normalized_input.norm_map)
+                or self._surname_group_strength(
+                    last_group,
+                    normalized_input.tokens[1],
+                )
+                >= self._surname_group_strength(
+                    first_group,
+                    normalized_input.tokens[0],
+                )
+                * BILINGUAL_SURNAME_STRENGTH_RATIO_MIN
+            )
 
             if (
                 last_is_surname
@@ -608,7 +691,7 @@ class ChineseNameDetector:
                 and self._spaced_han_prefers_prefix_surname(first_group, last_group)
             ):
                 return None
-            if last_is_surname and (not first_is_surname or last_is_compound_surname):
+            if last_is_surname and (not first_is_surname or last_compound_surname_wins):
                 surname_tokens = last_group
                 given_tokens = first_group
                 original_order = ["given", "surname"]
@@ -1110,7 +1193,11 @@ class ChineseNameDetector:
         true per-name parallel normalization, use create_persistent_multiprocess_pool().
         """
         self._ensure_initialized()
-        _ = (max_workers, chunk_size, mp_start_method)
+        validate_multiprocess_options(
+            max_workers=max_workers,
+            chunk_size=chunk_size,
+            mp_start_method=mp_start_method,
+        )
         return self.process_name_batch(names)
 
     def _create_fallback_batch_result(

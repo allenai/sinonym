@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 PYTEST_BASELINE_RETURN_CODES = {0, 1}
 UNEXPECTED_FAILURE_SAMPLE_SIZE = 5
+PERFORMANCE_METRIC_MARKERS = ("Time per name:", "names/second")
 EXPECTED_NORMALIZED_NAME_FAILURES = (
     (
         "tests.test_acl::test_acl_chinese_names[Tong Zhang-Tong Zhang]",
@@ -434,7 +435,7 @@ def check_performance_tests() -> tuple[bool, str]:
 
     try:
         result = subprocess.run(  # noqa: S603
-            [_uv_executable(), "run", "pytest", "tests/test_performance.py", "-q"],
+            [_uv_executable(), "run", "pytest", "tests/test_performance.py", "-q", "--capture=no"],
             check=False,
             capture_output=True,
             text=True,
@@ -448,6 +449,11 @@ def check_performance_tests() -> tuple[bool, str]:
     if result.returncode == 0:
         return True, result.stdout
     return False, result.stdout + result.stderr
+
+
+def is_performance_metric_line(line: str) -> bool:
+    """Return whether a performance-test output line contains a reported metric."""
+    return any(marker in line for marker in PERFORMANCE_METRIC_MARKERS)
 
 
 def _failure_signature(failure: FailureDetail) -> tuple[str, str, str]:
@@ -575,7 +581,7 @@ def main() -> None:
     if perf_passed:
         print("Performance tests PASSED")
         for line in perf_output.splitlines():
-            if "microseconds per name" in line or "names/second" in line:
+            if is_performance_metric_line(line):
                 print(_safe_for_console(f"  {line.strip()}"))
     else:
         print("Performance tests FAILED")

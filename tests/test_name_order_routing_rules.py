@@ -1,4 +1,5 @@
 import csv
+import json
 import runpy
 import sys
 from pathlib import Path
@@ -16,6 +17,9 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_abstain_rows,
     route_pp_vys_abstain_rows,
 )
+
+JSONL_SCALAR_COUNT = 3
+JSONL_SCALAR_SCORE = 0.25
 
 
 def _pp_vys_row(**overrides):
@@ -82,6 +86,28 @@ def test_name_order_routing_script_preserves_empty_csv_schema(tmp_path, monkeypa
         reader = csv.DictReader(handle)
         assert reader.fieldnames == [*fieldnames, "router_prediction", "router_reason"]
         assert list(reader) == []
+
+
+def test_name_order_routing_script_writes_numpy_scalars_to_jsonl(tmp_path):
+    output_path = tmp_path / "rows.jsonl"
+    script_module = runpy.run_path("scripts/name_order_routing_rules.py")
+
+    script_module["_write_rows"](
+        [
+            {
+                "count": np.int64(JSONL_SCALAR_COUNT),
+                "flag": np.bool_(True),
+                "score": np.float32(JSONL_SCALAR_SCORE),
+            },
+        ],
+        output_path,
+        ["count", "flag", "score"],
+    )
+
+    row = json.loads(output_path.read_text(encoding="utf-8"))
+    assert row["count"] == JSONL_SCALAR_COUNT
+    assert row["flag"] is True
+    assert row["score"] == pytest.approx(JSONL_SCALAR_SCORE)
 
 
 def test_name_order_routing_script_rejects_empty_csv_with_missing_schema(tmp_path, monkeypatch):

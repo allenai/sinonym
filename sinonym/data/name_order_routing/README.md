@@ -23,3 +23,5 @@ columns.
 For PP/VYS/abstain scoring, router output `abstain` means "emit the
 preprocessed input-order parse." The regression test maps `abstain` to the
 computed `input_order_candidate` before comparing against `pp`/`vys` labels.
+Router output `not_person` is a terminal non-person decision and means no
+person parse should be emitted.

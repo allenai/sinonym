@@ -38,6 +38,8 @@ try:
 except ImportError:
     ML_AVAILABLE = False
 
+LOGGER = logging.getLogger(__name__)
+
 
 class _MLJapaneseClassifier:
     """Consolidated ML Japanese classifier - moved from separate service for simplification."""
@@ -95,18 +97,21 @@ class _MLJapaneseClassifier:
         return self._cache.get_or_compute(name, compute_classification)
 
     def japanese_probability(self, name: str) -> float:
-        """Return the model probability that an all-Chinese character name is Japanese."""
+        """Return the Japanese-class probability, logging model failures and degrading to 0.0."""
         if not self.is_available():
             return 0.0
 
-        probabilities = self._model.predict_proba([name])[0]
-        classes = list(getattr(self._model, "classes_", ()))
-        if "jp" in classes:
-            return float(probabilities[classes.index("jp")])
+        try:
+            probabilities = self._model.predict_proba([name])[0]
+            classes = list(getattr(self._model, "classes_", ()))
+            if "jp" in classes:
+                return float(probabilities[classes.index("jp")])
 
-        prediction = self._model.predict([name])[0]
-        if prediction == "jp":
-            return float(max(probabilities))
+            prediction = self._model.predict([name])[0]
+            if prediction == "jp":
+                return float(max(probabilities))
+        except Exception as e:  # noqa: BLE001 - model-backed classifiers may raise arbitrary runtime errors.
+            LOGGER.warning("ML Japanese classifier probability error for %r: %s", name, e, exc_info=True)
         return 0.0
 
 
@@ -129,7 +134,11 @@ class EthnicityClassificationService:
         self._ml_classifier = _MLJapaneseClassifier(confidence_threshold=0.8)
 
     def japanese_probability(self, compact_chinese_text: str) -> float:
-        """Return the Japanese-class probability for compact all-CJK text."""
+        """Return the Japanese-class probability for compact all-CJK text.
+
+        Classifier probability failures are logged by the model wrapper and
+        intentionally degrade to 0.0 so serving can continue.
+        """
         if not compact_chinese_text:
             return 0.0
         return self._ml_classifier.japanese_probability(compact_chinese_text)

@@ -210,3 +210,28 @@ def test_performance_status_requires_successful_pytest_return_code(monkeypatch):
 
     assert not passed
     assert "ERROR collecting later" in output
+
+
+def test_performance_status_captures_and_identifies_metric_output(monkeypatch):
+    captured_command = None
+
+    class CompletedProcess:
+        stdout = "Rate: 12345 names/second\nTime per name: 81.0 microseconds\n"
+        stderr = ""
+        returncode = 0
+
+    def fake_run(command, *args, **kwargs):
+        nonlocal captured_command
+        captured_command = command
+        return CompletedProcess()
+
+    monkeypatch.setattr(check_test_status, "_uv_executable", lambda: "uv")
+    monkeypatch.setattr(check_test_status.subprocess, "run", fake_run)
+
+    passed, output = check_test_status.check_performance_tests()
+
+    assert passed
+    assert captured_command == ["uv", "run", "pytest", "tests/test_performance.py", "-q", "--capture=no"]
+    assert "Time per name: 81.0 microseconds" in output
+    assert check_test_status.is_performance_metric_line("Time per name: 81.0 microseconds")
+    assert check_test_status.is_performance_metric_line("Rate: 12345 names/second")

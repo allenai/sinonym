@@ -205,6 +205,23 @@ def test_name_order_evidence_supports_external_context_routing(detector):
     )
 
 
+def test_batch_evidence_uses_actual_individual_format_for_guarded_given_first(detector):
+    """Batch metadata reports standalone order when batch context flips guarded names."""
+    names = ["Diao Wang", "Bian Li", "Cen Zhang", "Luan Wang", "Rao Li"]
+
+    individual = detector.normalize_name(names[0])
+    result = detector.analyze_name_batch(names)
+
+    assert individual.result == "Diao Wang"
+    assert individual.parsed_original_order.order == ["given", "surname"]
+    assert result.results[0].result == "Wang Diao"
+    assert result.name_order_evidence[0].individual_format == NameFormat.GIVEN_FIRST
+    assert result.name_order_evidence[0].selected_format == NameFormat.SURNAME_FIRST
+    assert result.name_order_evidence[0].batch_changed_format is True
+    assert 0 in result.improvements
+    assert result.individual_analyses[0].best_candidate.format == NameFormat.GIVEN_FIRST
+
+
 def test_name_order_evidence_uses_selected_compound_surname_span_frequency(detector):
     """Spaced compound selected surnames use the whole surname span for frequency evidence."""
     names = ["Zhu Ge Liang", "Ou Yang Wei"]

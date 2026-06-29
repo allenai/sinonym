@@ -55,7 +55,8 @@ uv run python scripts/train_ml_classifier_for_chinese_vs_japanese.py
 ```
 
 ### `name_order_routing_rules.py`
-Applies the external routing rules for context runs that compare paper-level PP, VYS, and input-order abstain outputs. The routing policy lives in `sinonym.pipeline.name_order_routing`; this script is the file-format CLI wrapper that consumes evidence columns emitted beside PP/VYS batch runs and adds `router_prediction` plus `router_reason`.
+Applies the external routing rules for context runs that compare paper-level PP, VYS, input-order abstain, and terminal non-person outputs. The routing policy lives in `sinonym.pipeline.name_order_routing`; this script is the file-format CLI wrapper that consumes evidence columns emitted beside PP/VYS batch runs and adds `router_prediction` plus `router_reason`.
+`router_prediction` can be `pp`, `vys`, `abstain`, or `not_person`; `not_person` means no person parse should be emitted.
 The PP/VYS/abstain regime requires raw `name` so the narrow validated name-prior guards can run.
 CSV and JSONL use only the standard library; Parquet inputs/outputs require pandas plus a Parquet engine in the runtime environment.
 

@@ -34,6 +34,25 @@ class RowTable:
     fieldnames: list[str]
 
 
+def _json_default(value: object) -> object:
+    """Convert scalar dataframe values into standard JSON values.
+
+    Args:
+        value: Object passed by `json.dumps` after standard encoding fails.
+
+    Returns:
+        A JSON-serializable scalar value.
+
+    Raises:
+        TypeError: If the object is not a scalar value with an `item()` converter.
+    """
+    item = getattr(value, "item", None)
+    if callable(item):
+        return item()
+    message = f"Object of type {type(value).__name__} is not JSON serializable"
+    raise TypeError(message)
+
+
 def _read_rows(path: Path) -> RowTable:
     suffix = path.suffix.casefold()
     if suffix == ".parquet":
@@ -54,7 +73,7 @@ def _write_rows(rows: list[MutableRow], path: Path, fieldnames: list[str]) -> No
     elif suffix == ".jsonl":
         with path.open("w", encoding="utf-8") as handle:
             for row in rows:
-                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+                handle.write(json.dumps(row, ensure_ascii=False, default=_json_default) + "\n")
     else:
         with path.open("w", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=fieldnames)

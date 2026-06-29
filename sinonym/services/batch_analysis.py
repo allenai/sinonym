@@ -173,13 +173,18 @@ class BatchAnalysisService:
             # Too small for batch analysis - fall back to individual processing
             return self._process_individually(names, normalizer, data, formatting_service)
 
-        # Phase 1: Analyze each name individually and collect all parse candidates
-        name_candidates: list[BatchCandidateEntry] = []
+        # Phase 1: Analyze each name individually and collect all parse candidates.
+        # Batch format detection intentionally uses no-bonus candidates; reporting
+        # needs the standalone individual parse candidates.
+        format_candidates: list[BatchCandidateEntry] = []
+        individual_candidates: list[BatchCandidateEntry] = []
 
         for name in names:
             input_failure = self._input_failure(name)
             if input_failure is not None:
-                name_candidates.append(BatchCandidateEntry(name, [], None, {}, REJECTED_INPUT_REPRESENTATION))
+                entry = BatchCandidateEntry(name, [], None, {}, REJECTED_INPUT_REPRESENTATION)
+                format_candidates.append(entry)
+                individual_candidates.append(entry)
                 continue
 
             # Normalize once and reuse
@@ -187,42 +192,58 @@ class BatchAnalysisService:
             representation = self._script_representation(normalizer, normalized_input)
             vote_eligible = self._batch_vote_eligible(normalized_input)
             if not self._is_batch_format_participant(representation):
-                name_candidates.append(BatchCandidateEntry(name, [], None, normalized_input.compound_metadata, representation))
+                entry = BatchCandidateEntry(name, [], None, normalized_input.compound_metadata, representation)
+                format_candidates.append(entry)
+                individual_candidates.append(entry)
                 continue
 
-            candidates, best_candidate = self._analyze_individual_name_with_normalized(
+            batch_vote_candidates, batch_vote_best_candidate = self._analyze_individual_name_with_normalized(
                 name,
                 normalized_input,
                 allow_guarded_given_first_bonus=False,
             )
-            name_candidates.append(
+            standalone_candidates, standalone_best_candidate = self._analyze_individual_name_with_normalized(
+                name,
+                normalized_input,
+            )
+            format_candidates.append(
                 BatchCandidateEntry(
                     name,
-                    candidates,
-                    best_candidate,
+                    batch_vote_candidates,
+                    batch_vote_best_candidate,
+                    normalized_input.compound_metadata,
+                    representation,
+                    vote_eligible,
+                ),
+            )
+            individual_candidates.append(
+                BatchCandidateEntry(
+                    name,
+                    standalone_candidates,
+                    standalone_best_candidate,
                     normalized_input.compound_metadata,
                     representation,
                     vote_eligible,
                 ),
             )
 
-        name_candidates = self._promote_guarded_given_first_batch_votes(name_candidates, normalizer, data)
+        format_candidates = self._promote_guarded_given_first_batch_votes(format_candidates, normalizer, data)
 
         # Phase 2: Detect the dominant format pattern
         resolved_threshold = self._resolved_format_threshold(options.format_threshold)
-        format_pattern = self._detect_format_pattern(name_candidates, normalizer, data, resolved_threshold)
+        format_pattern = self._detect_format_pattern(format_candidates, normalizer, data, resolved_threshold)
 
         # Phase 3: Apply batch formatting only when the dominant pattern decision confidence
         # clears the configured threshold. Otherwise, fall back to individual
         # processing to avoid over-applying a weak batch signal.
         if format_pattern.total_count > 0 and format_pattern.threshold_met:
             results = self._apply_batch_format(
-                name_candidates,
+                format_candidates,
                 format_pattern.dominant_format,
                 normalizer,
                 formatting_service,
             )
-            improvements = self._find_improvements(name_candidates, results)
+            improvements = self._find_improvements(individual_candidates, results)
         else:
             individual_fallback = self._process_individually(names, normalizer, data, formatting_service)
             return BatchParseResult(
@@ -235,9 +256,9 @@ class BatchAnalysisService:
             )
 
         # Build per-name analysis details
-        individual_analyses = self._build_individual_analyses(name_candidates, results)
+        individual_analyses = self._build_individual_analyses(individual_candidates, results)
         name_order_evidence = self._build_name_order_evidence(
-            name_candidates,
+            individual_candidates,
             results,
             normalizer,
             data,
@@ -1311,7 +1332,7 @@ class BatchAnalysisService:
         if alternate_span is not None:
             alternate_freq = float(data.get_surname_freq(alternate_span.lookup_key, 0))
 
-        if selected_freq is None or alternate_freq is None or alternate_freq <= 0:
+        if alternate_freq is None or alternate_freq <= 0:
             return selected_freq, alternate_freq, None
         return selected_freq, alternate_freq, selected_freq / alternate_freq
 

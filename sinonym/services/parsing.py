@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
-from sinonym.chinese_names_data import COMPOUND_VARIANTS, OVERLAPPING_KOREAN_SURNAMES
+from sinonym.chinese_names_data import COMPOUND_VARIANTS, KOREAN_GIVEN_PATTERNS, OVERLAPPING_KOREAN_SURNAMES
 from sinonym.coretypes import ParseResult
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
@@ -666,6 +666,8 @@ class NameParsingService:
                 first_surname_freq = self._data.get_surname_freq(first_norm)
                 last_surname_freq = self._data.get_surname_freq(last_norm)
                 freq_ratio = (last_surname_freq / first_surname_freq) if first_surname_freq > 0 else 0.0
+                second_clean = StringManipulationUtils.remove_spaces(tokens[1]).lower()
+                second_has_korean_given_signal = second_clean in KOREAN_GIVEN_PATTERNS
 
                 if (
                     first_is_surname
@@ -686,6 +688,7 @@ class NameParsingService:
                     and first_surname_freq > last_surname_freq
                     and 0 < last_surname_freq <= RARE_TRAILING_OVERLAPPING_SURNAME_MAX
                     and StringManipulationUtils.remove_spaces(last_norm) in OVERLAPPING_KOREAN_SURNAMES
+                    and second_has_korean_given_signal
                 ):
                     order_preservation_bonus = max(order_preservation_bonus, 1.0)
 

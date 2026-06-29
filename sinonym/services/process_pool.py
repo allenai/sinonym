@@ -23,6 +23,28 @@ if TYPE_CHECKING:
 _WORKER_DETECTOR: ChineseNameDetector | None = None
 
 
+def validate_multiprocess_options(
+    *,
+    max_workers: int | None = None,
+    chunk_size: int = 64,
+    mp_start_method: str = "spawn",
+) -> None:
+    """Validate process-pool knobs without starting worker processes."""
+    if max_workers is not None and max_workers < 1:
+        message = "max_workers must be >= 1"
+        raise ValueError(message)
+    if chunk_size < 1:
+        message = "chunk_size must be >= 1"
+        raise ValueError(message)
+
+    try:
+        get_context(mp_start_method)
+    except ValueError as exc:
+        available = ", ".join(get_all_start_methods())
+        message = f"unsupported multiprocessing start method '{mp_start_method}'. Available methods: {available}"
+        raise ValueError(message) from exc
+
+
 def _init_worker(config: ChineseNameConfig | None, weights: tuple[float, ...] | None) -> None:
     """Initialize one detector per worker process."""
     from sinonym.detector import ChineseNameDetector
@@ -62,10 +84,11 @@ class PersistentMultiprocessNormalizer:
         detector_config: ChineseNameConfig | None = None,
         detector_weights: list[float] | None = None,
     ) -> None:
-        if max_workers is not None and max_workers < 1:
-            raise ValueError("max_workers must be >= 1")
-        if chunk_size < 1:
-            raise ValueError("chunk_size must be >= 1")
+        validate_multiprocess_options(
+            max_workers=max_workers,
+            chunk_size=chunk_size,
+            mp_start_method=mp_start_method,
+        )
 
         self._chunk_size = chunk_size
         self._closed = False
@@ -74,13 +97,7 @@ class PersistentMultiprocessNormalizer:
 
         self._validate_picklable_state()
 
-        try:
-            mp_context = get_context(mp_start_method)
-        except ValueError as exc:
-            available = ", ".join(get_all_start_methods())
-            raise ValueError(
-                f"unsupported multiprocessing start method '{mp_start_method}'. Available methods: {available}",
-            ) from exc
+        mp_context = get_context(mp_start_method)
 
         self._executor = ProcessPoolExecutor(
             max_workers=max_workers,

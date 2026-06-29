@@ -124,7 +124,7 @@ class NormalizationService:
     def get_normalized(self, token: str, norm_cache: dict[str, str]) -> str:
         """
         Get normalized form of token using cache, with fallback to normalization.
-        
+
         Consolidates the common pattern: normalized_cache.get(token, self.norm(token))
         """
         return norm_cache.get(token, self.norm(token))
@@ -352,7 +352,10 @@ class NormalizationService:
                 self._canonical_pinyin_alignment_text(self._text_normalizer.normalize_token(part))
                 for part in roman_parts
             ]
-            han_parts_norm = tuple(self._canonical_pinyin_alignment_text(part) for part in han_pinyin)
+            han_parts_norm = tuple(
+                self._canonical_pinyin_alignment_text(self._text_normalizer.normalize_token(part))
+                for part in han_pinyin
+            )
             return tuple(roman_parts_norm) == han_parts_norm
 
         return False

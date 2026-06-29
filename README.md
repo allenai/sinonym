@@ -402,9 +402,9 @@ Batch processing requires a minimum of 2 names and works best with 5+ names for 
 
 **Unambiguous Names**: Some names have only one possible parsing format (e.g., compound given names like "Wei‑Qi Wang"). Batch processing never forces such names into the detected pattern and never raises. These names keep their best individual parse while other Chinese names benefit from the jointly detected order.
 
-**Batch Application Threshold**: Batch detection keeps count-based evidence (`confidence`, counts, and vote margin) separate from the application decision (`decision_confidence`). Batch formatting is applied only when the direction is confident, at least two Latin-only Chinese names participate, and `decision_confidence` clears the configured threshold. Weak participants can count toward the participant minimum without contributing a direction vote.
+**Batch Application Threshold**: Batch detection keeps count-based evidence (`confidence`, counts, and vote margin) separate from the application decision (`decision_confidence`). Batch formatting is applied only when the direction is confident, at least two vote-eligible Latin-only Chinese names participate, and `decision_confidence` clears the configured threshold. Latin rows with all-caps source-token cues are exposed in `name_order_evidence` but do not vote in, or receive, Latin batch formatting.
 
-**Script Cohorts**: Latin-only names vote in and receive Latin batch formatting. Han-only, explicitly aligned Han/Roman, and other mixed-script names are parsed from their own script evidence so a Latin batch convention does not flip their order.
+**Script Cohorts**: Vote-eligible Latin-only names vote in and receive Latin batch formatting. Han-only, explicitly aligned Han/Roman, and other mixed-script names are parsed from their own script evidence so a Latin batch convention does not flip their order.
 
 ### Batch Processing with Mixed Name Types
 

@@ -5,6 +5,7 @@ from sinonym.timo.interface import (
     FormatPattern,
     Instance,
     NameFormatValue,
+    NameOrderEvidence,
     Prediction,
     Predictor,
     PredictorConfig,
@@ -125,10 +126,18 @@ def test_compound_surname(predictor: Predictor):
 def test_prediction_models_keep_mutable_backwards_compatible_shapes_and_enum_typed(predictor: Predictor):
     results = predictor.predict_batch([Instance(name="Li Wei"), Instance(name="Zhang Ming")])
 
-    results[0].format_pattern.threshold_met = False
-    assert results[0].format_pattern.threshold_met is False
-    assert isinstance(results[1].format_pattern.dominant_format, NameFormatValue)
-    assert results[1].format_pattern.dominant_format == NameFormatValue.SURNAME_FIRST
+    first_pattern = results[0].format_pattern
+    second_pattern = results[1].format_pattern
+    assert first_pattern is not None
+    assert second_pattern is not None
+
+    second_threshold = second_pattern.threshold_met
+    first_threshold = not second_threshold
+    first_pattern.threshold_met = first_threshold
+    assert first_pattern.threshold_met is first_threshold
+    assert second_pattern.threshold_met is second_threshold
+    assert isinstance(second_pattern.dominant_format, NameFormatValue)
+    assert second_pattern.dominant_format == NameFormatValue.SURNAME_FIRST
 
     with pytest.raises(ValidationError):
         FormatPattern(
@@ -187,6 +196,13 @@ def test_batch_models_keep_list_shaped_python_api(predictor: Predictor):
     assert isinstance(batch.name_order_evidence[0].raw_tokens, list)
     assert isinstance(batch.name_order_evidence[0].all_caps_tokens, list)
     assert isinstance(batch.individual_analyses[0].candidates, list)
+
+
+def test_name_order_evidence_required_fields_precede_defaulted_fields():
+    fields = list(NameOrderEvidence.__fields__)
+
+    assert fields.index("has_all_caps_token") < fields.index("first_token_surname_frequency")
+    assert fields.index("all_caps_tokens") < fields.index("first_token_surname_frequency")
 
 
 def test_empty_batch(predictor: Predictor):

@@ -4,18 +4,23 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import math
 import re
 import unicodedata
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.coretypes import NameFormat, ParseCandidate
+from sinonym.pipeline import name_order_routing
 from sinonym.resources import open_csv_reader, resource_path
+from sinonym.services import ethnicity
 from sinonym.services.batch_analysis import LATIN_ONLY_REPRESENTATION, BatchAnalysisService, BatchCandidateEntry
 from sinonym.services.non_person import NON_PERSON_FAILURE_REASON
 from sinonym.services.normalization import CompoundMetadata
@@ -99,17 +104,32 @@ def test_korean_curated_pairs_are_format_normalized(detector):
         assert result.result == expected
 
 
-def test_chinese_given_first_name_with_trailing_na_is_not_rejected_as_korean(detector):
+def test_trailing_na_surname_last_examples_keep_given_first_order(detector):
     normalized = detector._normalizer.apply("Yu Bin Na")
     analysis = detector._ethnicity_service._analyze_tokens_for_patterns(normalized.roman_tokens)
 
     assert analysis["surname_type"] == "chinese_only"
+    assert "bin" in analysis["korean_ambiguous_tokens"]
     assert analysis["korean_given_pairs"] == []
 
-    result = detector.normalize_name("Yu Bin Na")
+    examples = {
+        "Yu Bin Na": "Yu-Bin Na",
+        "Sang Min Na": "Sang-Min Na",
+        "Sang Ho Na": "Sang-Ho Na",
+    }
+    for raw_name, expected in examples.items():
+        result = detector.normalize_name(raw_name)
+        assert result.success
+        assert result.result == expected
+        assert result.parsed_original_order.order == ["given", "surname"]
+
+
+def test_trailing_na_bonus_does_not_flip_chinese_surname_first_name(detector):
+    result = detector.normalize_name("Peng Wen Na")
+
     assert result.success
-    assert result.result == "Yu-Bin Na"
-    assert result.parsed_original_order.order == ["given", "surname"]
+    assert result.result == "Wen-Na Peng"
+    assert result.parsed_original_order.order == ["surname", "given"]
 
 
 def test_korean_overlapping_ambiguous_branch_stays_bounded(detector):
@@ -657,6 +677,22 @@ def test_aligned_bilingual_lu_alias_matches_lv_pinyin(detector, lu_token):
     assert result.parsed_original_order.order == ["surname", "given"]
 
 
+def test_hyphenated_aligned_bilingual_normalizes_han_pinyin_parts(detector):
+    raw_name = "Wei-chi \u5c09\u8fdf Wei \u4f1f"
+    normalized = detector._normalizer.apply(raw_name)
+    pairs = detector._normalizer.aligned_bilingual_pairs(normalized)
+
+    assert detector._normalizer.classify_script_representation(normalized) == "bilingual_aligned"
+    assert pairs is not None
+    assert [pair.roman_token for pair in pairs] == ["Wei-chi", "Wei"]
+
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == "Wei Wei-Chi"
+    assert result.parsed_original_order.order == ["surname", "given"]
+
+
 def test_aligned_bilingual_middle_initial_preserves_original_order(detector):
     result = detector.normalize_name("Zhang \u5f20 Wei \u4f1f A \u963f")
 
@@ -755,6 +791,44 @@ def test_compact_han_roman_transliteration_uses_han_order(detector, raw_name, ex
 @pytest.mark.parametrize(
     ("raw_name", "expected"),
     [
+        ("Haoran wang \u6d69\u7136\u738b", "Haoran Wang"),
+        ("\u6d69\u7136\u738b Haoran Wang", "Haoran Wang"),
+        ("\u738b\u6d69\u7136 Wang Haoran", "Haoran Wang"),
+    ],
+)
+def test_compact_han_roman_transliteration_uses_stronger_endpoint_surname(detector, raw_name, expected):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+    assert result.parsed.surname == "Wang"
+    assert result.parsed.given_name == "Haoran"
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected", "expected_surname"),
+    [
+        ("\u53f8\u9a6c\u534e Sima Hua", "Hua Sima", "Sima"),
+        ("\u8bf8\u845b\u65b9 Zhuge Fang", "Fang Zhuge", "Zhuge"),
+        ("\u674e\u6b27\u9633 Li Ouyang", "Li Ouyang", "Ouyang"),
+    ],
+)
+def test_compact_han_roman_transliteration_preserves_curated_compound_surnames(
+    detector,
+    raw_name,
+    expected,
+    expected_surname,
+):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+    assert result.parsed.surname == expected_surname
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
         ("\u5218\u5fb7 \u534e", "De-Hua Liu"),
         ("\u738b\u660e \u534e", "Ming-Hua Wang"),
         ("\u5f20\u4f1f \u6797", "Wei-Lin Zhang"),
@@ -785,6 +859,49 @@ def test_han_compound_surname_suppresses_japanese_ml_rejection(detector, raw_nam
     assert result.success, f"{raw_name!r}: expected accepted name, got {result.error_message!r}"
     assert result.result == expected
     assert result.parsed_original_order.order == ["surname", "given"]
+
+
+class BrokenJapaneseProbabilityModel:
+    """Model stub whose probability API fails after reporting availability."""
+
+    classes_: ClassVar[list[str]] = ["cn", "jp"]
+
+    def predict_proba(self, names):
+        message = "boom"
+        raise RuntimeError(message)
+
+    def predict(self, names):
+        return ["jp"]
+
+
+def test_japanese_probability_degrades_when_loaded_model_errors(caplog):
+    classifier = ethnicity._MLJapaneseClassifier(confidence_threshold=0.8)
+    classifier._available = True
+    classifier._model = BrokenJapaneseProbabilityModel()
+
+    with caplog.at_level(logging.WARNING, logger=ethnicity.__name__):
+        assert classifier.japanese_probability("\u5c71\u7530") == 0.0
+
+    assert "ML Japanese classifier probability error" in caplog.text
+    assert any(record.exc_info for record in caplog.records)
+
+
+def test_japanese_probability_routing_degrades_when_service_errors(caplog):
+    def raise_probability_error(_name):
+        message = "boom"
+        raise RuntimeError(message)
+
+    context = SimpleNamespace(
+        _ethnicity_service=SimpleNamespace(
+            japanese_probability=raise_probability_error,
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING, logger=name_order_routing.__name__):
+        assert name_order_routing._japanese_probability_for_routing(context, "\u5c71\u7530") == 0.0
+
+    assert "Japanese probability routing failed" in caplog.text
+    assert any(record.exc_info for record in caplog.records)
 
 
 def test_non_person_inputs_are_rejected_before_parsing(detector):
@@ -1022,6 +1139,28 @@ def test_spaced_all_chinese_regular_surname_first_preserves_group_boundary(detec
     assert result.result == "Ming-Hua Li"
     assert result.parsed.surname == "Li"
     assert result.parsed.given_name == "Ming-Hua"
+    assert result.parsed_original_order.order == ["surname", "given"]
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected", "expected_surname"),
+    [
+        ("\u674e \u6d69\u7136", "Hao-Ran Li", "Li"),
+        ("\u738b \u4fca\u6770", "Jun-Jie Wang", "Wang"),
+        ("\u5f20 \u5b87\u8f69", "Yu-Xuan Zhang", "Zhang"),
+    ],
+)
+def test_spaced_all_chinese_uses_stronger_prefix_surname_against_false_compound(
+    detector,
+    raw_name,
+    expected,
+    expected_surname,
+):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+    assert result.parsed.surname == expected_surname
     assert result.parsed_original_order.order == ["surname", "given"]
 
 

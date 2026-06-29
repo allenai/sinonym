@@ -8,10 +8,12 @@ Route semantics:
 - `pp`: emit the PP parse.
 - `vys`: emit the VYS parse.
 - `abstain`: emit the preprocessed input-order parse.
+- `not_person`: terminal non-person decision; do not emit a person parse.
 """
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 from collections.abc import Iterable, Mapping
@@ -25,6 +27,7 @@ from sinonym.coretypes import BatchParseResult, NameFormat, NameOrderEvidence, P
 Route = Literal["pp", "vys", "abstain", "not_person"]
 Row = Mapping[str, object]
 MutableRow = dict[str, object]
+LOGGER = logging.getLogger(__name__)
 __all__ = [
     "MutableRow",
     "PPVysRoutingDecision",
@@ -486,6 +489,11 @@ def route_pp_vys_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
     - `input_order_candidate`
     - `router_prediction`
     - `router_reason`
+
+    `router_prediction` can be `pp`, `vys`, `abstain`, or terminal
+    `not_person`. The terminal route is emitted before parse-evidence
+    validation because non-person rows do not have meaningful PP/VYS parse
+    features.
     """
     return [_route_pp_vys_abstain_row(row) for row in rows]
 
@@ -949,12 +957,22 @@ def _compact_cjk_for_routing(detector_context: Any, raw_name: str) -> str:
 
 
 def _japanese_probability_for_routing(detector_context: Any, compact_cjk: str) -> float:
+    """Return routing Japanese probability, logging service failures and degrading to 0.0."""
     if not compact_cjk:
         return 0.0
     ethnicity_service = getattr(detector_context, "_ethnicity_service", None)
     if ethnicity_service is None or not hasattr(ethnicity_service, "japanese_probability"):
         return 0.0
-    return float(ethnicity_service.japanese_probability(compact_cjk))
+    try:
+        return float(ethnicity_service.japanese_probability(compact_cjk))
+    except Exception as e:  # noqa: BLE001 - model-backed services may raise arbitrary runtime errors.
+        LOGGER.warning(
+            "Japanese probability routing failed for compact CJK input %r: %s",
+            compact_cjk,
+            e,
+            exc_info=True,
+        )
+        return 0.0
 
 
 def _decision_string(decision: PPVysRoutingDecision | Row, column: str, *, allowed: tuple[str, ...]) -> str:

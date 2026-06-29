@@ -46,6 +46,20 @@ def test_process_name_batch_multiprocess_preserves_batch_overrides(detector):
     assert [_decision_signature(result) for result in actual] == [_decision_signature(result) for result in expected]
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"max_workers": 0}, "max_workers"),
+        ({"chunk_size": 0}, "chunk_size"),
+        ({"mp_start_method": "not_a_method"}, "start method"),
+    ],
+)
+def test_process_name_batch_multiprocess_rejects_invalid_pool_options(detector, kwargs, message):
+    """Compatibility wrapper should still surface invalid multiprocessing options."""
+    with pytest.raises(ValueError, match=message):
+        detector.process_name_batch_multiprocess(["Li Wei"], **kwargs)
+
+
 def test_persistent_multiprocess_pool_can_be_reused(detector):
     """Persistent pool should support repeated batch calls without changing outputs."""
     names_a = TEST_NAMES[:5]
