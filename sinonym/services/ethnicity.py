@@ -26,6 +26,8 @@ from sinonym.coretypes import ParseResult
 from sinonym.utils.string_manipulation import StringManipulationUtils
 from sinonym.utils.thread_cache import ThreadLocalCache
 
+MIN_COMPOUND_SURNAME_TOKEN_COUNT = 3
+
 # Optional ML Japanese classifier imports - consolidated from separate service
 try:
     import logging
@@ -132,6 +134,24 @@ class EthnicityClassificationService:
             return 0.0
         return self._ml_classifier.japanese_probability(compact_chinese_text)
 
+    def _starts_with_chinese_compound_surname(
+        self,
+        tokens: tuple[str, ...],
+        normalized_cache: dict[str, str],
+    ) -> bool:
+        """Return whether tokens begin with a recognized Chinese compound surname."""
+        if len(tokens) < MIN_COMPOUND_SURNAME_TOKEN_COUNT:
+            return False
+
+        first_two = [self._normalizer.get_normalized(token, normalized_cache) for token in tokens[:2]]
+        spaced = " ".join(first_two).lower()
+        compact = StringManipulationUtils.remove_spaces(spaced)
+        return (
+            spaced in self._data.compound_surnames
+            or spaced in self._data.compound_surnames_normalized
+            or compact in self._data.compound_original_format_map
+        )
+
     def classify_ethnicity(
         self,
         tokens: tuple[str, ...],
@@ -142,7 +162,7 @@ class EthnicityClassificationService:
         Three-tier Chinese vs non-Chinese classification system.
 
         ML Enhancement: For all-Chinese character inputs, use ML classifier first
-        Tier 1: Definitive Evidence (High Confidence)  
+        Tier 1: Definitive Evidence (High Confidence)
         Tier 2: Cultural Context (Medium Confidence)
         Tier 3: Chinese Default (Low Confidence)
         """
@@ -161,7 +181,11 @@ class EthnicityClassificationService:
             ml_result = self._ml_classifier.classify_all_chinese_name(compact_chinese_text)
 
             # If ML classifier confidently identifies it as Japanese, reject it
-            if ml_result.success is False and "japanese" in ml_result.error_message:
+            if (
+                ml_result.success is False
+                and "japanese" in ml_result.error_message
+                and not self._starts_with_chinese_compound_surname(tokens, normalized_cache)
+            ):
                 return ParseResult.failure("Japanese name detected by ML classifier")
 
         # Prepare expanded keys for pattern matching

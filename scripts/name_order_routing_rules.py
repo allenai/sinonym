@@ -103,8 +103,6 @@ def _output_fieldnames(input_fieldnames: list[str], rows: list[MutableRow], rout
 
 def _require_table_columns(fieldnames: list[str], required_columns: tuple[str, ...]) -> None:
     """Validate header/schema columns before row-level routing runs."""
-    if not fieldnames:
-        return
     missing = [column for column in required_columns if column not in fieldnames]
     if missing:
         message = f"missing required columns: {', '.join(missing)}"

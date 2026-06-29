@@ -379,7 +379,7 @@ def main():
         results_a = pool.normalize_names(names_a)
         results_b = pool.normalize_names(names_b)
 
-    # One-off convenience wrapper (creates and closes a temporary pool)
+    # One-off compatibility wrapper with full batch-context semantics
     single_batch = detector.process_name_batch_multiprocess(names_a, max_workers=6, chunk_size=64)
     return results_a, results_b, single_batch
 

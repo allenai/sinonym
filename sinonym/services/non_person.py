@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 
 NON_PERSON_FAILURE_REASON = "not a personal name"
 
-MIN_CJK_NON_PERSON_CHARS = 5
 MIN_CJK_NON_PERSON_PREFIX_CHARS = 2
 MIN_AUTHOR_LIST_LATIN_TOKENS = 6
 MIN_AUTHOR_LIST_SURNAME_TOKENS = 3
@@ -37,12 +36,7 @@ STRONG_CJK_NON_PERSON_MARKERS = (
 )
 
 STANDALONE_CJK_NON_PERSON_MARKERS = frozenset(STRONG_CJK_NON_PERSON_MARKERS)
-CJK_NON_PERSON_SUFFIX_MARKERS = (
-    "大学",
-    "学院",
-    "公司",
-    "研究所",
-)
+CJK_NON_PERSON_SUFFIX_MARKERS = STRONG_CJK_NON_PERSON_MARKERS
 
 
 class NonPersonInputDetectionService:
@@ -71,11 +65,7 @@ class NonPersonInputDetectionService:
             return True
         if any(self._has_marker_suffix(chunk) for chunk in cjk_chunks):
             return True
-
-        cjk_chars = sum(len(chunk) for chunk in cjk_chunks)
-        return cjk_chars >= MIN_CJK_NON_PERSON_CHARS and any(
-            marker in raw_name for marker in STRONG_CJK_NON_PERSON_MARKERS
-        )
+        return False
 
     @staticmethod
     def _has_marker_suffix(cjk_chunk: str) -> bool:

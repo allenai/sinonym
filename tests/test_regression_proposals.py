@@ -458,7 +458,7 @@ def test_exact_vote_tie_does_not_meet_batch_application_threshold(detector):
     assert [result.result for result in batch.results] == [detector.normalize_name(name).result for name in names]
 
 
-def test_batch_format_votes_ignore_weak_candidate_gaps_and_count_duplicate_rows(detector):
+def test_batch_format_votes_downweight_weak_candidate_gaps_and_count_duplicate_rows(detector):
     weak_surname_first = ParseCandidate(
         surname_tokens=["li"],
         given_tokens=["wei"],
@@ -520,9 +520,10 @@ def test_batch_format_votes_ignore_weak_candidate_gaps_and_count_duplicate_rows(
 
     stats = detector._batch_analysis_service._collect_batch_vote_stats(entries)
 
-    assert stats.surname_first_preferences == 0
+    assert stats.surname_first_preferences == 1
     assert stats.given_first_preferences == 3
     assert stats.names_with_candidates == 4
+    assert stats.surname_first_weight < stats.given_first_weight
 
 
 def test_batch_analysis_service_is_detector_owned(detector):
@@ -751,6 +752,41 @@ def test_compact_han_roman_transliteration_uses_han_order(detector, raw_name, ex
     assert result.parsed_original_order.order == expected_order
 
 
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("\u5218\u5fb7 \u534e", "De-Hua Liu"),
+        ("\u738b\u660e \u534e", "Ming-Hua Wang"),
+        ("\u5f20\u4f1f \u6797", "Wei-Lin Zhang"),
+    ],
+)
+def test_noisy_internal_space_in_three_character_han_name_preserves_surname_first_order(detector, raw_name, expected):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success, f"{raw_name!r}: expected accepted name, got {result.error_message!r}"
+    assert result.result == expected
+    assert result.parsed_original_order.order == ["surname", "given"]
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("\u4e0a\u5b98 \u5a49\u513f", "Wan-Er Shang Guan"),
+        ("\u4e1c\u65b9 \u4e0d\u8d25", "Bu-Bai Dong Fang"),
+        ("\u6b27\u9633 \u4fee \u6587", "Xiu-Wen Ou Yang"),
+        ("\u4e0a\u5b98\u5a49\u513f", "Wan-Er Shang Guan"),
+        ("\u4e1c\u65b9\u4e0d\u8d25", "Bu-Bai Dong Fang"),
+        ("\u6b27\u9633\u4fee\u6587", "Xiu-Wen Ou Yang"),
+    ],
+)
+def test_han_compound_surname_suppresses_japanese_ml_rejection(detector, raw_name, expected):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success, f"{raw_name!r}: expected accepted name, got {result.error_message!r}"
+    assert result.result == expected
+    assert result.parsed_original_order.order == ["surname", "given"]
+
+
 def test_non_person_inputs_are_rejected_before_parsing(detector):
     cases = [
         "\u5ef6\u5b89\u5927\u5b66 \u7269\u7406\u4e0e\u7535\u5b50\u4fe1\u606f\u5b66\u9662",
@@ -800,6 +836,13 @@ def test_short_cjk_non_person_marker_gate_preserves_person_names(detector, raw_n
 
     assert result.success, f"{raw_name!r}: expected accepted name, got {result.error_message!r}"
     assert result.result == expected
+
+
+def test_cjk_non_person_markers_do_not_match_internal_substrings(detector):
+    result = detector.normalize_name("\u738b\u5927\u5b66\u95ee\u5bb6")
+
+    if not result.success:
+        assert result.error_message != NON_PERSON_FAILURE_REASON
 
 
 def test_non_person_batch_rows_do_not_vote(detector):

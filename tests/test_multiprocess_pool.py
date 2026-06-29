@@ -4,7 +4,6 @@ Tests for persistent multi-process normalization.
 
 import pytest
 
-
 TEST_NAMES = [
     "Li Wei",
     "Wang Weiming",
@@ -24,15 +23,26 @@ def _decision_signature(result):
     return result.success, normalized
 
 
-def test_process_name_batch_multiprocess_matches_single_process(detector):
-    """Multi-process convenience path should match single-process output exactly."""
-    expected = [detector.normalize_name(name) for name in TEST_NAMES]
+def test_process_name_batch_multiprocess_matches_single_process_batch(detector):
+    """Multi-process compatibility path should match batch-context output exactly."""
+    expected = detector.process_name_batch(TEST_NAMES)
     actual = detector.process_name_batch_multiprocess(
         TEST_NAMES,
         max_workers=2,
         chunk_size=4,
     )
 
+    assert [_decision_signature(result) for result in actual] == [_decision_signature(result) for result in expected]
+
+
+def test_process_name_batch_multiprocess_preserves_batch_overrides(detector):
+    """Ambiguous rows should receive the same batch order override as process_name_batch."""
+    names = ["Wang An", "Yan Li", "Wu Gang", "Li Bao"]
+    individual = [detector.normalize_name(name) for name in names]
+    expected = detector.process_name_batch(names)
+    actual = detector.process_name_batch_multiprocess(names, max_workers=2, chunk_size=2)
+
+    assert [result.result for result in individual] != [result.result for result in expected]
     assert [_decision_signature(result) for result in actual] == [_decision_signature(result) for result in expected]
 
 

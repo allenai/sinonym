@@ -213,6 +213,18 @@ def test_middle_initial_trailing_after_given_preserves_original_order(detector):
     assert res.parsed_original_order.order == ["surname", "given", "middle"]
 
 
+def test_compact_middle_initial_trailing_after_given_preserves_original_order(detector):
+    raw = "Zhang WeiA"
+    res = detector.normalize_name(raw)
+
+    assert res.success, f"Expected success, got error: {res.error_message}"
+    assert res.result == "Wei A Zhang"
+    assert res.parsed.middle_tokens == ["A"]
+    assert res.parsed_original_order is not None
+    assert res.parsed_original_order.middle_tokens == ["A"]
+    assert res.parsed_original_order.order == ["surname", "given", "middle"]
+
+
 def test_middle_initial_trailing_batch_preserves_original_order(detector):
     names = ["Li Wei A.", "Zhang Ming F."]
     batch = detector.analyze_name_batch(names)
@@ -229,6 +241,8 @@ def test_middle_initial_trailing_batch_preserves_original_order(detector):
     [
         ("A-wei Zhang", "Wei A Zhang", ["middle", "given", "surname"], ["A"]),
         ("Wei-A Zhang", "Wei A Zhang", ["given", "middle", "surname"], ["A"]),
+        ("Awei Zhang", "Wei A Zhang", ["middle", "given", "surname"], ["A"]),
+        ("WeiA Zhang", "Wei A Zhang", ["given", "middle", "surname"], ["A"]),
         ("A Wei Zhang", "Wei A Zhang", ["middle", "given", "surname"], ["A"]),
         ("Wei Zhang", "Wei Zhang", ["given", "surname"], []),
     ],

@@ -13,6 +13,11 @@ from sinonym.timo.interface import (
 
 EXPECTED_BATCH_CONTEXT_RESULT_COUNT = 3
 TIE_CONFIDENCE = 0.5
+LEGACY_PATTERN_CONFIDENCE = 0.75
+LEGACY_SURNAME_FIRST_COUNT = 3
+LEGACY_GIVEN_FIRST_COUNT = 1
+LEGACY_TOTAL_COUNT = 4
+LEGACY_VOTE_MARGIN_COUNT = 2
 
 
 @pytest.fixture(scope="module")
@@ -138,6 +143,30 @@ def test_prediction_models_keep_mutable_backwards_compatible_shapes_and_enum_typ
             vote_margin=0.0,
             threshold_met=False,
         )
+
+
+def test_format_pattern_accepts_legacy_payload_and_dict_serializes_enum_values():
+    pattern = FormatPattern(
+        dominant_format="surname_first",
+        confidence=LEGACY_PATTERN_CONFIDENCE,
+        surname_first_count=LEGACY_SURNAME_FIRST_COUNT,
+        given_first_count=LEGACY_GIVEN_FIRST_COUNT,
+        total_count=LEGACY_TOTAL_COUNT,
+        threshold_met=True,
+    )
+
+    assert pattern.decision_confidence == LEGACY_PATTERN_CONFIDENCE
+    assert pattern.voting_count == LEGACY_TOTAL_COUNT
+    assert pattern.vote_margin_count == LEGACY_VOTE_MARGIN_COUNT
+    assert pattern.vote_margin == TIE_CONFIDENCE
+    assert isinstance(pattern.dominant_format, NameFormatValue)
+    assert pattern.dict()["dominant_format"] == "surname_first"
+
+
+def test_prediction_dict_serializes_nested_format_pattern_enum_values(predictor: Predictor):
+    result = predictor.predict_batch([Instance(name="Li Wei")])[0]
+
+    assert result.dict()["format_pattern"]["dominant_format"] == "surname_first"
 
 
 def test_batch_models_keep_list_shaped_python_api(predictor: Predictor):

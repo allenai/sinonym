@@ -192,11 +192,12 @@ from sinonym.services import (
     ServiceContext,
 )
 from sinonym.services.order_metadata import original_component_order
-from sinonym.services.process_pool import PersistentMultiprocessNormalizer, normalize_names_multiprocess
+from sinonym.services.process_pool import PersistentMultiprocessNormalizer
 
 BILINGUAL_SURNAME_STRENGTH_RATIO_MIN = 5.0
 BILINGUAL_ROMAN_HAN_SOURCE_ORDER_RATIO_MAX = 12.0
 BILINGUAL_ENDPOINT_PAIR_COUNT = 2
+SPACED_HAN_PREFIX_SURNAME_RATIO_MIN = 5.0
 
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CHINESE NAME DETECTOR CLASS
@@ -599,6 +600,14 @@ class ChineseNameDetector:
             last_is_surname = self._is_surname_group(last_group, normalized_input.norm_map)
             last_is_compound_surname = self._is_compound_surname_group(last_group, normalized_input.norm_map)
 
+            if (
+                last_is_surname
+                and not first_is_surname
+                and len(first_group) > 1
+                and len(last_group) == 1
+                and self._spaced_han_prefers_prefix_surname(first_group, last_group)
+            ):
+                return None
             if last_is_surname and (not first_is_surname or last_is_compound_surname):
                 surname_tokens = last_group
                 given_tokens = first_group
@@ -614,6 +623,17 @@ class ChineseNameDetector:
             return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
         except ValueError as e:
             return ParseResult.failure(str(e))
+
+    def _spaced_han_prefers_prefix_surname(self, first_group: list[str], last_group: list[str]) -> bool:
+        """Return whether noisy spacing likely split a surname-first Han name's given name."""
+        if not first_group or not last_group:
+            return False
+
+        first_freq = self._data.get_surname_freq(first_group[0])
+        last_freq = self._data.get_surname_freq(last_group[0])
+        if last_freq <= 0:
+            return first_freq > 0
+        return first_freq / last_freq >= SPACED_HAN_PREFIX_SURNAME_RATIO_MIN
 
     # Public API methods
     def get_cache_info(self) -> CacheInfo:
@@ -1084,20 +1104,14 @@ class ChineseNameDetector:
         mp_start_method: str = "spawn",
     ) -> list[ParseResult]:
         """
-        Process one batch with a temporary multi-process pool.
+        Process one batch and preserve the same batch-context semantics as process_name_batch().
 
-        For repeated calls, prefer `create_persistent_multiprocess_pool()`
-        to avoid repeated process start-up overhead.
+        The multiprocessing knobs are accepted for source compatibility. For
+        true per-name parallel normalization, use create_persistent_multiprocess_pool().
         """
         self._ensure_initialized()
-        return normalize_names_multiprocess(
-            names,
-            max_workers=max_workers,
-            chunk_size=chunk_size,
-            mp_start_method=mp_start_method,
-            detector_config=self._config,
-            detector_weights=self._weights,
-        )
+        _ = (max_workers, chunk_size, mp_start_method)
+        return self.process_name_batch(names)
 
     def _create_fallback_batch_result(
         self,

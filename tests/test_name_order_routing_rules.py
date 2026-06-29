@@ -106,6 +106,28 @@ def test_name_order_routing_script_rejects_empty_csv_with_missing_schema(tmp_pat
         runpy.run_path("scripts/name_order_routing_rules.py", run_name="__main__")
 
 
+def test_name_order_routing_script_rejects_headerless_empty_csv(tmp_path, monkeypatch):
+    input_path = tmp_path / "empty.csv"
+    output_path = tmp_path / "routed.csv"
+    input_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "scripts/name_order_routing_rules.py",
+            "pp-abstain",
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="missing required columns"):
+        runpy.run_path("scripts/name_order_routing_rules.py", run_name="__main__")
+
+
 def test_pp_abstain_builder_converts_batch_evidence_to_router_rows(detector):
     batch = detector.analyze_name_batch(["Wang An", "Yan Li", "Wu Gang", "Li Bao"])
 
@@ -342,6 +364,25 @@ def test_pp_vys_abstain_rule_rejects_unknown_enums():
         route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_surname_frequency_ratio="not-a-number")])
 
 
+def test_pp_vys_abstain_rule_keeps_not_person_terminal():
+    routed = route_pp_vys_abstain_rows(
+        [
+            _pp_vys_row(
+                new_prediction="not_person",
+                pp_selected_format="mixed",
+                vys_selected_format="mixed",
+                pp_batch_total_count="not-a-number",
+                pp_batch_confidence="not-a-number",
+                pp_selected_surname_frequency_ratio="not-a-number",
+            ),
+        ],
+    )
+
+    assert routed[0]["input_order_candidate"] == "unknown"
+    assert routed[0]["router_prediction"] == "not_person"
+    assert routed[0]["router_reason"] == "not_person"
+
+
 def test_pp_vys_abstain_rule_rejects_contradictory_new_prediction_reason():
     with pytest.raises(ValueError, match="new_reason"):
         route_pp_vys_abstain_rows(
@@ -408,6 +449,29 @@ def test_pp_vys_builder_preserves_missing_ratio_evidence():
     assert rows[0]["pp_selected_surname_frequency_ratio"] is None
     assert routed[0]["router_prediction"] == "vys"
     assert routed[0]["router_reason"] == "old_vys_new_pp_default_vys"
+
+
+def test_pp_vys_builder_accepts_mixed_format_for_not_person(detector):
+    names = ["John Smith"]
+    pp_batch = detector.analyze_name_batch(names)
+    vys_batch = detector.analyze_name_batch(names)
+
+    rows = build_pp_vys_abstain_rows(
+        pp_batch,
+        vys_batch,
+        [
+            {
+                "old_prediction": "pp",
+                "new_prediction": "not_person",
+                "new_reason": "weak_or_conflicting_evidence",
+            },
+        ],
+    )
+    routed = route_pp_vys_abstain_rows(rows)
+
+    assert rows[0]["pp_selected_format"] == "mixed"
+    assert rows[0]["vys_selected_format"] == "mixed"
+    assert routed[0]["router_prediction"] == "not_person"
 
 
 def test_pp_vys_abstain_rule_applies_effective_plus_vys_override():
@@ -517,6 +581,29 @@ def test_pp_vys_abstain_rule_applies_promoted_name_priors():
         "name_prior_ouyang_surname_first",
         "name_prior_korean_given_first_three_token",
         "name_prior_cantonese_given_first",
+    ]
+
+
+def test_pp_vys_abstain_repeated_tail_name_prior_beats_broader_given_first_priors():
+    routed = route_pp_vys_abstain_rows(
+        [
+            _pp_vys_row(
+                name="Su Yun Yun",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+            ),
+            _pp_vys_row(
+                name="Han Yun Yun",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+            ),
+        ],
+    )
+
+    assert [row["router_prediction"] for row in routed] == ["pp", "pp"]
+    assert [row["router_reason"] for row in routed] == [
+        "name_prior_repeated_tail_given_surname_first",
+        "name_prior_repeated_tail_given_surname_first",
     ]
 
 

@@ -22,7 +22,7 @@ import numpy as np
 
 from sinonym.coretypes import BatchParseResult, NameFormat, NameOrderEvidence, ParseResult
 
-Route = Literal["pp", "vys", "abstain"]
+Route = Literal["pp", "vys", "abstain", "not_person"]
 Row = Mapping[str, object]
 MutableRow = dict[str, object]
 __all__ = [
@@ -460,8 +460,16 @@ def build_pp_vys_abstain_rows(
                 "old_prediction": old_prediction,
                 "new_prediction": new_prediction,
                 "new_reason": new_reason,
-                "pp_selected_format": _order_format_value(pp_evidence.selected_format, "pp_selected_format"),
-                "vys_selected_format": _order_format_value(vys_evidence.selected_format, "vys_selected_format"),
+                "pp_selected_format": _routing_selected_format(
+                    pp_evidence.selected_format,
+                    "pp_selected_format",
+                    new_prediction,
+                ),
+                "vys_selected_format": _routing_selected_format(
+                    vys_evidence.selected_format,
+                    "vys_selected_format",
+                    new_prediction,
+                ),
                 "pp_batch_total_count": pp_batch_result.format_pattern.total_count,
                 "pp_batch_confidence": pp_batch_result.format_pattern.decision_confidence,
                 "pp_selected_surname_frequency_ratio": pp_evidence.selected_over_alternate_surname_frequency_ratio,
@@ -484,6 +492,10 @@ def route_pp_vys_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
 
 def _route_pp_vys_abstain_row(row: Row) -> MutableRow:
     _require_columns(row, PP_VYS_ABSTAIN_REQUIRED_COLUMNS)
+    terminal_route = _not_person_route(row)
+    if terminal_route is not None:
+        return terminal_route
+
     features = _pp_vys_features(row)
     route, reason = _base_pp_vys_route(features)
     override = _effective_plus_override(features)
@@ -512,7 +524,7 @@ def _pp_vys_features(row: Row) -> PPVysFeatures:
     vys_selected_format = _required_string(row, "vys_selected_format", allowed=ORDER_FORMAT_VALUES)
     old_new_vys = old_prediction == "vys" and new_prediction == "vys"
     old_pp_new_vys = old_prediction == "pp" and new_prediction == "vys"
-    old_vys_new_abstain = old_prediction == "vys" and new_prediction in {"abstain", "not_person"}
+    old_vys_new_abstain = old_prediction == "vys" and new_prediction == "abstain"
     old_vys_new_pp = old_prediction == "vys" and new_prediction == "pp"
 
     return PPVysFeatures(
@@ -534,6 +546,23 @@ def _pp_vys_features(row: Row) -> PPVysFeatures:
         old_vys_new_abstain=old_vys_new_abstain,
         old_vys_new_pp=old_vys_new_pp,
     )
+
+
+def _not_person_route(row: Row) -> MutableRow | None:
+    """Return the terminal non-person route without interpreting parse evidence."""
+    _required_string(row, "old_prediction", allowed=("pp", "vys"))
+    new_prediction = _required_string(row, "new_prediction", allowed=PREDICTION_VALUES)
+    if new_prediction != "not_person":
+        return None
+
+    new_reason = _required_string(row, "new_reason", allowed=PP_VYS_REASON_VALUES)
+    _require_consistent_new_prediction_reason(new_prediction, new_reason)
+
+    routed = dict(row)
+    routed["input_order_candidate"] = "unknown"
+    routed["router_prediction"] = "not_person"
+    routed["router_reason"] = "not_person"
+    return routed
 
 
 def _require_consistent_new_prediction_reason(new_prediction: str, new_reason: str) -> None:
@@ -632,7 +661,7 @@ def _reliable_input_order_abstain(features: PPVysFeatures) -> bool:
 def _pp_abstain_small_ratio_vys(features: PPVysFeatures) -> bool:
     return (
         features.old_prediction == "pp"
-        and features.new_prediction in {"abstain", "not_person"}
+        and features.new_prediction == "abstain"
         and features.pp_batch_total_count == PP_VYS_LOW_BATCH_MAX
         and PP_VYS_TINY_RATIO_MAX < features.ratio <= PP_VYS_ALLOWED_RATIO_LOW_MAX
     )
@@ -684,19 +713,18 @@ def _endpoint_pp_low_count_low_conf_very_high_ratio(features: PPVysFeatures) -> 
 
 
 def _name_prior_override(features: PPVysFeatures) -> tuple[Route, str] | None:
-    selected: tuple[Route, str] | None = None
     overrides: tuple[tuple[Route | None, str], ...] = (
         (
             _repeated_tail_given_surname_first_route(features),
             "name_prior_repeated_tail_given_surname_first",
         ),
         (
-            _korean_given_first_three_token_route(features),
-            "name_prior_korean_given_first_three_token",
-        ),
-        (
             _ouyang_surname_first_route(features),
             "name_prior_ouyang_surname_first",
+        ),
+        (
+            _korean_given_first_three_token_route(features),
+            "name_prior_korean_given_first_three_token",
         ),
         (
             _cantonese_given_first_route(features),
@@ -705,19 +733,23 @@ def _name_prior_override(features: PPVysFeatures) -> tuple[Route, str] | None:
     )
     for route, reason in overrides:
         if route is not None:
-            selected = (route, reason)
-    return selected
+            return route, reason
+    return None
 
 
 def _repeated_tail_given_surname_first_route(features: PPVysFeatures) -> Route | None:
-    tokens = features.name_tokens
-    if (
+    if _has_repeated_tail_chinese_surname(features.name_tokens):
+        return _desired_format_route(features, "surname_first")
+    return None
+
+
+def _has_repeated_tail_chinese_surname(tokens: tuple[str, ...]) -> bool:
+    """Return whether a name has a Chinese surname plus reduplicated given tail."""
+    return (
         len(tokens) >= MIN_THREE_TOKEN_NAME_PRIOR_TOKENS
         and tokens[-1] == tokens[-2]
         and tokens[0] in NAME_PRIOR_COMMON_CHINESE_SURNAMES
-    ):
-        return _desired_format_route(features, "surname_first")
-    return None
+    )
 
 
 def _ouyang_surname_first_route(features: PPVysFeatures) -> Route | None:
@@ -728,6 +760,8 @@ def _ouyang_surname_first_route(features: PPVysFeatures) -> Route | None:
 
 def _korean_given_first_three_token_route(features: PPVysFeatures) -> Route | None:
     tokens = features.name_tokens
+    if _has_repeated_tail_chinese_surname(tokens):
+        return None
     if (
         len(tokens) >= MIN_THREE_TOKEN_NAME_PRIOR_TOKENS
         and tokens[-1] in NAME_PRIOR_KOREAN_SURNAMES
@@ -739,6 +773,8 @@ def _korean_given_first_three_token_route(features: PPVysFeatures) -> Route | No
 
 def _cantonese_given_first_route(features: PPVysFeatures) -> Route | None:
     tokens = features.name_tokens
+    if _has_repeated_tail_chinese_surname(tokens):
+        return None
     if (
         len(tokens) >= MIN_THREE_TOKEN_NAME_PRIOR_TOKENS
         and tokens[-1] in NAME_PRIOR_CANTONESE_SOUTHEAST_ASIAN_SURNAMES
@@ -858,6 +894,17 @@ def _order_format_value(value: NameFormat | str, column: str) -> str:
         message = f"{column} must be one of {', '.join(ORDER_FORMAT_VALUES)}"
         raise ValueError(message)
     return output
+
+
+def _routing_selected_format(value: NameFormat | str, column: str, new_prediction: str) -> str:
+    """Return selected-format evidence, allowing mixed only for terminal non-person rows."""
+    if new_prediction == "not_person":
+        output = _format_value(value)
+        if output not in FORMAT_VALUES:
+            message = f"{column} must be one of {', '.join(FORMAT_VALUES)}"
+            raise ValueError(message)
+        return output
+    return _order_format_value(value, column)
 
 
 def _float_or_zero(value: float | None) -> float:

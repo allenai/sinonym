@@ -88,6 +88,20 @@ def test_threshold_boundary_cases(detector):
         assert pattern.threshold_met is True
 
 
+def test_low_gap_majority_votes_are_not_dropped(detector):
+    """Low-gap candidate rows should still vote instead of letting one row steer the batch."""
+    names = ["Bo Wen", "Hao Min", "Jun Wen", "Yu Han"]
+
+    batch = detector.analyze_name_batch(names)
+
+    assert batch.format_pattern.dominant_format == NameFormat.SURNAME_FIRST
+    assert batch.format_pattern.surname_first_count == 3
+    assert batch.format_pattern.given_first_count == 1
+    assert batch.format_pattern.total_count == 4
+    assert batch.format_pattern.threshold_met
+    assert [result.result for result in batch.results] == ["Wen Bo", "Min Hao", "Wen Jun", "Han Yu"]
+
+
 def test_small_batch_fallback(detector):
     """Test that small batches fall back correctly."""
     names = ["Mai Li", "Li Wang"]
@@ -106,6 +120,29 @@ def test_small_batch_fallback(detector):
     assert batch_result.name_order_evidence[0].batch_participant is True
     assert len(batch_result.results) == len(names)
     assert len(batch_result.improvements) == 0
+
+
+def test_batch_format_pattern_preserves_explicit_zero_decision_confidence():
+    pattern = BatchFormatPattern(
+        dominant_format=NameFormat.SURNAME_FIRST,
+        confidence=0.7,
+        surname_first_count=0,
+        given_first_count=0,
+        total_count=0,
+        threshold_met=False,
+        decision_confidence=0.0,
+    )
+    defaulted = BatchFormatPattern(
+        dominant_format=NameFormat.SURNAME_FIRST,
+        confidence=0.7,
+        surname_first_count=1,
+        given_first_count=0,
+        total_count=1,
+        threshold_met=False,
+    )
+
+    assert pattern.decision_confidence == 0.0
+    assert defaulted.decision_confidence == 0.7
 
 
 # ===================================================================

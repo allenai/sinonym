@@ -8,6 +8,7 @@ improve parsing accuracy for ambiguous individual names.
 
 from __future__ import annotations
 
+import collections.abc  # noqa: TC003
 import math
 from dataclasses import dataclass
 from statistics import median
@@ -33,7 +34,7 @@ LONG_GIVEN_NAME_TOKEN_MIN_LENGTH = 6
 TWO_TOKEN_NAME_LENGTH = 2
 MIN_CANDIDATES_FOR_CONFIDENCE_GAP = 2
 BATCH_PARTICIPANT_MIN = 2
-BATCH_FORMAT_MIN_VOTE_WEIGHT = 0.5
+BATCH_FORMAT_MIN_VOTER_SHARE = 0.5
 BATCH_FORMAT_DIRECTION_MIN_CONFIDENCE = 0.5
 HIGH_SURNAME_FREQUENCY_MIN = 1000
 MEDIUM_SURNAME_FREQUENCY_MIN = 100
@@ -49,8 +50,8 @@ class BatchAnalysisDependencies:
     """Detector-owned callbacks and constants needed by batch analysis."""
 
     min_tokens_required: int
-    individual_parser: Callable[[str], ParseResult]
-    input_failure: Callable[[str], ParseResult | None]
+    individual_parser: collections.abc.Callable[[str], ParseResult]
+    input_failure: collections.abc.Callable[[str], ParseResult | None]
 
 
 @dataclass(frozen=True)
@@ -70,12 +71,16 @@ class BatchCandidateEntry:
     best_candidate: ParseCandidate | None
     compound_metadata: dict | None
     representation: str
+    vote_eligible: bool = True
 
     @property
     def participates(self) -> bool:
         """Return whether this entry votes in Latin batch format detection."""
         return bool(
-            self.candidates and self.best_candidate and self.representation == LATIN_ONLY_REPRESENTATION,
+            self.vote_eligible
+            and self.candidates
+            and self.best_candidate
+            and self.representation == LATIN_ONLY_REPRESENTATION,
         )
 
 
@@ -112,10 +117,15 @@ class BatchVoteStats:
         """Return total format votes."""
         return self.surname_first_preferences + self.given_first_preferences
 
+    @property
+    def voter_share(self) -> float:
+        """Return the share of candidate participants that cast a format vote."""
+        if self.names_with_candidates <= 0:
+            return 0.0
+        return self.total_preferences / self.names_with_candidates
+
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from sinonym.services.ethnicity import EthnicityClassificationService
     from sinonym.services.parsing import NameParsingService
 
@@ -175,6 +185,7 @@ class BatchAnalysisService:
             # Normalize once and reuse
             normalized_input = normalizer.apply(name)
             representation = self._script_representation(normalizer, normalized_input)
+            vote_eligible = self._batch_vote_eligible(normalized_input)
             if not self._is_batch_format_participant(representation):
                 name_candidates.append(BatchCandidateEntry(name, [], None, normalized_input.compound_metadata, representation))
                 continue
@@ -185,7 +196,14 @@ class BatchAnalysisService:
                 allow_guarded_given_first_bonus=False,
             )
             name_candidates.append(
-                BatchCandidateEntry(name, candidates, best_candidate, normalized_input.compound_metadata, representation),
+                BatchCandidateEntry(
+                    name,
+                    candidates,
+                    best_candidate,
+                    normalized_input.compound_metadata,
+                    representation,
+                    vote_eligible,
+                ),
             )
 
         name_candidates = self._promote_guarded_given_first_batch_votes(name_candidates, normalizer, data)
@@ -259,6 +277,7 @@ class BatchAnalysisService:
             # Normalize once for format detection (compound_metadata not needed)
             normalized_input = normalizer.apply(name)
             representation = self._script_representation(normalizer, normalized_input)
+            vote_eligible = self._batch_vote_eligible(normalized_input)
             if not self._is_batch_format_participant(representation):
                 name_candidates.append(BatchCandidateEntry(name, [], None, None, representation))
                 continue
@@ -268,7 +287,9 @@ class BatchAnalysisService:
                 normalized_input,
                 allow_guarded_given_first_bonus=False,
             )
-            name_candidates.append(BatchCandidateEntry(name, candidates, best_candidate, None, representation))
+            name_candidates.append(
+                BatchCandidateEntry(name, candidates, best_candidate, None, representation, vote_eligible),
+            )
 
         name_candidates = self._promote_guarded_given_first_batch_votes(name_candidates, normalizer, data)
 
@@ -292,6 +313,7 @@ class BatchAnalysisService:
             # Normalize once and reuse
             normalized_input = normalizer.apply(name)
             representation = self._script_representation(normalizer, normalized_input)
+            vote_eligible = self._batch_vote_eligible(normalized_input)
             if not self._is_batch_format_participant(representation):
                 results.append(self._locked_representation_result(name))
                 name_candidates.append(BatchCandidateEntry(name, [], None, normalized_input.compound_metadata, representation))
@@ -332,7 +354,14 @@ class BatchAnalysisService:
                     ),
                 )
             name_candidates.append(
-                BatchCandidateEntry(name, candidates, best_candidate, normalized_input.compound_metadata, representation),
+                BatchCandidateEntry(
+                    name,
+                    candidates,
+                    best_candidate,
+                    normalized_input.compound_metadata,
+                    representation,
+                    vote_eligible,
+                ),
             )
             format_candidates.append(
                 BatchCandidateEntry(
@@ -341,6 +370,7 @@ class BatchAnalysisService:
                     format_best_candidate,
                     normalized_input.compound_metadata,
                     representation,
+                    vote_eligible,
                 ),
             )
 
@@ -478,6 +508,7 @@ class BatchAnalysisService:
                 promoted_candidate,
                 entry.compound_metadata,
                 entry.representation,
+                entry.vote_eligible,
             )
         return adjusted
 
@@ -493,7 +524,7 @@ class BatchAnalysisService:
         given_shape_count = 0
 
         for index, entry in enumerate(name_candidates):
-            if not self._is_batch_format_participant(entry.representation):
+            if not self._candidate_entry_participates(entry):
                 continue
 
             promotion = self._guarded_given_first_promotion(
@@ -646,8 +677,14 @@ class BatchAnalysisService:
         has_confident_direction = decision_confidence > BATCH_FORMAT_DIRECTION_MIN_CONFIDENCE and (
             has_decisive_vote or has_unopposed_dominant_vote
         )
-        has_multiple_participants = stats.names_with_candidates >= BATCH_PARTICIPANT_MIN
-        threshold_met = decision_confidence >= format_threshold and has_confident_direction and has_multiple_participants
+        has_enough_voters = stats.total_preferences >= BATCH_PARTICIPANT_MIN
+        has_enough_voter_share = stats.voter_share >= BATCH_FORMAT_MIN_VOTER_SHARE
+        threshold_met = (
+            decision_confidence >= format_threshold
+            and has_confident_direction
+            and has_enough_voters
+            and has_enough_voter_share
+        )
 
         return BatchFormatPattern(
             dominant_format=dominant_format,
@@ -669,8 +706,6 @@ class BatchAnalysisService:
             stats.names_with_candidates += 1
 
             weight = self._candidate_vote_weight(entry.candidates)
-            if weight < BATCH_FORMAT_MIN_VOTE_WEIGHT:
-                continue
             stats.total_weight += weight
 
             if entry.best_candidate.format == NameFormat.SURNAME_FIRST:
@@ -748,7 +783,7 @@ class BatchAnalysisService:
                 results.append(input_failure)
                 continue
 
-            if not self._is_batch_format_participant(entry.representation):
+            if not self._candidate_entry_participates(entry):
                 results.append(self._locked_representation_result(entry.name))
                 continue
 
@@ -850,6 +885,11 @@ class BatchAnalysisService:
         """Return whether the record should vote in and receive Latin batch format."""
         return representation == LATIN_ONLY_REPRESENTATION
 
+    @classmethod
+    def _batch_vote_eligible(cls, normalized_input) -> bool:
+        """Return whether a normalized Latin row should vote in batch order detection."""
+        return not cls._all_caps_tokens(list(normalized_input.roman_tokens))
+
     def _input_failure(self, name: str) -> ParseResult | None:
         """Return an early detector-owned input failure, if one matches."""
         return self._input_failure_callback(name)
@@ -937,7 +977,7 @@ class BatchAnalysisService:
         for i, (entry, batch_result) in enumerate(
             zip(name_candidates, batch_results, strict=False),
         ):
-            if not self._is_batch_format_participant(entry.representation):
+            if not self._candidate_entry_participates(entry):
                 continue
 
             if not entry.best_candidate or not batch_result.success:

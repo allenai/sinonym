@@ -22,7 +22,12 @@ def _given_middle_order(given_tokens: list[str], middle_tokens: list[str]) -> li
     if not middle_tokens:
         return ["given"]
 
-    return _compact_component_labels(_given_middle_labels(given_tokens))
+    labels = _given_middle_labels(given_tokens)
+    if "middle" not in labels:
+        compact_labels = _compact_given_middle_labels(given_tokens, middle_tokens)
+        if compact_labels:
+            labels = compact_labels
+    return _compact_component_labels(labels)
 
 
 def _given_middle_labels(given_tokens: list[str]) -> list[str]:
@@ -59,6 +64,20 @@ def _given_name_parts(given_tokens: list[str]) -> list[str]:
     return parts
 
 
+def _compact_given_middle_labels(given_tokens: list[str], middle_tokens: list[str]) -> list[str]:
+    """Infer edge-position middle initials that came from compact given tokens."""
+    source = "".join(_letters_only(token).lower() for token in given_tokens)
+    middle = "".join(_letters_only(token).lower() for token in middle_tokens)
+    if not source or not middle or len(source) <= len(middle):
+        return []
+
+    if source.startswith(middle):
+        return ["middle", "given"]
+    if source.endswith(middle):
+        return ["given", "middle"]
+    return []
+
+
 def _leading_initial_count(part_lengths: list[int]) -> int:
     """Return the leading single-letter run length."""
     count = 0
@@ -90,4 +109,9 @@ def _compact_component_labels(labels: list[str]) -> list[str]:
 
 def _token_letter_length(token: str) -> int:
     """Return the alphabetic length used for initial detection."""
-    return len("".join(char for char in token.replace("-", "") if char.isalpha()))
+    return len(_letters_only(token.replace("-", "")))
+
+
+def _letters_only(token: str) -> str:
+    """Return alphabetic characters from a token."""
+    return "".join(char for char in token if char.isalpha())

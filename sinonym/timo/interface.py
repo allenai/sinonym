@@ -1,12 +1,16 @@
 from enum import Enum
 
-from pydantic import BaseModel, BaseSettings, Field
+from pydantic import BaseModel, BaseSettings, Field, root_validator
 
 from sinonym.detector import ChineseNameDetector
 
 
 class TimoModel(BaseModel):
     """Base Pydantic model for TIMO request and response contracts."""
+
+    def dict(self, *args, **kwargs):
+        """Return plain Python serialization values for enum fields."""
+        return _serialize_enum_values(super().dict(*args, **kwargs))
 
 
 class NameFormatValue(str, Enum):
@@ -54,6 +58,38 @@ class FormatPattern(TimoModel):
     vote_margin_count: int = Field(description="absolute difference between surname-first and given-first votes")
     vote_margin: float = Field(description="vote_margin_count / total_count")
     threshold_met: bool = Field(description="decision_confidence >= format_threshold plus gating checks")
+
+    @root_validator(pre=True)
+    def _fill_derived_fields(cls, values):  # noqa: N805
+        """Accept legacy six-field payloads and derive the new vote metrics."""
+        if not isinstance(values, dict):
+            return values
+
+        output = dict(values)
+        confidence = float(output.get("confidence", 0.0) or 0.0)
+        surname_first_count = int(output.get("surname_first_count", 0) or 0)
+        given_first_count = int(output.get("given_first_count", 0) or 0)
+        total_count = int(output.get("total_count", 0) or 0)
+        vote_margin_count = abs(surname_first_count - given_first_count)
+
+        output.setdefault("decision_confidence", confidence)
+        output.setdefault("voting_count", surname_first_count + given_first_count)
+        output.setdefault("vote_margin_count", vote_margin_count)
+        output.setdefault("vote_margin", vote_margin_count / total_count if total_count > 0 else 0.0)
+        return output
+
+
+def _serialize_enum_values(value):
+    """Recursively convert Enum objects to their values for `.dict()` output."""
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, list):
+        return [_serialize_enum_values(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_serialize_enum_values(item) for item in value)
+    if isinstance(value, dict):
+        return {key: _serialize_enum_values(item) for key, item in value.items()}
+    return value
 
 
 class Prediction(TimoModel):
