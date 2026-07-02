@@ -669,11 +669,9 @@ COMPOUND_VARIANTS = {
     "pugu": "pu gu",  # 濮阳 historical
     "puyang": "pu yang",  # 濮阳
     "taishi": "tai shi",  # 太史
-    "xinlei": "xin lei",  # 辛雷 rare historical
     "gongxi": "gong xi",  # 公西
     "zaisang": "zai sang",  # 宰桑 historical
     "baili": "bai li",  # 百里
-    "qianlong": "qian long",  # 钱龙 historical
     "wuma": "wu ma",  # 巫马
     "yangsi": "yang si",  # 羊舌
     "lezheng": "le zheng",  # 乐正
@@ -843,7 +841,9 @@ HIGH_CONFIDENCE_ANCHORS = frozenset(
         "long",
         "mei",
         "peng",
+        "qian",
         "qing",
+        "ran",
         "rong",
         "rui",
         "shan",

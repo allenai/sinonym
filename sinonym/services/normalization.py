@@ -86,11 +86,13 @@ class NormalizedInput:
     roman_tokens: tuple[str, ...]  # After Han→pinyin & mixed-token processing
     norm_map: dict[str, str]  # token → fully normalized (eager)
     compound_metadata: dict[str, CompoundMetadata]  # token → compound info
+    from_camel_case_pair: bool = False
+    surname_first_parenthetical_hint: bool = False
 
     @classmethod
     def empty(cls, raw: str = "") -> NormalizedInput:
         """Factory for empty/invalid input."""
-        return cls(raw, "", (), (), {}, {})
+        return cls(raw, "", (), (), {}, {}, False, False)
 
 
 class NormalizationService:
@@ -121,6 +123,15 @@ class NormalizationService:
         """
         return self._text_normalizer.normalize_token(token)
 
+    def norm_light(self, token: str) -> str:
+        """
+        Normalize text without romanization remapping.
+
+        Used for first-chance table lookups where the source syllable may be a
+        valid pinyin key that collides with a Wade-Giles/Cantonese alias.
+        """
+        return self._text_normalizer.normalize_token_light(token)
+
     def get_normalized(self, token: str, norm_cache: dict[str, str]) -> str:
         """
         Get normalized form of token using cache, with fallback to normalization.
@@ -138,7 +149,10 @@ class NormalizationService:
             return NormalizedInput.empty(raw_name)
 
         # Phase 1: Clean input (single regex pass)
-        cleaned = self._text_preprocessor.preprocess_input(raw_name, self._data)
+        cleaned, from_camel_case_pair, surname_first_parenthetical_hint = self._text_preprocessor.preprocess_input(
+            raw_name,
+            self._data,
+        )
 
         # Phase 2: Handle "LAST, First" format (common in academic/professional contexts)
         if "," in cleaned:
@@ -175,6 +189,8 @@ class NormalizationService:
             roman_tokens=roman_tokens,
             norm_map=norm_map,
             compound_metadata=compound_metadata,
+            from_camel_case_pair=from_camel_case_pair,
+            surname_first_parenthetical_hint=surname_first_parenthetical_hint,
         )
 
     def _process_mixed_tokens(self, tokens: list[str], is_all_chinese: bool = False) -> list[str]:
@@ -270,15 +286,8 @@ class NormalizationService:
 
     def classify_script_representation(self, normalized_input: NormalizedInput) -> ScriptRepresentation:
         """Classify script provenance for batch convention voting."""
-        has_han = any(
-            self._config.cjk_pattern.search(char)
-            for token in normalized_input.tokens
-            for char in token
-        )
-        has_roman = any(
-            self._config.ascii_alpha_pattern.search(token)
-            for token in normalized_input.tokens
-        )
+        has_han = any(self._config.cjk_pattern.search(char) for token in normalized_input.tokens for char in token)
+        has_roman = any(self._config.ascii_alpha_pattern.search(token) for token in normalized_input.tokens)
 
         if has_han and has_roman:
             if self.aligned_bilingual_pairs(normalized_input) is not None:
@@ -326,9 +335,7 @@ class NormalizationService:
     def _is_roman_token(self, token: str) -> bool:
         """Return whether the token carries Roman letters and no CJK characters."""
         return bool(
-            token
-            and self._config.ascii_alpha_pattern.search(token)
-            and not self._config.cjk_pattern.search(token),
+            token and self._config.ascii_alpha_pattern.search(token) and not self._config.cjk_pattern.search(token),
         )
 
     def _clean_roman_token(self, token: str) -> str:
@@ -349,12 +356,10 @@ class NormalizationService:
         if "-" in roman_token:
             roman_parts = StringManipulationUtils.split_and_clean_hyphens(roman_token)
             roman_parts_norm = [
-                self._canonical_pinyin_alignment_text(self._text_normalizer.normalize_token(part))
-                for part in roman_parts
+                self._canonical_pinyin_alignment_text(self._text_normalizer.normalize_token(part)) for part in roman_parts
             ]
             han_parts_norm = tuple(
-                self._canonical_pinyin_alignment_text(self._text_normalizer.normalize_token(part))
-                for part in han_pinyin
+                self._canonical_pinyin_alignment_text(self._text_normalizer.normalize_token(part)) for part in han_pinyin
             )
             return tuple(roman_parts_norm) == han_parts_norm
 

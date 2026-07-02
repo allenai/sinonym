@@ -69,11 +69,7 @@ class NameDataStructures:
 
     def is_surname(self, token: str, normalized_token: str) -> bool:
         """Check if token is a surname using both original and normalized forms."""
-        return (
-            token in self.surnames
-            or normalized_token in self.surnames
-            or normalized_token in self.surnames_normalized
-        )
+        return token in self.surnames or normalized_token in self.surnames or normalized_token in self.surnames_normalized
 
     def is_given_name(self, normalized_token: str) -> bool:
         """Check if normalized token is a given name."""
@@ -114,9 +110,7 @@ class DataInitializationService:
         compound_surnames = frozenset(compound_surnames_with_variants)
 
         # Build normalized versions
-        surnames_normalized = frozenset(
-            StringManipulationUtils.remove_spaces(self._normalizer.norm(s)) for s in surnames_raw
-        )
+        surnames_normalized = frozenset(StringManipulationUtils.remove_spaces(self._normalizer.norm(s)) for s in surnames_raw)
         compound_surnames_normalized = frozenset(self._normalizer.norm(s) for s in surnames_raw if " " in s)
 
         # Add normalized compound variants
@@ -361,6 +355,10 @@ class DataInitializationService:
         for compound_surname in compound_surnames:
             parts = compound_surname.split()
             if len(parts) == 2:
+                existing_freq = surname_frequencies.get(compound_surname, 0.0)
+                if existing_freq > 0:
+                    continue
+
                 # Use reasonable fallback frequency for missing parts (1.0 instead of 1e-6)
                 freq1 = surname_frequencies.get(parts[0], 1.0)
                 freq2 = surname_frequencies.get(parts[1], 1.0)
@@ -370,9 +368,8 @@ class DataInitializationService:
                 min_compound_freq = 0.1  # Reasonable floor for compound surnames
                 compound_freq = max(compound_freq, min_compound_freq)
 
-                existing_freq = surname_frequencies.get(compound_surname, 0.0)
                 surname_frequencies[compound_surname] = compound_freq
-                compound_freq_delta += max(compound_freq - existing_freq, 0.0)
+                compound_freq_delta += compound_freq
 
         total_with_compounds = total_surname_freq + compound_freq_delta
         if total_with_compounds <= 0:

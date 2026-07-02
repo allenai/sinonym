@@ -77,10 +77,7 @@ class BatchCandidateEntry:
     def participates(self) -> bool:
         """Return whether this entry votes in Latin batch format detection."""
         return bool(
-            self.vote_eligible
-            and self.candidates
-            and self.best_candidate
-            and self.representation == LATIN_ONLY_REPRESENTATION,
+            self.vote_eligible and self.candidates and self.best_candidate and self.representation == LATIN_ONLY_REPRESENTATION,
         )
 
 
@@ -475,6 +472,7 @@ class BatchAnalysisService:
                 is_all_chinese=False,
                 original_compound_format=original_compound_format,
                 allow_guarded_given_first_bonus=allow_guarded_given_first_bonus,
+                surname_first_parenthetical_hint=normalized_input.surname_first_parenthetical_hint,
             )
 
             # Determine the format of this parse
@@ -511,10 +509,16 @@ class BatchAnalysisService:
             normalizer,
             data,
         )
+        given_first_support = sum(
+            1
+            for entry in name_candidates
+            if entry.participates and entry.best_candidate is not None and entry.best_candidate.format == NameFormat.GIVEN_FIRST
+        )
 
         if not self._should_promote_guarded_given_first_votes(
             participant_count,
             promoted,
+            given_first_support,
             first_surname_freqs,
             given_shape_count,
         ):
@@ -618,11 +622,12 @@ class BatchAnalysisService:
     def _should_promote_guarded_given_first_votes(
         participant_count: int,
         promoted: list[tuple[int, ParseCandidate]],
+        given_first_support: int,
         first_surname_freqs: list[float],
         given_shape_count: int,
     ) -> bool:
         """Return whether guarded given-first votes have enough batch-level support."""
-        if not promoted or len(promoted) / participant_count < GUARDED_GIVEN_FIRST_BATCH_MIN_SHARE:
+        if not promoted or (len(promoted) + given_first_support) / participant_count < GUARDED_GIVEN_FIRST_BATCH_MIN_SHARE:
             return False
 
         has_shape_evidence = given_shape_count / len(promoted) >= GIVEN_NAME_SHAPE_MIN_SHARE
@@ -701,10 +706,7 @@ class BatchAnalysisService:
         has_enough_voters = stats.total_preferences >= BATCH_PARTICIPANT_MIN
         has_enough_voter_share = stats.voter_share >= BATCH_FORMAT_MIN_VOTER_SHARE
         threshold_met = (
-            decision_confidence >= format_threshold
-            and has_confident_direction
-            and has_enough_voters
-            and has_enough_voter_share
+            decision_confidence >= format_threshold and has_confident_direction and has_enough_voters and has_enough_voter_share
         )
 
         return BatchFormatPattern(
@@ -1132,15 +1134,16 @@ class BatchAnalysisService:
 
         normalized_surname_tokens = [normalizer.norm(token) for token in surname_tokens]
         selected_surname = "".join(normalized_surname_tokens)
-        selected_surname_key = (
-            self._selected_compound_surname_lookup_key(surname_tokens, raw_tokens, compound_metadata)
-            or self._selected_surname_lookup_key(
-                normalized_surname_tokens,
-                raw_tokens,
-                0,
-                None,
-                compound_metadata,
-            )
+        selected_surname_key = self._selected_compound_surname_lookup_key(
+            surname_tokens,
+            raw_tokens,
+            compound_metadata,
+        ) or self._selected_surname_lookup_key(
+            normalized_surname_tokens,
+            raw_tokens,
+            0,
+            None,
+            compound_metadata,
         )
         selected_format = self._format_from_parse_result(result)
         if selected_surname and selected_format == NameFormat.SURNAME_FIRST:

@@ -199,6 +199,7 @@ BILINGUAL_SURNAME_STRENGTH_RATIO_MIN = 5.0
 BILINGUAL_ROMAN_HAN_SOURCE_ORDER_RATIO_MAX = 12.0
 BILINGUAL_ENDPOINT_PAIR_COUNT = 2
 SPACED_HAN_PREFIX_SURNAME_RATIO_MIN = 5.0
+CAMEL_CASE_LAST_SURNAME_RATIO_MIN = 5.0
 CURATED_COMPOUND_SURNAME_FORMS = frozenset((*COMPOUND_VARIANTS.keys(), *COMPOUND_VARIANTS.values()))
 CompactHanRomanCandidate = tuple[list[str], list[str], list[str], float, bool]
 
@@ -333,6 +334,7 @@ class ChineseNameDetector:
                 given_tokens,
                 normalized_input.norm_map,
                 normalized_input.compound_metadata,
+                allow_surname_like_given_split=self._allows_surname_like_given_split(normalized_input),
             )
         )
         parsed = ParsedName(
@@ -362,6 +364,43 @@ class ChineseNameDetector:
             parsed=parsed,
             parsed_original_order=parsed_original_order,
         )
+
+    def _allows_surname_like_given_split(self, normalized_input: NormalizedInput) -> bool:
+        """Return whether surname-like fused given tokens may be gold-split."""
+        return not any(
+            self._config.cjk_pattern.search(char) for token in normalized_input.tokens for char in token
+        )
+
+    def _normalize_camel_case_pair(self, normalized_input: NormalizedInput) -> ParseResult | None:
+        """Parse a whole-input camelCase pair using surname-first provenance."""
+        tokens = list(normalized_input.roman_tokens)
+        if len(tokens) != 2 or self._is_compound_surname_group(tokens, normalized_input.norm_map):
+            return None
+
+        first, last = tokens
+        first_key = self._normalizer.norm_light(first)
+        last_key = self._normalizer.norm_light(last)
+        first_is_surname = self._data.is_surname(first, first_key)
+        last_is_surname = self._data.is_surname(last, last_key)
+        if not first_is_surname and not last_is_surname:
+            return None
+
+        first_freq = self._data.get_surname_freq(first_key)
+        last_freq = self._data.get_surname_freq(last_key)
+        last_wins = last_is_surname and (
+            not first_is_surname or last.isupper() or last_freq >= CAMEL_CASE_LAST_SURNAME_RATIO_MIN * first_freq
+        )
+        if last_wins:
+            surname_tokens, given_tokens = [last], [first]
+            original_order = ["given", "surname"]
+        else:
+            surname_tokens, given_tokens = [first], [last]
+            original_order = ["surname", "given"]
+
+        try:
+            return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
+        except ValueError as e:
+            return ParseResult.failure(str(e))
 
     def _normalize_aligned_bilingual_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
         """Parse explicit Roman/Han aligned names using Han surname identity."""
@@ -821,6 +860,7 @@ class ChineseNameDetector:
                             given_tokens,
                             normalized_input.norm_map,
                             normalized_input.compound_metadata,
+                            allow_surname_like_given_split=self._allows_surname_like_given_split(normalized_input),
                         )
                     )
                     parsed = ParsedName(
@@ -892,6 +932,7 @@ class ChineseNameDetector:
                             given_tokens,
                             normalized_input.norm_map,
                             normalized_input.compound_metadata,
+                            allow_surname_like_given_split=self._allows_surname_like_given_split(normalized_input),
                         )
                     )
                     parsed = ParsedName(
@@ -922,6 +963,11 @@ class ChineseNameDetector:
                 except ValueError as e:
                     return ParseResult.failure(str(e))
         else:
+            if normalized_input.from_camel_case_pair:
+                camel_result = self._normalize_camel_case_pair(normalized_input)
+                if camel_result is not None:
+                    return camel_result
+
             # Evaluate both order hypotheses and pick the best-scoring parse
             original_tokens = list(normalized_input.roman_tokens)
             best_candidate = None
@@ -944,6 +990,7 @@ class ChineseNameDetector:
                     normalized_input.norm_map,
                     is_all_chinese=False,
                     original_compound_format=original_compound_surname,
+                    surname_first_parenthetical_hint=normalized_input.surname_first_parenthetical_hint,
                 )
                 used_original = order_tokens == original_tokens
 
@@ -978,6 +1025,7 @@ class ChineseNameDetector:
                             given_tokens,
                             normalized_input.norm_map,
                             normalized_input.compound_metadata,
+                            allow_surname_like_given_split=self._allows_surname_like_given_split(normalized_input),
                         )
                     )
                     parsed = ParsedName(

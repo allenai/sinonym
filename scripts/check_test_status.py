@@ -19,12 +19,6 @@ UNEXPECTED_FAILURE_SAMPLE_SIZE = 5
 PERFORMANCE_METRIC_MARKERS = ("Time per name:", "names/second")
 EXPECTED_NORMALIZED_NAME_FAILURES = (
     (
-        "tests.test_acl::test_acl_chinese_names[Tong Zhang-Tong Zhang]",
-        "Tong Zhang",
-        "Tong Zhang",
-        "Zhang Tong",
-    ),
-    (
         "tests.test_acl::test_acl_chinese_names[Fei Yu-Fei Yu]",
         "Fei Yu",
         "Fei Yu",
@@ -37,76 +31,16 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Fei Hao",
     ),
     (
-        "tests.test_acl::test_acl_order_preservation[Hao-Ran Wei-Hao-Ran Wei]",
-        "Hao-Ran Wei",
-        "Hao-Ran Wei",
-        "Wei Hao-Ran",
-    ),
-    (
-        "tests.test_acl::test_acl_order_preservation[Haoran Jin-Hao-Ran Jin]",
-        "Haoran Jin",
-        "Hao-Ran Jin",
-        "Haoran Jin",
-    ),
-    (
-        "tests.test_acl::test_acl_order_preservation[Haoran Que-Hao-Ran Que]",
-        "Haoran Que",
-        "Hao-Ran Que",
-        "Que Haoran",
-    ),
-    (
-        "tests.test_acl::test_acl_order_preservation[Haoran Ye-Hao-Ran Ye]",
-        "Haoran Ye",
-        "Hao-Ran Ye",
-        "Haoran Ye",
-    ),
-    (
         "tests.test_acl::test_acl_order_preservation[Kun Kuang-Kun Kuang]",
         "Kun Kuang",
         "Kun Kuang",
         "Kuang Kun",
     ),
     (
-        "tests.test_acl::test_acl_order_preservation[Qianlong Du-Qian-Long Du]",
-        "Qianlong Du",
-        "Qian-Long Du",
-        "Du Qianlong",
-    ),
-    (
-        "tests.test_acl::test_acl_order_preservation[Qianlong Wang-Qian-Long Wang]",
-        "Qianlong Wang",
-        "Qian-Long Wang",
-        "Wang Qianlong",
-    ),
-    (
-        "tests.test_acl::test_acl_order_preservation[Xinlei Chen-Xin-Lei Chen]",
-        "Xinlei Chen",
-        "Xin-Lei Chen",
-        "Chen Xinlei",
-    ),
-    (
-        "tests.test_acl::test_acl_order_preservation[Xinlei He-Xin-Lei He]",
-        "Xinlei He",
-        "Xin-Lei He",
-        "He Xinlei",
-    ),
-    (
         "tests.test_acl::test_acl_order_preservation[Yao Shu-Yao Shu]",
         "Yao Shu",
         "Yao Shu",
         "Shu Yao",
-    ),
-    (
-        "tests.test_acl::test_acl_order_preservation[Yuwen Wang-Yuwen Wang]",
-        "Yuwen Wang",
-        "Yuwen Wang",
-        "Wang Yuwen",
-    ),
-    (
-        "tests.test_acl::test_acl_order_preservation[Yuxuan Gu-Yuxuan Gu]",
-        "Yuxuan Gu",
-        "Yuxuan Gu",
-        "Gu Yuxuan",
     ),
     (
         "tests.test_basic_chinese_names::test_basic_chinese_names[Feng Cha-expected4]",
@@ -241,18 +175,6 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Xi Zhao",
     ),
     (
-        "tests.test_mixed_production_cases::test_mixed_cases[Fu Meng Ting-expected_result86]",
-        "Fu Meng Ting",
-        "Meng-Ting Fu",
-        "Fu-Meng Ting",
-    ),
-    (
-        "tests.test_mixed_production_cases::test_mixed_cases[ke chen-expected_result106]",
-        "ke chen",
-        "Ke Chen",
-        "Chen Ke",
-    ),
-    (
         "tests.test_mixed_production_cases::test_mixed_cases[xu feng-expected_result120]",
         "xu feng",
         "Feng Xu",
@@ -263,24 +185,6 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "yang guang",
         "Guang Yang",
         "Yang Guang",
-    ),
-    (
-        r"tests.test_mixed_scripts::test_mixed_scripts[Zhou\uff08Mary\uff09Li-expected8]",
-        "Zhou\uff08Mary\uff09Li",
-        "Li Zhou",
-        "Zhou Li",
-    ),
-    (
-        "tests.test_name_formatting::test_name_formatting[JinHua-expected9]",
-        "JinHua",
-        "Hua Jin",
-        "Jin Hua",
-    ),
-    (
-        "tests.test_name_formatting::test_name_formatting[LinShu-expected95]",
-        "LinShu",
-        "Shu Lin",
-        "Lin Shu",
     ),
 )
 EXPECTED_FAILURES = len(EXPECTED_NORMALIZED_NAME_FAILURES)
@@ -477,10 +381,7 @@ def unexpected_failure_signatures(failures: Iterable[FailureDetail]) -> list[Fai
 
 def _unexpected_failure_sample(failures: list[FailureDetail]) -> str:
     """Return a concise sample of unexpected failure signatures for the status line."""
-    samples = [
-        f"{failure.nodeid} ({failure.kind}: {failure.message})"
-        for failure in failures[:UNEXPECTED_FAILURE_SAMPLE_SIZE]
-    ]
+    samples = [f"{failure.nodeid} ({failure.kind}: {failure.message})" for failure in failures[:UNEXPECTED_FAILURE_SAMPLE_SIZE]]
     suffix = (
         ""
         if len(failures) <= UNEXPECTED_FAILURE_SAMPLE_SIZE

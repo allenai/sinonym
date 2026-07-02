@@ -45,6 +45,8 @@ class NameFormattingService:
         given_tokens: list[str],
         normalized_cache: dict[str, str] | None = None,
         compound_metadata: dict[str, CompoundMetadata] | None = None,
+        *,
+        allow_surname_like_given_split: bool = True,
     ) -> str:
         """
         Format parsed name components into final output string.
@@ -86,7 +88,7 @@ class NameFormattingService:
                 self._normalizer,
                 self._config,
             )
-            if not split:
+            if not split and allow_surname_like_given_split:
                 split = StringManipulationUtils.split_surname_like_given_name(
                     token,
                     normalized_cache,
@@ -192,6 +194,8 @@ class NameFormattingService:
         given_tokens: list[str],
         normalized_cache: dict[str, str] | None = None,
         compound_metadata: dict[str, CompoundMetadata] | None = None,
+        *,
+        allow_surname_like_given_split: bool = True,
     ) -> tuple[str, list[str], list[str], str, str, list[str]]:
         """
         Format parsed name components and also return the individual tokens.
@@ -231,7 +235,7 @@ class NameFormattingService:
                 self._normalizer,
                 self._config,
             )
-            if not split:
+            if not split and allow_surname_like_given_split:
                 split = StringManipulationUtils.split_surname_like_given_name(
                     token,
                     normalized_cache,
