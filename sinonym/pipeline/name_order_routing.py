@@ -1,8 +1,8 @@
-"""Name-order routing rules for external PP/VYS/abstain pipeline contexts.
+"""Name-order routing rules for PP/VYS/abstain pipeline contexts.
 
-These rules combine two or more `sinonym.analyze_name_batch()` runs plus
-caller-owned context metadata. They intentionally stay out of the single-name
-detector API and default batch parser path.
+These rules combine two or more `sinonym.analyze_name_batch()` runs. They
+intentionally stay out of the single-name detector API and default batch parser
+path.
 
 Route semantics:
 - `pp`: emit the PP parse.
@@ -30,7 +30,6 @@ MutableRow = dict[str, object]
 LOGGER = logging.getLogger(__name__)
 __all__ = [
     "MutableRow",
-    "PPVysRoutingDecision",
     "Route",
     "Row",
     "build_pp_abstain_rows",
@@ -38,12 +37,14 @@ __all__ = [
     "pp_abstain_router",
     "pp_vys_abstain_router",
     "route_pp_abstain_rows",
+    "route_pp_vys_abstain_batches",
     "route_pp_vys_abstain_rows",
 ]
 
 FORMAT_VALUES = ("surname_first", "given_first", "mixed")
 ORDER_FORMAT_VALUES = ("surname_first", "given_first")
 PREDICTION_VALUES = ("pp", "vys", "abstain", "not_person")
+OLD_PREDICTION_VALUES = ("pp", "vys", "not_person")
 PP_VYS_REASON_VALUES = (
     "endpoint_frequency_strongly_favors_pp",
     "endpoint_frequency_strongly_favors_vys",
@@ -56,14 +57,26 @@ VYS_NEW_REASON_VALUES = ("endpoint_frequency_strongly_favors_vys", "strong_vys_b
 
 PP_VYS_ABSTAIN_REQUIRED_COLUMNS = (
     "name",
-    "old_prediction",
-    "new_prediction",
-    "new_reason",
+    "pp_success",
+    "pp_result",
     "pp_selected_format",
-    "vys_selected_format",
+    "pp_selected_surname_position",
+    "pp_selected_surname_frequency",
+    "pp_batch_dominant_format",
+    "pp_batch_threshold_met",
     "pp_batch_total_count",
     "pp_batch_confidence",
+    "pp_batch_vote_margin",
     "pp_selected_surname_frequency_ratio",
+    "vys_success",
+    "vys_result",
+    "vys_selected_format",
+    "vys_selected_surname_position",
+    "vys_selected_surname_frequency",
+    "vys_batch_dominant_format",
+    "vys_batch_threshold_met",
+    "vys_batch_confidence",
+    "vys_batch_vote_margin",
 )
 
 PP_ABSTAIN_REQUIRED_COLUMNS = (
@@ -107,6 +120,18 @@ PP_VYS_TOTAL_BUCKET_TEN_MAX = 10
 PP_VYS_CONF_BUCKET_LOW_MAX = 0.50
 PP_VYS_CONF_BUCKET_MID_MAX = 0.70
 MIN_THREE_TOKEN_NAME_PRIOR_TOKENS = 3
+PP_VYS_SELECTED_CLEAN_ENDPOINT_VYS_RATIO_MAX = 0.10
+PP_VYS_SELECTED_CLEAN_ENDPOINT_PP_RATIO_MIN = 20.0
+PP_VYS_SELECTED_CLEAN_STRONG_PP_CONFIDENCE_MIN = 0.70
+PP_VYS_SELECTED_CLEAN_STRONG_VYS_CONFIDENCE_MIN = 0.85
+PP_VYS_OLD_ENDPOINT_VYS_RATIO_MIN = 5.0
+PP_VYS_OLD_ENDPOINT_VYS_MARGIN_MIN = 0.55
+PP_VYS_OLD_SMALL_PP_CONTEXT_MAX = 3
+PP_VYS_OLD_SMALL_PP_VYS_MARGIN_MIN = 0.65
+PP_VYS_OLD_WEAK_PP_MARGIN_MAX = 0.20
+PP_VYS_OLD_WEAK_PP_VYS_MARGIN_MIN = 0.35
+PP_VYS_GARBAGE_RESULT_TOKEN_MAX = 4
+ROUTING_TOKEN_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)?", flags=re.UNICODE)
 
 NAME_PRIOR_COMMON_CHINESE_SURNAMES = frozenset(
     {
@@ -368,15 +393,6 @@ NAME_PRIOR_CANTONESE_GIVEN_SYLLABLES = frozenset(
 
 
 @dataclass(frozen=True)
-class PPVysRoutingDecision:
-    """Caller-owned policy decision fields needed to build one PP/VYS routing row."""
-
-    old_prediction: str
-    new_prediction: str
-    new_reason: str
-
-
-@dataclass(frozen=True)
 class PPVysFeatures:
     """Parsed feature values for one PP/VYS/abstain routing row."""
 
@@ -435,64 +451,72 @@ def build_pp_abstain_rows(batch_result: BatchParseResult, detector_context: Any)
 def build_pp_vys_abstain_rows(
     pp_batch_result: BatchParseResult,
     vys_batch_result: BatchParseResult,
-    decisions: Iterable[PPVysRoutingDecision | Row],
 ) -> list[MutableRow]:
-    """Build `pp-vys-abstain` router rows from aligned PP and VYS batch results.
-
-    The caller must provide old/new prediction labels and the new prediction
-    reason because those are external policy decisions, not parse evidence.
-    """
+    """Build evidence-only `pp-vys-abstain` router rows from aligned batch results."""
     _require_aligned_batch_results(pp_batch_result, vys_batch_result)
-    decision_rows = list(decisions)
-    if len(decision_rows) != len(pp_batch_result.names):
-        message = "decisions must have one row per batch result"
-        raise ValueError(message)
 
     rows: list[MutableRow] = []
-    for index, decision in enumerate(decision_rows):
+    for index in range(len(pp_batch_result.results)):
+        pp_result = pp_batch_result.results[index]
+        vys_result = vys_batch_result.results[index]
         pp_evidence = pp_batch_result.name_order_evidence[index]
         vys_evidence = vys_batch_result.name_order_evidence[index]
-        old_prediction = _decision_string(decision, "old_prediction", allowed=("pp", "vys"))
-        new_prediction = _decision_string(decision, "new_prediction", allowed=PREDICTION_VALUES)
-        new_reason = _decision_string(decision, "new_reason", allowed=PP_VYS_REASON_VALUES)
-        _require_consistent_new_prediction_reason(new_prediction, new_reason)
 
         rows.append(
             {
                 "name": pp_evidence.raw_name or pp_batch_result.names[index],
-                "old_prediction": old_prediction,
-                "new_prediction": new_prediction,
-                "new_reason": new_reason,
-                "pp_selected_format": _routing_selected_format(
-                    pp_evidence.selected_format,
-                    "pp_selected_format",
-                    new_prediction,
-                ),
-                "vys_selected_format": _routing_selected_format(
-                    vys_evidence.selected_format,
-                    "vys_selected_format",
-                    new_prediction,
-                ),
+                "pp_success": pp_result.success,
+                "pp_result": _result_text(pp_result),
+                "pp_selected_format": _format_value(pp_evidence.selected_format),
+                "pp_selected_surname_position": pp_evidence.selected_surname_position,
+                "pp_selected_surname_frequency": _float_or_zero(pp_evidence.selected_surname_frequency),
+                "pp_batch_dominant_format": _format_value(pp_batch_result.format_pattern.dominant_format),
+                "pp_batch_threshold_met": pp_batch_result.format_pattern.threshold_met,
                 "pp_batch_total_count": pp_batch_result.format_pattern.total_count,
-                "pp_batch_confidence": pp_batch_result.format_pattern.decision_confidence,
+                "pp_batch_confidence": _format_pattern_decision_confidence(pp_batch_result.format_pattern),
+                "pp_batch_vote_margin": pp_batch_result.format_pattern.vote_margin,
                 "pp_selected_surname_frequency_ratio": pp_evidence.selected_over_alternate_surname_frequency_ratio,
+                "vys_success": vys_result.success,
+                "vys_result": _result_text(vys_result),
+                "vys_selected_format": _format_value(vys_evidence.selected_format),
+                "vys_selected_surname_position": vys_evidence.selected_surname_position,
+                "vys_selected_surname_frequency": _float_or_zero(vys_evidence.selected_surname_frequency),
+                "vys_batch_dominant_format": _format_value(vys_batch_result.format_pattern.dominant_format),
+                "vys_batch_threshold_met": vys_batch_result.format_pattern.threshold_met,
+                "vys_batch_total_count": vys_batch_result.format_pattern.total_count,
+                "vys_batch_confidence": _format_pattern_decision_confidence(vys_batch_result.format_pattern),
+                "vys_batch_vote_margin": vys_batch_result.format_pattern.vote_margin,
             },
         )
     return rows
+
+
+def route_pp_vys_abstain_batches(
+    pp_batch_result: BatchParseResult,
+    vys_batch_result: BatchParseResult,
+) -> list[MutableRow]:
+    """Route aligned PP and VYS batch results with the selected PP/VYS/abstain policy."""
+    return route_pp_vys_abstain_rows(build_pp_vys_abstain_rows(pp_batch_result, vys_batch_result))
 
 
 def route_pp_vys_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
     """Route PP/VYS disagreements, defaulting to PP except known VYS/abstain slices.
 
     Required input columns are listed in `PP_VYS_ABSTAIN_REQUIRED_COLUMNS`.
-    The returned rows add:
+    The returned rows add audit fields derived from evidence:
+    - `old_prediction`
+    - `old_reason`
+    - `new_prediction`
+    - `new_reason`
+
+    They also add:
     - `input_order_candidate`
     - `router_prediction`
     - `router_reason`
 
     `router_prediction` can be `pp`, `vys`, `abstain`, or terminal
-    `not_person`. The terminal route is emitted before parse-evidence
-    validation because non-person rows do not have meaningful PP/VYS parse
+    `not_person`. The terminal route is emitted before deeper parse-evidence
+    validation because non-person rows do not have meaningful PP/VYS route
     features.
     """
     return [_route_pp_vys_abstain_row(row) for row in rows]
@@ -500,11 +524,12 @@ def route_pp_vys_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
 
 def _route_pp_vys_abstain_row(row: Row) -> MutableRow:
     _require_columns(row, PP_VYS_ABSTAIN_REQUIRED_COLUMNS)
-    terminal_route = _not_person_route(row)
+    routing_row = _pp_vys_policy_row(row)
+    terminal_route = _not_person_route(routing_row)
     if terminal_route is not None:
         return terminal_route
 
-    features = _pp_vys_features(row)
+    features = _pp_vys_features(routing_row)
     route, reason = _base_pp_vys_route(features)
     override = _effective_plus_override(features)
     if override is not None:
@@ -513,10 +538,27 @@ def _route_pp_vys_abstain_row(row: Row) -> MutableRow:
     if name_prior_override is not None:
         route, reason = name_prior_override
 
-    routed = dict(row)
+    routed = dict(routing_row)
     routed["input_order_candidate"] = features.input_order_candidate
     routed["router_prediction"] = route
     routed["router_reason"] = reason
+    return routed
+
+
+def _pp_vys_policy_row(row: Row) -> MutableRow:
+    """Return a row with old/new policy audit fields derived from evidence."""
+    old_prediction, old_reason = _old_pp_vys_decision_from_row(row)
+    if old_prediction == "not_person":
+        new_prediction, new_reason = "not_person", "weak_or_conflicting_evidence"
+    else:
+        new_prediction, new_reason = _selected_clean_pp_vys_decision_from_row(row)
+    _require_consistent_new_prediction_reason(new_prediction, new_reason)
+
+    routed = dict(row)
+    routed["old_prediction"] = old_prediction
+    routed["old_reason"] = old_reason
+    routed["new_prediction"] = new_prediction
+    routed["new_reason"] = new_reason
     return routed
 
 
@@ -558,7 +600,7 @@ def _pp_vys_features(row: Row) -> PPVysFeatures:
 
 def _not_person_route(row: Row) -> MutableRow | None:
     """Return the terminal non-person route without interpreting parse evidence."""
-    _required_string(row, "old_prediction", allowed=("pp", "vys"))
+    _required_string(row, "old_prediction", allowed=OLD_PREDICTION_VALUES)
     new_prediction = _required_string(row, "new_prediction", allowed=PREDICTION_VALUES)
     if new_prediction != "not_person":
         return None
@@ -851,7 +893,19 @@ def pp_vys_abstain_router(dataframe: Any) -> Any:
     """
     _require_frame_columns(dataframe, PP_VYS_ABSTAIN_REQUIRED_COLUMNS)
     rows = route_pp_vys_abstain_rows(dataframe.to_dict("records"))
-    return _with_routing_columns(dataframe, rows, ("input_order_candidate", "router_prediction", "router_reason"))
+    return _with_routing_columns(
+        dataframe,
+        rows,
+        (
+            "old_prediction",
+            "old_reason",
+            "new_prediction",
+            "new_reason",
+            "input_order_candidate",
+            "router_prediction",
+            "router_reason",
+        ),
+    )
 
 
 def pp_abstain_router(dataframe: Any) -> Any:
@@ -875,12 +929,112 @@ def _require_aligned_batch_results(pp_batch_result: BatchParseResult, vys_batch_
     if pp_batch_result.names != vys_batch_result.names:
         message = "pp and vys batch results must have aligned names"
         raise ValueError(message)
+    if len(pp_batch_result.results) != len(pp_batch_result.names):
+        message = "pp batch result must include one ParseResult per name"
+        raise ValueError(message)
+    if len(vys_batch_result.results) != len(vys_batch_result.names):
+        message = "vys batch result must include one ParseResult per name"
+        raise ValueError(message)
     if len(pp_batch_result.name_order_evidence) != len(pp_batch_result.names):
         message = "pp batch result must include one NameOrderEvidence row per name"
         raise ValueError(message)
     if len(vys_batch_result.name_order_evidence) != len(vys_batch_result.names):
         message = "vys batch result must include one NameOrderEvidence row per name"
         raise ValueError(message)
+
+
+def _old_pp_vys_decision_from_row(row: Row) -> tuple[str, str]:
+    """Return the earlier PP/VYS backoff decision used by the selected hybrid."""
+    pp_success = _required_bool(row, "pp_success")
+    vys_success = _required_bool(row, "vys_success")
+    pp_text = _optional_string(row, "pp_result")
+    vys_text = _optional_string(row, "vys_result")
+    if (
+        not pp_success
+        or not vys_success
+        or _routing_token_count(pp_text) > PP_VYS_GARBAGE_RESULT_TOKEN_MAX
+        or _routing_token_count(vys_text) > PP_VYS_GARBAGE_RESULT_TOKEN_MAX
+    ):
+        return "not_person", "garbage_or_failed_parse"
+
+    if pp_text == vys_text:
+        return "pp", "pp_vys_same"
+
+    pp_margin = _required_float(row, "pp_batch_vote_margin")
+    pp_ct = _required_float(row, "pp_batch_total_count")
+    vys_margin = _required_float(row, "vys_batch_vote_margin")
+
+    pp_freq = _optional_float(row, "pp_selected_surname_frequency", default=0.0)
+    vys_freq = _optional_float(row, "vys_selected_surname_frequency", default=0.0)
+    vys_over_pp_freq_ratio = vys_freq / pp_freq if pp_freq > 0 else 0.0
+    pp_position = _required_string(row, "pp_selected_surname_position", allowed=("first", "last", "unknown"))
+    vys_position = _required_string(row, "vys_selected_surname_position", allowed=("first", "last", "unknown"))
+    endpoint_disagrees = pp_position in {"first", "last"} and vys_position in {"first", "last"} and pp_position != vys_position
+    vys_batch_dominant_format = _required_string(row, "vys_batch_dominant_format", allowed=FORMAT_VALUES)
+    use_vys = (
+        (
+            endpoint_disagrees
+            and vys_over_pp_freq_ratio >= PP_VYS_OLD_ENDPOINT_VYS_RATIO_MIN
+            and vys_margin >= PP_VYS_OLD_ENDPOINT_VYS_MARGIN_MIN
+        )
+        or (
+            pp_ct <= PP_VYS_OLD_SMALL_PP_CONTEXT_MAX
+            and vys_batch_dominant_format == "given_first"
+            and vys_margin >= PP_VYS_OLD_SMALL_PP_VYS_MARGIN_MIN
+        )
+        or (pp_margin <= PP_VYS_OLD_WEAK_PP_MARGIN_MAX and vys_margin >= PP_VYS_OLD_WEAK_PP_VYS_MARGIN_MIN)
+    )
+    if use_vys:
+        return "vys", "vys_backoff_rule"
+    return "pp", "default_pp"
+
+
+def _selected_clean_pp_vys_decision_from_row(row: Row) -> tuple[str, str]:
+    """Return the selected clean PP/VYS/abstain decision before hybrid overrides."""
+    ratio = _optional_float(row, "pp_selected_surname_frequency_ratio", default=math.nan)
+    if ratio <= PP_VYS_SELECTED_CLEAN_ENDPOINT_VYS_RATIO_MAX:
+        return "vys", "endpoint_frequency_strongly_favors_vys"
+    if ratio >= PP_VYS_SELECTED_CLEAN_ENDPOINT_PP_RATIO_MIN:
+        return "pp", "endpoint_frequency_strongly_favors_pp"
+    if _strong_pp_paper_context_from_row(row):
+        return "pp", "strong_pp_paper_context"
+    if _strong_vys_batch_context_from_row(row):
+        return "vys", "strong_vys_batch_context"
+    return "abstain", "weak_or_conflicting_evidence"
+
+
+def _strong_pp_paper_context_from_row(row: Row) -> bool:
+    return (
+        _required_bool(row, "pp_batch_threshold_met")
+        and _required_string(row, "pp_batch_dominant_format", allowed=FORMAT_VALUES)
+        == _required_string(row, "pp_selected_format", allowed=FORMAT_VALUES)
+        and _required_float(row, "pp_batch_total_count") >= PP_VYS_REAL_PAPER_VOTES_MIN
+        and _required_float(row, "pp_batch_confidence") >= PP_VYS_SELECTED_CLEAN_STRONG_PP_CONFIDENCE_MIN
+    )
+
+
+def _strong_vys_batch_context_from_row(row: Row) -> bool:
+    return (
+        _required_bool(row, "vys_batch_threshold_met")
+        and _required_string(row, "vys_batch_dominant_format", allowed=FORMAT_VALUES)
+        == _required_string(row, "vys_selected_format", allowed=FORMAT_VALUES)
+        and _required_float(row, "vys_batch_confidence") >= PP_VYS_SELECTED_CLEAN_STRONG_VYS_CONFIDENCE_MIN
+    )
+
+
+def _format_pattern_decision_confidence(pattern: Any) -> float:
+    confidence = getattr(pattern, "decision_confidence", None)
+    if confidence is None:
+        confidence = getattr(pattern, "confidence", 0.0)
+    return float(confidence)
+
+
+def _result_text(result: ParseResult) -> str:
+    return str(result.result) if result.success else ""
+
+
+def _routing_token_count(text: str) -> int:
+    return len(ROUTING_TOKEN_RE.findall(text or ""))
 
 
 def _parse_result_token_count(result: ParseResult) -> int:
@@ -894,25 +1048,6 @@ def _format_value(value: NameFormat | str) -> str:
     if isinstance(value, NameFormat):
         return value.value
     return str(value)
-
-
-def _order_format_value(value: NameFormat | str, column: str) -> str:
-    output = _format_value(value)
-    if output not in ORDER_FORMAT_VALUES:
-        message = f"{column} must be one of {', '.join(ORDER_FORMAT_VALUES)}"
-        raise ValueError(message)
-    return output
-
-
-def _routing_selected_format(value: NameFormat | str, column: str, new_prediction: str) -> str:
-    """Return selected-format evidence, allowing mixed only for terminal non-person rows."""
-    if new_prediction == "not_person":
-        output = _format_value(value)
-        if output not in FORMAT_VALUES:
-            message = f"{column} must be one of {', '.join(FORMAT_VALUES)}"
-            raise ValueError(message)
-        return output
-    return _order_format_value(value, column)
 
 
 def _float_or_zero(value: float | None) -> float:
@@ -973,14 +1108,6 @@ def _japanese_probability_for_routing(detector_context: Any, compact_cjk: str) -
             exc_info=True,
         )
         return 0.0
-
-
-def _decision_string(decision: PPVysRoutingDecision | Row, column: str, *, allowed: tuple[str, ...]) -> str:
-    value = decision.get(column) if isinstance(decision, Mapping) else getattr(decision, column, None)
-    if not isinstance(value, str) or value not in allowed:
-        message = f"{column} must be one of {', '.join(allowed)}"
-        raise ValueError(message)
-    return value
 
 
 def _input_order_candidate(row: Row) -> str:

@@ -22,7 +22,15 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_vys_abstain_rows,
 )
 
-PP_VYS_ABSTAIN_ROUTING_COLUMNS = ("input_order_candidate", "router_prediction", "router_reason")
+PP_VYS_ABSTAIN_ROUTING_COLUMNS = (
+    "old_prediction",
+    "old_reason",
+    "new_prediction",
+    "new_reason",
+    "input_order_candidate",
+    "router_prediction",
+    "router_reason",
+)
 PP_ABSTAIN_ROUTING_COLUMNS = ("router_prediction", "router_reason")
 
 

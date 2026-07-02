@@ -12,8 +12,10 @@ columns.
 
 - `pp_vys_abstain_labels.jsonl`: 1,000 PP/VYS/abstain routing examples from
   four 250-row labeling rounds. This fixture includes raw `name` because the
-  promoted narrow name-prior guards require it. Labels are `pp`, `vys`, or
-  `uncertain`.
+  promoted narrow name-prior guards require it, plus parser evidence from the
+  PP and VYS runs. It does not store `old_prediction`, `old_reason`,
+  `new_prediction`, or `new_reason`; the router derives those audit fields from
+  evidence. Labels are `pp`, `vys`, or `uncertain`.
 - `pp_abstain_labels.jsonl`: 750 PP/abstain routing examples from the current
   corrected train, corrected holdout, and fresh holdout feature sets. Labels
   are `pp`, `abstain`, or `uncertain`.
