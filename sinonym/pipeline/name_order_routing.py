@@ -24,7 +24,6 @@ Materializing `abstain`:
 
 from __future__ import annotations
 
-import logging
 import math
 import re
 from collections.abc import Iterable, Mapping
@@ -38,7 +37,6 @@ from sinonym.coretypes import BatchParseResult, NameFormat, NameOrderEvidence, P
 Route = Literal["pp", "vys", "abstain", "not_person"]
 Row = Mapping[str, object]
 MutableRow = dict[str, object]
-LOGGER = logging.getLogger(__name__)
 __all__ = [
     "MutableRow",
     "Route",
@@ -96,12 +94,9 @@ PP_ABSTAIN_REQUIRED_COLUMNS = (
     "selected_format",
     "batch_total_count",
     "selected_surname_frequency",
-    "selected_over_alternate_ratio",
     "has_cjk",
     "has_latin",
     "cjk_has_space",
-    "compact_cjk",
-    "jp_probability",
     "raw_tokens",
 )
 
@@ -425,21 +420,15 @@ def build_pp_abstain_rows(batch_result: BatchParseResult, detector_context: Any)
     for result, evidence in _iter_result_evidence(batch_result):
         normalized_input = _normalize_for_routing(detector_context, evidence.raw_name)
         script_representation = _script_representation_for_routing(detector_context, normalized_input, evidence)
-        compact_cjk = _compact_cjk_for_routing(detector_context, evidence.raw_name)
         rows.append(
             {
                 "pp_result_token_count": _parse_result_token_count(result),
                 "selected_format": _format_value(evidence.selected_format),
                 "batch_total_count": batch_result.format_pattern.total_count,
                 "selected_surname_frequency": _float_or_zero(evidence.selected_surname_frequency),
-                "selected_over_alternate_ratio": _float_or_zero(
-                    evidence.selected_over_alternate_surname_frequency_ratio,
-                ),
                 "has_cjk": _has_cjk(script_representation),
                 "has_latin": _has_latin(script_representation),
                 "cjk_has_space": script_representation == "han_only" and len(normalized_input.tokens) > 1,
-                "compact_cjk": compact_cjk,
-                "jp_probability": _japanese_probability_for_routing(detector_context, compact_cjk),
                 "raw_tokens": evidence.raw_token_count,
             },
         )
@@ -1071,33 +1060,6 @@ def _has_cjk(script_representation: str) -> bool:
 
 def _has_latin(script_representation: str) -> bool:
     return script_representation in {"latin_only", "bilingual_aligned", "mixed_script"}
-
-
-def _compact_cjk_for_routing(detector_context: Any, raw_name: str) -> str:
-    normalizer = getattr(detector_context, "_normalizer", None)
-    preprocessor = getattr(normalizer, "_text_preprocessor", None)
-    if preprocessor is None or not hasattr(preprocessor, "compact_all_chinese_input"):
-        return ""
-    return preprocessor.compact_all_chinese_input(raw_name)
-
-
-def _japanese_probability_for_routing(detector_context: Any, compact_cjk: str) -> float:
-    """Return routing Japanese probability, logging service failures and degrading to 0.0."""
-    if not compact_cjk:
-        return 0.0
-    ethnicity_service = getattr(detector_context, "_ethnicity_service", None)
-    if ethnicity_service is None or not hasattr(ethnicity_service, "japanese_probability"):
-        return 0.0
-    try:
-        return float(ethnicity_service.japanese_probability(compact_cjk))
-    except Exception as e:  # noqa: BLE001 - model-backed services may raise arbitrary runtime errors.
-        LOGGER.warning(
-            "Japanese probability routing failed for compact CJK input %r: %s",
-            compact_cjk,
-            e,
-            exc_info=True,
-        )
-        return 0.0
 
 
 def _input_order_candidate(row: Row) -> str:

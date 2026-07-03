@@ -11,14 +11,12 @@ import unicodedata
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.coretypes import NameFormat, ParseCandidate
-from sinonym.pipeline import name_order_routing
 from sinonym.resources import open_csv_reader, resource_path
 from sinonym.services import ethnicity
 from sinonym.services.batch_analysis import LATIN_ONLY_REPRESENTATION, BatchAnalysisService, BatchCandidateEntry
@@ -883,24 +881,6 @@ def test_japanese_probability_degrades_when_loaded_model_errors(caplog):
         assert classifier.japanese_probability("\u5c71\u7530") == 0.0
 
     assert "ML Japanese classifier probability error" in caplog.text
-    assert any(record.exc_info for record in caplog.records)
-
-
-def test_japanese_probability_routing_degrades_when_service_errors(caplog):
-    def raise_probability_error(_name):
-        message = "boom"
-        raise RuntimeError(message)
-
-    context = SimpleNamespace(
-        _ethnicity_service=SimpleNamespace(
-            japanese_probability=raise_probability_error,
-        ),
-    )
-
-    with caplog.at_level(logging.WARNING, logger=name_order_routing.__name__):
-        assert name_order_routing._japanese_probability_for_routing(context, "\u5c71\u7530") == 0.0
-
-    assert "Japanese probability routing failed" in caplog.text
     assert any(record.exc_info for record in caplog.records)
 
 

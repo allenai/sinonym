@@ -164,12 +164,9 @@ def _pp_abstain_row(**overrides):
         "selected_format": "surname_first",
         "batch_total_count": 3,
         "selected_surname_frequency": 10_000,
-        "selected_over_alternate_ratio": 100,
         "has_cjk": False,
         "has_latin": True,
         "cjk_has_space": False,
-        "compact_cjk": "",
-        "jp_probability": 0,
         "raw_tokens": 2,
     }
     row.update(overrides)
@@ -373,8 +370,6 @@ def test_pp_abstain_builder_derives_cjk_context_fields(detector):
     assert row["has_cjk"] is True
     assert row["has_latin"] is False
     assert row["cjk_has_space"] is True
-    assert row["compact_cjk"] == "\u9ec4\u5609\u5e73"
-    assert isinstance(row["jp_probability"], float)
 
 
 def test_pp_vys_builder_converts_aligned_batch_results_to_router_rows(detector):

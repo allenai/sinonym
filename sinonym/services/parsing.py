@@ -41,6 +41,19 @@ CURATED_COMPOUND_TARGETS = frozenset(COMPOUND_VARIANTS.values()) | frozenset(
     variant for variant in COMPOUND_VARIANTS if " " in variant
 )
 
+DEFAULT_WEIGHTS = (
+    0.465,  # surname_logp
+    0.395,  # given_logp_sum
+    -0.888,  # surname_rank_bonus
+    1.348,  # compound_given_bonus
+    1.102,  # order_preservation_bonus
+    0.425,  # surname_first_bonus
+    -0.042,  # surname_freq_log_ratio (log-based comparative feature)
+    -0.573,  # surname_rank_difference (comparative feature)
+    0.06,  # given_position_logp (comparative positional given-syllable feature)
+    0.1,  # surname_usage_delta (surname-position usage evidence, 1+1 parses)
+)
+
 
 class NameParsingService:
     """Service for parsing Chinese names into surname and given name components."""
@@ -62,25 +75,9 @@ class NameParsingService:
         # pickled configs or process-pool workers) get the default coefficients for
         # the newer trailing features appended, keeping index order stable.
         if weights and len(weights) in (8, 9, 10):
-            self._weights = list(weights)
-            if len(self._weights) == 8:
-                self._weights.append(0.06)
-            if len(self._weights) == 9:
-                self._weights.append(0.1)
+            self._weights = list(weights) + list(DEFAULT_WEIGHTS[len(weights) :])
         else:
-            # Default weights (10 features)
-            self._weights = [
-                0.465,  # surname_logp
-                0.395,  # given_logp_sum
-                -0.888,  # surname_rank_bonus
-                1.348,  # compound_given_bonus
-                1.102,  # order_preservation_bonus
-                0.425,  # surname_first_bonus
-                -0.042,  # surname_freq_log_ratio (log-based comparative feature)
-                -0.573,  # surname_rank_difference (comparative feature)
-                0.06,  # given_position_logp (comparative positional given-syllable feature)
-                0.1,  # surname_usage_delta (surname-position usage evidence, 1+1 parses)
-            ]
+            self._weights = list(DEFAULT_WEIGHTS)
 
     def parse_name_order(
         self,
@@ -728,10 +725,12 @@ class NameParsingService:
 
                 if is_ambiguous:
                     # Order prior applies only where usage evidence does not already
-                    # decide the case; a lopsided usage margin overrides it.
+                    # decide the case against it; a lopsided usage margin favoring
+                    # the flipped order overrides it. Confirming evidence (positive
+                    # delta for this order-preserving parse) leaves the prior intact.
                     order_preservation_bonus = max(
                         0.0,
-                        1.0 - abs(surname_usage_delta) / ORDER_BONUS_EVIDENCE_SCALE,
+                        1.0 - max(0.0, -surname_usage_delta) / ORDER_BONUS_EVIDENCE_SCALE,
                     )
                 elif allow_guarded_given_first_bonus and self._has_guarded_given_first_surname_ratio(
                     surname_tokens[0],

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import math
 import unicodedata
-from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
@@ -17,7 +16,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import CANTONESE_SURNAMES, COMPOUND_VARIANTS, PYPINYIN_FREQUENCY_ALIASES
-from sinonym.resources import open_csv_reader, read_text
+from sinonym.resources import open_csv_reader
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
@@ -328,10 +327,9 @@ class DataInitializationService:
         """Build add-k smoothed positional log probabilities from given_position_acl.csv.
 
         Keys are as-written romanized syllables (no Mandarin remapping), so
-        Cantonese/Wade-Giles forms keep their own positional statistics. Values
-        are centered on a uniform-over-vocabulary baseline: score deltas between
-        competing parses are unchanged, but typical parses stay level-neutral
-        relative to parse structures that do not receive the positional feature.
+        Cantonese/Wade-Giles forms keep their own positional statistics. The
+        only consumer (surname_first_delta in NameParsingService) takes
+        differences of these values, so no baseline centering is needed.
         """
         smoothing_k = 0.5
         initial_counts: dict[str, int] = {}
@@ -342,14 +340,13 @@ class DataInitializationService:
             final_counts[syllable] = int(row["final_count"])
 
         vocabulary_size = len(initial_counts) + 1  # reserve one slot for unseen syllables
-        uniform_baseline = math.log(1.0 / vocabulary_size)
         initial_total = sum(initial_counts.values()) + smoothing_k * vocabulary_size
         final_total = sum(final_counts.values()) + smoothing_k * vocabulary_size
 
-        initial_logp = {s: math.log((c + smoothing_k) / initial_total) - uniform_baseline for s, c in initial_counts.items()}
-        final_logp = {s: math.log((c + smoothing_k) / final_total) - uniform_baseline for s, c in final_counts.items()}
-        initial_default = math.log(smoothing_k / initial_total) - uniform_baseline
-        final_default = math.log(smoothing_k / final_total) - uniform_baseline
+        initial_logp = {s: math.log((c + smoothing_k) / initial_total) for s, c in initial_counts.items()}
+        final_logp = {s: math.log((c + smoothing_k) / final_total) for s, c in final_counts.items()}
+        initial_default = math.log(smoothing_k / initial_total)
+        final_default = math.log(smoothing_k / final_total)
 
         return initial_logp, final_logp, initial_default, final_default
 
@@ -468,33 +465,18 @@ class DataInitializationService:
         return self._percentiles(surname_frequencies)
 
     def _build_surname_usage_logodds(self, add_k: float = 2.0, min_total: int = 3) -> dict[str, float]:
-        """Mine per-syllable surname-position usage log-odds from ACL author names.
+        """Build per-syllable surname-position usage log-odds from surname_usage_acl.csv.
 
-        Assumes Western name order (given names first, surname last), which holds
-        for the large majority of entries. Add-k smoothing plus a minimum-count
-        gate keeps thin syllables neutral (absent from the map).
+        The counts are mined offline by scripts/generate_surname_usage_data.py,
+        which keys syllables with the same norm_light normalization the scorer
+        uses at lookup time. Add-k smoothing plus a minimum-count gate keeps
+        thin syllables neutral (absent from the map).
         """
-        surname_counts: Counter[str] = Counter()
-        given_counts: Counter[str] = Counter()
-
-        for line in read_text("acl_2025_authors.txt").splitlines():
-            tokens = [t.lower().strip(".,'") for t in line.split()]
-            if not 2 <= len(tokens) <= 3:
-                continue
-            if not all(t.isalpha() or "-" in t for t in tokens):
-                continue
-            if "-" not in tokens[-1]:
-                surname_counts[tokens[-1]] += 1
-            for token in tokens[:-1]:
-                for part in token.split("-"):
-                    if part.isalpha():
-                        given_counts[part] += 1
-
         logodds = {}
-        for syllable in surname_counts.keys() | given_counts.keys():
-            s_count = surname_counts.get(syllable, 0)
-            g_count = given_counts.get(syllable, 0)
+        for row in open_csv_reader("surname_usage_acl.csv"):
+            s_count = int(row["surname_count"])
+            g_count = int(row["given_count"])
             if s_count + g_count < min_total:
                 continue
-            logodds[syllable] = math.log((s_count + add_k) / (g_count + add_k))
+            logodds[row["syllable"]] = math.log((s_count + add_k) / (g_count + add_k))
         return logodds
