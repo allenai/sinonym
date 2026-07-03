@@ -23,17 +23,16 @@ debug-only columns.
   self-contained for future evidence refreshes (paper IDs stay out by
   design). Labels are `pp`, `abstain`, or `uncertain`.
 
-## Evidence provenance (re-refreshed at PR #18 head, July 2026)
+## Evidence provenance (re-refreshed after the bigram-feature revert, July 2026)
 
-The evidence columns were regenerated on top of commit `80dc166` (PR #18:
-one-sided order suppression, romanization-conditional surname discount,
-corpus-regenerated positional table + ordered-pair bigram feature) by
-re-running the original batches and building rows with the canonical
-production builders, so the fixtures match exactly what production evidence
-extraction emits (331/1000 pp-vys rows and 1/750 pp-abstain rows changed vs
-the previous v0.3.0/`bffbad1` refresh; the pp-abstain columns dropped from the
+The evidence columns were regenerated under the PR #18 parser after the
+ordered-pair bigram feature was removed (one-sided order suppression,
+romanization-conditional surname discount, and the corpus-regenerated
+positional table remain) by re-running the original batches and building rows
+with the canonical production builders, so the fixtures match exactly what
+production evidence extraction emits (the pp-abstain columns dropped from the
 builder in PR review — `selected_over_alternate_ratio`, `compact_cjk`,
-`jp_probability` — were dropped from the fixture too):
+`jp_probability` — remain dropped from the fixture too):
 
 - PP evidence: `analyze_name_batch()` over the paper's own author list.
 - VYS evidence (pp-vys fixture only): `analyze_name_batch()` over names pooled
@@ -64,7 +63,10 @@ accepted by the repo owner) applied on top of the re-refreshed evidence:
   The set was derived from the refreshed evidence itself, not the June-era
   draft list: 127 of the 136 drafted rows still had identical strings, 9
   diverged under the current parser and kept their original label, and 36
-  newly-identical rows joined.
+  newly-identical rows joined. After the bigram-feature revert, 7 of those
+  rows' PP/VYS strings diverged again (all 3-token names, the removed
+  feature's footprint); having no pre-`either` route label, they were demoted
+  to `uncertain` pending relabeling, leaving 156 `either` rows.
 - pp-vys, suspicious labels (20 rows adjudicated): June label disagreed with
   both the current router and at least one strong-evidence signal; 10 were
   overturned, 10 kept as labeled.
@@ -87,13 +89,14 @@ produces, for three stacked reasons:
    under the pre-PR #18 parser.
 2. PR #18's parser changes the PP/VYS parses and batch statistics further
    (three more parser changes landed between the `bffbad1` refresh and the
-   `80dc166` re-refresh).
+   PR #18 re-refresh, which was re-run once more after the bigram-feature
+   revert).
 3. The confidence convention changed from `format_pattern.confidence` to
    `decision_confidence` (production convention).
 
 The regression tests assert the current numbers for the current router on
 the re-refreshed, relabeled fixtures: pp-vys 729/806 decisive rows correct at
-the emitted-string level plus 163/163 `either` rows (see Semantics), and
+the emitted-string level plus 156/156 `either` rows (see Semantics), and
 pp-abstain 587/608 at the route level (the new `pp` labels include rows the
 tuned rules deliberately leave on `abstain`, e.g. below-threshold bilingual
 glosses, so route-level mismatches there document router conservatism, not

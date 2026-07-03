@@ -103,6 +103,12 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Jia-Jian Feng",
     ),
     (
+        "tests.test_mixed_production_cases::test_mixed_cases[Wei Wen Xing-expected_result48]",
+        "Wei Wen Xing",
+        "Wen-Xing Wei",
+        "Wei-Wen Xing",
+    ),
+    (
         "tests.test_mixed_production_cases::test_mixed_cases[Xi Zhao-expected_result79]",
         "Xi Zhao",
         "Zhao Xi",

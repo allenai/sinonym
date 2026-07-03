@@ -7,7 +7,7 @@ from sinonym.pipeline.name_order_routing import route_pp_abstain_rows, route_pp_
 DATA_DIR = Path("sinonym/data/name_order_routing")
 PP_VYS_FIXTURE_ROWS = 1000
 PP_VYS_DECISIVE_ROWS = 806
-PP_VYS_EITHER_ROWS = 163
+PP_VYS_EITHER_ROWS = 156
 PP_ABSTAIN_FIXTURE_ROWS = 750
 PP_ABSTAIN_DECISIVE_ROWS = 608
 

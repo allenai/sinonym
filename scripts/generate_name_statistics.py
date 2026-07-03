@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # ruff: noqa: PLR2004, SLF001, PLC0415
-"""Generate corpus-derived given-name statistics assets for sinonym/data.
+"""Generate the corpus-derived given-position statistics asset for sinonym/data.
 
-Produces two CSVs consumed by ``DataInitializationService``:
-
-* ``given_position.csv``  - per-syllable initial/final counts inside two-syllable
-  given names. Feeds the positional feature for 3-token parses.
-* ``given_bigrams.csv``   - ordered (initial, final) pair counts for two-syllable
-  given names. Feeds the ordered-vs-reversed bigram feature for 3-token parses.
+Produces ``given_position.csv``, consumed by ``DataInitializationService``:
+per-syllable initial/final counts inside two-syllable given names. Feeds the
+positional feature for 3-token parses.
 
 (The surname-position usage table, surname_usage_acl.csv, intentionally stays
 ACL-mined: replacing it with corpus-scale marginal counts was measured to be
@@ -38,7 +35,6 @@ Sources
    but common in romanized bylines ("sang" as a given initial).
 
 Thresholds (documented in sinonym/data/README.md):
-* bigrams: pooled pairs need count >= 5; byline-only pairs need >= 3 distinct names.
 * given position: byline-only syllables need >= 10 distinct names across positions.
 
 Usage:
@@ -66,8 +62,6 @@ from sinonym.utils.string_manipulation import StringManipulationUtils
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "sinonym" / "data"
 
-BIGRAM_MIN_COUNT = 5
-BYLINE_BIGRAM_MIN_DISTINCT = 3
 BYLINE_POSITION_MIN_DISTINCT = 10
 
 # Conventional surname readings where pypinyin's default differs
@@ -89,11 +83,14 @@ HYPHEN_NAME_PATTERN = re.compile(
 
 @dataclass
 class PositionStats:
-    """Positional and pair counts from one source corpus."""
+    """Positional counts from one source corpus.
+
+    ``sum(initial.values())`` is the total number of two-syllable given pairs
+    (each pair contributes exactly one initial), used as the pooling scale.
+    """
 
     initial: Counter[str] = field(default_factory=Counter)
     final: Counter[str] = field(default_factory=Counter)
-    bigrams: Counter[tuple[str, str]] = field(default_factory=Counter)
 
 
 def mine_corpus(corpus_path: Path, norm_light) -> PositionStats:
@@ -128,16 +125,11 @@ def mine_corpus(corpus_path: Path, norm_light) -> PositionStats:
             g1, g2 = romanize(given[0]), romanize(given[1])
             stats.initial[g1] += 1
             stats.final[g2] += 1
-            stats.bigrams[(g1, g2)] += 1
 
     print(
-        f"120W corpus: {n_total:,} Han names, {n_used:,} split "
-        f"({n_total - n_used:,} skipped, no inventory surname)",
+        f"120W corpus: {n_total:,} Han names, {n_used:,} split ({n_total - n_used:,} skipped, no inventory surname)",
     )
-    print(
-        f"  2-syllable given pairs={sum(stats.bigrams.values()):,}  "
-        f"distinct bigrams={len(stats.bigrams):,}",
-    )
+    print(f"  2-syllable given pairs={sum(stats.initial.values()):,}")
     return stats
 
 
@@ -204,9 +196,8 @@ def mine_byline(parquet_path: Path, detector: ChineseNameDetector) -> PositionSt
         g1, g2 = normalizer.norm_light(parts[0]), normalizer.norm_light(parts[1])
         stats.initial[g1] += 1
         stats.final[g2] += 1
-        stats.bigrams[(g1, g2)] += 1
 
-    print(f"  kept {kept:,} distinct resolved names, {len(stats.bigrams):,} distinct given bigrams")
+    print(f"  kept {kept:,} distinct resolved names")
     return stats
 
 
@@ -217,7 +208,7 @@ def _scale(count: int, factor: float) -> int:
 def emit_given_position(corpus: PositionStats, byline: PositionStats | None) -> None:
     """Emit given_position.csv: pooled initial/final counts inside 2-syllable given names."""
     rows: list[tuple[str, int, int, str]] = []
-    factor = sum(corpus.bigrams.values()) / sum(byline.bigrams.values()) if byline is not None else 0.0
+    factor = sum(corpus.initial.values()) / sum(byline.initial.values()) if byline is not None else 0.0
     corpus_vocabulary = set(corpus.initial) | set(corpus.final)
     byline_vocabulary = (set(byline.initial) | set(byline.final)) if byline is not None else set()
     for syllable in sorted(corpus_vocabulary | byline_vocabulary):
@@ -239,37 +230,6 @@ def emit_given_position(corpus: PositionStats, byline: PositionStats | None) -> 
     print(f"wrote {len(rows)} rows to {out_path} ({out_path.stat().st_size / 1024:.0f} KB)")
 
 
-def emit_given_bigrams(corpus: PositionStats, byline: PositionStats | None) -> None:
-    """Emit given_bigrams.csv: pooled ordered (initial, final) given-pair counts."""
-    rows: list[tuple[str, str, int, str]] = []
-    factor = sum(corpus.bigrams.values()) / sum(byline.bigrams.values()) if byline is not None else 0.0
-    byline_pairs = set(byline.bigrams) if byline is not None else set()
-    for pair in sorted(set(corpus.bigrams) | byline_pairs):
-        corpus_count = corpus.bigrams.get(pair, 0)
-        byline_count = byline.bigrams.get(pair, 0) if byline is not None else 0
-        if corpus_count == 0 and byline_count < BYLINE_BIGRAM_MIN_DISTINCT:
-            continue
-        total = corpus_count + (_scale(byline_count, factor) if byline_count else 0)
-        if total < BIGRAM_MIN_COUNT:
-            continue
-        source = ("corpus+byline" if byline_count else "corpus") if corpus_count else "byline"
-        rows.append((pair[0], pair[1], total, source))
-
-    out_path = DATA_DIR / "given_bigrams.csv"
-    with out_path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["initial", "final", "count", "source"])
-        writer.writerows(rows)
-    print(f"wrote {len(rows)} rows to {out_path} ({out_path.stat().st_size / 1024:.0f} KB)")
-
-
-def print_verification_targets(corpus: PositionStats) -> None:
-    """Print the pairs whose measured values gate the parser features."""
-    print("\nverification targets (bigrams):")
-    for pair in (("jian", "feng"), ("feng", "jian"), ("wen", "xing"), ("xing", "wen")):
-        print(f"  {pair[0]}+{pair[1]}: {corpus.bigrams.get(pair, 0):,}")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
@@ -288,11 +248,9 @@ def main() -> None:
     corpus = mine_corpus(Path(args.corpus), detector._normalizer.norm_light)
     byline = mine_byline(Path(args.parquet), detector) if args.parquet else None
     if byline is None:
-        print("no --parquet given: emitting corpus-only tables (committed assets include the byline supplement)")
+        print("no --parquet given: emitting a corpus-only table (the committed asset includes the byline supplement)")
 
     emit_given_position(corpus, byline)
-    emit_given_bigrams(corpus, byline)
-    print_verification_targets(corpus)
 
 
 if __name__ == "__main__":
