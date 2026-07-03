@@ -26,16 +26,19 @@ from sinonym.coretypes import ParseResult
 from sinonym.utils.string_manipulation import StringManipulationUtils
 from sinonym.utils.thread_cache import ThreadLocalCache
 
+MIN_COMPOUND_SURNAME_TOKEN_COUNT = 3
+
 # Optional ML Japanese classifier imports - consolidated from separate service
 try:
     import logging
-    from pathlib import Path
 
     # Ensure custom model components are importable when deserializing
     import sinonym.ml_model_components  # noqa: F401
     ML_AVAILABLE = True
 except ImportError:
     ML_AVAILABLE = False
+
+LOGGER = logging.getLogger(__name__)
 
 
 class _MLJapaneseClassifier:
@@ -93,6 +96,24 @@ class _MLJapaneseClassifier:
 
         return self._cache.get_or_compute(name, compute_classification)
 
+    def japanese_probability(self, name: str) -> float:
+        """Return the Japanese-class probability, logging model failures and degrading to 0.0."""
+        if not self.is_available():
+            return 0.0
+
+        try:
+            probabilities = self._model.predict_proba([name])[0]
+            classes = list(getattr(self._model, "classes_", ()))
+            if "jp" in classes:
+                return float(probabilities[classes.index("jp")])
+
+            prediction = self._model.predict([name])[0]
+            if prediction == "jp":
+                return float(max(probabilities))
+        except Exception as e:  # noqa: BLE001 - model-backed classifiers may raise arbitrary runtime errors.
+            LOGGER.warning("ML Japanese classifier probability error for %r: %s", name, e, exc_info=True)
+        return 0.0
+
 
 class EthnicityClassificationService:
     """Service for classifying names by ethnicity using linguistic patterns."""
@@ -112,12 +133,45 @@ class EthnicityClassificationService:
         # Initialize consolidated ML Japanese classifier
         self._ml_classifier = _MLJapaneseClassifier(confidence_threshold=0.8)
 
-    def classify_ethnicity(self, tokens: tuple[str, ...], normalized_cache: dict[str, str], original_text: str = "") -> ParseResult:
+    def japanese_probability(self, compact_chinese_text: str) -> float:
+        """Return the Japanese-class probability for compact all-CJK text.
+
+        Classifier probability failures are logged by the model wrapper and
+        intentionally degrade to 0.0 so serving can continue.
+        """
+        if not compact_chinese_text:
+            return 0.0
+        return self._ml_classifier.japanese_probability(compact_chinese_text)
+
+    def _starts_with_chinese_compound_surname(
+        self,
+        tokens: tuple[str, ...],
+        normalized_cache: dict[str, str],
+    ) -> bool:
+        """Return whether tokens begin with a recognized Chinese compound surname."""
+        if len(tokens) < MIN_COMPOUND_SURNAME_TOKEN_COUNT:
+            return False
+
+        first_two = [self._normalizer.get_normalized(token, normalized_cache) for token in tokens[:2]]
+        spaced = " ".join(first_two).lower()
+        compact = StringManipulationUtils.remove_spaces(spaced)
+        return (
+            spaced in self._data.compound_surnames
+            or spaced in self._data.compound_surnames_normalized
+            or compact in self._data.compound_original_format_map
+        )
+
+    def classify_ethnicity(
+        self,
+        tokens: tuple[str, ...],
+        normalized_cache: dict[str, str],
+        original_text: str = "",
+    ) -> ParseResult:
         """
         Three-tier Chinese vs non-Chinese classification system.
 
         ML Enhancement: For all-Chinese character inputs, use ML classifier first
-        Tier 1: Definitive Evidence (High Confidence)  
+        Tier 1: Definitive Evidence (High Confidence)
         Tier 2: Cultural Context (Medium Confidence)
         Tier 3: Chinese Default (Low Confidence)
         """
@@ -129,15 +183,18 @@ class EthnicityClassificationService:
         # =================================================================
 
         # Check if this is an all-Chinese character input that could be Japanese
-        if (original_text and
-            self._normalizer._text_preprocessor.is_all_chinese_input(original_text) and
-            self._ml_classifier.is_available()):
+        compact_chinese_text = self._normalizer._text_preprocessor.compact_all_chinese_input(original_text)
+        if compact_chinese_text and self._ml_classifier.is_available():
 
             # Use ML classifier to check for Japanese names in Chinese characters
-            ml_result = self._ml_classifier.classify_all_chinese_name(original_text)
+            ml_result = self._ml_classifier.classify_all_chinese_name(compact_chinese_text)
 
             # If ML classifier confidently identifies it as Japanese, reject it
-            if ml_result.success is False and "japanese" in ml_result.error_message:
+            if (
+                ml_result.success is False
+                and "japanese" in ml_result.error_message
+                and not self._starts_with_chinese_compound_surname(tokens, normalized_cache)
+            ):
                 return ParseResult.failure("Japanese name detected by ML classifier")
 
         # Prepare expanded keys for pattern matching
@@ -263,37 +320,67 @@ class EthnicityClassificationService:
             "has_thi_pattern": False,
         }
 
-        # Single pass through all tokens
-        for i, token in enumerate(tokens):
-            token_lower = token.lower()
+        self._collect_single_token_patterns(tokens, analysis)
+        analysis["korean_given_pairs"] = self._korean_given_pairs(tokens, analysis["surname_type"])
+        return analysis
 
-            # Check for hyphenated patterns
+    @staticmethod
+    def _collect_single_token_patterns(tokens: tuple[str, ...], analysis: dict) -> None:
+        """Collect per-token ethnicity pattern signals."""
+        for token in tokens:
+            token_lower = token.lower()
             if "-" in token:
                 parts = token.split("-")
                 if len(parts) == 2:
                     analysis["hyphenated_tokens"].append((parts[0].lower(), parts[1].lower()))
 
-            # Check for Vietnamese "Thi" pattern
             if token_lower in ["thi", "thị"]:
                 analysis["has_thi_pattern"] = True
-
-            # Categorize tokens by pattern type
             if token_lower in KOREAN_SPECIFIC_PATTERNS:
                 analysis["korean_specific_tokens"].append(token_lower)
             elif token_lower in KOREAN_AMBIGUOUS_PATTERNS:
                 analysis["korean_ambiguous_tokens"].append(token_lower)
-
             if token_lower in VIETNAMESE_GIVEN_PATTERNS:
                 analysis["vietnamese_tokens"].append(token_lower)
 
-        # Check for Korean given name pairs (skip surname)
-        given_tokens = [token.lower() for token in tokens[1:]]
-        for i in range(len(given_tokens) - 1):
-            pair = (given_tokens[i], given_tokens[i + 1])
-            if pair in KOREAN_GIVEN_PAIRS:
-                analysis["korean_given_pairs"].append(pair)
+    def _korean_given_pairs(self, tokens: tuple[str, ...], surname_type: str) -> list[tuple[str, str]]:
+        """Return Korean given-name pairs under plausible surname positions."""
+        seen_pairs = set()
+        pairs: list[tuple[str, str]] = []
+        for given_tokens in self._candidate_korean_given_sequences(tokens, surname_type):
+            for i in range(len(given_tokens) - 1):
+                pair = (given_tokens[i], given_tokens[i + 1])
+                if pair in KOREAN_GIVEN_PAIRS and pair not in seen_pairs:
+                    pairs.append(pair)
+                    seen_pairs.add(pair)
+        return pairs
 
-        return analysis
+    @staticmethod
+    def _candidate_korean_given_sequences(tokens: tuple[str, ...], surname_type: str) -> list[list[str]]:
+        """Return plausible given-token spans for Korean pair detection."""
+        def split_given_tokens(given_tokens: tuple[str, ...]) -> list[str]:
+            split_tokens: list[str] = []
+            for token in given_tokens:
+                split_tokens.extend(part.lower() for part in token.split("-") if part)
+            return split_tokens
+
+        candidate_given_sequences = []
+        if surname_type in {"korean_only", "korean_overlapping", "none"}:
+            candidate_given_sequences.append(split_given_tokens(tokens[1:]))
+
+        last_token = StringManipulationUtils.remove_spaces(tokens[-1]).lower() if tokens else ""
+        if len(tokens) >= 2 and last_token in OVERLAPPING_KOREAN_SURNAMES:
+            candidate_given_sequences.append(split_given_tokens(tokens[:-1]))
+
+        return candidate_given_sequences
+
+    @staticmethod
+    def _has_trailing_overlapping_korean_surname(tokens: tuple[str, ...]) -> bool:
+        """Return whether a final token can be a Korean surname."""
+        return bool(
+            tokens
+            and StringManipulationUtils.remove_spaces(tokens[-1]).lower() in OVERLAPPING_KOREAN_SURNAMES,
+        )
 
     def _calculate_non_chinese_patterns_unified(
         self,
@@ -325,8 +412,11 @@ class EthnicityClassificationService:
         normalized_cache: dict[str, str] | None = None,
     ) -> float:
         """Calculate Korean score from pre-computed analysis."""
-        # Early returns for definitive cases
-        if analysis["surname_type"] == "chinese_only":
+        # Early returns for definitive cases. Strong Korean given-pair evidence
+        # with a trailing overlapping Korean surname must still be scored.
+        if analysis["surname_type"] == "chinese_only" and not (
+            self._has_trailing_overlapping_korean_surname(tokens) and analysis["korean_given_pairs"]
+        ):
             return 0.0  # Block Korean scoring for non-overlapping Chinese surnames
         if analysis["surname_type"] == "korean_only":
             return 10.0  # Definitive Korean evidence

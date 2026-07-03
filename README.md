@@ -208,7 +208,11 @@ author_list = ["Zhang Wei", "Li Ming", "Wang Xiaoli", "Liu Jiaming", "Feng Cha"]
 batch_result = detector.analyze_name_batch(author_list)
 print(f"Format detected: {batch_result.format_pattern.dominant_format}")
 print(f"Confidence: {batch_result.format_pattern.confidence:.1%}")
-# Expected Output: Format detected: NameFormat.SURNAME_FIRST, Confidence: 94%
+print(f"Decision confidence: {batch_result.format_pattern.decision_confidence:.1%}")
+# Expected Output:
+# Format detected: NameFormat.SURNAME_FIRST
+# Confidence: 80.0%
+# Decision confidence: 80.0%
 
 for i, result in enumerate(batch_result.results):
     if result.success:
@@ -220,7 +224,7 @@ unknown_format_list = ["Wei Zhang", "Ming Li", "Xiaoli Wang"]
 pattern = detector.detect_batch_format(unknown_format_list)
 if pattern.threshold_met:
     print(f"Consistent {pattern.dominant_format} formatting detected")
-    print(f"Safe to process as batch with {pattern.confidence:.1%} confidence")
+    print(f"Safe to process as batch with {pattern.decision_confidence:.1%} decision confidence")
 else:
     print("Mixed formatting detected - process individually")
 
@@ -244,7 +248,9 @@ When you call `normalize_name`, you get a `ParseResult` with helpful structured 
   - `surname_tokens`, `given_tokens`: normalized, capitalized tokens used to form components
   - `middle_tokens`: trailing single-letter initials extracted from given name, if present
   - `order`: component order descriptor, typically `["given", "middle", "surname"]`
-- `parsed_original_order`: A `ParsedName` aligned to the input’s original order. In this view, the labels are positional: `given` corresponds to the first component(s) in the original input, and `surname` to the last component(s), regardless of the semantic roles used for normalization.
+- `parsed_original_order`: A `ParsedName` with the same semantic `surname` and
+  `given_name` labels as `parsed`, plus an `order` list that records how those
+  components appeared in the input.
 
 Notes:
 - The tokens in `parsed` and `parsed_original_order` are the same normalized tokens; only the conceptual ordering differs via the `order` list.
@@ -257,8 +263,8 @@ res = detector.normalize_name("Li Wei")
 # res.result == "Wei Li"
 # res.parsed.order == ["given", "middle", "surname"]
 # res.parsed_original_order.order == ["surname", "given"]
-# res.parsed_original_order.given_name == "Li"   # first in input
-# res.parsed_original_order.surname == "Wei"     # last in input
+# res.parsed_original_order.given_name == "Wei"
+# res.parsed_original_order.surname == "Li"
 
 res = detector.normalize_name("Chi-Ying F. Huang")
 # res.result == "Chi-Ying F Huang"
@@ -280,7 +286,7 @@ When processing multiple names together, Sinonym:
 
 1.  **Detects Format Patterns**: Analyzes the entire batch to identify whether names follow a surname-first (e.g., "Zhang Wei") or given-first (e.g., "Wei Zhang") pattern
 2.  **Aggregates Evidence**: Uses frequency statistics across all names to build confidence in the detected pattern
-3.  **Applies Consistent Formatting**: When confidence exceeds 67%, applies the detected pattern to improve parsing of ambiguous individual names
+3.  **Applies Consistent Formatting**: When `decision_confidence` exceeds the configured threshold, applies the detected pattern to improve parsing of ambiguous individual names
 4.  **Tracks Improvements**: Identifies which names benefit from batch context vs. individual processing
 
 ### Key Benefits
@@ -303,7 +309,10 @@ result = detector.analyze_name_batch([
 ])
 print(f"Format detected: {result.format_pattern.dominant_format}")
 print(f"Confidence: {result.format_pattern.confidence:.1%}")
+print(f"Decision confidence: {result.format_pattern.decision_confidence:.1%}")
+print(f"Vote margin: {result.format_pattern.vote_margin:.1%}")
 print(f"Improved names: {len(result.improvements)}")
+print(result.name_order_evidence[0].selected_surname_position)
 
 # Quick format detection without full processing
 pattern = detector.detect_batch_format([
@@ -319,6 +328,37 @@ results = detector.process_name_batch([
 for result in results:
     print(f"Processed: {result.result}")
 ```
+
+Use `analyze_name_batch()` when you need to choose between two batch contexts
+such as paper-level and source/venue/year-level runs. `process_name_batch()`
+returns only the final `ParseResult` list and intentionally drops the routing
+evidence.
+
+`BatchFormatPattern` exposes batch-level convention evidence:
+
+- `dominant_format`, `confidence`, and `threshold_met`
+- `decision_confidence`, the score used by the batch-application gate
+- `surname_first_count`, `given_first_count`, and `total_count`
+- `voting_count`, `vote_margin_count`, and `vote_margin`
+
+`BatchParseResult.name_order_evidence` is aligned with `names` and `results`.
+Each `NameOrderEvidence` contains stable evidence for external context-routing
+rules:
+
+- token shape: `raw_tokens`, `raw_token_count`, `has_all_caps_token`,
+  `all_caps_tokens`
+- batch behavior: `script_representation`, `batch_participant`,
+  `batch_applied`, `batch_changed_format`
+- order choices: `individual_format`, `selected_format`,
+  `selected_surname_position`
+- endpoint frequency evidence: `first_token_surname_frequency`,
+  `last_token_surname_frequency`, `selected_surname_frequency`,
+  `alternate_endpoint_surname_frequency`,
+  `selected_over_alternate_surname_frequency_ratio`
+
+Caller-owned metadata such as source, venue, and year is not inferred by
+sinonym. Keep that metadata beside the PP/VYS batch calls and combine it with
+the emitted evidence in the external router.
 
 ### Persistent Multi-Process Processing
 
@@ -339,7 +379,7 @@ def main():
         results_a = pool.normalize_names(names_a)
         results_b = pool.normalize_names(names_b)
 
-    # One-off convenience wrapper (creates and closes a temporary pool)
+    # One-off compatibility wrapper with full batch-context semantics
     single_batch = detector.process_name_batch_multiprocess(names_a, max_workers=6, chunk_size=64)
     return results_a, results_b, single_batch
 
@@ -362,7 +402,9 @@ Batch processing requires a minimum of 2 names and works best with 5+ names for 
 
 **Unambiguous Names**: Some names have only one possible parsing format (e.g., compound given names like "Wei‑Qi Wang"). Batch processing never forces such names into the detected pattern and never raises. These names keep their best individual parse while other Chinese names benefit from the jointly detected order.
 
-**Confidence (Advisory Only)**: Batch detection computes a dominant format and a confidence value, but there is no confidence threshold gating. Results are always returned. The confidence is informational (e.g., for logging/UX) and is not used to raise errors.
+**Batch Application Threshold**: Batch detection keeps count-based evidence (`confidence`, counts, and vote margin) separate from the application decision (`decision_confidence`). Batch formatting is applied only when the direction is confident, at least two vote-eligible Latin-only Chinese names participate, and `decision_confidence` clears the configured threshold. Latin rows with all-caps source-token cues are exposed in `name_order_evidence` but do not vote in, or receive, Latin batch formatting.
+
+**Script Cohorts**: Vote-eligible Latin-only names vote in and receive Latin batch formatting. Han-only, explicitly aligned Han/Roman, and other mixed-script names are parsed from their own script evidence so a Latin batch convention does not flip their order.
 
 ### Batch Processing with Mixed Name Types
 
@@ -385,7 +427,7 @@ mixed_names = [
 
 result = detector.analyze_name_batch(mixed_names)
 
-# Format detection uses only the 8 Chinese names
+# Format detection uses only the 8 Latin-only Chinese names
 # If 7 prefer GIVEN_FIRST vs 1 SURNAME_FIRST = 87.5% confidence
 # GIVEN_FIRST pattern is applied to Chinese names; non‑Chinese names return clear failures
 
@@ -411,8 +453,8 @@ for i, (name, result_obj) in enumerate(zip(mixed_names, result.results)):
 
 **Key Benefits:**
 - **Maintains input-output correspondence**: Results array matches input array length and order
-- **Robust format detection**: Only valid Chinese names contribute to pattern detection
-- **Consistent formatting**: All Chinese names get the same detected format applied
+- **Robust format detection**: Only valid Latin-only Chinese names contribute to Latin batch pattern detection
+- **Consistent formatting**: Latin-only Chinese names get the detected format applied when the batch signal is strong enough
 - **Clear failure reporting**: Non-Chinese names are clearly marked as failed with error messages
 
 ## Development

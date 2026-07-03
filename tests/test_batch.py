@@ -9,13 +9,19 @@ All tests refactored to use session-scoped detector fixture for optimal performa
 
 import pytest
 
-from sinonym import ChineseNameDetector
-from sinonym.coretypes import BatchFormatPattern, BatchParseResult
-
+from sinonym.coretypes import (
+    BatchFormatPattern,
+    BatchParseResult,
+    NameFormat,
+    NameOrderEvidence,
+    ParseResult,
+)
+from sinonym.services.batch_analysis import BatchAnalysisDependencies, BatchAnalysisOptions, BatchAnalysisService
 
 # ===================================================================
 # BATCH FORMAT DETECTION TESTS
 # ===================================================================
+
 
 def test_homogeneous_given_first_batch(detector):
     """Test detection with names that individual processing handles correctly."""
@@ -78,25 +84,71 @@ def test_threshold_boundary_cases(detector):
 
     assert pattern.total_count == 3
     # With current weights, likely all will be given-first
-    if pattern.confidence >= 0.67:
+    if pattern.decision_confidence >= 0.67:
         assert pattern.threshold_met is True
+
+
+def test_low_gap_majority_votes_are_not_dropped(detector):
+    """Low-gap candidate rows should still vote instead of letting one row steer the batch."""
+    names = ["Bo Wen", "Hao Min", "Jun Wen", "Yu Han"]
+
+    batch = detector.analyze_name_batch(names)
+
+    assert batch.format_pattern.dominant_format == NameFormat.SURNAME_FIRST
+    assert batch.format_pattern.surname_first_count == 3
+    assert batch.format_pattern.given_first_count == 1
+    assert batch.format_pattern.total_count == 4
+    assert batch.format_pattern.threshold_met
+    assert [result.result for result in batch.results] == ["Wen Bo", "Min Hao", "Wen Jun", "Han Yu"]
 
 
 def test_small_batch_fallback(detector):
     """Test that small batches fall back correctly."""
-    names = ["Xin Liu", "Yang Li"]  # Only 2 names
+    names = ["Mai Li", "Li Wang"]
 
-    batch_result = detector.analyze_name_batch(names, minimum_batch_size=3)
+    detected_pattern = detector.detect_batch_format(names)
+    batch_result = detector.analyze_name_batch(names, minimum_batch_size=len(names) + 1)
 
     # Should fall back to individual processing
     assert batch_result.format_pattern.threshold_met is False
-    assert len(batch_result.results) == 2
+    assert batch_result.format_pattern.dominant_format == detected_pattern.dominant_format
+    assert batch_result.format_pattern.confidence == detected_pattern.confidence
+    assert batch_result.format_pattern.surname_first_count == detected_pattern.surname_first_count
+    assert batch_result.format_pattern.given_first_count == detected_pattern.given_first_count
+    assert batch_result.format_pattern.total_count == detected_pattern.total_count
+    assert batch_result.format_pattern.decision_confidence == detected_pattern.decision_confidence
+    assert batch_result.name_order_evidence[0].batch_participant is True
+    assert len(batch_result.results) == len(names)
     assert len(batch_result.improvements) == 0
+
+
+def test_batch_format_pattern_preserves_explicit_zero_decision_confidence():
+    pattern = BatchFormatPattern(
+        dominant_format=NameFormat.SURNAME_FIRST,
+        confidence=0.7,
+        surname_first_count=0,
+        given_first_count=0,
+        total_count=0,
+        threshold_met=False,
+        decision_confidence=0.0,
+    )
+    defaulted = BatchFormatPattern(
+        dominant_format=NameFormat.SURNAME_FIRST,
+        confidence=0.7,
+        surname_first_count=1,
+        given_first_count=0,
+        total_count=1,
+        threshold_met=False,
+    )
+
+    assert pattern.decision_confidence == 0.0
+    assert defaulted.decision_confidence == 0.7
 
 
 # ===================================================================
 # BATCH PROCESSING TESTS
 # ===================================================================
+
 
 def test_analyze_name_batch_basic(detector):
     """Test basic batch analysis functionality."""
@@ -110,6 +162,154 @@ def test_analyze_name_batch_basic(detector):
     assert len(result.individual_analyses) == 3
     assert isinstance(result.format_pattern, BatchFormatPattern)
     assert isinstance(result.improvements, list)
+
+
+def test_batch_format_pattern_exposes_vote_margin(detector):
+    """Batch format output exposes vote margin without caller recomputation."""
+    names = ["Wang An", "Yan Li", "Wu Gang", "Li Bao"]
+
+    pattern = detector.detect_batch_format(names)
+
+    assert pattern.total_count == 4
+    assert pattern.voting_count == pattern.surname_first_count + pattern.given_first_count
+    assert pattern.confidence == pytest.approx(
+        max(pattern.surname_first_count, pattern.given_first_count) / pattern.total_count,
+    )
+    assert pattern.vote_margin_count == abs(pattern.surname_first_count - pattern.given_first_count)
+    assert pattern.vote_margin == pytest.approx(pattern.vote_margin_count / pattern.total_count)
+
+
+def test_name_order_evidence_supports_external_context_routing(detector):
+    """Batch result exposes per-name evidence needed to compare PP and VYS runs."""
+    names = ["Wang An", "Yan Li", "Wu Gang", "Li Bao"]
+
+    result = detector.analyze_name_batch(names)
+
+    assert len(result.name_order_evidence) == len(names)
+    evidence = result.name_order_evidence[1]
+    assert isinstance(evidence, NameOrderEvidence)
+    assert evidence.raw_name == "Yan Li"
+    assert evidence.raw_tokens == ["Yan", "Li"]
+    assert evidence.raw_token_count == 2
+    assert evidence.script_representation == "latin_only"
+    assert evidence.batch_participant is True
+    assert evidence.batch_applied is True
+    assert evidence.batch_changed_format is True
+    assert evidence.individual_format == NameFormat.GIVEN_FIRST
+    assert evidence.selected_format == NameFormat.SURNAME_FIRST
+    assert evidence.selected_surname_position == "first"
+    assert evidence.selected_surname_frequency == evidence.first_token_surname_frequency
+    assert evidence.alternate_endpoint_surname_frequency == evidence.last_token_surname_frequency
+    assert evidence.selected_over_alternate_surname_frequency_ratio == pytest.approx(
+        evidence.first_token_surname_frequency / evidence.last_token_surname_frequency,
+    )
+
+
+def test_batch_evidence_uses_actual_individual_format_for_guarded_given_first(detector):
+    """Batch metadata reports standalone order when batch context flips guarded names."""
+    names = ["Diao Wang", "Bian Li", "Cen Zhang", "Luan Wang", "Rao Li"]
+
+    individual = detector.normalize_name(names[0])
+    result = detector.analyze_name_batch(names)
+
+    assert individual.result == "Diao Wang"
+    assert individual.parsed_original_order.order == ["given", "surname"]
+    assert result.results[0].result == "Wang Diao"
+    assert result.name_order_evidence[0].individual_format == NameFormat.GIVEN_FIRST
+    assert result.name_order_evidence[0].selected_format == NameFormat.SURNAME_FIRST
+    assert result.name_order_evidence[0].batch_changed_format is True
+    assert 0 in result.improvements
+    assert result.individual_analyses[0].best_candidate.format == NameFormat.GIVEN_FIRST
+
+
+def test_name_order_evidence_uses_selected_compound_surname_span_frequency(detector):
+    """Spaced compound selected surnames use the whole surname span for frequency evidence."""
+    names = ["Zhu Ge Liang", "Ou Yang Wei"]
+
+    result = detector.analyze_name_batch(names, format_threshold=0.0)
+
+    zhu_ge_evidence = result.name_order_evidence[0]
+    zhu_ge_parse = result.results[0].parsed_original_order
+    assert zhu_ge_parse is not None
+    assert zhu_ge_parse.surname_tokens == ["Zhu", "Ge"]
+    assert zhu_ge_evidence.selected_surname_position == "first"
+    assert zhu_ge_evidence.selected_surname_frequency is not None
+    assert zhu_ge_evidence.selected_surname_frequency != zhu_ge_evidence.first_token_surname_frequency
+    assert zhu_ge_evidence.alternate_endpoint_surname_frequency is not None
+    assert zhu_ge_evidence.alternate_endpoint_surname_frequency != zhu_ge_evidence.last_token_surname_frequency
+    assert zhu_ge_evidence.selected_over_alternate_surname_frequency_ratio is None
+
+    trailing_result = detector.analyze_name_batch(["Liang Zhu Ge", "Wei Ou Yang"], format_threshold=0.0)
+    trailing_zhu_ge_evidence = trailing_result.name_order_evidence[0]
+    trailing_zhu_ge_parse = trailing_result.results[0].parsed_original_order
+    assert trailing_zhu_ge_parse is not None
+    assert trailing_zhu_ge_parse.surname_tokens == ["Zhu", "Ge"]
+    assert trailing_zhu_ge_evidence.selected_surname_position == "last"
+    assert trailing_zhu_ge_evidence.selected_surname_frequency is not None
+    assert trailing_zhu_ge_evidence.selected_surname_frequency != trailing_zhu_ge_evidence.last_token_surname_frequency
+    assert trailing_zhu_ge_evidence.alternate_endpoint_surname_frequency is not None
+    assert trailing_zhu_ge_evidence.alternate_endpoint_surname_frequency != trailing_zhu_ge_evidence.first_token_surname_frequency
+    assert trailing_zhu_ge_evidence.selected_over_alternate_surname_frequency_ratio is None
+
+
+@pytest.mark.parametrize("raw_name", ["Szeto Wah", "AuYeung Wah", "Au-Yeung Wah"])
+def test_name_order_evidence_uses_compound_alias_surname_span_frequency(detector, raw_name):
+    result = detector.analyze_name_batch([raw_name])
+
+    evidence = result.name_order_evidence[0]
+    parse = result.results[0].parsed_original_order
+    assert parse is not None
+    assert evidence.selected_surname_position == "first"
+    assert evidence.selected_surname_frequency is not None
+    assert evidence.selected_surname_frequency > 0
+
+
+def test_name_order_evidence_exposes_all_caps_cue(detector):
+    """All-caps source tokens are exposed without changing the parse decision."""
+    names = ["Ren Qing FENG", "Li Ying DU", "Zhen Quan GUO"]
+
+    result = detector.analyze_name_batch(names)
+
+    evidence = result.name_order_evidence[0]
+    assert evidence.raw_tokens == ["Ren", "Qing", "FENG"]
+    assert evidence.raw_token_count == 3
+    assert evidence.has_all_caps_token is True
+    assert evidence.all_caps_tokens == ["FENG"]
+    assert evidence.batch_applied is False
+
+
+def test_name_order_evidence_does_not_normalize_rejected_input():
+    """Rejected inputs keep evidence aligned without re-running normalization."""
+    service = BatchAnalysisService(
+        parsing_service=None,
+        dependencies=BatchAnalysisDependencies(
+            min_tokens_required=2,
+            individual_parser=lambda _name: ParseResult.failure("unexpected individual parse"),
+            input_failure=lambda _name: ParseResult.failure("invalid input length"),
+        ),
+    )
+
+    class NormalizerThatMustNotRun:
+        def apply(self, _raw_name):
+            pytest.fail("rejected inputs must not be normalized during evidence building")
+
+    rejected_name = "A" * 101
+    result = service.analyze_name_batch(
+        [rejected_name],
+        NormalizerThatMustNotRun(),
+        data=None,
+        formatting_service=None,
+        options=BatchAnalysisOptions(minimum_batch_size=1),
+    )
+
+    assert result.results[0].success is False
+    assert result.results[0].error_message == "invalid input length"
+    evidence = result.name_order_evidence[0]
+    assert evidence.raw_name == rejected_name
+    assert evidence.raw_tokens == []
+    assert evidence.raw_token_count == 0
+    assert evidence.script_representation == "rejected_input"
+    assert evidence.selected_format == NameFormat.MIXED
 
 
 def test_process_name_batch_convenience(detector):
@@ -165,6 +365,7 @@ def test_configurable_thresholds(detector):
 # BATCH EDGE CASES TESTS
 # ===================================================================
 
+
 def test_empty_batch(detector):
     """Test empty batch handling."""
     names = []
@@ -185,6 +386,29 @@ def test_single_name_batch(detector):
     assert len(result.results) == 1
     assert result.results[0].success
     assert result.results[0].result == "Xin Liu"
+
+
+def test_non_latin_locked_batch_rows_keep_individual_confidence_and_format(detector):
+    names = ["\u5de9\u4fd0"]
+
+    result = detector.analyze_name_batch(names)
+
+    assert result.results[0].success
+    assert result.individual_analyses[0].confidence == 1.0
+    assert result.name_order_evidence[0].batch_participant is False
+    assert result.name_order_evidence[0].individual_format == result.name_order_evidence[0].selected_format
+    assert result.name_order_evidence[0].individual_format != NameFormat.MIXED
+
+
+def test_duplicate_input_rows_count_as_batch_votes(detector):
+    names = ["Mai Liao", "Xin Liu", "Xin Liu"]
+
+    result = detector.analyze_name_batch(names)
+
+    assert result.format_pattern.total_count == 3
+    assert result.format_pattern.given_first_count == 2
+    assert result.format_pattern.threshold_met
+    assert [row.result for row in result.results] == ["Mai Liao", "Xin Liu", "Xin Liu"]
 
 
 def test_all_rejected_batch(detector):
@@ -249,13 +473,14 @@ def test_mixed_script_batch(detector):
 # BATCH IMPROVEMENTS TESTS
 # ===================================================================
 
+
 def test_improvement_detection(detector):
     """Test detection of batch improvements."""
     # Names that benefit from batch format detection
     names = [
         "Liu Xin",  # Ambiguous - could be surname-first or given-first
-        "Li Yang", # Ambiguous
-        "Zhang Wei", # Ambiguous
+        "Li Yang",  # Ambiguous
+        "Zhang Wei",  # Ambiguous
     ]
 
     result = detector.analyze_name_batch(names)
@@ -283,6 +508,7 @@ def test_no_improvements_when_optimal(detector):
 # ===================================================================
 # BATCH PERFORMANCE TESTS
 # ===================================================================
+
 
 def test_large_batch_processing(detector):
     """Test processing of larger batches."""
@@ -314,36 +540,37 @@ def test_batch_vs_individual_consistency(detector):
 
 
 # ===================================================================
-# BATCH OUTCOMES TESTS  
+# BATCH OUTCOMES TESTS
 # ===================================================================
+
 
 def test_surname_first_batch_outcomes(detector):
     """Test outcomes for surname-first dominant batches."""
     names = [
-        "Wang Xin",    # surname-first
-        "Li Yang",     # surname-first  
-        "Zhang Wei",   # surname-first
-        "Chen Ming",   # surname-first
+        "Wang Xin",  # surname-first
+        "Li Yang",  # surname-first
+        "Zhang Wei",  # surname-first
+        "Chen Ming",  # surname-first
     ]
 
     result = detector.analyze_name_batch(names)
-    
+
     assert len(result.results) == 4
     for res in result.results:
         assert res.success
 
 
 def test_given_first_batch_outcomes(detector):
-    """Test outcomes for given-first dominant batches."""  
+    """Test outcomes for given-first dominant batches."""
     names = [
-        "Xin Wang",    # given-first
-        "Yang Li",     # given-first
-        "Wei Zhang",   # given-first
-        "Ming Chen",   # given-first
+        "Xin Wang",  # given-first
+        "Yang Li",  # given-first
+        "Wei Zhang",  # given-first
+        "Ming Chen",  # given-first
     ]
 
     result = detector.analyze_name_batch(names)
-    
+
     assert len(result.results) == 4
     for res in result.results:
         assert res.success
@@ -352,14 +579,14 @@ def test_given_first_batch_outcomes(detector):
 def test_problematic_cases_in_context(detector):
     """Test problematic individual cases in batch context."""
     names = [
-        "Li Jin",      # Problematic individual case
-        "Wang Wei",    # Clear surname-first
+        "Li Jin",  # Problematic individual case
+        "Wang Wei",  # Clear surname-first
         "Zhang Ming",  # Clear surname-first
-        "Liu Yang",    # Clear surname-first
+        "Liu Yang",  # Clear surname-first
     ]
 
     result = detector.analyze_name_batch(names)
-    
+
     assert len(result.results) == 4
     # Batch context should help resolve the ambiguous "Li Jin"
     for res in result.results:
@@ -369,14 +596,14 @@ def test_problematic_cases_in_context(detector):
 def test_compound_variations_batch_outcomes(detector):
     """Test batch outcomes with compound surname variations."""
     names = [
-        "Ou-yang Wei",     # Compound with hyphen
-        "OuYang Ming",     # Compound camelCase  
-        "ou yang Li",      # Compound lowercase
-        "OUYANG Zhang",    # Compound uppercase
+        "Ou-yang Wei",  # Compound with hyphen
+        "OuYang Ming",  # Compound camelCase
+        "ou yang Li",  # Compound lowercase
+        "OUYANG Zhang",  # Compound uppercase
     ]
 
     result = detector.analyze_name_batch(names)
-    
+
     assert len(result.results) == 4
     for res in result.results:
         assert res.success
@@ -386,19 +613,20 @@ def test_compound_variations_batch_outcomes(detector):
 # BATCH REAL FAILING CASES TESTS
 # ===================================================================
 
+
 def test_real_failing_cases_batch_context(detector):
     """Test real failing cases in batch context to see if context helps."""
     # These are names that might fail individually but could be helped by batch context
     names = [
-        "Yu Bei",      # Real failing case - ambiguous
-        "Li Chong",    # Real failing case - ambiguous
-        "Wang Wei",    # Clear context name
+        "Yu Bei",  # Real failing case - ambiguous
+        "Li Chong",  # Real failing case - ambiguous
+        "Wang Wei",  # Clear context name
         "Zhang Ming",  # Clear context name
-        "Liu Yang",    # Clear context name
+        "Liu Yang",  # Clear context name
     ]
 
     result = detector.analyze_name_batch(names)
-    
+
     assert len(result.results) == 5
     # At minimum, the clear context names should succeed
     context_successes = sum(1 for res in result.results[-3:] if res.success)
@@ -408,29 +636,30 @@ def test_real_failing_cases_batch_context(detector):
 def test_batch_edge_case_names(detector):
     """Test edge case names in batch context."""
     names = [
-        "A Li",        # Single letter given name
-        "Li A",        # Single letter surname  
-        "Ma Ma",       # Repeated syllable
-        "Wang Wei",    # Normal context
+        "A Li",  # Single letter given name
+        "Li A",  # Single letter surname
+        "Ma Ma",  # Repeated syllable
+        "Wang Wei",  # Normal context
     ]
 
     result = detector.analyze_name_batch(names)
-    
+
     assert len(result.results) == 4
     # At least the normal context should work
     assert result.results[-1].success
 
 
-# ===================================================================  
+# ===================================================================
 # BATCH ACL REAL WORLD TESTS
 # ===================================================================
+
 
 def test_acl_author_batch_processing(detector):
     """Test batch processing on ACL-style author names."""
     # Real ACL author names that might benefit from batch processing
     names = [
         "Xin Liu",
-        "Yang Li", 
+        "Yang Li",
         "Chen Huang",
         "Wei Zhang",
         "Ming Wang",
@@ -440,7 +669,7 @@ def test_acl_author_batch_processing(detector):
     ]
 
     result = detector.analyze_name_batch(names)
-    
+
     assert len(result.results) == 8
     success_count = sum(1 for res in result.results if res.success)
     # Most ACL names should be successfully processed
@@ -450,15 +679,15 @@ def test_acl_author_batch_processing(detector):
 def test_mixed_confidence_batch(detector):
     """Test batch with mixed confidence names."""
     names = [
-        "Xin Liu",      # High confidence
-        "Yang Li",      # High confidence  
-        "Bei Yu",       # Lower confidence, ambiguous
-        "Li Jin",       # Lower confidence, ambiguous
-        "Chen Wei",     # High confidence
+        "Xin Liu",  # High confidence
+        "Yang Li",  # High confidence
+        "Bei Yu",  # Lower confidence, ambiguous
+        "Li Jin",  # Lower confidence, ambiguous
+        "Chen Wei",  # High confidence
     ]
 
     result = detector.analyze_name_batch(names)
-    
+
     assert len(result.results) == 5
     # High confidence names should definitely succeed
     high_conf_indices = [0, 1, 4]  # Xin Liu, Yang Li, Chen Wei
@@ -469,19 +698,19 @@ def test_mixed_confidence_batch(detector):
 def test_batch_format_consistency(detector):
     """Test that batch maintains format consistency."""
     names = [
-        "Liu Xin",     # Could be surname-first or given-first
-        "Li Yang",     # Could be surname-first or given-first  
-        "Zhang Wei",   # Could be surname-first or given-first
-        "Wang Ming",   # Could be surname-first or given-first
+        "Liu Xin",  # Could be surname-first or given-first
+        "Li Yang",  # Could be surname-first or given-first
+        "Zhang Wei",  # Could be surname-first or given-first
+        "Wang Ming",  # Could be surname-first or given-first
     ]
 
     result = detector.analyze_name_batch(names)
-    
+
     assert len(result.results) == 4
     # All should be processed successfully
     for res in result.results:
         assert res.success
-        
+
     # Check that format pattern was detected
     assert result.format_pattern.total_count == 4
 
@@ -491,10 +720,10 @@ def test_batch_individual_analyses(detector):
     names = ["Xin Liu", "Yang Li", "Chen Huang"]
 
     result = detector.analyze_name_batch(names)
-    
+
     assert len(result.individual_analyses) == 3
     for analysis in result.individual_analyses:
-        assert hasattr(analysis, 'raw_name')
-        assert hasattr(analysis, 'candidates') 
-        assert hasattr(analysis, 'best_candidate')
-        assert hasattr(analysis, 'confidence')
+        assert hasattr(analysis, "raw_name")
+        assert hasattr(analysis, "candidates")
+        assert hasattr(analysis, "best_candidate")
+        assert hasattr(analysis, "confidence")

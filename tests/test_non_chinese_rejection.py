@@ -10,13 +10,9 @@ This module contains tests for names that should be properly rejected as non-Chi
 - Names with forbidden patterns
 """
 
-import sys
-from pathlib import Path
+import pytest
 
-# Add the parent directory to path to import sinonym
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from sinonym import ChineseNameDetector
+from tests._case_assertions import assert_rejected
 
 # Non-Chinese names that should return False (failure reason varies)
 NON_CHINESE_TEST_CASES = [
@@ -24,6 +20,8 @@ NON_CHINESE_TEST_CASES = [
     ("John Smith", (False, "should_be_rejected")),
     ("Maria Garcia", (False, "should_be_rejected")),
     ("Kim Min Soo", (False, "should_be_rejected")),
+    ("Min Soo Lee", (False, "should_be_rejected")),
+    ("Sung Soo Jung", (False, "should_be_rejected")),
     ("Nguyen Van Anh", (False, "should_be_rejected")),
     ("Le Mai Anh", (False, "should_be_rejected")),
     ("Tran Thi Lan", (False, "should_be_rejected")),
@@ -370,28 +368,7 @@ NON_CHINESE_TEST_CASES = [
 ]
 
 
-def test_non_chinese_rejection(detector):
+@pytest.mark.parametrize(("input_name", "_expected_result"), NON_CHINESE_TEST_CASES)
+def test_non_chinese_rejection(detector, input_name, _expected_result):
     """Test that non-Chinese names are correctly rejected."""
-
-    passed = 0
-    failed = 0
-
-    for input_name, expected_result in NON_CHINESE_TEST_CASES:
-        result = detector.normalize_name(input_name)
-
-        # Extract expected success status from tuple
-        expected_success, _ = expected_result
-
-        if result.success == expected_success:
-            passed += 1
-        else:
-            failed += 1
-            actual = result.result if result.success else f"ERROR: {result.error_message}"
-            print(f"FAILED: '{input_name}': expected {expected_result}, got ({result.success}, '{actual}')")
-
-    assert failed == 0, f"Non-Chinese rejection tests: {failed} failures out of {len(NON_CHINESE_TEST_CASES)} tests"
-    print(f"Non-Chinese rejection tests: {passed} passed, {failed} failed")
-
-
-if __name__ == "__main__":
-    test_non_chinese_rejection()
+    assert_rejected(detector, input_name)

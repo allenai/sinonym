@@ -75,6 +75,19 @@ class TextNormalizer:
         # Step 5: Remove apostrophes and hyphens from the final result
         return wade_giles_result.translate(self._config.hyphens_apostrophes_tr)
 
+    @lru_cache(maxsize=32_768)
+    def normalize_token_light(self, token: str) -> str:
+        """
+        Normalize a token without romanization remapping.
+
+        This keeps valid as-written pinyin keys from being scored as colliding
+        Wade-Giles/Cantonese aliases, while still applying Unicode cleanup and
+        punctuation stripping.
+        """
+        normalized = unicodedata.normalize("NFD", token)
+        without_diacritics = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+        return without_diacritics.lower().translate(self._config.hyphens_apostrophes_tr)
+
     def _apply_unified_wade_giles(self, token: str) -> str:
         """
         Unified Wade-Giles conversion with explicit precedence handling.
@@ -93,6 +106,7 @@ class TextNormalizer:
         if token == "j":
             result = "r"
         else:
+
             def wade_giles_replacer(match):
                 for i, group in enumerate(match.groups(), 1):
                     if group is not None:
@@ -124,9 +138,18 @@ class TextNormalizer:
         """Fix common OCR artifacts in Chinese names."""
         result = self.normalize_fullwidth_chars(text)
         ocr_fixes = {
-            "п": "n", "р": "p", "о": "o", "а": "a", "е": "e", "х": "x",
-            "с": "c", "т": "t", "и": "u", "к": "k", "м": "m", "н": "h",
+            "п": "n",
+            "р": "p",
+            "о": "o",
+            "а": "a",
+            "е": "e",
+            "х": "x",
+            "с": "c",
+            "т": "t",
+            "и": "u",
+            "к": "k",
+            "м": "m",
+            "н": "h",
         }
         translation_table = str.maketrans(ocr_fixes)
         return result.translate(translation_table)
-

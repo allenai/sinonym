@@ -9,14 +9,9 @@ This helps validate that improvements don't break existing functionality
 while fixing known issues.
 """
 
-import sys
-from pathlib import Path
+import pytest
 
-# Add the parent directory to path to import sinonym
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from sinonym import ChineseNameDetector
-from tests._fail_log import log_failure
+from tests._case_assertions import assert_normalized_name
 
 # Mixed test cases: 50% production errors, 50% production successes
 MIXED_TEST_CASES = [
@@ -252,42 +247,7 @@ MIXED_TEST_CASES += [
 ]
 
 
-def test_mixed_cases(detector):
+@pytest.mark.parametrize(("input_name", "expected_result"), MIXED_TEST_CASES)
+def test_mixed_cases(detector, input_name, expected_result):
     """Test mixed cases from production results."""
-
-    passed = 0
-    failed = 0
-
-    for input_name, expected_result in MIXED_TEST_CASES:
-        result = detector.normalize_name(input_name)
-
-        # Extract expected success status and name from tuple
-        expected_success, expected_name = expected_result
-
-        if result.success == expected_success and (not expected_success or result.result == expected_name):
-            passed += 1
-        else:
-            failed += 1
-            actual = result.result if result.success else f"ERROR: {result.error_message}"
-            actual_text = result.result if result.success else result.error_message
-            print(
-                f"FAILED: '{input_name}': expected ({expected_success}, '{expected_name}'), got ({result.success}, '{actual_text}')",
-            )
-            log_failure(
-                "ML ranker test data tests",
-                input_name,
-                expected_success,
-                expected_name,
-                result.success,
-                actual_text,
-            )
-
-    if failed:
-        print(f"ML ranker test data tests: {failed} failures out of {len(MIXED_TEST_CASES)} tests")
-    assert failed == 0, f"ML ranker test data tests: {failed} failures out of {len(MIXED_TEST_CASES)} tests"
-
-
-if __name__ == "__main__":
-    import pytest
-
-    pytest.main([__file__, "-v"])
+    assert_normalized_name(detector, input_name, expected_result)

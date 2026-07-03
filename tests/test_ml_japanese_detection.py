@@ -6,14 +6,9 @@ These tests verify that Japanese names written in Chinese characters (kanji) are
 identified and rejected, filling the gap in the original rule-based system.
 """
 
-import sys
-from pathlib import Path
+import pytest
 
-# Add the parent directory to path to import sinonym
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from sinonym import ChineseNameDetector
-from tests._fail_log import log_failure
+from tests._case_assertions import assert_normalized_name, assert_rejected
 
 # Japanese names in Chinese characters that should be rejected by ML classifier
 # These would slip through the original rule-based system because they get converted
@@ -56,6 +51,8 @@ ML_JAPANESE_TEST_CASES = [
     ("黒田東彦", (False, "should_be_rejected")),  # Kuroda Haruhiko - Bank of Japan governor
     ("岸田文雄", (False, "should_be_rejected")),  # Kishida Fumio - current Prime Minister
     ("菅義偉", (False, "should_be_rejected")),  # Suga Yoshihide - former Prime Minister
+    ("原田 泰夫", (False, "should_be_rejected")),  # Harada Yasuo - spaced Kanji should still hit ML classifier
+    ("\u5c71\u7530-\u592a\u90ce", (False, "should_be_rejected")),  # ASCII hyphen should still hit ML classifier
 ]
 
 # Chinese control cases that should be accepted (for comparison)
@@ -68,65 +65,19 @@ ML_CHINESE_CONTROL_CASES = [
     ("刘八", (True, "Ba Liu")),  # Common Chinese test name
     ("黄九", (True, "Jiu Huang")),  # Common Chinese test name
     ("周十", (True, "Shi Zhou")),  # Common Chinese test name
+    ("黄 嘉平", (True, "Jia-Ping Huang")),  # Spaced Han Chinese name should remain accepted
+    ("功华 张", (True, "Gong-Hua Zhang")),  # Spaced Han given-surname should use compact text for JP classification
+    ("\u5f20\u4f1f-\u660e", (True, "Wei-Ming Zhang")),  # Hyphenated Han Chinese name should remain accepted
 ]
 
 
-def test_ml_japanese_detection(detector):
+@pytest.mark.parametrize(("input_name", "_expected_result"), ML_JAPANESE_TEST_CASES)
+def test_ml_japanese_detection(detector, input_name, _expected_result):
     """Test that Japanese names in Chinese characters are correctly rejected by ML classifier."""
-
-    passed = 0
-    failed = 0
-
-    for input_name, expected_result in ML_JAPANESE_TEST_CASES:
-        result = detector.normalize_name(input_name)
-
-        # Extract expected success status and name from tuple
-        expected_success, _ = expected_result
-
-        if result.success == expected_success:
-            passed += 1
-        else:
-            failed += 1
-            actual = result.result if result.success else f"ERROR: {result.error_message}"
-            print(
-                f"FAILED: '{input_name}': expected ({expected_success}, 'should_be_rejected'), got ({result.success}, '{actual}')",
-            )
-            log_failure("ML Japanese detection tests", input_name, expected_success, "should_be_rejected", result.success, actual)
-
-    if failed:
-        print(f"ML Japanese detection tests: {failed} failures out of {len(ML_JAPANESE_TEST_CASES)} tests")
-    assert failed == 0, f"ML Japanese detection tests: {failed} failures out of {len(ML_JAPANESE_TEST_CASES)} tests"
-    print(f"ML Japanese detection tests: {passed} passed, {failed} failed")
+    assert_rejected(detector, input_name)
 
 
-def test_ml_chinese_control(detector):
+@pytest.mark.parametrize(("input_name", "expected_result"), ML_CHINESE_CONTROL_CASES)
+def test_ml_chinese_control(detector, input_name, expected_result):
     """Test that Chinese control names are correctly accepted."""
-
-    passed = 0
-    failed = 0
-
-    for input_name, expected_result in ML_CHINESE_CONTROL_CASES:
-        result = detector.normalize_name(input_name)
-
-        # Extract expected success status and name from tuple
-        expected_success, expected_name = expected_result
-
-        if result.success == expected_success and (not expected_success or result.result == expected_name):
-            passed += 1
-        else:
-            failed += 1
-            actual = result.result if result.success else f"ERROR: {result.error_message}"
-            print(
-                f"FAILED: '{input_name}': expected ({expected_success}, '{expected_name}'), got ({result.success}, '{actual}')",
-            )
-            log_failure("ML Chinese control tests", input_name, expected_success, expected_name, result.success, actual)
-
-    if failed:
-        print(f"ML Chinese control tests: {failed} failures out of {len(ML_CHINESE_CONTROL_CASES)} tests")
-    assert failed == 0, f"ML Chinese control tests: {failed} failures out of {len(ML_CHINESE_CONTROL_CASES)} tests"
-    print(f"ML Chinese control tests: {passed} passed, {failed} failed")
-
-
-if __name__ == "__main__":
-    test_ml_japanese_detection()
-    test_ml_chinese_control()
+    assert_normalized_name(detector, input_name, expected_result)

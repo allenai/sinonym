@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import string
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from sinonym.chinese_names_data import VALID_CHINESE_RIMES
 from sinonym.text_processing import CompoundDetector, TextNormalizer, TextPreprocessor
@@ -18,6 +18,18 @@ from sinonym.utils.thread_cache import ThreadLocalCache
 
 if TYPE_CHECKING:
     from sinonym.coretypes import ChineseNameConfig
+
+ScriptRepresentation = Literal["latin_only", "han_only", "bilingual_aligned", "mixed_script"]
+MIN_BILINGUAL_ALIGNMENT_PAIRS = 2
+
+
+@dataclass(frozen=True)
+class BilingualTokenPair:
+    """Explicit Roman/Han token alignment from bilingual author-name strings."""
+
+    roman_token: str
+    han_token: str
+    han_pinyin: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -74,11 +86,13 @@ class NormalizedInput:
     roman_tokens: tuple[str, ...]  # After Han→pinyin & mixed-token processing
     norm_map: dict[str, str]  # token → fully normalized (eager)
     compound_metadata: dict[str, CompoundMetadata]  # token → compound info
+    from_camel_case_pair: bool = False
+    surname_first_parenthetical_hint: bool = False
 
     @classmethod
     def empty(cls, raw: str = "") -> NormalizedInput:
         """Factory for empty/invalid input."""
-        return cls(raw, "", (), (), {}, {})
+        return cls(raw, "", (), (), {}, {}, False, False)
 
 
 class NormalizationService:
@@ -109,10 +123,19 @@ class NormalizationService:
         """
         return self._text_normalizer.normalize_token(token)
 
+    def norm_light(self, token: str) -> str:
+        """
+        Normalize text without romanization remapping.
+
+        Used for first-chance table lookups where the source syllable may be a
+        valid pinyin key that collides with a Wade-Giles/Cantonese alias.
+        """
+        return self._text_normalizer.normalize_token_light(token)
+
     def get_normalized(self, token: str, norm_cache: dict[str, str]) -> str:
         """
         Get normalized form of token using cache, with fallback to normalization.
-        
+
         Consolidates the common pattern: normalized_cache.get(token, self.norm(token))
         """
         return norm_cache.get(token, self.norm(token))
@@ -126,7 +149,10 @@ class NormalizationService:
             return NormalizedInput.empty(raw_name)
 
         # Phase 1: Clean input (single regex pass)
-        cleaned = self._text_preprocessor.preprocess_input(raw_name, self._data)
+        cleaned, from_camel_case_pair, surname_first_parenthetical_hint = self._text_preprocessor.preprocess_input(
+            raw_name,
+            self._data,
+        )
 
         # Phase 2: Handle "LAST, First" format (common in academic/professional contexts)
         if "," in cleaned:
@@ -163,6 +189,8 @@ class NormalizationService:
             roman_tokens=roman_tokens,
             norm_map=norm_map,
             compound_metadata=compound_metadata,
+            from_camel_case_pair=from_camel_case_pair,
+            surname_first_parenthetical_hint=surname_first_parenthetical_hint,
         )
 
     def _process_mixed_tokens(self, tokens: list[str], is_all_chinese: bool = False) -> list[str]:
@@ -202,7 +230,11 @@ class NormalizationService:
         for token in mix:
             if self._config.cjk_pattern.search(token):
                 # Convert Han to pinyin. all-Chinese and mixed-script paths share the same behavior.
-                pinyin_tokens = self._cache_service.han_to_pinyin_fast(token)
+                han_token = token
+                if is_all_chinese:
+                    han_token = self._config.sep_pattern.sub("", han_token)
+                    han_token = han_token.translate(self._config.hyphens_apostrophes_tr)
+                pinyin_tokens = self._cache_service.han_to_pinyin_fast(han_token)
                 han_tokens.extend(pinyin_tokens)
             else:
                 # Clean Roman token
@@ -251,6 +283,92 @@ class NormalizationService:
         if han_tokens:
             return han_tokens
         return roman_tokens_original
+
+    def classify_script_representation(self, normalized_input: NormalizedInput) -> ScriptRepresentation:
+        """Classify script provenance for batch convention voting."""
+        has_han = any(self._config.cjk_pattern.search(char) for token in normalized_input.tokens for char in token)
+        has_roman = any(self._config.ascii_alpha_pattern.search(token) for token in normalized_input.tokens)
+
+        if has_han and has_roman:
+            if self.aligned_bilingual_pairs(normalized_input) is not None:
+                return "bilingual_aligned"
+            return "mixed_script"
+        if has_han:
+            return "han_only"
+        return "latin_only"
+
+    def aligned_bilingual_pairs(self, normalized_input: NormalizedInput) -> tuple[BilingualTokenPair, ...] | None:
+        """Return explicit alternating Roman/Han pairs when the alignment is unambiguous."""
+        pairs: list[BilingualTokenPair] = []
+        tokens = list(normalized_input.tokens)
+        index = 0
+
+        while index < len(tokens):
+            if index + 1 >= len(tokens):
+                return None
+
+            first = tokens[index]
+            second = tokens[index + 1]
+
+            if self._is_roman_token(first) and self._is_han_token(second):
+                roman_token = self._clean_roman_token(first)
+                han_token = second
+            elif self._is_han_token(first) and self._is_roman_token(second):
+                roman_token = self._clean_roman_token(second)
+                han_token = first
+            else:
+                return None
+
+            han_pinyin = tuple(self._cache_service.han_to_pinyin_fast(han_token))
+            if not roman_token or not han_pinyin or not self._roman_matches_han_token(roman_token, han_pinyin):
+                return None
+
+            pairs.append(BilingualTokenPair(roman_token=roman_token, han_token=han_token, han_pinyin=han_pinyin))
+            index += 2
+
+        return tuple(pairs) if len(pairs) >= MIN_BILINGUAL_ALIGNMENT_PAIRS else None
+
+    def _is_han_token(self, token: str) -> bool:
+        """Return whether the whole token is CJK characters."""
+        return bool(token) and all(self._config.cjk_pattern.search(char) for char in token)
+
+    def _is_roman_token(self, token: str) -> bool:
+        """Return whether the token carries Roman letters and no CJK characters."""
+        return bool(
+            token and self._config.ascii_alpha_pattern.search(token) and not self._config.cjk_pattern.search(token),
+        )
+
+    def _clean_roman_token(self, token: str) -> str:
+        """Clean a Roman token without changing its source capitalization."""
+        return self._config.clean_roman_pattern.sub("", token)
+
+    def _roman_matches_han_token(self, roman_token: str, han_pinyin: tuple[str, ...]) -> bool:
+        """Return whether a Roman token is the pinyin equivalent of a Han token group."""
+        roman_norm = self._canonical_pinyin_alignment_text(
+            self._text_normalizer.normalize_token(roman_token).replace(" ", ""),
+        )
+        han_norm = self._canonical_pinyin_alignment_text(
+            "".join(self._text_normalizer.normalize_token(part) for part in han_pinyin),
+        )
+        if roman_norm == han_norm:
+            return True
+
+        if "-" in roman_token:
+            roman_parts = StringManipulationUtils.split_and_clean_hyphens(roman_token)
+            roman_parts_norm = [
+                self._canonical_pinyin_alignment_text(self._text_normalizer.normalize_token(part)) for part in roman_parts
+            ]
+            han_parts_norm = tuple(
+                self._canonical_pinyin_alignment_text(self._text_normalizer.normalize_token(part)) for part in han_pinyin
+            )
+            return tuple(roman_parts_norm) == han_parts_norm
+
+        return False
+
+    @staticmethod
+    def _canonical_pinyin_alignment_text(text: str) -> str:
+        """Canonicalize pinyin spellings that differ only by v/umlaut notation."""
+        return text.replace("lv", "lu").replace("nv", "nu")
 
     def is_valid_chinese_phonetics(self, token: str) -> bool:
         """Check if a token could plausibly be Chinese based on phonetic structure."""

@@ -6,11 +6,12 @@ detection system, organized by domain responsibility.
 """
 
 from sinonym.coretypes import CacheInfo, ChineseNameConfig, ParseResult
-from sinonym.services.batch_analysis import BatchAnalysisService
+from sinonym.services.batch_analysis import BatchAnalysisDependencies, BatchAnalysisOptions, BatchAnalysisService
 from sinonym.services.cache import PinyinCacheService
 from sinonym.services.ethnicity import EthnicityClassificationService
 from sinonym.services.formatting import NameFormattingService
 from sinonym.services.initialization import DataInitializationService, NameDataStructures
+from sinonym.services.non_person import NonPersonInputDetectionService
 from sinonym.services.normalization import LazyNormalizationMap, NormalizationService, NormalizedInput
 from sinonym.services.parsing import NameParsingService
 
@@ -25,8 +26,11 @@ class ServiceContext:
         self.normalizer = normalizer
         self.data = data
 
+
 __all__ = [
     # Batch Services
+    "BatchAnalysisDependencies",
+    "BatchAnalysisOptions",
     "BatchAnalysisService",
     # Types (re-exported for compatibility)
     "CacheInfo",
@@ -38,6 +42,7 @@ __all__ = [
     "NameDataStructures",
     "NameFormattingService",
     "NameParsingService",
+    "NonPersonInputDetectionService",
     "NormalizationService",
     "NormalizedInput",
     "ParseResult",

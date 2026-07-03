@@ -5,7 +5,7 @@ Utility scripts for benchmarking, profiling, testing, and model training.
 ## Active Scripts
 
 ### `check_test_status.py`
-Runs the full test suite and reports individual test case failures with detailed diagnostics. Runs performance tests separately, then exits 0/1 based on whether the failure count matches the expected baseline configured in `scripts/check_test_status.py`. Improvements (fewer failures) also pass; regressions fail.
+Runs the full test suite and reports individual test case failures with detailed diagnostics. Runs performance tests separately, then exits 0/1 based on whether the failure count and failure signatures match the expected baseline configured in `scripts/check_test_status.py`. Improvements (fewer failures) also pass when the remaining failures are all from the known baseline; regressions or unexpected failure signatures fail.
 
 ```bash
 uv run python scripts/check_test_status.py
@@ -52,6 +52,19 @@ Trains the Chinese-vs-Japanese name classifier used in production. Downloads Chi
 
 ```bash
 uv run python scripts/train_ml_classifier_for_chinese_vs_japanese.py
+```
+
+### `name_order_routing_rules.py`
+Applies the external routing rules for context runs that compare paper-level PP, VYS, input-order abstain, and terminal non-person outputs. The routing policy lives in `sinonym.pipeline.name_order_routing`; this script is the file-format CLI wrapper for already-expanded routing rows and adds `router_prediction` plus `router_reason`.
+`router_prediction` can be `pp`, `vys`, `abstain`, or `not_person`; `not_person` means no person parse should be emitted.
+For PP/VYS/abstain, input rows contain parser evidence from aligned PP and VYS runs. The router derives `old_prediction`, `old_reason`, `new_prediction`, and `new_reason` as audit output; those fields are not policy inputs.
+For direct PP/VYS `BatchParseResult` usage, call `build_pp_vys_abstain_rows` or `route_pp_vys_abstain_batches`; those functions use the same evidence-row policy path as the file CLI.
+The PP/VYS/abstain row regime requires raw `name` so the narrow validated name-prior guards can run.
+CSV and JSONL use only the standard library; Parquet inputs/outputs require pandas plus a Parquet engine in the runtime environment.
+
+```bash
+uv run python scripts/name_order_routing_rules.py pp-vys-abstain --input pp_vys_features.parquet --output routed.parquet
+uv run python scripts/name_order_routing_rules.py pp-abstain --input pp_only_features.parquet --output routed.parquet
 ```
 
 ## Abandoned Scripts

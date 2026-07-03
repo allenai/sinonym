@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sinonym"
-version = "0.2.7"
+version = "0.2.8"
 description = "Chinese Name Detection and Normalization Module"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -61,6 +61,8 @@ include = [
 include = [
     "sinonym",
     "tests",
+    "scripts/check_test_status.py",
+    "scripts/name_order_routing_rules.py",
     "README.md",
     "pyproject.toml",
 ]
@@ -80,7 +82,9 @@ select = ["E", "F", "W", "C90", "I", "N", "UP", "YTT", "S", "BLE", "FBT", "B", "
 ignore = ["S101", "T201"]  # Allow assert statements and print statements
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "T201", "ARG", "FBT"]
+"tests/*" = ["S101", "T201", "ARG", "FBT", "INP001"]
+"tests/test_mixed_scripts.py" = ["RUF001"]
+"tests/test_non_chinese_rejection.py" = ["RUF001"]
 
 [tool.mypy]
 python_version = "3.10"

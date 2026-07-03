@@ -45,6 +45,8 @@ class NameFormattingService:
         given_tokens: list[str],
         normalized_cache: dict[str, str] | None = None,
         compound_metadata: dict[str, CompoundMetadata] | None = None,
+        *,
+        allow_surname_like_given_split: bool = True,
     ) -> str:
         """
         Format parsed name components into final output string.
@@ -86,7 +88,7 @@ class NameFormattingService:
                 self._normalizer,
                 self._config,
             )
-            if not split:
+            if not split and allow_surname_like_given_split:
                 split = StringManipulationUtils.split_surname_like_given_name(
                     token,
                     normalized_cache,
@@ -192,6 +194,8 @@ class NameFormattingService:
         given_tokens: list[str],
         normalized_cache: dict[str, str] | None = None,
         compound_metadata: dict[str, CompoundMetadata] | None = None,
+        *,
+        allow_surname_like_given_split: bool = True,
     ) -> tuple[str, list[str], list[str], str, str, list[str]]:
         """
         Format parsed name components and also return the individual tokens.
@@ -231,7 +235,7 @@ class NameFormattingService:
                 self._normalizer,
                 self._config,
             )
-            if not split:
+            if not split and allow_surname_like_given_split:
                 split = StringManipulationUtils.split_surname_like_given_name(
                     token,
                     normalized_cache,
@@ -456,11 +460,14 @@ class NameFormattingService:
         """
         # Check if this token appears in compound metadata
         meta = compound_metadata.get(surname_token)
-        if meta and meta.is_compound and meta.format_type == "compact":
-            # This was originally a compact compound, find the original token
-            original_token = self._find_original_compound_token(compound_metadata, meta.compound_target)
-            if original_token:
-                return StringManipulationUtils.capitalize_name_part(original_token)
+        if meta and meta.is_compound:
+            if meta.format_type == "compact":
+                return StringManipulationUtils.capitalize_name_part(surname_token)
+            if meta.format_type == "camelCase":
+                surname_parts = StringManipulationUtils.split_compound_token(surname_token, meta)
+                return StringManipulationUtils.format_camel_case_compound(surname_parts, surname_token)
+            if meta.format_type == "hyphenated":
+                return StringManipulationUtils.capitalize_name_part(surname_token)
 
         # Default single token formatting
         return StringManipulationUtils.capitalize_name_part(surname_token)

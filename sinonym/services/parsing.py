@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
-from sinonym.chinese_names_data import COMPOUND_VARIANTS
+from sinonym.chinese_names_data import COMPOUND_VARIANTS, KOREAN_GIVEN_PATTERNS, OVERLAPPING_KOREAN_SURNAMES
 from sinonym.coretypes import ParseResult
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
@@ -21,6 +21,10 @@ if TYPE_CHECKING:
 LOW_FREQUENCY_SURNAME_MAX = 500.0
 GIVEN_FIRST_SURNAME_FREQ_RATIO_MIN = 50.0
 GIVEN_FIRST_ORDER_PRESERVATION_BONUS = 4.0
+RARE_TRAILING_OVERLAPPING_SURNAME_MAX = 100.0
+CURATED_COMPOUND_TARGETS = frozenset(COMPOUND_VARIANTS.values()) | frozenset(
+    variant for variant in COMPOUND_VARIANTS if " " in variant
+)
 
 
 class NameParsingService:
@@ -45,16 +49,15 @@ class NameParsingService:
         else:
             # Default weights (8 features)
             self._weights = [
-                0.465,   # surname_logp
-                0.395,   # given_logp_sum
+                0.465,  # surname_logp
+                0.395,  # given_logp_sum
                 -0.888,  # surname_rank_bonus
-                1.348,   # compound_given_bonus
-                1.102,   # order_preservation_bonus
-                0.425,   # surname_first_bonus
+                1.348,  # compound_given_bonus
+                1.102,  # order_preservation_bonus
+                0.425,  # surname_first_bonus
                 -0.042,  # surname_freq_log_ratio (log-based comparative feature)
                 -0.573,  # surname_rank_difference (comparative feature)
             ]
-
 
     def parse_name_order(
         self,
@@ -94,6 +97,15 @@ class NameParsingService:
                 return result
 
         return None
+
+    def generate_parse_options(
+        self,
+        tokens: list[str],
+        normalized_cache: dict[str, str],
+        compound_metadata: dict[str, CompoundMetadata],
+    ) -> list[tuple[list[str], list[str], str | None]]:
+        """Return possible surname/given parses for batch-level scoring."""
+        return self._generate_all_parses_with_format(tokens, normalized_cache, compound_metadata)
 
     def _try_fallback_parse(
         self,
@@ -162,10 +174,7 @@ class NameParsingService:
         surname_token = order[surname_pos]
         normalized_surname = self._normalizer.get_normalized(surname_token, normalized_cache)
 
-        if (
-            len(surname_token) > 1
-            and StringManipulationUtils.remove_spaces(normalized_surname) in self._data.surnames_normalized
-        ):
+        if len(surname_token) > 1 and StringManipulationUtils.remove_spaces(normalized_surname) in self._data.surnames_normalized:
             surname_tokens = [surname_token]
             given_tokens = order[given_slice]
             if given_tokens:
@@ -476,7 +485,7 @@ class NameParsingService:
             compound_parts = StringManipulationUtils.split_compound_token(first_token, first_meta)
             original_format = self._get_compound_original_format(first_meta, [first_token])
             parses.append((compound_parts, tokens[1:], original_format))
-        elif len(first_token) > 1:
+        elif len(first_token) > 1 and "-" not in first_token:
             # Check for regular single surnames
             is_regular_surname = self._data.is_surname(
                 first_token,
@@ -498,7 +507,7 @@ class NameParsingService:
                 compound_parts = StringManipulationUtils.split_compound_token(last_token, last_meta)
                 original_format = self._get_compound_original_format(last_meta, [last_token])
                 parses.append((compound_parts, tokens[:-1], original_format))
-            elif len(last_token) > 1:
+            elif len(last_token) > 1 and "-" not in last_token:
                 # Check for regular single surnames
                 is_regular_surname = self._data.is_surname(
                     last_token,
@@ -510,7 +519,12 @@ class NameParsingService:
         # 3. Check for hyphenated compounds using centralized metadata
         # Beginning position
         first_meta = compound_metadata.get(tokens[0])
-        if first_meta and first_meta.is_compound and first_meta.format_type == "hyphenated":
+        if (
+            first_meta
+            and first_meta.is_compound
+            and first_meta.format_type == "hyphenated"
+            and first_meta.compound_target in CURATED_COMPOUND_TARGETS
+        ):
             target_compound = first_meta.compound_target
             compound_parts = [StringManipulationUtils.capitalize_name_part(part) for part in target_compound.split()]
             if len(compound_parts) == 2 and len(tokens) > 1:
@@ -520,11 +534,14 @@ class NameParsingService:
         # End position
         if len(tokens) >= 2:
             last_meta = compound_metadata.get(tokens[-1])
-            if last_meta and last_meta.is_compound and last_meta.format_type == "hyphenated":
+            if (
+                last_meta
+                and last_meta.is_compound
+                and last_meta.format_type == "hyphenated"
+                and last_meta.compound_target in CURATED_COMPOUND_TARGETS
+            ):
                 target_compound = last_meta.compound_target
-                compound_parts = [
-                    StringManipulationUtils.capitalize_name_part(part) for part in target_compound.split()
-                ]
+                compound_parts = [StringManipulationUtils.capitalize_name_part(part) for part in target_compound.split()]
                 if len(compound_parts) == 2:
                     original_format = tokens[-1]  # Keep the hyphenated format
                     parses.append((compound_parts, tokens[:-1], original_format))
@@ -557,6 +574,7 @@ class NameParsingService:
         original_compound_format: str | None = None,
         score_cache: dict[str, dict] | None = None,
         allow_guarded_given_first_bonus: bool = True,
+        surname_first_parenthetical_hint: bool = False,
     ) -> float:
         """Calculate unified score for a parse candidate."""
         if not given_tokens:
@@ -589,6 +607,7 @@ class NameParsingService:
                 surname_logp = self._data.get_surname_logp(original_compound, self._config.default_surname_logp)
 
         given_logp_sum = 0.0
+        has_decomposed_given_pair = False
         for g_token in given_tokens:
             if given_key_cache is not None:
                 given_key = given_key_cache.get(g_token)
@@ -597,12 +616,26 @@ class NameParsingService:
                     given_key_cache[g_token] = given_key
             else:
                 given_key = self._given_name_key(g_token, normalized_cache)
-            given_logp_sum += self._data.get_given_logp(given_key, self._config.default_given_logp)
+            if given_key in self._data.given_log_probabilities:
+                given_logp_sum += self._data.given_log_probabilities[given_key]
+                continue
+
+            decomposed = self._decompose_unknown_given(g_token, normalized_cache, score_cache)
+            if decomposed is None:
+                given_logp_sum += self._config.default_given_logp
+                continue
+
+            decomposed_logp, both_known = decomposed
+            given_logp_sum += decomposed_logp
+            if both_known:
+                has_decomposed_given_pair = True
 
         compound_given_bonus = 0.0
         if len(given_tokens) == 2 and all(
             self._data.is_given_name(self._normalizer.get_normalized(t, normalized_cache)) for t in given_tokens
         ):
+            compound_given_bonus = 1.0
+        elif len(given_tokens) == 1 and has_decomposed_given_pair:
             compound_given_bonus = 1.0
 
         # Bonus for surname-first pattern in all-Chinese inputs
@@ -621,8 +654,20 @@ class NameParsingService:
         # Order preservation bonus for ambiguous romanized cases
         order_preservation_bonus = 0.0
         if not is_all_chinese and len(tokens) == 2 and len(surname_tokens) == 1 and len(given_tokens) == 1:
+            if surname_first_parenthetical_hint and surname_tokens[0] == tokens[0] and given_tokens[0] == tokens[1]:
+                ambiguous_key = (surname_tokens[0], given_tokens[0])
+                if ambiguous_cache is not None:
+                    is_ambiguous = ambiguous_cache.get(ambiguous_key)
+                    if is_ambiguous is None:
+                        is_ambiguous = self._is_ambiguous_case(surname_tokens[0], given_tokens[0], normalized_cache)
+                        ambiguous_cache[ambiguous_key] = is_ambiguous
+                else:
+                    is_ambiguous = self._is_ambiguous_case(surname_tokens[0], given_tokens[0], normalized_cache)
+
+                if is_ambiguous:
+                    order_preservation_bonus = 1.0
             # Check if this parse maintains the original given-surname order (given first, surname last)
-            if given_tokens[0] == tokens[0] and surname_tokens[0] == tokens[1]:
+            elif given_tokens[0] == tokens[0] and surname_tokens[0] == tokens[1]:
                 # This maintains the original order - check if case is ambiguous
                 ambiguous_key = (surname_tokens[0], given_tokens[0])
                 if ambiguous_cache is not None:
@@ -646,14 +691,18 @@ class NameParsingService:
             # only apply when surname-last is materially more plausible than surname-first.
             if given_tokens == tokens[0:2] and surname_tokens[0] == tokens[2]:
                 first_norm = self._normalizer.get_normalized(tokens[0], normalized_cache)
+                second_norm = self._normalizer.get_normalized(tokens[1], normalized_cache)
                 last_norm = self._normalizer.get_normalized(tokens[2], normalized_cache)
                 first_is_surname = self._data.is_surname(tokens[0], first_norm)
                 last_is_surname = self._data.is_surname(tokens[2], last_norm)
                 first_is_given = self._data.is_given_name(first_norm)
+                second_is_given = self._data.is_given_name(second_norm)
                 last_is_given = self._data.is_given_name(last_norm)
                 first_surname_freq = self._data.get_surname_freq(first_norm)
                 last_surname_freq = self._data.get_surname_freq(last_norm)
                 freq_ratio = (last_surname_freq / first_surname_freq) if first_surname_freq > 0 else 0.0
+                second_clean = StringManipulationUtils.remove_spaces(tokens[1]).lower()
+                second_has_korean_given_signal = second_clean in KOREAN_GIVEN_PATTERNS
 
                 if (
                     first_is_surname
@@ -666,6 +715,17 @@ class NameParsingService:
                     and freq_ratio <= 3.0
                 ):
                     order_preservation_bonus = max(order_preservation_bonus, 0.5)
+                elif (
+                    first_is_surname
+                    and last_is_surname
+                    and first_is_given
+                    and second_is_given
+                    and first_surname_freq > last_surname_freq
+                    and 0 < last_surname_freq <= RARE_TRAILING_OVERLAPPING_SURNAME_MAX
+                    and StringManipulationUtils.remove_spaces(last_norm) in OVERLAPPING_KOREAN_SURNAMES
+                    and second_has_korean_given_signal
+                ):
+                    order_preservation_bonus = max(order_preservation_bonus, 1.0)
 
         # Percentile rank-based scoring for surnames only
         surname_rank_bonus = 0.0
@@ -712,6 +772,46 @@ class NameParsingService:
 
         return total_score
 
+    def _decompose_unknown_given(
+        self,
+        given_token: str,
+        normalized_cache: dict[str, str],
+        score_cache: dict[str, dict] | None = None,
+    ) -> tuple[float, bool] | None:
+        """Score an unknown given token as a two-syllable fused given name."""
+        decomp_cache = score_cache.setdefault("given_decomp", {}) if score_cache is not None else None
+        if decomp_cache is not None and given_token in decomp_cache:
+            return decomp_cache[given_token]
+
+        if "-" in given_token:
+            parts = StringManipulationUtils.split_and_clean_hyphens(given_token)
+            candidates = [(parts[0], parts[1])] if len(parts) == 2 else []
+        else:
+            candidates = [
+                (given_token[:index], given_token[index:])
+                for index in range(1, len(given_token))
+                if self._normalizer.norm_light(given_token[:index]) in self._data.plausible_components
+                and self._normalizer.norm_light(given_token[index:]) in self._data.plausible_components
+            ]
+
+        best: tuple[float, bool] | None = None
+        for first, second in candidates:
+            first_key = self._given_name_key(first, normalized_cache)
+            second_key = self._given_name_key(second, normalized_cache)
+            logp = self._data.get_given_logp(first_key, self._config.default_given_logp) + self._data.get_given_logp(
+                second_key,
+                self._config.default_given_logp,
+            )
+            both_known = first_key in self._data.given_log_probabilities and second_key in self._data.given_log_probabilities
+            if best is None or logp > best[0]:
+                best = (logp, both_known)
+
+        if best is not None and best[0] <= self._config.default_given_logp:
+            best = None
+        if decomp_cache is not None:
+            decomp_cache[given_token] = best
+        return best
+
     def _is_ambiguous_case(self, surname_token: str, given_token: str, normalized_cache: dict[str, str]) -> bool:
         """
         Determine if a case is ambiguous enough to warrant order preservation.
@@ -743,7 +843,7 @@ class NameParsingService:
         given_freq = self._data.get_surname_freq(given_norm)
 
         if surname_freq == 0 or given_freq == 0:
-            return True  # Ambiguous if we lack frequency data for either
+            return True  # Preserve source order when frequency coverage is missing
 
         freq_ratio = max(surname_freq, given_freq) / min(surname_freq, given_freq)
         return freq_ratio < 5.0  # Ambiguous if frequencies are within 5x of each other
@@ -755,16 +855,13 @@ class NameParsingService:
         normalized_cache: dict[str, str],
     ) -> bool:
         """Return whether surname frequencies strongly support given-first order."""
-        if "-" in given_token or self._is_compound_surname_token(given_token, normalized_cache):
+        if self._is_compound_surname_token(given_token, normalized_cache):
             return False
 
         surname_key = self._surname_key([surname_token], normalized_cache)
         given_as_surname_key = self._surname_key([given_token], normalized_cache)
 
-        if not (
-            self._data.is_surname(surname_token, surname_key)
-            and self._data.is_surname(given_token, given_as_surname_key)
-        ):
+        if not (self._data.is_surname(surname_token, surname_key) and self._data.is_surname(given_token, given_as_surname_key)):
             return False
 
         given_surname_freq = self._data.get_surname_freq(given_as_surname_key)
@@ -775,11 +872,14 @@ class NameParsingService:
         return surname_freq / given_surname_freq > GIVEN_FIRST_SURNAME_FREQ_RATIO_MIN
 
     def _is_compound_surname_token(self, token: str, _normalized_cache: dict[str, str]) -> bool:
-        """Return whether a single token is a known compact/camelCase compound surname."""
+        """Return whether a single token is a curated compact or hyphenated compound surname."""
         token_key = token.strip().lower()
-        return token_key in COMPOUND_VARIANTS or (
-            "-" in token_key and token_key in self._data.compound_hyphen_map
-        )
+        if token_key in COMPOUND_VARIANTS:
+            return True
+        if "-" in token_key:
+            target = self._data.compound_hyphen_map.get(token_key)
+            return target in CURATED_COMPOUND_TARGETS
+        return False
 
     def _surname_key(self, surname_tokens: list[str], normalized_cache: dict[str, str]) -> str:
         """Convert surname tokens to lookup key, preferring Chinese characters when available."""
@@ -810,10 +910,12 @@ class NameParsingService:
             if given_token in self._data.given_log_probabilities:
                 return given_token
 
-        # Try original form first (more likely to preserve correct romanization)
-        original_key = self._normalizer.norm(given_token)
-        if original_key in self._data.given_log_probabilities:
-            return original_key
+        light_key = self._normalizer.norm_light(given_token)
+        remapped_key = self._normalizer.norm(given_token)
+        light_logp = self._data.get_given_logp(light_key, float("-inf"))
+        remapped_logp = self._data.get_given_logp(remapped_key, float("-inf"))
+        if light_logp > float("-inf") or remapped_logp > float("-inf"):
+            return light_key if light_logp >= remapped_logp else remapped_key
         # Fall back to normalized form
         return self._normalizer.norm(self._normalizer.get_normalized(given_token, normalized_cache))
 

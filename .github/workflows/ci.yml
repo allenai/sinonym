@@ -46,7 +46,7 @@ jobs:
       - name: Validate package metadata (twine check)
         run: uvx twine check dist/*
 
-      - name: Check test status against baseline (118 failures expected)
+      - name: Check test status against baseline (44 failures expected)
         run: uv run python scripts/check_test_status.py
 
       - name: Test import from sdist

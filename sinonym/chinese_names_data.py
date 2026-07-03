@@ -669,11 +669,9 @@ COMPOUND_VARIANTS = {
     "pugu": "pu gu",  # 濮阳 historical
     "puyang": "pu yang",  # 濮阳
     "taishi": "tai shi",  # 太史
-    "xinlei": "xin lei",  # 辛雷 rare historical
     "gongxi": "gong xi",  # 公西
     "zaisang": "zai sang",  # 宰桑 historical
     "baili": "bai li",  # 百里
-    "qianlong": "qian long",  # 钱龙 historical
     "wuma": "wu ma",  # 巫马
     "yangsi": "yang si",  # 羊舌
     "lezheng": "le zheng",  # 乐正
@@ -843,7 +841,9 @@ HIGH_CONFIDENCE_ANCHORS = frozenset(
         "long",
         "mei",
         "peng",
+        "qian",
         "qing",
+        "ran",
         "rong",
         "rui",
         "shan",
@@ -1059,7 +1059,12 @@ KOREAN_AMBIGUOUS_PATTERNS = frozenset(
 KOREAN_GIVEN_PAIRS = frozenset(
     {
         ("soo", "jin"),  # 수진 - very common Korean name
+        ("min", "soo"),  # 민수 - very common Korean name
         ("min", "jung"),  # 민정 - very common Korean name
+        ("soo", "jung"),  # 수정 - very common Korean name
+        ("heung", "min"),  # 흥민 - Korean name pattern
+        ("ye", "jin"),  # 예진 - very common Korean name
+        ("ha", "young"),  # 하영 - very common Korean name
         ("ji", "min"),  # 지민 - very common Korean name
         ("hoon", "ki"),  # 훈기 - Korean name pattern
         ("young", "ho"),  # 영호 - Korean name pattern
