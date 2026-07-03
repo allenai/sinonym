@@ -215,6 +215,25 @@ class PPRoutedPrediction(TimoModel):
     pp: Prediction = Field(description="the paper-batch (PP) parse for this author")
 
 
+class RoutingInstance(TimoModel):
+    """One paper's authors for the routing-served variant (`RoutingPredictor.predict_batch`).
+
+    Self-contained per instance (the timo runner feeds one Instance at a time), so each carries
+    its own venue pool. `predict_batch([paper])` returns `len(pp_names)` RoutedPredictions in
+    `pp_names` order.
+    """
+
+    pp_names: list[str] = Field(description="the paper's author names (PP batch); output aligns to this order")
+    vys_pool_names: list[str] | None = Field(
+        default=None,
+        description=(
+            "venue-source-year author pool with the paper's authors as the FIRST len(pp_names) "
+            "entries (same strings/order as pp_names), then the other venue authors. None/empty => "
+            "PP-only routing fallback."
+        ),
+    )
+
+
 class PredictorConfig(BaseSettings):
     pass
 
@@ -317,7 +336,7 @@ class Predictor:
             confidences=[a.confidence for a in batch_result.individual_analyses],
         )
 
-    # ---- timo entrypoint --------------------------------------------------
+    # ---- predict_batch: timo-served entrypoint for sinonym_v1 (flat name->Prediction) ----
 
     def predict_batch(self, instances: list[Instance]) -> list[Prediction]:
         """timo HTTP entrypoint. Analyzes the whole batch jointly.
@@ -400,7 +419,11 @@ class Predictor:
         batch_result = self._detector.analyze_name_batch(names, **self._batch_kwargs(format_threshold, minimum_batch_size))
         return self._to_batch_summary(batch_result)
 
-    # ---- pp-vys routing ---------------------------------------------------
+    # ---- name-order routing (call `route`) --------------------------------
+    # The routing core: `RoutingPredictor.predict_batch` (the sinonym_routing_v1 timo variant)
+    # calls `route` per RoutingInstance; also callable directly by importing Predictor.
+    # Needs per-paper grouping (pp_names + vys_pool_names), which the flat sinonym_v1
+    # predict_batch(List[Instance]) contract can't express — hence the separate variant.
 
     def route_pp_vys(
         self,
@@ -580,3 +603,18 @@ class Predictor:
             )
             for r in self.route_pp(pp_names)
         ]
+
+
+class RoutingPredictor(Predictor):
+    """timo-served routing variant: Instance = one paper, Prediction = per-author RoutedPrediction.
+
+    Wraps `Predictor.route`. Each RoutingInstance yields `len(pp_names)` RoutedPredictions (in
+    pp_names order); the timo runner writes each on its own line, so paper boundaries are the
+    order in which authors are emitted (one instance's authors are contiguous).
+    """
+
+    def predict_batch(self, instances: list[RoutingInstance]) -> list[RoutedPrediction]:  # type: ignore[override]
+        out: list[RoutedPrediction] = []
+        for inst in instances:
+            out.extend(self.route(inst.pp_names, inst.vys_pool_names))
+        return out
