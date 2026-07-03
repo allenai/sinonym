@@ -1,6 +1,15 @@
 import unittest
 
-from sinonym.timo.interface import Instance, Prediction, Predictor, PredictorConfig
+from sinonym.timo.interface import (
+    Instance,
+    Prediction,
+    Predictor,
+    PredictorConfig,
+    RoutedPaperPrediction,
+    RoutedPrediction,
+    RoutingInstance,
+    RoutingPredictor,
+)
 
 
 class TestIntegration(unittest.TestCase):
@@ -67,3 +76,49 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(len(result.name_order_evidence), 2)
         self.assertEqual(result.name_order_evidence[0].raw_name, "Li Wei")
         self.assertEqual(result.name_order_evidence[0].selected_format, "surname_first")
+
+
+class TestRoutingIntegration(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.predictor = RoutingPredictor(config=PredictorConfig(), artifacts_dir=".")
+
+    def test_route_with_vys_pool(self):
+        # paper authors must be the leading slice of the pool
+        pp = ["Yue Lin", "Wei Wang"]
+        pool = pp + ["Jun Zhao", "Hui Li"]
+        results = self.predictor.predict_batch([RoutingInstance(pp_names=pp, vys_pool_names=pool)])
+        self.assertEqual(len(results), 1)  # one prediction per instance (timo 1:1 contract)
+        paper = results[0]
+        self.assertIsInstance(paper, RoutedPaperPrediction)
+        self.assertEqual(len(paper.authors), 2)  # one RoutedPrediction per pp author
+        for r in paper.authors:
+            self.assertIsInstance(r, RoutedPrediction)
+            self.assertIn(r.router_prediction, {"pp", "vys", "abstain", "not_person"})
+            self.assertIsNotNone(r.vys)  # vys candidate present when a pool is given
+
+    def test_route_pp_only_fallback(self):
+        results = self.predictor.predict_batch([RoutingInstance(pp_names=["Li Wei"])])
+        self.assertEqual(len(results), 1)
+        authors = results[0].authors
+        self.assertEqual(len(authors), 1)
+        self.assertIsNone(authors[0].vys)  # PP-only fallback: no venue pool
+        self.assertIsNone(authors[0].input_order_candidate)
+
+    def test_predict_batch_is_one_to_one(self):
+        instances = [
+            RoutingInstance(pp_names=["Li Wei", "Wang Weiming"]),
+            RoutingInstance(pp_names=["Zhang San"]),
+        ]
+        results = self.predictor.predict_batch(instances)
+        self.assertEqual(len(results), len(instances))  # 1:1, paper boundaries preserved
+        self.assertEqual([len(p.authors) for p in results], [2, 1])
+
+    def test_empty_paper_still_emits_one_prediction(self):
+        # an instance with no authors must not vanish from the output stream
+        results = self.predictor.predict_batch([RoutingInstance(pp_names=[])])
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].authors, [])
+
+    def test_predict_batch_empty(self):
+        self.assertEqual(self.predictor.predict_batch([]), [])
