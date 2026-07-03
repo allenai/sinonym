@@ -58,10 +58,11 @@ produces, for three stacked reasons:
 3. The confidence convention changed from `format_pattern.confidence` to
    `decision_confidence` (production convention).
 
-Decisive-row effective accuracy on the pp-vys fixture is 830/969 (85.7%)
+Decisive-row label-level accuracy on the pp-vys fixture is 830/969 (85.7%)
 under fresh v0.3.0 evidence, versus 876/969 (90.4%) asserted against the
 stale June evidence — the old number measured the router against inputs
-production could no longer generate. On the pp-abstain fixture, decisive
+production could no longer generate. At the emitted-string level (see
+Semantics) the fresh number is 882/969. On the pp-abstain fixture, decisive
 accuracy is 538/550 (97.8%) versus the frozen June 540/550 (98.2%); the -2
 is real parser drift (`batch_total_count` changed on 55 rows; `has_latin`,
 `selected_format`, and frequency fields on 7 han rows). The regression tests
@@ -70,10 +71,14 @@ assert the fresh numbers.
 ## Semantics
 
 For PP/VYS/abstain scoring, router output `abstain` means "emit the
-preprocessed input-order parse." The regression test maps `abstain` to the
-computed `input_order_candidate` before comparing against `pp`/`vys` labels.
-Router output `not_person` is a terminal non-person decision and means no
-person parse should be emitted.
+preprocessed input-order parse." The regression test scores decisive rows at
+the emitted-string level: a row is correct iff the string the chosen route
+emits (`pp_result` for `pp`, `vys_result` for `vys`, and for `abstain` the
+result on whichever side `input_order_candidate` says preserves input order)
+equals the labeled route's string. When PP and VYS emit the identical string
+the route is cosmetic and either route scores as correct. Router output
+`not_person` is a terminal non-person decision and means no person parse
+should be emitted.
 
 ## Refreshing these fixtures after parser changes
 
