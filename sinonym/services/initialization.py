@@ -49,6 +49,9 @@ class NameDataStructures:
     given_initial_default_logp: float
     given_final_default_logp: float
 
+    # Ordered (initial, final) given-pair counts inside two-syllable given names
+    given_bigram_counts: Mapping[tuple[str, str], int]
+
     # Pre-computed percentile ranks for ML features (0-1 scale)
     surname_percentile_ranks: Mapping[str, float]
 
@@ -80,6 +83,10 @@ class NameDataStructures:
     def get_given_final_logp(self, given_key: str) -> float:
         """Get log probability of a syllable in the second given-name position."""
         return self.given_final_log_probabilities.get(given_key, self.given_final_default_logp)
+
+    def get_given_bigram_count(self, initial_key: str, final_key: str) -> int:
+        """Get the corpus count of an ordered (initial, final) given-syllable pair."""
+        return self.given_bigram_counts.get((initial_key, final_key), 0)
 
     def get_surname_freq(self, surname_key: str, default: float = 0.0) -> float:
         """Get surname frequency with default fallback."""
@@ -149,6 +156,7 @@ class DataInitializationService:
             given_initial_default_logp,
             given_final_default_logp,
         ) = self._build_given_position_data()
+        given_bigram_counts = self._build_given_bigram_counts()
         given_names_normalized = given_names  # Already normalized from pinyin data
 
         # Build compound surname mappings
@@ -186,6 +194,7 @@ class DataInitializationService:
             given_final_log_probabilities=MappingProxyType(dict(given_final_log_probabilities)),
             given_initial_default_logp=given_initial_default_logp,
             given_final_default_logp=given_final_default_logp,
+            given_bigram_counts=MappingProxyType(given_bigram_counts),
             surname_percentile_ranks=MappingProxyType(dict(surname_percentile_ranks)),
             compound_hyphen_map=MappingProxyType(dict(compound_hyphen_map)),
             compound_original_format_map=MappingProxyType(dict(compound_original_format_map)),
@@ -346,7 +355,7 @@ class DataInitializationService:
         return frozenset(given_names), given_log_probabilities, plausible_components
 
     def _build_given_position_data(self) -> tuple[dict[str, float], dict[str, float], float, float]:
-        """Build add-k smoothed positional log probabilities from given_position_acl.csv.
+        """Build add-k smoothed positional log probabilities from given_position.csv.
 
         Keys are as-written romanized syllables (no Mandarin remapping), so
         Cantonese/Wade-Giles forms keep their own positional statistics. The
@@ -356,7 +365,7 @@ class DataInitializationService:
         smoothing_k = 0.5
         initial_counts: dict[str, int] = {}
         final_counts: dict[str, int] = {}
-        for row in open_csv_reader("given_position_acl.csv"):
+        for row in open_csv_reader("given_position.csv"):
             syllable = row["syllable"]
             initial_counts[syllable] = int(row["initial_count"])
             final_counts[syllable] = int(row["final_count"])
@@ -371,6 +380,16 @@ class DataInitializationService:
         final_default = math.log(smoothing_k / final_total)
 
         return initial_logp, final_logp, initial_default, final_default
+
+    def _build_given_bigram_counts(self) -> dict[tuple[str, str], int]:
+        """Load ordered (initial, final) given-pair counts from given_bigrams.csv.
+
+        The counts are mined offline by scripts/generate_name_statistics.py
+        (thresholded, so absent pairs mean "rare", not "impossible"). The only
+        consumer is the ordered-vs-reversed bigram feature in NameParsingService,
+        which applies its own smoothing at lookup time.
+        """
+        return {(row["initial"], row["final"]): int(row["count"]) for row in open_csv_reader("given_bigrams.csv")}
 
     def _build_compound_hyphen_map(self, compound_surnames: frozenset[str]) -> dict[str, str]:
         """Build mapping for hyphenated compound surnames (stores lowercase keys only)."""

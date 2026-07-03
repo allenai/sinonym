@@ -33,9 +33,22 @@ ORDER_BONUS_EVIDENCE_SCALE = 1.25
 # the comparative-feature gating).
 UNATTESTED_AMBIGUITY_SURNAME_FREQ_MAX = 5000.0
 # Positional given-syllable feature for 3-token parses: the deadband keeps small
-# (noisy) unigram differences neutral and the cap bounds the feature magnitude.
-GIVEN_POSITION_DEADBAND = 1.0
+# unigram differences neutral and the cap bounds the feature magnitude. The
+# deadband is calibrated to the corpus-scale positional table (given_position.csv,
+# 963k pairs): differences below 1.5 log-units are dominated by benign asymmetries
+# (measured floor: Zhang Yi Gong stays correct up to a wrong-way delta of 2.01
+# with deadband >= ~1.3; 1.5 leaves margin while Huang Yu Chang's 3.93 delta
+# still saturates the cap).
+GIVEN_POSITION_DEADBAND = 1.5
 GIVEN_POSITION_MAGNITUDE_CAP = 1.5
+# Ordered-vs-reversed given-bigram feature for 3-token parses: log-odds of this
+# parse's given pair appearing in corpus order versus reversed (given_bigrams.csv).
+# Smoothing keeps unattested pairs neutral, so no deadband is needed; the cap
+# times the weight (1.5 * 0.085 = 0.1275 per parse, 0.255 max swing) stays below
+# the 0.261 batch tie-break vote margin so weak batch participants cannot flip.
+GIVEN_BIGRAM_DEADBAND = 0.0
+GIVEN_BIGRAM_MAGNITUDE_CAP = 1.5
+GIVEN_BIGRAM_SMOOTHING_K = 2.0
 RARE_TRAILING_OVERLAPPING_SURNAME_MAX = 100.0
 # Romanization-conditional surname discount: log(target_share) for a spelling
 # whose surname mass is reachable only via romanization remapping and that is
@@ -57,6 +70,7 @@ DEFAULT_WEIGHTS = (
     -0.573,  # surname_rank_difference (comparative feature)
     0.06,  # given_position_logp (comparative positional given-syllable feature)
     0.1,  # surname_usage_delta (surname-position usage evidence, 1+1 parses)
+    0.085,  # given_bigram_logodds (ordered-vs-reversed given-pair evidence, 3-token parses)
 )
 
 
@@ -79,7 +93,7 @@ class NameParsingService:
         # Weight parameters - can be overridden. Legacy shorter vectors (e.g. from
         # pickled configs or process-pool workers) get the default coefficients for
         # the newer trailing features appended, keeping index order stable.
-        if weights and len(weights) in (8, 9, 10):
+        if weights and len(weights) in (8, 9, 10, 11):
             self._weights = list(weights) + list(DEFAULT_WEIGHTS[len(weights) :])
         else:
             self._weights = list(DEFAULT_WEIGHTS)
@@ -810,6 +824,7 @@ class NameParsingService:
         # Keyed on surname position only, so permuted given-order variants of
         # the same segmentation score identically.
         given_position_logp = 0.0
+        given_bigram_logodds = 0.0
         if not is_all_chinese and len(tokens) == 3 and len(surname_tokens) == 1 and len(given_tokens) == 2:
             surname_sign = 0.0
             if surname_tokens[0] == tokens[0]:
@@ -833,6 +848,23 @@ class NameParsingService:
                 if magnitude > 0.0:
                     given_position_logp = surname_sign * math.copysign(magnitude, surname_first_delta)
 
+                # Ordered-vs-reversed bigram evidence for this parse's given pair:
+                # positive when the corpus attests the pair in this order far more
+                # than reversed (e.g. jian+feng vs feng+jian at ~50:1). Unattested
+                # pairs stay neutral via the smoothing.
+                first_given_key, second_given_key = (middle_key, last_key) if surname_sign > 0.0 else (first_key, middle_key)
+                forward_count = self._data.get_given_bigram_count(first_given_key, second_given_key)
+                reversed_count = self._data.get_given_bigram_count(second_given_key, first_given_key)
+                pair_logodds = math.log(
+                    (forward_count + GIVEN_BIGRAM_SMOOTHING_K) / (reversed_count + GIVEN_BIGRAM_SMOOTHING_K),
+                )
+                bigram_magnitude = min(
+                    abs(pair_logodds) - GIVEN_BIGRAM_DEADBAND,
+                    GIVEN_BIGRAM_MAGNITUDE_CAP,
+                )
+                if bigram_magnitude > 0.0:
+                    given_bigram_logodds = math.copysign(bigram_magnitude, pair_logodds)
+
         total_score = (
             surname_logp * self._weights[0]  # Surname frequency weight
             + given_logp_sum * self._weights[1]  # Given name frequency weight
@@ -844,6 +876,7 @@ class NameParsingService:
             + surname_rank_difference * self._weights[7]  # Surname rank difference weight
             + given_position_logp * self._weights[8]  # Positional given-syllable weight
             + surname_usage_delta * self._weights[9]  # Surname-position usage evidence weight
+            + given_bigram_logodds * self._weights[10]  # Ordered-vs-reversed given-bigram weight
         )
 
         return total_score

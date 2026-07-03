@@ -571,20 +571,23 @@ def test_strong_given_first_batch_still_overrides_ambiguous_name(detector):
 
 
 @pytest.mark.parametrize(
-    ("names", "expected_results"),
+    ("names", "expected_results", "expected_confidence"),
     [
-        (["Li Yang Hsu", "Hanwei Cao"], ["Li-Yang Hsu", "Han-Wei Cao"]),
-        (["Yunbo Hu", "Fei Yu"], ["Yun-Bo Hu", "Fei Yu"]),
-        (["J. Liu", "Jing Wan"], ["J Liu", "Jing Wan"]),
-        (["Qinggong Ping", "Hao Fei"], ["Qing-Gong Ping", "Hao Fei"]),
+        # Since the corpus-scale given-bigram evidence, "Li Yang Hsu" parses
+        # given-first on its own (matching its individual expectation), so this
+        # batch is unanimous rather than tie-broken.
+        (["Li Yang Hsu", "Hanwei Cao"], ["Li-Yang Hsu", "Han-Wei Cao"], 1.0),
+        (["Yunbo Hu", "Fei Yu"], ["Yun-Bo Hu", "Fei Yu"], 0.5),
+        (["J. Liu", "Jing Wan"], ["J Liu", "Jing Wan"], 0.5),
+        (["Qinggong Ping", "Hao Fei"], ["Qing-Gong Ping", "Hao Fei"], 0.5),
     ],
 )
-def test_batch_format_uses_weighted_tie_break_with_weak_participants(detector, names, expected_results):
+def test_batch_format_uses_weighted_tie_break_with_weak_participants(detector, names, expected_results, expected_confidence):
     batch = detector.analyze_name_batch(names)
 
     assert batch.format_pattern.total_count == 2
     assert batch.format_pattern.dominant_format == NameFormat.GIVEN_FIRST
-    assert batch.format_pattern.confidence == pytest.approx(0.5)
+    assert batch.format_pattern.confidence == pytest.approx(expected_confidence)
     assert batch.format_pattern.decision_confidence >= 0.55
     assert batch.format_pattern.decision_confidence >= batch.format_pattern.confidence
     assert batch.format_pattern.threshold_met
