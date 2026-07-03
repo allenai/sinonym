@@ -94,9 +94,7 @@ PP_ABSTAIN_REQUIRED_COLUMNS = (
 )
 
 PP_ABSTAIN_WEAK_SURNAME_FREQUENCY_MAX = 500.0
-PP_ABSTAIN_LATIN_AMBIGUOUS_RATIO_MAX = 10.0
 PP_ABSTAIN_CLEAN_BILINGUAL_SURNAME_FREQUENCY_MIN = 2500.0
-PP_ABSTAIN_JP_PROBABILITY_MIN = 0.60
 PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT = 2
 PP_ABSTAIN_MIXED_LONG_RAW_TOKEN_MIN = 3
 PP_ABSTAIN_CLEAN_BILINGUAL_RAW_TOKEN_COUNT = 2
@@ -107,18 +105,8 @@ PP_VYS_LOW_RATIO_MAX = 5.0
 PP_VYS_ALLOWED_RATIO_LOW_MAX = 1.0
 PP_VYS_ALLOWED_RATIO_HIGH_MIN = 5.0
 PP_VYS_ALLOWED_RATIO_HIGH_MAX = 20.0
-PP_VYS_TINY_RATIO_MAX = 0.1
-PP_VYS_MEDIUM_RATIO_MAX = 5.0
-PP_VYS_HIGH_RATIO_MAX = 100.0
 PP_VYS_HIGH_CONFIDENCE_MIN = 0.85
 PP_VYS_LARGER_PAPER_VOTES_MIN = 6
-PP_VYS_TOTAL_BUCKET_ZERO_ONE_MAX = 1
-PP_VYS_TOTAL_BUCKET_TWO_MAX = 2
-PP_VYS_TOTAL_BUCKET_THREE_MAX = 3
-PP_VYS_TOTAL_BUCKET_FIVE_MAX = 5
-PP_VYS_TOTAL_BUCKET_TEN_MAX = 10
-PP_VYS_CONF_BUCKET_LOW_MAX = 0.50
-PP_VYS_CONF_BUCKET_MID_MAX = 0.70
 MIN_THREE_TOKEN_NAME_PRIOR_TOKENS = 3
 PP_VYS_SELECTED_CLEAN_ENDPOINT_VYS_RATIO_MAX = 0.10
 PP_VYS_SELECTED_CLEAN_ENDPOINT_PP_RATIO_MIN = 20.0
@@ -406,9 +394,6 @@ class PPVysFeatures:
     vys_selected_format: str
     input_order_candidate: str
     name_tokens: tuple[str, ...]
-    pp_total_bucket: str
-    pp_conf_bucket: str
-    pp_ratio_bucket: str
     old_new_vys: bool
     old_pp_new_vys: bool
     old_vys_new_abstain: bool
@@ -588,9 +573,6 @@ def _pp_vys_features(row: Row) -> PPVysFeatures:
         vys_selected_format=vys_selected_format,
         input_order_candidate=_input_order_candidate(row),
         name_tokens=_name_tokens(_required_string(row, "name")),
-        pp_total_bucket=_pp_total_bucket(pp_batch_total_count),
-        pp_conf_bucket=_pp_conf_bucket(pp_batch_confidence),
-        pp_ratio_bucket=_pp_ratio_bucket(ratio),
         old_new_vys=old_new_vys,
         old_pp_new_vys=old_pp_new_vys,
         old_vys_new_abstain=old_vys_new_abstain,
@@ -648,16 +630,8 @@ def _base_pp_vys_route(features: PPVysFeatures) -> tuple[Route, str]:
 def _effective_plus_override(features: PPVysFeatures) -> tuple[Route, str] | None:
     selected: tuple[Route, str] | None = None
     overrides: tuple[tuple[bool, Route, str], ...] = (
-        (_pp_abstain_small_ratio_vys(features), "vys", "pp_abstain_two_vote_small_ratio_vys"),
         (_endpoint_pp_high_conf_two_vote(features), "pp", "endpoint_pp_high_conf_two_vote"),
         (_pp_context_over_vys_batch_for_larger_papers(features), "pp", "larger_pp_paper_overrides_vys_batch"),
-        (_strong_vys_large_pp_looks_pp(features), "pp", "strong_vys_large_pp_count_ratio_looks_pp"),
-        (_strong_vys_three_vote_mid_ratio_pp(features), "pp", "strong_vys_three_vote_mid_ratio_pp"),
-        (
-            _endpoint_pp_low_count_low_conf_very_high_ratio(features),
-            "pp",
-            "endpoint_pp_low_count_low_conf_very_high_ratio",
-        ),
     )
     for condition, route, reason in overrides:
         if condition:
@@ -708,15 +682,6 @@ def _reliable_input_order_abstain(features: PPVysFeatures) -> bool:
     return input_pp_old_new_pp or endpoint_vys_small_pp_context or weak_vys_small_pp_context or strong_vys_small_pp_context
 
 
-def _pp_abstain_small_ratio_vys(features: PPVysFeatures) -> bool:
-    return (
-        features.old_prediction == "pp"
-        and features.new_prediction == "abstain"
-        and features.pp_batch_total_count == PP_VYS_LOW_BATCH_MAX
-        and PP_VYS_TINY_RATIO_MAX < features.ratio <= PP_VYS_ALLOWED_RATIO_LOW_MAX
-    )
-
-
 def _endpoint_pp_high_conf_two_vote(features: PPVysFeatures) -> bool:
     return (
         features.old_vys_new_pp
@@ -734,43 +699,11 @@ def _pp_context_over_vys_batch_for_larger_papers(features: PPVysFeatures) -> boo
     )
 
 
-def _strong_vys_large_pp_looks_pp(features: PPVysFeatures) -> bool:
-    return (
-        features.old_new_vys
-        and features.new_reason == "strong_vys_batch_context"
-        and features.pp_total_bucket == "6-10"
-        and features.pp_ratio_bucket == "1-5"
-    )
-
-
-def _strong_vys_three_vote_mid_ratio_pp(features: PPVysFeatures) -> bool:
-    return (
-        features.old_new_vys
-        and features.new_reason == "strong_vys_batch_context"
-        and features.pp_batch_total_count == PP_VYS_REAL_PAPER_VOTES_MIN
-        and PP_VYS_ALLOWED_RATIO_HIGH_MIN < features.ratio <= PP_VYS_ALLOWED_RATIO_HIGH_MAX
-    )
-
-
-def _endpoint_pp_low_count_low_conf_very_high_ratio(features: PPVysFeatures) -> bool:
-    return (
-        features.old_vys_new_pp
-        and features.new_reason == "endpoint_frequency_strongly_favors_pp"
-        and features.pp_total_bucket == "0-1"
-        and features.pp_conf_bucket == "<=0.50"
-        and features.pp_ratio_bucket == "100+"
-    )
-
-
 def _name_prior_override(features: PPVysFeatures) -> tuple[Route, str] | None:
     overrides: tuple[tuple[Route | None, str], ...] = (
         (
             _repeated_tail_given_surname_first_route(features),
             "name_prior_repeated_tail_given_surname_first",
-        ),
-        (
-            _ouyang_surname_first_route(features),
-            "name_prior_ouyang_surname_first",
         ),
         (
             _korean_given_first_three_token_route(features),
@@ -800,12 +733,6 @@ def _has_repeated_tail_chinese_surname(tokens: tuple[str, ...]) -> bool:
         and tokens[-1] == tokens[-2]
         and tokens[0] in NAME_PRIOR_COMMON_CHINESE_SURNAMES
     )
-
-
-def _ouyang_surname_first_route(features: PPVysFeatures) -> Route | None:
-    if features.name_tokens and features.name_tokens[0] == "ouyang":
-        return _desired_format_route(features, "surname_first")
-    return None
 
 
 def _korean_given_first_three_token_route(features: PPVysFeatures) -> Route | None:
@@ -871,10 +798,8 @@ def route_pp_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
                 predicates,
                 (
                     "spaced_cjk_zero_batch_surname_first",
-                    "jp_likelihood_060",
                     "weak_zero_batch",
                     "zero_batch_mixed_long",
-                    "zero_batch_latin_ambiguous_endpoint",
                 ),
                 default="default_abstain",
             )
@@ -1143,82 +1068,23 @@ def _name_tokens(name: str) -> tuple[str, ...]:
     return tuple(token.lower() for token in re.findall(r"[A-Za-z]+", name))
 
 
-def _pp_total_bucket(value: float) -> str:
-    buckets = (
-        (PP_VYS_TOTAL_BUCKET_ZERO_ONE_MAX, "0-1"),
-        (PP_VYS_TOTAL_BUCKET_TWO_MAX, "2"),
-        (PP_VYS_TOTAL_BUCKET_THREE_MAX, "3"),
-        (PP_VYS_TOTAL_BUCKET_FIVE_MAX, "4-5"),
-        (PP_VYS_TOTAL_BUCKET_TEN_MAX, "6-10"),
-    )
-    for upper_bound, label in buckets:
-        if value <= upper_bound:
-            return label
-    return "11+"
-
-
-def _pp_conf_bucket(value: float) -> str:
-    buckets = (
-        (PP_VYS_CONF_BUCKET_LOW_MAX, "<=0.50"),
-        (PP_VYS_CONF_BUCKET_MID_MAX, "0.50-0.70"),
-        (PP_VYS_HIGH_CONFIDENCE_MIN, "0.70-0.85"),
-    )
-    for upper_bound, label in buckets:
-        if value <= upper_bound:
-            return label
-    return "0.85-1.00"
-
-
-def _pp_ratio_bucket(value: float) -> str:
-    if math.isnan(value):
-        return "missing"
-    buckets = (
-        (PP_VYS_TINY_RATIO_MAX, "<=0.1"),
-        (PP_VYS_ALLOWED_RATIO_LOW_MAX, "0.1-1"),
-        (PP_VYS_MEDIUM_RATIO_MAX, "1-5"),
-        (PP_VYS_ALLOWED_RATIO_HIGH_MAX, "5-20"),
-        (PP_VYS_HIGH_RATIO_MAX, "20-100"),
-    )
-    for upper_bound, label in buckets:
-        if value <= upper_bound:
-            return label
-    return "100+"
-
-
 def _pp_abstain_predicates(row: Row) -> dict[str, bool]:
     pp_result_token_count = _required_float(row, "pp_result_token_count")
     batch_total_count = _required_float(row, "batch_total_count")
     selected_surname_frequency = _required_float(row, "selected_surname_frequency")
-    selected_over_alternate_ratio = _required_float(row, "selected_over_alternate_ratio")
     raw_tokens = _required_float(row, "raw_tokens")
-    jp_probability = _required_float(row, "jp_probability")
     has_cjk = _required_bool(row, "has_cjk")
     has_latin = _required_bool(row, "has_latin")
     cjk_has_space = _required_bool(row, "cjk_has_space")
-    compact_cjk = _optional_string(row, "compact_cjk")
     selected_format = _required_string(row, "selected_format", allowed=FORMAT_VALUES)
 
     surname_first_two_token = pp_result_token_count == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT and selected_format == "surname_first"
     weak_zero_batch = batch_total_count == 0 and selected_surname_frequency < PP_ABSTAIN_WEAK_SURNAME_FREQUENCY_MAX
     zero_batch_mixed_long = batch_total_count == 0 and has_cjk and has_latin and raw_tokens >= PP_ABSTAIN_MIXED_LONG_RAW_TOKEN_MIN
-    zero_batch_latin_ambiguous_endpoint = (
-        batch_total_count == 0
-        and not has_cjk
-        and has_latin
-        and 0 < selected_over_alternate_ratio <= PP_ABSTAIN_LATIN_AMBIGUOUS_RATIO_MAX
-    )
     spaced_cjk_zero_batch_surname_first = (
         surname_first_two_token and batch_total_count == 0 and has_cjk and not has_latin and cjk_has_space
     )
-    jp_likelihood_060 = surname_first_two_token and compact_cjk != "" and jp_probability >= PP_ABSTAIN_JP_PROBABILITY_MIN
-    accept_surname_first = (
-        surname_first_two_token
-        and not weak_zero_batch
-        and not zero_batch_mixed_long
-        and not zero_batch_latin_ambiguous_endpoint
-        and not spaced_cjk_zero_batch_surname_first
-        and not jp_likelihood_060
-    )
+    accept_surname_first = surname_first_two_token and not zero_batch_mixed_long and not spaced_cjk_zero_batch_surname_first
     clean_bilingual_given_first = (
         pp_result_token_count == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
         and selected_format == "given_first"
@@ -1231,9 +1097,7 @@ def _pp_abstain_predicates(row: Row) -> dict[str, bool]:
         "surname_first_two_token": surname_first_two_token,
         "weak_zero_batch": weak_zero_batch,
         "zero_batch_mixed_long": zero_batch_mixed_long,
-        "zero_batch_latin_ambiguous_endpoint": zero_batch_latin_ambiguous_endpoint,
         "spaced_cjk_zero_batch_surname_first": spaced_cjk_zero_batch_surname_first,
-        "jp_likelihood_060": jp_likelihood_060,
         "accept_surname_first": accept_surname_first,
         "clean_bilingual_given_first": clean_bilingual_given_first,
     }

@@ -49,7 +49,7 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
     the router's route equals the labeled route's string (`pp_result` for label
     `pp`, `vys_result` for label `vys`). When PP and VYS emit the identical
     string the route is cosmetic, so either route scores as a match; label-level
-    scoring would count 52 such rows as errors (830/969 label-level vs 882/969
+    scoring would count 52 such rows as errors (825/969 label-level vs 877/969
     output-level on this fixture).
     """
     rows = _load_jsonl(DATA_DIR / "pp_vys_abstain_labels.jsonl")
@@ -57,23 +57,21 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
 
     decisive = [row for row in routed if row["decision"] in {"pp", "vys"}]
     confusion = Counter(
-        (str(row["decision"]), "match" if _emitted_string(row) == _labeled_string(row) else "mismatch")
-        for row in decisive
+        (str(row["decision"]), "match" if _emitted_string(row) == _labeled_string(row) else "mismatch") for row in decisive
     )
     reason_counts = Counter(row["router_reason"] for row in decisive)
 
     assert len(rows) == PP_VYS_FIXTURE_ROWS
     assert len(decisive) == PP_VYS_DECISIVE_ROWS
     assert confusion == {
-        ("pp", "match"): 411,
-        ("pp", "mismatch"): 63,
-        ("vys", "match"): 471,
-        ("vys", "mismatch"): 24,
+        ("pp", "match"): 407,
+        ("pp", "mismatch"): 67,
+        ("vys", "match"): 470,
+        ("vys", "mismatch"): 25,
     }
     assert {reason: count for reason, count in reason_counts.items() if reason.startswith("name_prior_")} == {
         "name_prior_cantonese_given_first": 6,
         "name_prior_korean_given_first_three_token": 33,
-        "name_prior_ouyang_surname_first": 1,
         "name_prior_repeated_tail_given_surname_first": 5,
     }
 
@@ -89,15 +87,15 @@ def test_pp_abstain_label_fixture_reproduces_current_validation_metrics():
     assert len(rows) == PP_ABSTAIN_FIXTURE_ROWS
     assert len(decisive) == PP_ABSTAIN_DECISIVE_ROWS
     assert confusion == {
-        ("abstain", "abstain"): 433,
-        ("abstain", "pp"): 5,
-        ("pp", "abstain"): 7,
-        ("pp", "pp"): 105,
+        ("abstain", "abstain"): 432,
+        ("abstain", "pp"): 6,
+        ("pp", "abstain"): 2,
+        ("pp", "pp"): 110,
     }
     assert reason_counts == {
         "default_abstain": 149,
         "spaced_cjk_zero_batch_surname_first": 5,
-        "weak_zero_batch": 211,
+        "weak_zero_batch": 205,
         "zero_batch_mixed_long": 75,
-        "surname_first_two_token": 110,
+        "surname_first_two_token": 116,
     }

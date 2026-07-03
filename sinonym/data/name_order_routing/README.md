@@ -58,15 +58,16 @@ produces, for three stacked reasons:
 3. The confidence convention changed from `format_pattern.confidence` to
    `decision_confidence` (production convention).
 
-Decisive-row label-level accuracy on the pp-vys fixture is 830/969 (85.7%)
-under fresh v0.3.0 evidence, versus 876/969 (90.4%) asserted against the
-stale June evidence — the old number measured the router against inputs
-production could no longer generate. At the emitted-string level (see
-Semantics) the fresh number is 882/969. On the pp-abstain fixture, decisive
-accuracy is 538/550 (97.8%) versus the frozen June 540/550 (98.2%); the -2
-is real parser drift (`batch_total_count` changed on 55 rows; `has_latin`,
-`selected_format`, and frequency fields on 7 han rows). The regression tests
-assert the fresh numbers.
+Under fresh v0.3.0 evidence the pre-pruning router scored 830/969 (85.7%)
+label-level on the pp-vys fixture, versus 876/969 (90.4%) asserted against
+the stale June evidence — the old number measured the router against inputs
+production could no longer generate. The regression tests assert the fresh
+numbers for the current (pruned) router: 877/969 at the emitted-string level
+(see Semantics; 825/969 label-level) on pp-vys, and 542/550 on pp-abstain
+(the frozen June fixture scored 540/550 under the pre-pruning rules; -2 of
+the drift is real parser drift — `batch_total_count` changed on 55 rows;
+`has_latin`, `selected_format`, and frequency fields on 7 han rows — and
+rule pruning recovered +4).
 
 ## Semantics
 

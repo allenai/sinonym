@@ -552,26 +552,26 @@ def test_pp_abstain_rule_accepts_numpy_bool_scalars():
 def test_pp_abstain_rule_defaults_to_input_order_for_weak_or_ambiguous_zero_batch():
     routed = route_pp_abstain_rows(
         [
-            _pp_abstain_row(batch_total_count=0, selected_surname_frequency=499),
+            _pp_abstain_row(selected_format="given_first", batch_total_count=0, selected_surname_frequency=499),
             _pp_abstain_row(batch_total_count=0, has_cjk=True, has_latin=True, raw_tokens=3),
-            _pp_abstain_row(
-                batch_total_count=0,
-                has_cjk=False,
-                has_latin=True,
-                selected_over_alternate_ratio=10,
-            ),
         ],
     )
 
-    assert [row["router_prediction"] for row in routed] == ["abstain", "abstain", "abstain"]
+    assert [row["router_prediction"] for row in routed] == ["abstain", "abstain"]
     assert [row["router_reason"] for row in routed] == [
         "weak_zero_batch",
         "zero_batch_mixed_long",
-        "zero_batch_latin_ambiguous_endpoint",
     ]
 
 
-def test_pp_abstain_rule_applies_spaced_cjk_and_jp_likelihood_guards():
+def test_pp_abstain_rule_accepts_surname_first_despite_weak_zero_batch():
+    routed = route_pp_abstain_rows([_pp_abstain_row(batch_total_count=0, selected_surname_frequency=499)])
+
+    assert routed[0]["router_prediction"] == "pp"
+    assert routed[0]["router_reason"] == "surname_first_two_token"
+
+
+def test_pp_abstain_rule_applies_spaced_cjk_guard():
     routed = route_pp_abstain_rows(
         [
             _pp_abstain_row(
@@ -581,18 +581,11 @@ def test_pp_abstain_rule_applies_spaced_cjk_and_jp_likelihood_guards():
                 has_latin=False,
                 cjk_has_space=True,
             ),
-            _pp_abstain_row(
-                compact_cjk="原田泰夫",
-                jp_probability=0.60,
-            ),
         ],
     )
 
-    assert [row["router_prediction"] for row in routed] == ["abstain", "abstain"]
-    assert [row["router_reason"] for row in routed] == [
-        "spaced_cjk_zero_batch_surname_first",
-        "jp_likelihood_060",
-    ]
+    assert routed[0]["router_prediction"] == "abstain"
+    assert routed[0]["router_reason"] == "spaced_cjk_zero_batch_surname_first"
 
 
 def test_pp_abstain_rule_rejects_malformed_feature_values():
@@ -730,24 +723,6 @@ def test_pp_vys_builder_accepts_mixed_format_for_not_person(detector):
     assert routed[0]["router_prediction"] == "not_person"
 
 
-def test_pp_vys_abstain_rule_applies_effective_plus_vys_override():
-    routed = route_pp_vys_abstain_rows(
-        [
-            _pp_vys_row(
-                old_prediction="pp",
-                new_prediction="abstain",
-                pp_selected_format="surname_first",
-                vys_selected_format="given_first",
-                pp_batch_total_count=2,
-                pp_selected_surname_frequency_ratio=0.5,
-            ),
-        ],
-    )
-
-    assert routed[0]["router_prediction"] == "vys"
-    assert routed[0]["router_reason"] == "pp_abstain_two_vote_small_ratio_vys"
-
-
 def test_pp_vys_abstain_rule_applies_effective_plus_pp_overrides():
     routed = route_pp_vys_abstain_rows(
         [
@@ -764,38 +739,13 @@ def test_pp_vys_abstain_rule_applies_effective_plus_pp_overrides():
                 new_reason="strong_vys_batch_context",
                 pp_batch_total_count=6,
             ),
-            _pp_vys_row(
-                old_prediction="vys",
-                new_prediction="vys",
-                new_reason="strong_vys_batch_context",
-                pp_batch_total_count=7,
-                pp_selected_surname_frequency_ratio=3,
-            ),
-            _pp_vys_row(
-                old_prediction="vys",
-                new_prediction="vys",
-                new_reason="strong_vys_batch_context",
-                pp_batch_total_count=3,
-                pp_selected_surname_frequency_ratio=8,
-            ),
-            _pp_vys_row(
-                old_prediction="vys",
-                new_prediction="pp",
-                new_reason="endpoint_frequency_strongly_favors_pp",
-                pp_batch_total_count=1,
-                pp_batch_confidence=0.5,
-                pp_selected_surname_frequency_ratio=101,
-            ),
         ],
     )
 
-    assert [row["router_prediction"] for row in routed] == ["pp", "pp", "pp", "pp", "pp"]
+    assert [row["router_prediction"] for row in routed] == ["pp", "pp"]
     assert [row["router_reason"] for row in routed] == [
         "endpoint_pp_high_conf_two_vote",
         "larger_pp_paper_overrides_vys_batch",
-        "strong_vys_large_pp_count_ratio_looks_pp",
-        "strong_vys_three_vote_mid_ratio_pp",
-        "endpoint_pp_low_count_low_conf_very_high_ratio",
     ]
 
 
@@ -807,14 +757,6 @@ def test_pp_vys_abstain_rule_applies_promoted_name_priors():
                 old_prediction="vys",
                 new_prediction="vys",
                 new_reason="strong_vys_batch_context",
-                pp_selected_format="surname_first",
-                vys_selected_format="given_first",
-            ),
-            _pp_vys_row(
-                name="Ouyang Yu",
-                old_prediction="vys",
-                new_prediction="vys",
-                new_reason="weak_or_conflicting_evidence",
                 pp_selected_format="surname_first",
                 vys_selected_format="given_first",
             ),
@@ -831,10 +773,9 @@ def test_pp_vys_abstain_rule_applies_promoted_name_priors():
         ],
     )
 
-    assert [row["router_prediction"] for row in routed] == ["pp", "pp", "vys", "vys"]
+    assert [row["router_prediction"] for row in routed] == ["pp", "vys", "vys"]
     assert [row["router_reason"] for row in routed] == [
         "name_prior_repeated_tail_given_surname_first",
-        "name_prior_ouyang_surname_first",
         "name_prior_korean_given_first_three_token",
         "name_prior_cantonese_given_first",
     ]
