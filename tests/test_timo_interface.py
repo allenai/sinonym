@@ -221,3 +221,126 @@ def test_analyze_name_batch_handles_detector_fallback_evidence(predictor: Predic
 
     assert len(result.name_order_evidence) == 1
     assert result.name_order_evidence[0].script_representation == ScriptRepresentationValue.UNKNOWN
+
+
+def test_route_pp_vys_requires_paper_authors_first(predictor: Predictor):
+    # paper authors not the leading slice of the pool -> raise
+    with pytest.raises(ValueError, match="must start with the paper"):
+        predictor.route_pp_vys(["Yue Lin", "Wei Wang"], ["Wei Wang", "Yue Lin", "Tao Sun"])
+
+
+def test_route_pp_vys_empty(predictor: Predictor):
+    assert predictor.route_pp_vys([], []) == []
+
+
+def test_route_pp_vys_matches_manual_pp_then_vys_then_router(predictor: Predictor):
+    """Documents the underlying flow: run PP batch, run VYS batch, feed BOTH to the router.
+
+    `route_pp_vys` is a thin wrapper over exactly these steps; this test rebuilds them by hand
+    and asserts the routed answers match.
+    """
+    from sinonym.coretypes import BatchParseResult
+    from sinonym.detector import ChineseNameDetector
+    from sinonym.pipeline.name_order_routing import (
+        build_pp_vys_abstain_rows,
+        route_pp_vys_abstain_rows,
+    )
+
+    pp_names = ["Yue Lin", "Wei Wang", "Chuang Yang"]
+    # paper authors first, then the other venue authors
+    vys_pool = ["Yue Lin", "Wei Wang", "Chuang Yang", "Jun Zhao", "Hui Li", "Tao Sun", "Min Guo"]
+    n = len(pp_names)
+
+    detector = ChineseNameDetector()
+    # 1) PP batch: the paper's authors, parsed jointly
+    pp_batch = detector.analyze_name_batch(pp_names)
+    # 2) VYS batch: the venue-source-year pool, parsed jointly, then aligned to the paper's authors
+    pool = detector.analyze_name_batch(vys_pool)
+    vys_batch = BatchParseResult(
+        names=list(pp_names),
+        results=list(pool.results[:n]),
+        format_pattern=pool.format_pattern,
+        individual_analyses=[],
+        improvements=set(),
+        name_order_evidence=list(pool.name_order_evidence[:n]),
+    )
+    # 3) feed both batch results to the router
+    routed_rows = route_pp_vys_abstain_rows(build_pp_vys_abstain_rows(pp_batch, vys_batch))
+
+    def manual_surname(i):
+        pred = routed_rows[i]["router_prediction"]
+        ioc = routed_rows[i].get("input_order_candidate", "unknown")
+        if pred == "pp":
+            res = pp_batch.results[i]
+        elif pred == "vys":
+            res = vys_batch.results[i]
+        elif pred == "abstain":
+            res = vys_batch.results[i] if ioc == "vys" else pp_batch.results[i]
+        else:
+            return None
+        return res.parsed.surname if (res.success and res.parsed) else None
+
+    # the wrapper endpoint reproduces the manual PP->VYS->router result
+    endpoint = predictor.route_pp_vys(pp_names, vys_pool)
+    assert [manual_surname(i) for i in range(len(pp_names))] == [r.surname for r in endpoint]
+    assert [routed_rows[i]["router_prediction"] for i in range(len(pp_names))] == [
+        r.router_prediction for r in endpoint
+    ]
+
+
+# Fixed-scenario regression: exact routed values for v0.2.9 (batch-composition dependent).
+ROUTE_SCENARIO_PP = ["Yue Lin", "Wei Wang", "Chuang Yang"]
+ROUTE_SCENARIO_POOL = ["Yue Lin", "Wei Wang", "Chuang Yang", "Jun Zhao", "Hui Li", "Tao Sun", "Min Guo"]
+
+
+def test_route_pp_vys_exact_values(predictor: Predictor):
+    out = predictor.route_pp_vys(ROUTE_SCENARIO_PP, ROUTE_SCENARIO_POOL)
+    got = [(r.router_prediction.value, r.given_name, r.surname) for r in out]
+    assert got == [
+        ("pp", "Lin", "Yue"),
+        ("vys", "Wei", "Wang"),
+        ("vys", "Chuang", "Yang"),
+    ]
+    # candidate parses carried through exactly
+    assert (out[1].pp.given_name, out[1].pp.surname) == ("Wang", "Wei")   # PP (paper-batch) reading
+    assert (out[1].vys.given_name, out[1].vys.surname) == ("Wei", "Wang")  # VYS (venue-pool) reading
+
+
+def test_route_pp_exact_values(predictor: Predictor):
+    out = predictor.route_pp(ROUTE_SCENARIO_PP)
+    got = [(r.router_prediction.value, r.given_name, r.surname) for r in out]
+    # NB: differs from route_pp_vys on "Wei Wang" — PP-only keeps the PP-batch reading
+    # (given=Wang/surname=Wei) whereas route_pp_vys routed it to VYS (given=Wei/surname=Wang).
+    assert got == [
+        ("pp", "Lin", "Yue"),
+        ("pp", "Wang", "Wei"),
+        ("pp", "Yang", "Chuang"),
+    ]
+    assert predictor.route_pp([]) == []
+
+
+
+
+
+def test_route_unified_falls_back_to_pp_when_no_pool(predictor: Predictor):
+    from sinonym.timo.interface import RoutedPrediction
+
+    pp_names = ["Yue Lin", "Wei Wang", "Chuang Yang"]
+    pool = ["Yue Lin", "Wei Wang", "Chuang Yang", "Jun Zhao", "Hui Li", "Tao Sun", "Min Guo"]
+
+    # no pool (None or []) -> PP-only fallback: vys/input_order_candidate are None, matches route_pp
+    for empty in (None, []):
+        out = predictor.route(pp_names, empty)
+        assert all(isinstance(r, RoutedPrediction) for r in out)
+        assert all(r.vys is None and r.input_order_candidate is None for r in out)
+        assert all(r.router_prediction in {"pp", "abstain", "not_person"} for r in out)
+        pp_only = predictor.route_pp(pp_names)
+        assert [(r.given_name, r.surname) for r in out] == [(r.given_name, r.surname) for r in pp_only]
+
+    # with pool -> delegates to route_pp_vys (vys candidate present)
+    out = predictor.route(pp_names, pool)
+    assert [(r.given_name, r.surname) for r in out] == [
+        (r.given_name, r.surname) for r in predictor.route_pp_vys(pp_names, pool)
+    ]
+    assert all(r.vys is not None for r in out)
+    assert isinstance(out[0].dict(), dict)

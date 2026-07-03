@@ -161,6 +161,60 @@ class BatchSummary(TimoModel):
     confidences: list[float] = Field(description="per-name confidence from individual_analyses, aligned with results")
 
 
+class RoutingDecisionValue(str, Enum):
+    """Serialized pp-vys-abstain router decision."""
+
+    PP = "pp"
+    VYS = "vys"
+    ABSTAIN = "abstain"
+    NOT_PERSON = "not_person"
+
+
+class InputOrderCandidateValue(str, Enum):
+    """Which batch (pp/vys) preserves the input/given-first order; unknown if neither uniquely does."""
+
+    PP = "pp"
+    VYS = "vys"
+    UNKNOWN = "unknown"
+
+
+class RoutedPrediction(TimoModel):
+    """PP-vs-VYS routed result for one author, plus everything needed to inspect/re-run the router.
+
+    `given_name`/`surname`/`middle_name`/`success` are the FINAL routed answer: the PP parse
+    when `router_prediction=='pp'`, the VYS parse when `'vys'`, the input-order side
+    (`input_order_candidate`) when `'abstain'`, and empty when `'not_person'`.
+    """
+
+    success: bool = Field(description="Whether the routed answer is a recognized Chinese person")
+    given_name: str | None = Field(default=None)
+    surname: str | None = Field(default=None)
+    middle_name: str | None = Field(default=None)
+    router_prediction: RoutingDecisionValue = Field(description="pp / vys / abstain / not_person")
+    router_reason: str = Field(description="rule that produced router_prediction")
+    input_order_candidate: InputOrderCandidateValue | None = Field(
+        default=None, description="pp/vys/unknown; abstain resolves to this side. None in PP-only mode."
+    )
+    pp: Prediction = Field(description="the paper-batch (PP) parse for this author")
+    vys: Prediction | None = Field(default=None, description="the VYS parse; None in PP-only mode (no venue pool)")
+
+
+class PPRoutedPrediction(TimoModel):
+    """PP-only (pp-abstain) routed result for one author.
+
+    `given_name`/`surname`/`middle_name`/`success` are the FINAL routed answer: the PP parse when
+    `router_prediction=='pp'`, the input-order parse when `'abstain'`, empty when `'not_person'`.
+    """
+
+    success: bool = Field(description="Whether the routed answer is a recognized Chinese person")
+    given_name: str | None = Field(default=None)
+    surname: str | None = Field(default=None)
+    middle_name: str | None = Field(default=None)
+    router_prediction: RoutingDecisionValue = Field(description="pp / abstain (pp-abstain router never emits vys or not_person)")
+    router_reason: str = Field(description="rule that produced router_prediction")
+    pp: Prediction = Field(description="the paper-batch (PP) parse for this author")
+
+
 class PredictorConfig(BaseSettings):
     pass
 
@@ -345,3 +399,184 @@ class Predictor:
         """analyze_name_batch trimmed to names, results, format_pattern, per-name confidence."""
         batch_result = self._detector.analyze_name_batch(names, **self._batch_kwargs(format_threshold, minimum_batch_size))
         return self._to_batch_summary(batch_result)
+
+    # ---- pp-vys routing ---------------------------------------------------
+
+    def route_pp_vys(
+        self,
+        pp_names: list[str],
+        vys_pool_names: list[str],
+    ) -> list[RoutedPrediction]:
+        """Run the pp-vys-abstain router for one paper's authors.
+
+        - `pp_names`: the paper's author names (the PP batch); output is aligned to this order.
+        - `vys_pool_names`: the venue-source-year author pool (the VYS batch), with **the paper's
+          own authors as the FIRST `len(pp_names)` entries** (same strings, same order as
+          `pp_names`), followed by the other venue authors. Validated:
+          `vys_pool_names[:len(pp_names)] == pp_names`, else ValueError.
+
+        The full pool sets the VYS batch order-vote (parsing is order-independent, so only the
+        set of names matters); the paper's authors are the leading slice, so their VYS parses are
+        `vys_pool_names[:len(pp_names)]`. Returns one RoutedPrediction per pp author: the FINAL
+        routed parse plus the PP and VYS candidate parses and the router
+        decision/reason/input_order_candidate. Routing emits the PP parse for `pp`, the VYS parse
+        for `vys`, the `input_order_candidate` side for `abstain`, nothing for `not_person`.
+
+        Example — build `vys_pool_names` as the paper's authors FIRST, then the *other* venue
+        authors (do NOT re-include the paper's authors again; that would double-count them in the
+        vote):
+
+            pp_names = ["Yue Lin", "Wei Wang"]                 # this paper's 2 authors
+            other_venue_authors = ["Jun Zhao", "Hui Li", ...]  # rest of the venue-source-year pool
+            vys_pool_names = pp_names + other_venue_authors     # paper authors first
+            predictor.route_pp_vys(pp_names, vys_pool_names)
+
+        Returns 2 RoutedPredictions (one per pp author), aligned to `pp_names`.
+        """
+        from sinonym.coretypes import BatchParseResult
+        from sinonym.pipeline.name_order_routing import route_pp_vys_abstain_batches
+
+        n = len(pp_names)
+        if len(vys_pool_names) < n:
+            message = (
+                f"vys_pool_names (len {len(vys_pool_names)}) must contain at least the paper's "
+                f"{n} authors — the paper is a subset of the venue pool"
+            )
+            raise ValueError(message)
+        if list(vys_pool_names[:n]) != list(pp_names):
+            message = "vys_pool_names must start with the paper's authors: vys_pool_names[:len(pp_names)] == pp_names"
+            raise ValueError(message)
+        if not pp_names:
+            return []
+
+        pp_batch = self._detector.analyze_name_batch(pp_names)
+        pool = self._detector.analyze_name_batch(vys_pool_names)
+        # The paper's authors are the leading slice of the pool (pool.names[:n] == pp_names, checked
+        # above), so take the VYS batch context straight from the pool's own leading slice.
+        vys_batch = BatchParseResult(
+            names=list(pool.names[:n]),
+            results=list(pool.results[:n]),
+            format_pattern=pool.format_pattern,
+            individual_analyses=list(pool.individual_analyses[:n]),
+            improvements=[i for i in pool.improvements if i < n],
+            name_order_evidence=list(pool.name_order_evidence[:n]),
+        )
+        rows = route_pp_vys_abstain_batches(pp_batch, vys_batch)
+
+        pp_fp = self._to_format_pattern(pp_batch.format_pattern)
+        vys_fp = self._to_format_pattern(vys_batch.format_pattern)
+        out: list[RoutedPrediction] = []
+        for i, row in enumerate(rows):
+            pred = row["router_prediction"]
+            ioc = row.get("input_order_candidate", "unknown")
+            pp_res = pp_batch.results[i]
+            vys_res = vys_batch.results[i]
+            if pred == "pp":
+                chosen = pp_res
+            elif pred == "vys":
+                chosen = vys_res
+            elif pred == "abstain":
+                # abstain always carries input_order_candidate "pp" or "vys" (never "unknown");
+                # emit that (given-first) side, and fail loudly if the invariant ever breaks.
+                chosen = {"pp": pp_res, "vys": vys_res}.get(ioc)
+                if chosen is None:
+                    message = f"abstain with unexpected input_order_candidate={ioc!r} (expected 'pp'/'vys')"
+                    raise ValueError(message)
+            elif pred == "not_person":
+                chosen = None
+            else:
+                message = f"pp-vys router returned unexpected router_prediction={pred!r}"
+                raise ValueError(message)
+            parsed = chosen.parsed if (chosen is not None and chosen.success) else None
+            out.append(
+                RoutedPrediction(
+                    success=bool(chosen is not None and chosen.success),
+                    given_name=parsed.given_name if parsed else None,
+                    surname=parsed.surname if parsed else None,
+                    middle_name=(parsed.middle_name if parsed and parsed.middle_name else None),
+                    router_prediction=pred,
+                    router_reason=row.get("router_reason", ""),
+                    input_order_candidate=ioc,
+                    pp=self._to_prediction(pp_res, format_pattern=pp_fp.copy(deep=True)),
+                    vys=self._to_prediction(vys_res, format_pattern=vys_fp.copy(deep=True)),
+                )
+            )
+        return out
+
+    def route_pp(self, names: list[str]) -> list[PPRoutedPrediction]:
+        """PP-only (pp-abstain) router — for when there is no VYS venue pool.
+
+        Runs a single PP batch and applies the self-contained pp-abstain router, which decides
+        per author between `pp` (trust the PP-batch reorder), `abstain` (keep the input-order
+        parse), and `not_person`. Returns one PPRoutedPrediction per name (aligned to `names`):
+        the final routed parse + decision/reason + the PP candidate parse.
+        """
+        from sinonym.pipeline.name_order_routing import (
+            build_pp_abstain_rows,
+            route_pp_abstain_rows,
+        )
+
+        if not names:
+            return []
+
+        pp_batch = self._detector.analyze_name_batch(names)
+        rows = route_pp_abstain_rows(build_pp_abstain_rows(pp_batch, self._detector))
+        pp_fp = self._to_format_pattern(pp_batch.format_pattern)
+
+        out: list[PPRoutedPrediction] = []
+        for i, row in enumerate(rows):
+            pred = row["router_prediction"]
+            res = pp_batch.results[i]
+            if pred == "pp":
+                parsed = res.parsed if res.success else None
+            elif pred == "abstain":
+                parsed = res.parsed_original_order if res.success else None
+            elif pred == "not_person":  # valid Route value; emit nothing (pp-abstain router doesn't produce it today)
+                parsed = None
+            else:
+                message = f"pp-abstain router returned unexpected router_prediction={pred!r}"
+                raise ValueError(message)
+            out.append(
+                PPRoutedPrediction(
+                    success=bool(parsed is not None),
+                    given_name=parsed.given_name if parsed else None,
+                    surname=parsed.surname if parsed else None,
+                    middle_name=(parsed.middle_name if parsed and parsed.middle_name else None),
+                    router_prediction=pred,
+                    router_reason=row.get("router_reason", ""),
+                    pp=self._to_prediction(res, format_pattern=pp_fp.copy(deep=True)),
+                )
+            )
+        return out
+
+    def route(
+        self,
+        pp_names: list[str],
+        vys_pool_names: list[str] | None = None,
+    ) -> list[RoutedPrediction]:
+        """Unified router: use PP+VYS routing when a venue pool is given, else PP-only fallback.
+
+        - If `vys_pool_names` is falsy (None or empty), routes PP-only via the pp-abstain router
+          (`route_pp`); returned `RoutedPrediction`s have `vys=None` and `input_order_candidate=None`.
+        - Otherwise routes PP-vs-VYS via `route_pp_vys` (paper authors must be the leading slice of
+          `vys_pool_names`; see that method).
+
+        Always returns `list[RoutedPrediction]` (one per pp author, aligned to `pp_names`), so callers
+        get a single response shape whether or not venue context is available.
+        """
+        if vys_pool_names:
+            return self.route_pp_vys(pp_names, vys_pool_names)
+        return [
+            RoutedPrediction(
+                success=r.success,
+                given_name=r.given_name,
+                surname=r.surname,
+                middle_name=r.middle_name,
+                router_prediction=r.router_prediction,
+                router_reason=r.router_reason,
+                input_order_candidate=None,
+                pp=r.pp,
+                vys=None,
+            )
+            for r in self.route_pp(pp_names)
+        ]
