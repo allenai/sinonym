@@ -12,7 +12,7 @@ model_variants:
     docker_run_commands: []
   sinonym_routing_v1:
     instance: sinonym.timo.interface.RoutingInstance
-    prediction: sinonym.timo.interface.RoutedPrediction
+    prediction: sinonym.timo.interface.RoutedPaperPrediction
     predictor: sinonym.timo.interface.RoutingPredictor
     predictor_config: sinonym.timo.interface.PredictorConfig
     artifacts_s3_path: null

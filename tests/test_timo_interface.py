@@ -9,6 +9,9 @@ from sinonym.timo.interface import (
     Prediction,
     Predictor,
     PredictorConfig,
+    RoutedPaperPrediction,
+    RoutingInstance,
+    RoutingPredictor,
     ScriptRepresentationValue,
 )
 
@@ -393,3 +396,24 @@ def test_route_unified_falls_back_to_pp_when_no_pool(predictor: Predictor):
     ]
     assert all(r.vys is not None for r in out)
     assert isinstance(out[0].dict(), dict)
+
+
+# --- RoutingPredictor: timo 1:1 instance->prediction contract ----------------
+
+def test_routing_predictor_one_prediction_per_instance():
+    rp = RoutingPredictor(config=PredictorConfig(), artifacts_dir=".")
+    instances = [
+        RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Yue Lin", "Wei Wang", "Jun Zhao"]),
+        RoutingInstance(pp_names=["Zhang San"]),  # PP-only
+        RoutingInstance(pp_names=[]),              # empty paper must still emit one prediction
+    ]
+    results = rp.predict_batch(instances)
+
+    # the guard timo's InferenceServerContainer asserts: len(predictions) == len(instances)
+    assert len(results) == len(instances)
+    assert all(isinstance(p, RoutedPaperPrediction) for p in results)
+    assert [len(p.authors) for p in results] == [2, 1, 0]
+
+    # timo reconstructs each prediction via prediction_class(**raw_pred); round-trip must hold
+    rebuilt = [RoutedPaperPrediction(**p.dict()) for p in results]
+    assert rebuilt == results

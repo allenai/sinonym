@@ -219,8 +219,8 @@ class RoutingInstance(TimoModel):
     """One paper's authors for the routing-served variant (`RoutingPredictor.predict_batch`).
 
     Self-contained per instance (the timo runner feeds one Instance at a time), so each carries
-    its own venue pool. `predict_batch([paper])` returns `len(pp_names)` RoutedPredictions in
-    `pp_names` order.
+    its own venue pool. One `RoutingInstance` maps to exactly one `RoutedPaperPrediction`, whose
+    `authors` list holds `len(pp_names)` routed authors in `pp_names` order.
     """
 
     pp_names: list[str] = Field(description="the paper's author names (PP batch); output aligns to this order")
@@ -231,6 +231,20 @@ class RoutingInstance(TimoModel):
             "entries (same strings/order as pp_names), then the other venue authors. None/empty => "
             "PP-only routing fallback."
         ),
+    )
+
+
+class RoutedPaperPrediction(TimoModel):
+    """One paper's routed result — the timo `Prediction` for the `sinonym_routing_v1` variant.
+
+    Keeps the timo contract 1:1 (one Prediction per `RoutingInstance`) while carrying the paper's
+    per-author routed results in `authors` (aligned to `pp_names`). A paper with no authors yields
+    `authors=[]`, so instances never silently vanish from the output stream.
+    """
+
+    authors: list[RoutedPrediction] = Field(
+        default_factory=list,
+        description="per-author routed results, aligned to the instance's pp_names",
     )
 
 
@@ -611,15 +625,15 @@ class Predictor:
 
 
 class RoutingPredictor(Predictor):
-    """timo-served routing variant: Instance = one paper, Prediction = per-author RoutedPrediction.
+    """timo-served routing variant: one RoutingInstance (paper) -> one RoutedPaperPrediction.
 
-    Wraps `Predictor.route`. Each RoutingInstance yields `len(pp_names)` RoutedPredictions (in
-    pp_names order); the timo runner writes each on its own line, so paper boundaries are the
-    order in which authors are emitted (one instance's authors are contiguous).
+    Wraps `Predictor.route`. Stays 1:1 with the timo instance/prediction contract — the paper's
+    per-author routed results are nested in `RoutedPaperPrediction.authors` (aligned to pp_names),
+    so paper boundaries are explicit and empty papers still emit one prediction.
     """
 
-    def predict_batch(self, instances: list[RoutingInstance]) -> list[RoutedPrediction]:  # type: ignore[override]
-        out: list[RoutedPrediction] = []
-        for inst in instances:
-            out.extend(self.route(inst.pp_names, inst.vys_pool_names))
-        return out
+    def predict_batch(self, instances: list[RoutingInstance]) -> list[RoutedPaperPrediction]:  # type: ignore[override]
+        return [
+            RoutedPaperPrediction(authors=self.route(inst.pp_names, inst.vys_pool_names))
+            for inst in instances
+        ]
