@@ -5,7 +5,7 @@ This module provides shared fixtures to optimize test performance by avoiding
 repeated expensive initialization of ChineseNameDetector instances.
 
 Also supports injecting candidate weight vectors via the optional
-environment variable `SINONYM_WEIGHTS` (JSON-encoded list of 8 floats), to
+environment variable `SINONYM_WEIGHTS` (JSON-encoded list of 10 floats), to
 enable automated optimization scripts to evaluate weight configurations.
 """
 
@@ -37,7 +37,7 @@ def detector():
     if raw:
         try:
             parsed = json.loads(raw)
-            if isinstance(parsed, list) and len(parsed) == 8:
+            if isinstance(parsed, list) and len(parsed) == 10:
                 weights = [float(x) for x in parsed]
         except Exception:
             weights = None

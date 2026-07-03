@@ -21,6 +21,21 @@ if TYPE_CHECKING:
 LOW_FREQUENCY_SURNAME_MAX = 500.0
 GIVEN_FIRST_SURNAME_FREQ_RATIO_MIN = 50.0
 GIVEN_FIRST_ORDER_PRESERVATION_BONUS = 4.0
+# Surname-position usage evidence for 1+1 parses: the hinge keeps mildly skewed
+# syllables neutral (only lopsided usage beyond this many log-units counts), the
+# clamp bounds the feature, and the evidence scale is the hinged margin at which
+# the ambiguous order-preservation prior is fully overridden.
+USAGE_EVIDENCE_HINGE = 2.25
+USAGE_EVIDENCE_CLAMP = 3.0
+ORDER_BONUS_EVIDENCE_SCALE = 1.25
+# Unattested-vs-attested ambiguity ceiling: an unattested token can plausibly tie
+# with a modest surname, but not with a dominant one (see _is_ambiguous_case and
+# the comparative-feature gating).
+UNATTESTED_AMBIGUITY_SURNAME_FREQ_MAX = 5000.0
+# Positional given-syllable feature for 3-token parses: the deadband keeps small
+# (noisy) unigram differences neutral and the cap bounds the feature magnitude.
+GIVEN_POSITION_DEADBAND = 1.0
+GIVEN_POSITION_MAGNITUDE_CAP = 1.5
 RARE_TRAILING_OVERLAPPING_SURNAME_MAX = 100.0
 CURATED_COMPOUND_TARGETS = frozenset(COMPOUND_VARIANTS.values()) | frozenset(
     variant for variant in COMPOUND_VARIANTS if " " in variant
@@ -43,11 +58,17 @@ class NameParsingService:
             self._normalizer = normalizer
             self._data = data
 
-        # Weight parameters - can be overridden
-        if weights and len(weights) == 8:
-            self._weights = weights
+        # Weight parameters - can be overridden. Legacy shorter vectors (e.g. from
+        # pickled configs or process-pool workers) get the default coefficients for
+        # the newer trailing features appended, keeping index order stable.
+        if weights and len(weights) in (8, 9, 10):
+            self._weights = list(weights)
+            if len(self._weights) == 8:
+                self._weights.append(0.06)
+            if len(self._weights) == 9:
+                self._weights.append(0.1)
         else:
-            # Default weights (8 features)
+            # Default weights (10 features)
             self._weights = [
                 0.465,  # surname_logp
                 0.395,  # given_logp_sum
@@ -57,6 +78,8 @@ class NameParsingService:
                 0.425,  # surname_first_bonus
                 -0.042,  # surname_freq_log_ratio (log-based comparative feature)
                 -0.573,  # surname_rank_difference (comparative feature)
+                0.06,  # given_position_logp (comparative positional given-syllable feature)
+                0.1,  # surname_usage_delta (surname-position usage evidence, 1+1 parses)
             ]
 
     def parse_name_order(
@@ -584,14 +607,7 @@ class NameParsingService:
         given_key_cache = score_cache.get("given_key") if score_cache else None
         ambiguous_cache = score_cache.get("ambiguous") if score_cache else None
 
-        surname_tuple = tuple(surname_tokens)
-        if surname_key_cache is not None:
-            surname_key = surname_key_cache.get(surname_tuple)
-            if surname_key is None:
-                surname_key = self._surname_key(surname_tokens, normalized_cache)
-                surname_key_cache[surname_tuple] = surname_key
-        else:
-            surname_key = self._surname_key(surname_tokens, normalized_cache)
+        surname_key = self._surname_key_cached(surname_tokens, normalized_cache, surname_key_cache)
 
         surname_logp = self._data.get_surname_logp(surname_key, self._config.default_surname_logp)
 
@@ -609,13 +625,7 @@ class NameParsingService:
         given_logp_sum = 0.0
         has_decomposed_given_pair = False
         for g_token in given_tokens:
-            if given_key_cache is not None:
-                given_key = given_key_cache.get(g_token)
-                if given_key is None:
-                    given_key = self._given_name_key(g_token, normalized_cache)
-                    given_key_cache[g_token] = given_key
-            else:
-                given_key = self._given_name_key(g_token, normalized_cache)
+            given_key = self._given_key_cached(g_token, normalized_cache, given_key_cache)
             if given_key in self._data.given_log_probabilities:
                 given_logp_sum += self._data.given_log_probabilities[given_key]
                 continue
@@ -651,6 +661,44 @@ class NameParsingService:
                 # This follows the traditional Chinese surname-first order
                 surname_first_bonus = 1.0  # Strong bonus for correct Chinese order
 
+        # Percentile rank-based scoring for surnames only
+        surname_rank_bonus = 0.0
+        if surname_tokens:
+            surname_rank_bonus = self._data.get_surname_rank(surname_key)
+
+        # Comparative features for 1+1 parses: my surname token vs the competing token
+        surname_freq_log_ratio = 0.0
+        surname_rank_difference = 0.0
+        surname_usage_delta = 0.0
+
+        if len(surname_tokens) == 1 and len(given_tokens) == 1:
+            given_as_surname_key = self._surname_key_cached(given_tokens, normalized_cache, surname_key_cache)
+
+            # SURNAME comparative features. When one side is unattested, the small
+            # default plus the negative weights manufacture a large bonus for the
+            # unattested side; grant that benefit of the doubt only against a
+            # modest surname, never against a dominant one.
+            my_surname_freq = self._data.get_surname_freq(surname_key)
+            alt_surname_freq = self._data.get_surname_freq(given_as_surname_key)
+            both_attested = my_surname_freq > 0 and alt_surname_freq > 0
+            if both_attested or max(my_surname_freq, alt_surname_freq) < UNATTESTED_AMBIGUITY_SURNAME_FREQ_MAX:
+                surname_freq_log_ratio = math.log(max(my_surname_freq, 0.001) / max(alt_surname_freq, 0.001))
+                # Reuse precomputed rank from the same scoring pass.
+                surname_rank_difference = surname_rank_bonus - self._data.get_surname_rank(given_as_surname_key)
+
+            # Surname-position usage evidence (antisymmetric between the two orders):
+            # positive when the corpus uses my surname token in surname position far
+            # more than the competing token, hinged so only lopsided usage counts.
+            usage = self._data.surname_usage_logodds
+            lo_surname = usage.get(self._normalizer.norm_light(surname_tokens[0]))
+            lo_given = usage.get(self._normalizer.norm_light(given_tokens[0]))
+            if lo_surname is not None and lo_given is not None:
+                usage_diff = lo_surname - lo_given
+                if usage_diff > USAGE_EVIDENCE_HINGE:
+                    surname_usage_delta = min(usage_diff - USAGE_EVIDENCE_HINGE, USAGE_EVIDENCE_CLAMP)
+                elif usage_diff < -USAGE_EVIDENCE_HINGE:
+                    surname_usage_delta = max(usage_diff + USAGE_EVIDENCE_HINGE, -USAGE_EVIDENCE_CLAMP)
+
         # Order preservation bonus for ambiguous romanized cases
         order_preservation_bonus = 0.0
         if not is_all_chinese and len(tokens) == 2 and len(surname_tokens) == 1 and len(given_tokens) == 1:
@@ -679,7 +727,12 @@ class NameParsingService:
                     is_ambiguous = self._is_ambiguous_case(surname_tokens[0], given_tokens[0], normalized_cache)
 
                 if is_ambiguous:
-                    order_preservation_bonus = 1.0  # Strong bonus for preserving original order in ambiguous cases
+                    # Order prior applies only where usage evidence does not already
+                    # decide the case; a lopsided usage margin overrides it.
+                    order_preservation_bonus = max(
+                        0.0,
+                        1.0 - abs(surname_usage_delta) / ORDER_BONUS_EVIDENCE_SCALE,
+                    )
                 elif allow_guarded_given_first_bonus and self._has_guarded_given_first_surname_ratio(
                     surname_tokens[0],
                     given_tokens[0],
@@ -727,37 +780,36 @@ class NameParsingService:
                 ):
                     order_preservation_bonus = max(order_preservation_bonus, 1.0)
 
-        # Percentile rank-based scoring for surnames only
-        surname_rank_bonus = 0.0
-        if surname_tokens:
-            surname_rank_bonus = self._data.get_surname_rank(surname_key)
-
-        # NEW: Comparative features - scaled and balanced approach
-        surname_freq_log_ratio = 0.0
-        surname_rank_difference = 0.0
-
-        if len(surname_tokens) == 1 and len(given_tokens) == 1:
-            # Get the alternative key
-            given_tuple = tuple(given_tokens)
-            if surname_key_cache is not None:
-                given_as_surname_key = surname_key_cache.get(given_tuple)
-                if given_as_surname_key is None:
-                    given_as_surname_key = self._surname_key(given_tokens, normalized_cache)
-                    surname_key_cache[given_tuple] = given_as_surname_key
-            else:
-                given_as_surname_key = self._surname_key(given_tokens, normalized_cache)
-
-            # SURNAME comparative features
-            # Calculate log frequency ratio to keep values in reasonable range
-            my_surname_freq = self._data.get_surname_freq(surname_key, 0.001)  # Small default
-            alt_surname_freq = self._data.get_surname_freq(given_as_surname_key, 0.001)
-            surname_freq_log_ratio = math.log(my_surname_freq / alt_surname_freq) if alt_surname_freq > 0 else 0.0
-
-            # Calculate rank difference: my_surname_rank - alternative_surname_rank
-            # Reuse precomputed rank from the same scoring pass.
-            my_surname_rank = surname_rank_bonus
-            alt_surname_rank = self._data.get_surname_rank(given_as_surname_key)
-            surname_rank_difference = my_surname_rank - alt_surname_rank
+        # Positional given-syllable evidence for 3-token single-surname parses.
+        # Given-name syllables are strongly position-skewed, which separates
+        # "Surname G1 G2" from "G1 G2 Surname". Comparative and antisymmetric:
+        # this parse's in-order given pair versus the opposite-end segmentation,
+        # with a deadband so small (noisy) unigram differences stay neutral.
+        # Keyed on surname position only, so permuted given-order variants of
+        # the same segmentation score identically.
+        given_position_logp = 0.0
+        if not is_all_chinese and len(tokens) == 3 and len(surname_tokens) == 1 and len(given_tokens) == 2:
+            surname_sign = 0.0
+            if surname_tokens[0] == tokens[0]:
+                surname_sign = 1.0
+            elif surname_tokens[0] == tokens[2]:
+                surname_sign = -1.0
+            if surname_sign != 0.0:
+                first_key = self._normalizer.norm_light(tokens[0])
+                middle_key = self._normalizer.norm_light(tokens[1])
+                last_key = self._normalizer.norm_light(tokens[2])
+                surname_first_delta = (
+                    self._data.get_given_initial_logp(middle_key)
+                    + self._data.get_given_final_logp(last_key)
+                    - self._data.get_given_initial_logp(first_key)
+                    - self._data.get_given_final_logp(middle_key)
+                )
+                magnitude = min(
+                    abs(surname_first_delta) - GIVEN_POSITION_DEADBAND,
+                    GIVEN_POSITION_MAGNITUDE_CAP,
+                )
+                if magnitude > 0.0:
+                    given_position_logp = surname_sign * math.copysign(magnitude, surname_first_delta)
 
         total_score = (
             surname_logp * self._weights[0]  # Surname frequency weight
@@ -768,6 +820,8 @@ class NameParsingService:
             + surname_first_bonus * self._weights[5]  # Surname first bonus weight
             + surname_freq_log_ratio * self._weights[6]  # Surname frequency log ratio weight
             + surname_rank_difference * self._weights[7]  # Surname rank difference weight
+            + given_position_logp * self._weights[8]  # Positional given-syllable weight
+            + surname_usage_delta * self._weights[9]  # Surname-position usage evidence weight
         )
 
         return total_score
@@ -831,9 +885,14 @@ class NameParsingService:
         if not (surname_is_surname and given_is_surname):
             return False  # Not ambiguous if one clearly can't be a surname
 
-        # Check if both can be given names
-        surname_is_given = self._data.is_given_name(surname_norm)
-        given_is_given = self._data.is_given_name(given_norm)
+        # Check if both can be given names (as-written form first: remapping can
+        # point a valid pinyin given name at a syllable outside the table)
+        surname_is_given = self._data.is_given_name(
+            self._normalizer.norm_light(surname_token),
+        ) or self._data.is_given_name(surname_norm)
+        given_is_given = self._data.is_given_name(
+            self._normalizer.norm_light(given_token),
+        ) or self._data.is_given_name(given_norm)
 
         if not (surname_is_given and given_is_given):
             return False  # Not ambiguous if one clearly can't be a given name
@@ -843,7 +902,9 @@ class NameParsingService:
         given_freq = self._data.get_surname_freq(given_norm)
 
         if surname_freq == 0 or given_freq == 0:
-            return True  # Preserve source order when frequency coverage is missing
+            # An unattested token can plausibly tie with a modest surname, but not
+            # with a dominant one: strong evidence on one side is not ambiguity.
+            return max(surname_freq, given_freq) < UNATTESTED_AMBIGUITY_SURNAME_FREQ_MAX
 
         freq_ratio = max(surname_freq, given_freq) / min(surname_freq, given_freq)
         return freq_ratio < 5.0  # Ambiguous if frequencies are within 5x of each other
@@ -880,6 +941,37 @@ class NameParsingService:
             target = self._data.compound_hyphen_map.get(token_key)
             return target in CURATED_COMPOUND_TARGETS
         return False
+
+    def _surname_key_cached(
+        self,
+        surname_tokens: list[str],
+        normalized_cache: dict[str, str],
+        cache: dict[tuple[str, ...], str] | None,
+    ) -> str:
+        """Surname lookup key with optional per-call memoization."""
+        if cache is None:
+            return self._surname_key(surname_tokens, normalized_cache)
+        surname_tuple = tuple(surname_tokens)
+        key = cache.get(surname_tuple)
+        if key is None:
+            key = self._surname_key(surname_tokens, normalized_cache)
+            cache[surname_tuple] = key
+        return key
+
+    def _given_key_cached(
+        self,
+        given_token: str,
+        normalized_cache: dict[str, str],
+        cache: dict[str, str] | None,
+    ) -> str:
+        """Given-name lookup key with optional per-call memoization."""
+        if cache is None:
+            return self._given_name_key(given_token, normalized_cache)
+        key = cache.get(given_token)
+        if key is None:
+            key = self._given_name_key(given_token, normalized_cache)
+            cache[given_token] = key
+        return key
 
     def _surname_key(self, surname_tokens: list[str], normalized_cache: dict[str, str]) -> str:
         """Convert surname tokens to lookup key, preferring Chinese characters when available."""

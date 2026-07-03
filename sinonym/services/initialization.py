@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import unicodedata
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
@@ -16,7 +17,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import CANTONESE_SURNAMES, COMPOUND_VARIANTS, PYPINYIN_FREQUENCY_ALIASES
-from sinonym.resources import open_csv_reader
+from sinonym.resources import open_csv_reader, read_text
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
@@ -43,6 +44,12 @@ class NameDataStructures:
     surname_log_probabilities: Mapping[str, float]
     given_log_probabilities: Mapping[str, float]
 
+    # Position-conditional given-syllable log probabilities (as-written romanization)
+    given_initial_log_probabilities: Mapping[str, float]
+    given_final_log_probabilities: Mapping[str, float]
+    given_initial_default_logp: float
+    given_final_default_logp: float
+
     # Pre-computed percentile ranks for ML features (0-1 scale)
     surname_percentile_ranks: Mapping[str, float]
 
@@ -51,6 +58,9 @@ class NameDataStructures:
     # Maps normalized compound surnames back to their original input format
     compound_original_format_map: Mapping[str, str]
 
+    # Per-syllable log-odds of surname-position usage in romanized author names
+    surname_usage_logodds: Mapping[str, float]
+
     def get_surname_logp(self, surname_key: str, default: float) -> float:
         """Get surname log probability with default fallback."""
         return self.surname_log_probabilities.get(surname_key, default)
@@ -58,6 +68,14 @@ class NameDataStructures:
     def get_given_logp(self, given_key: str, default: float) -> float:
         """Get given name log probability with default fallback."""
         return self.given_log_probabilities.get(given_key, default)
+
+    def get_given_initial_logp(self, given_key: str) -> float:
+        """Get log probability of a syllable in the first given-name position."""
+        return self.given_initial_log_probabilities.get(given_key, self.given_initial_default_logp)
+
+    def get_given_final_logp(self, given_key: str) -> float:
+        """Get log probability of a syllable in the second given-name position."""
+        return self.given_final_log_probabilities.get(given_key, self.given_final_default_logp)
 
     def get_surname_freq(self, surname_key: str, default: float = 0.0) -> float:
         """Get surname frequency with default fallback."""
@@ -121,6 +139,12 @@ class DataInitializationService:
 
         # Build given name data and plausible components
         given_names, given_log_probabilities, plausible_components = self._build_given_name_data()
+        (
+            given_initial_log_probabilities,
+            given_final_log_probabilities,
+            given_initial_default_logp,
+            given_final_default_logp,
+        ) = self._build_given_position_data()
         given_names_normalized = given_names  # Already normalized from pinyin data
 
         # Build compound surname mappings
@@ -137,6 +161,9 @@ class DataInitializationService:
         # Build pre-computed percentile ranks for ML features
         surname_percentile_ranks = self._build_percentile_ranks(surname_frequencies)
 
+        # Build romanized surname-position usage statistics
+        surname_usage_logodds = self._build_surname_usage_logodds()
+
         return NameDataStructures(
             surnames=surnames,
             surnames_normalized=surnames_normalized,
@@ -148,9 +175,14 @@ class DataInitializationService:
             surname_frequencies=MappingProxyType(dict(surname_frequencies)),
             surname_log_probabilities=MappingProxyType(dict(surname_log_probabilities)),
             given_log_probabilities=MappingProxyType(dict(given_log_probabilities)),
+            given_initial_log_probabilities=MappingProxyType(dict(given_initial_log_probabilities)),
+            given_final_log_probabilities=MappingProxyType(dict(given_final_log_probabilities)),
+            given_initial_default_logp=given_initial_default_logp,
+            given_final_default_logp=given_final_default_logp,
             surname_percentile_ranks=MappingProxyType(dict(surname_percentile_ranks)),
             compound_hyphen_map=MappingProxyType(dict(compound_hyphen_map)),
             compound_original_format_map=MappingProxyType(dict(compound_original_format_map)),
+            surname_usage_logodds=MappingProxyType(surname_usage_logodds),
         )
 
     def _is_plausible_chinese_syllable(self, component: str) -> bool:
@@ -292,6 +324,35 @@ class DataInitializationService:
 
         return frozenset(given_names), given_log_probabilities, plausible_components
 
+    def _build_given_position_data(self) -> tuple[dict[str, float], dict[str, float], float, float]:
+        """Build add-k smoothed positional log probabilities from given_position_acl.csv.
+
+        Keys are as-written romanized syllables (no Mandarin remapping), so
+        Cantonese/Wade-Giles forms keep their own positional statistics. Values
+        are centered on a uniform-over-vocabulary baseline: score deltas between
+        competing parses are unchanged, but typical parses stay level-neutral
+        relative to parse structures that do not receive the positional feature.
+        """
+        smoothing_k = 0.5
+        initial_counts: dict[str, int] = {}
+        final_counts: dict[str, int] = {}
+        for row in open_csv_reader("given_position_acl.csv"):
+            syllable = row["syllable"]
+            initial_counts[syllable] = int(row["initial_count"])
+            final_counts[syllable] = int(row["final_count"])
+
+        vocabulary_size = len(initial_counts) + 1  # reserve one slot for unseen syllables
+        uniform_baseline = math.log(1.0 / vocabulary_size)
+        initial_total = sum(initial_counts.values()) + smoothing_k * vocabulary_size
+        final_total = sum(final_counts.values()) + smoothing_k * vocabulary_size
+
+        initial_logp = {s: math.log((c + smoothing_k) / initial_total) - uniform_baseline for s, c in initial_counts.items()}
+        final_logp = {s: math.log((c + smoothing_k) / final_total) - uniform_baseline for s, c in final_counts.items()}
+        initial_default = math.log(smoothing_k / initial_total) - uniform_baseline
+        final_default = math.log(smoothing_k / final_total) - uniform_baseline
+
+        return initial_logp, final_logp, initial_default, final_default
+
     def _build_compound_hyphen_map(self, compound_surnames: frozenset[str]) -> dict[str, str]:
         """Build mapping for hyphenated compound surnames (stores lowercase keys only)."""
         compound_hyphen_map = {}
@@ -405,3 +466,35 @@ class DataInitializationService:
     def _build_percentile_ranks(self, surname_frequencies: dict[str, float]) -> dict[str, float]:
         """Build pre-computed percentile ranks for ML features (0-1 scale)."""
         return self._percentiles(surname_frequencies)
+
+    def _build_surname_usage_logodds(self, add_k: float = 2.0, min_total: int = 3) -> dict[str, float]:
+        """Mine per-syllable surname-position usage log-odds from ACL author names.
+
+        Assumes Western name order (given names first, surname last), which holds
+        for the large majority of entries. Add-k smoothing plus a minimum-count
+        gate keeps thin syllables neutral (absent from the map).
+        """
+        surname_counts: Counter[str] = Counter()
+        given_counts: Counter[str] = Counter()
+
+        for line in read_text("acl_2025_authors.txt").splitlines():
+            tokens = [t.lower().strip(".,'") for t in line.split()]
+            if not 2 <= len(tokens) <= 3:
+                continue
+            if not all(t.isalpha() or "-" in t for t in tokens):
+                continue
+            if "-" not in tokens[-1]:
+                surname_counts[tokens[-1]] += 1
+            for token in tokens[:-1]:
+                for part in token.split("-"):
+                    if part.isalpha():
+                        given_counts[part] += 1
+
+        logodds = {}
+        for syllable in surname_counts.keys() | given_counts.keys():
+            s_count = surname_counts.get(syllable, 0)
+            g_count = given_counts.get(syllable, 0)
+            if s_count + g_count < min_total:
+                continue
+            logodds[syllable] = math.log((s_count + add_k) / (g_count + add_k))
+        return logodds
