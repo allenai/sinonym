@@ -49,7 +49,7 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
     the router's route equals the labeled route's string (`pp_result` for label
     `pp`, `vys_result` for label `vys`). When PP and VYS emit the identical
     string the route is cosmetic, so either route scores as a match; label-level
-    scoring would count 52 such rows as errors (825/969 label-level vs 877/969
+    scoring would count 66 such rows as errors (816/969 label-level vs 882/969
     output-level on this fixture).
     """
     rows = _load_jsonl(DATA_DIR / "pp_vys_abstain_labels.jsonl")
@@ -64,15 +64,15 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
     assert len(rows) == PP_VYS_FIXTURE_ROWS
     assert len(decisive) == PP_VYS_DECISIVE_ROWS
     assert confusion == {
-        ("pp", "match"): 407,
-        ("pp", "mismatch"): 67,
-        ("vys", "match"): 470,
-        ("vys", "mismatch"): 25,
+        ("pp", "match"): 408,
+        ("pp", "mismatch"): 66,
+        ("vys", "match"): 474,
+        ("vys", "mismatch"): 21,
     }
     assert {reason: count for reason, count in reason_counts.items() if reason.startswith("name_prior_")} == {
         "name_prior_cantonese_given_first": 6,
-        "name_prior_korean_given_first_three_token": 33,
-        "name_prior_repeated_tail_given_surname_first": 5,
+        "name_prior_korean_given_first_three_token": 30,
+        "name_prior_repeated_tail_given_surname_first": 4,
     }
 
 
