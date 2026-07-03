@@ -49,12 +49,6 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Li Gong",
     ),
     (
-        "tests.test_basic_chinese_names::test_basic_chinese_names[Kong Kung-expected63]",
-        "Kong Kung",
-        "Kung Kong",
-        "Kong Kung",
-    ),
-    (
         "tests.test_basic_chinese_names::test_basic_chinese_names[Lu Xun-expected75]",
         "Lu Xun",
         "Xun Lu",
@@ -65,12 +59,6 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Qin Shi",
         "Shi Qin",
         "Qin Shi",
-    ),
-    (
-        "tests.test_compound_names::test_compound_names[Leung Ka Fai-expected7]",
-        "Leung Ka Fai",
-        "Ka-Fai Leung",
-        "Leung-Ka Fai",
     ),
     (
         "tests.test_misc::test_misc_chinese_names[Jin Hua-expected13]",

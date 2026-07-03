@@ -37,6 +37,11 @@ UNATTESTED_AMBIGUITY_SURNAME_FREQ_MAX = 5000.0
 GIVEN_POSITION_DEADBAND = 1.0
 GIVEN_POSITION_MAGNITUDE_CAP = 1.5
 RARE_TRAILING_OVERLAPPING_SURNAME_MAX = 100.0
+# Romanization-conditional surname discount: log(target_share) for a spelling
+# whose surname mass is reachable only via romanization remapping and that is
+# missing from surname_romanizations.csv (open-ended Wade-Giles prefix/suffix
+# rewrites); listed spellings carry their own share in the table.
+REMAP_ONLY_SURNAME_DEFAULT_LOG_SHARE = -4.0
 CURATED_COMPOUND_TARGETS = frozenset(COMPOUND_VARIANTS.values()) | frozenset(
     variant for variant in COMPOUND_VARIANTS if " " in variant
 )
@@ -619,6 +624,24 @@ class NameParsingService:
                 original_compound = StringManipulationUtils.lowercase_join_with_spaces(surname_tokens)
                 surname_logp = self._data.get_surname_logp(original_compound, self._config.default_surname_logp)
 
+        # Romanization-conditional surname discount: a surname key reached only
+        # through Wade-Giles/Cantonese/Taiwanese remapping, with no as-written
+        # attestation as a surname romanization, must not inherit the full
+        # frequency mass of its Mandarin target (e.g. 'fai'->hui 13,395 ppm,
+        # 'kung'->gong). Attested spellings (surname tables, full-share rows in
+        # surname_romanizations.csv) keep their mass untouched.
+        if (
+            len(surname_tokens) == 1
+            and surname_logp > self._config.default_surname_logp
+            and not self._config.cjk_pattern.search(surname_tokens[0])
+        ):
+            share_logp = self._surname_spelling_share_logp(surname_tokens[0])
+            if share_logp < 0.0:
+                surname_logp = max(
+                    surname_logp + share_logp,
+                    self._config.default_surname_logp,
+                )
+
         given_logp_sum = 0.0
         has_decomposed_given_pair = False
         for g_token in given_tokens:
@@ -824,6 +847,22 @@ class NameParsingService:
         )
 
         return total_score
+
+    def _surname_spelling_share_logp(self, token: str) -> float:
+        """Return log(target_share) for scoring ``token`` as a single surname.
+
+        0.0 when the as-written (norm_light) spelling is itself an attested
+        surname romanization; otherwise the spelling's share from
+        surname_romanizations.csv, falling back to the remap-only penalty
+        share for spellings the table does not enumerate.
+        """
+        spelling = self._normalizer.norm_light(token)
+        if spelling in self._data.surnames:
+            return 0.0
+        return self._data.surname_spelling_share_logp.get(
+            spelling,
+            REMAP_ONLY_SURNAME_DEFAULT_LOG_SHARE,
+        )
 
     def _decompose_unknown_given(
         self,
