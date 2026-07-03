@@ -9,6 +9,17 @@ Route semantics:
 - `vys`: emit the VYS parse.
 - `abstain`: emit the preprocessed input-order parse.
 - `not_person`: terminal non-person decision; do not emit a person parse.
+
+Materializing `abstain`:
+- PP/VYS regime: emit the `input_order_candidate` side's parse. Router invariant:
+  an abstain row always has `input_order_candidate` in {"pp", "vys"} — the only
+  abstain-emitting rule requires a defined side — so consumers may treat
+  abstain + "unknown" as a contract violation and raise.
+- PP-only regime: there is no second run to pick from; emit the as-typed reading
+  via `input_order_parsed(result)` (trailing token is the surname, everything
+  else keeps its position). Do NOT re-parse the name standalone: the single-name
+  detector re-decides order, which defeats the point of abstaining and couples
+  the routed output to parser-version behavior.
 """
 
 from __future__ import annotations
@@ -22,7 +33,7 @@ from typing import Any, Literal
 
 import numpy as np
 
-from sinonym.coretypes import BatchParseResult, NameFormat, NameOrderEvidence, ParseResult
+from sinonym.coretypes import BatchParseResult, NameFormat, NameOrderEvidence, ParsedName, ParseResult
 
 Route = Literal["pp", "vys", "abstain", "not_person"]
 Row = Mapping[str, object]
@@ -34,6 +45,7 @@ __all__ = [
     "Row",
     "build_pp_abstain_rows",
     "build_pp_vys_abstain_rows",
+    "input_order_parsed",
     "pp_abstain_router",
     "pp_vys_abstain_router",
     "route_pp_abstain_rows",
@@ -119,6 +131,7 @@ PP_VYS_OLD_SMALL_PP_VYS_MARGIN_MIN = 0.65
 PP_VYS_OLD_WEAK_PP_MARGIN_MAX = 0.20
 PP_VYS_OLD_WEAK_PP_VYS_MARGIN_MIN = 0.35
 PP_VYS_GARBAGE_RESULT_TOKEN_MAX = 4
+MIN_INPUT_ORDER_DISPLAY_TOKENS = 2
 ROUTING_TOKEN_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)?", flags=re.UNICODE)
 
 NAME_PRIOR_COMMON_CHINESE_SURNAMES = frozenset(
@@ -952,6 +965,53 @@ def _format_pattern_decision_confidence(pattern: Any) -> float:
     if confidence is None:
         confidence = getattr(pattern, "confidence", 0.0)
     return float(confidence)
+
+
+def input_order_parsed(result: ParseResult) -> ParsedName | None:
+    """Materialize the preprocessed input-order (as-typed) parse for an abstain route.
+
+    The input-order reading interprets the preprocessed tokens as already being in
+    the library's Given-Surname output order: the trailing token is the surname and
+    every preceding token keeps its position (initials stay middle tokens, the rest
+    form the given name). This is the single-batch counterpart of the PP/VYS
+    ``input_order_candidate``: it never re-decides name order, so it is stable
+    across parser versions and batch compositions.
+
+    Returns None for failed parses and single-token names.
+    """
+    if not result.success or result.parsed_original_order is None:
+        return None
+
+    original = result.parsed_original_order
+    tokens_by_role = {
+        "surname": list(original.surname_tokens),
+        "given": list(original.given_tokens),
+        "middle": list(original.middle_tokens),
+    }
+    display = [(role, token) for role in original.order for token in tokens_by_role.get(role, ())]
+    if len(display) < MIN_INPUT_ORDER_DISPLAY_TOKENS:
+        return None
+
+    surname_token_count = len(original.surname_tokens)
+    if all(role == "surname" for role, _token in display[-surname_token_count:]):
+        # The original reading already puts the surname last: the normalized parse
+        # (including compound-surname and hyphenation handling) is the input-order parse.
+        return result.parsed
+
+    surname = display[-1][1]
+    middle_tokens = [token for role, token in display[:-1] if role == "middle"]
+    given_tokens = [token for role, token in display[:-1] if role != "middle"]
+    if not given_tokens:
+        return None
+    return ParsedName(
+        surname=surname,
+        given_name="-".join(given_tokens),
+        surname_tokens=[surname],
+        given_tokens=given_tokens,
+        middle_name=" ".join(middle_tokens),
+        middle_tokens=middle_tokens,
+        order=["given", "middle", "surname"],
+    )
 
 
 def _result_text(result: ParseResult) -> str:

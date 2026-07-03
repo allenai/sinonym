@@ -327,28 +327,26 @@ def test_route_pp_exact_values(predictor: Predictor):
 # branches, which the routers do exercise on real batches.
 
 def test_route_pp_abstain_emits_input_order_parse(predictor: Predictor):
-    """PP-only abstain = "keep the input-order parse": emit the name's normalized standalone
-    reading, NOT the (possibly reordered) PP-batch reading."""
-    pp = ["Lin Yue", "Wang Wei", "Yang Chuang", "Zhao Jun", "Li Hui"]
-    out = predictor.route_pp(pp)
+    """PP-only abstain = the as-typed input-order reading (trailing token = surname),
+    NOT the PP-batch reorder and NOT the standalone parser's own order choice."""
+    # Spaced-Han zero-batch input: the PP reading is surname-first (surname=Wang),
+    # the router abstains, and abstain must undo the reorder.
+    (reordered,) = predictor.route_pp(["王 伟"])
+    assert reordered.router_prediction.value == "abstain"
+    assert reordered.success
+    assert (reordered.given_name, reordered.middle_name, reordered.surname) == ("Wang", None, "Wei")
+    # the PP candidate genuinely disagrees: abstain is not a no-op here
+    assert (reordered.pp.given_name, reordered.pp.surname) == ("Wei", "Wang")
+    assert (reordered.given_name, reordered.surname) != (reordered.pp.given_name, reordered.pp.surname)
 
-    assert [r.router_prediction.value for r in out] == ["abstain"] * len(pp)
-    assert all(r.success for r in out)
-    # each abstain row is the name's input-order (standalone) reading; assert every component
-    expected = {
-        "Lin Yue": ("Lin", None, "Yue"),
-        "Wang Wei": ("Wei", None, "Wang"),      # input order kept (batch would flip to Wang/Wei)
-        "Yang Chuang": ("Yang", None, "Chuang"),
-        "Zhao Jun": ("Jun", None, "Zhao"),      # input order kept (batch would flip to Zhao/Jun)
-        "Li Hui": ("Li", None, "Hui"),
-    }
-    for name, r in zip(pp, out):
-        assert (r.given_name, r.middle_name, r.surname) == expected[name]
-    # the batch reordered "Wang Wei"/"Zhao Jun"; abstain reverts to input order, so the routed
-    # answer differs from the PP candidate there (proving abstain is not a no-op)
-    for name in ("Wang Wei", "Zhao Jun"):
-        r = next(r for n, r in zip(pp, out) if n == name)
-        assert (r.given_name, r.surname) != (r.pp.given_name, r.pp.surname)
+    # Latin pair: the given-first read abstains and keeps its (input-order) reading;
+    # the surname-first read is accepted as pp and keeps the batch reorder.
+    lin, wang = predictor.route_pp(["Lin Yue", "Wang Wei"])
+    assert lin.router_prediction.value == "abstain"
+    assert (lin.given_name, lin.middle_name, lin.surname) == ("Lin", None, "Yue")
+    assert (lin.given_name, lin.surname) == (lin.pp.given_name, lin.pp.surname)
+    assert wang.router_prediction.value == "pp"
+    assert (wang.given_name, wang.middle_name, wang.surname) == ("Wei", None, "Wang")
 
 
 def test_route_pp_vys_abstain_picks_input_order_candidate(predictor: Predictor):

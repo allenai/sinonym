@@ -559,6 +559,7 @@ class Predictor:
         """
         from sinonym.pipeline.name_order_routing import (
             build_pp_abstain_rows,
+            input_order_parsed,
             route_pp_abstain_rows,
         )
 
@@ -577,13 +578,11 @@ class Predictor:
             if pred == "pp":
                 parsed = res.parsed if res.success else None
             elif pred == "abstain":
-                # abstain = "emit the preprocessed input-order parse" (keep the name as typed, don't
-                # apply the batch reorder). res.parsed carries the BATCH reading, which differs from
-                # the input order whenever the batch reordered this name — so re-parse the name in
-                # isolation to get its normalized standalone (input-order) parse. Falls back to the
-                # batch parse only if the name won't parse standalone.
-                standalone = self._detector.normalize_name(names[i])
-                parsed = standalone.parsed if standalone.success else (res.parsed if res.success else None)
+                # abstain = "emit the preprocessed input-order parse": the as-typed reading
+                # (trailing token = surname), independent of both the batch reorder and the
+                # standalone parser's own order choice. Falls back to the batch parse only
+                # when no as-typed reading exists (failed parse / single token).
+                parsed = input_order_parsed(res) or (res.parsed if res.success else None)
             elif pred == "not_person":  # valid Route value; emit nothing (pp-abstain router doesn't produce it today)
                 parsed = None
             else:

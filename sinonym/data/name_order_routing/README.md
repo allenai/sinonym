@@ -81,6 +81,16 @@ the route is cosmetic and either route scores as correct. Router output
 `not_person` is a terminal non-person decision and means no person parse
 should be emitted.
 
+Abstain rows always have `input_order_candidate` in {`pp`, `vys`} — the only
+abstain-emitting rule requires a defined input-order side — so consumers may
+treat abstain + `unknown` as a contract violation.
+
+In the PP-only regime there is no second run to pick from: `abstain` is
+materialized with `input_order_parsed(result)` (the as-typed reading — the
+trailing token is the surname, everything else keeps its position). It is an
+emitted person parse, not a defer signal, and it deliberately does NOT
+re-parse the name standalone, since the single-name detector re-decides order.
+
 ## Refreshing these fixtures after parser changes
 
 Evidence (not labels) should be regenerated whenever parser or batch-evidence

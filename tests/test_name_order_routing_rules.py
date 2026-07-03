@@ -8,12 +8,14 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from sinonym.coretypes import ParsedName, ParseResult
 from sinonym.pipeline.name_order_routing import (
     PP_ABSTAIN_REQUIRED_COLUMNS,
     PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT,
     PP_VYS_ABSTAIN_REQUIRED_COLUMNS,
     build_pp_abstain_rows,
     build_pp_vys_abstain_rows,
+    input_order_parsed,
     route_pp_abstain_rows,
     route_pp_vys_abstain_batches,
     route_pp_vys_abstain_rows,
@@ -828,3 +830,46 @@ def test_pp_vys_abstain_rule_does_not_apply_rejected_broad_name_priors():
 
     assert [row["router_prediction"] for row in routed] == ["vys", "vys"]
     assert [row["router_reason"] for row in routed] == ["old_new_vys", "old_new_vys"]
+
+
+def _parse_result(surname, given_tokens, order, middle_tokens=()):
+    parsed_original = ParsedName(
+        surname=surname,
+        given_name="-".join(given_tokens),
+        surname_tokens=[surname],
+        given_tokens=list(given_tokens),
+        middle_name=" ".join(middle_tokens),
+        middle_tokens=list(middle_tokens),
+        order=order,
+    )
+    return ParseResult.success_with_name(
+        formatted_name=f"{'-'.join(given_tokens)} {surname}",
+        parsed=parsed_original,
+        parsed_original_order=parsed_original,
+    )
+
+
+def test_input_order_parsed_flips_surname_first_reading():
+    result = _parse_result("Wang", ["Wei"], ["surname", "given"])
+    as_typed = input_order_parsed(result)
+    assert (as_typed.given_name, as_typed.surname) == ("Wang", "Wei")
+    assert as_typed.order == ["given", "middle", "surname"]
+
+
+def test_input_order_parsed_keeps_surname_last_reading():
+    result = _parse_result("Zhang", ["Wei"], ["given", "surname"], middle_tokens=["Y", "Z"])
+    assert input_order_parsed(result) is result.parsed
+
+
+def test_input_order_parsed_hyphenates_multi_token_given():
+    result = _parse_result("Huang", ["Yu", "Qiang"], ["surname", "given"])
+    as_typed = input_order_parsed(result)
+    assert (as_typed.given_name, as_typed.surname) == ("Huang-Yu", "Qiang")
+    assert as_typed.given_tokens == ["Huang", "Yu"]
+
+
+def test_input_order_parsed_rejects_failed_and_single_token_parses():
+    failed = ParseResult(success=False, result="", error_message="no parse")
+    assert input_order_parsed(failed) is None
+    single = _parse_result("Wang", [], ["surname", "given"])
+    assert input_order_parsed(single) is None
