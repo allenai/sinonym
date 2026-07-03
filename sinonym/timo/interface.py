@@ -266,6 +266,15 @@ class Predictor:
             format_pattern=format_pattern,
         )
 
+    @staticmethod
+    def _routed_name_fields(parsed) -> dict:
+        """given/surname/middle for a routed answer (all None when `parsed` is None)."""
+        return {
+            "given_name": parsed.given_name if parsed else None,
+            "surname": parsed.surname if parsed else None,
+            "middle_name": parsed.middle_name if parsed and parsed.middle_name else None,
+        }
+
     def _to_format_pattern(self, pattern) -> FormatPattern:
         return FormatPattern(
             dominant_format=pattern.dominant_format.value,
@@ -459,6 +468,8 @@ class Predictor:
         from sinonym.coretypes import BatchParseResult
         from sinonym.pipeline.name_order_routing import route_pp_vys_abstain_batches
 
+        if not pp_names:
+            return []
         n = len(pp_names)
         if len(vys_pool_names) < n:
             message = (
@@ -469,8 +480,6 @@ class Predictor:
         if list(vys_pool_names[:n]) != list(pp_names):
             message = "vys_pool_names must start with the paper's authors: vys_pool_names[:len(pp_names)] == pp_names"
             raise ValueError(message)
-        if not pp_names:
-            return []
 
         pp_batch = self._detector.analyze_name_batch(pp_names)
         pool = self._detector.analyze_name_batch(vys_pool_names)
@@ -486,6 +495,8 @@ class Predictor:
         )
         rows = route_pp_vys_abstain_batches(pp_batch, vys_batch)
 
+        # format_pattern is batch-wide (same for every row); build each once and share it —
+        # the candidate Predictions are output DTOs and never mutate it.
         pp_fp = self._to_format_pattern(pp_batch.format_pattern)
         vys_fp = self._to_format_pattern(vys_batch.format_pattern)
         out: list[RoutedPrediction] = []
@@ -514,14 +525,12 @@ class Predictor:
             out.append(
                 RoutedPrediction(
                     success=bool(chosen is not None and chosen.success),
-                    given_name=parsed.given_name if parsed else None,
-                    surname=parsed.surname if parsed else None,
-                    middle_name=(parsed.middle_name if parsed and parsed.middle_name else None),
+                    **self._routed_name_fields(parsed),
                     router_prediction=pred,
                     router_reason=row.get("router_reason", ""),
                     input_order_candidate=ioc,
-                    pp=self._to_prediction(pp_res, format_pattern=pp_fp.copy(deep=True)),
-                    vys=self._to_prediction(vys_res, format_pattern=vys_fp.copy(deep=True)),
+                    pp=self._to_prediction(pp_res, format_pattern=pp_fp),
+                    vys=self._to_prediction(vys_res, format_pattern=vys_fp),
                 )
             )
         return out
@@ -544,6 +553,7 @@ class Predictor:
 
         pp_batch = self._detector.analyze_name_batch(names)
         rows = route_pp_abstain_rows(build_pp_abstain_rows(pp_batch, self._detector))
+        # format_pattern is batch-wide (same for every row); build once and share it.
         pp_fp = self._to_format_pattern(pp_batch.format_pattern)
 
         out: list[PPRoutedPrediction] = []
@@ -553,7 +563,12 @@ class Predictor:
             if pred == "pp":
                 parsed = res.parsed if res.success else None
             elif pred == "abstain":
-                parsed = res.parsed_original_order if res.success else None
+                # Single-batch regime: the "input-order parse" IS the PP-batch parse — there is no
+                # second batch / input_order_candidate to pick (unlike route_pp_vys). res.parsed and
+                # res.parsed_original_order carry the same surname/given (they differ only in the
+                # display `order`, which this endpoint drops), so abstain emits the same name as pp;
+                # the decision differs only as a confidence label.
+                parsed = res.parsed if res.success else None
             elif pred == "not_person":  # valid Route value; emit nothing (pp-abstain router doesn't produce it today)
                 parsed = None
             else:
@@ -562,12 +577,10 @@ class Predictor:
             out.append(
                 PPRoutedPrediction(
                     success=bool(parsed is not None),
-                    given_name=parsed.given_name if parsed else None,
-                    surname=parsed.surname if parsed else None,
-                    middle_name=(parsed.middle_name if parsed and parsed.middle_name else None),
+                    **self._routed_name_fields(parsed),
                     router_prediction=pred,
                     router_reason=row.get("router_reason", ""),
-                    pp=self._to_prediction(res, format_pattern=pp_fp.copy(deep=True)),
+                    pp=self._to_prediction(res, format_pattern=pp_fp),
                 )
             )
         return out
@@ -589,18 +602,10 @@ class Predictor:
         """
         if vys_pool_names:
             return self.route_pp_vys(pp_names, vys_pool_names)
+        # PPRoutedPrediction is a field-subset of RoutedPrediction; widen each to the unified
+        # shape by adding the PP-only sentinels (no venue pool → no vys / input_order_candidate).
         return [
-            RoutedPrediction(
-                success=r.success,
-                given_name=r.given_name,
-                surname=r.surname,
-                middle_name=r.middle_name,
-                router_prediction=r.router_prediction,
-                router_reason=r.router_reason,
-                input_order_candidate=None,
-                pp=r.pp,
-                vys=None,
-            )
+            RoutedPrediction(**r.dict(), input_order_candidate=None, vys=None)
             for r in self.route_pp(pp_names)
         ]
 

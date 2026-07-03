@@ -319,6 +319,55 @@ def test_route_pp_exact_values(predictor: Predictor):
     assert predictor.route_pp([]) == []
 
 
+# --- abstain coverage -------------------------------------------------------
+# The exact-value fixtures above only route to pp/vys. These lock the abstain
+# branches, which the routers do exercise on real batches.
+
+def test_route_pp_abstain_emits_batch_reading(predictor: Predictor):
+    """PP-only abstain: single-batch regime has no input_order_candidate to pick, so the
+    routed answer IS the PP-batch parse (abstain emits the same name as pp would)."""
+    pp = ["Lin Yue", "Wang Wei", "Yang Chuang", "Zhao Jun", "Li Hui"]
+    out = predictor.route_pp(pp)
+
+    assert [r.router_prediction.value for r in out] == ["abstain"] * len(pp)
+    # every abstain row emits its PP candidate parse (not something else)
+    for r in out:
+        assert r.success
+        assert (r.surname, r.given_name) == (r.pp.surname, r.pp.given_name)
+    assert [(r.given_name, r.surname) for r in out] == [
+        ("Lin", "Yue"),
+        ("Wang", "Wei"),
+        ("Yang", "Chuang"),
+        ("Zhao", "Jun"),
+        ("Li", "Hui"),
+    ]
+
+
+def test_route_pp_vys_abstain_picks_input_order_candidate(predictor: Predictor):
+    """PP-vs-VYS abstain resolves to the input_order_candidate side (pp/vys), per README
+    semantics + the routing fixture. Covers both ioc=pp and ioc=vys."""
+    # ioc=pp: both authors abstain and resolve to the PP reading (which differs from VYS)
+    pp = ["Na Li", "Jie Chen"]
+    pool = ["Na Li", "Jie Chen", "Yue Lin", "Zhang Wei", "Kai Yang", "Wang Fang", "Sima Qian"]
+    out = predictor.route_pp_vys(pp, pool)
+    assert [r.router_prediction.value for r in out] == ["abstain", "abstain"]
+    for r in out:
+        assert r.input_order_candidate.value == "pp"
+        # the pick is meaningful: pp and vys candidates genuinely disagree here
+        assert (r.pp.surname, r.pp.given_name) != (r.vys.surname, r.vys.given_name)
+        assert (r.surname, r.given_name) == (r.pp.surname, r.pp.given_name)
+    assert [(r.given_name, r.surname) for r in out] == [("Na", "Li"), ("Jie", "Chen")]
+
+    # ioc=vys: the abstaining author resolves to the VYS reading
+    pp2 = ["Lei Sun", "Sima Qian"]
+    pool2 = ["Lei Sun", "Sima Qian", "Jun Zhao", "Liu Yang", "Tao Sun", "Ming Li", "Hui Guo", "Kai Yang"]
+    out2 = predictor.route_pp_vys(pp2, pool2)
+    sima = out2[1]
+    assert sima.router_prediction.value == "abstain"
+    assert sima.input_order_candidate.value == "vys"
+    assert (sima.pp.surname, sima.pp.given_name) != (sima.vys.surname, sima.vys.given_name)
+    assert (sima.surname, sima.given_name) == (sima.vys.surname, sima.vys.given_name)
+    assert (sima.given_name, sima.surname) == ("Sima", "Qian")
 
 
 
