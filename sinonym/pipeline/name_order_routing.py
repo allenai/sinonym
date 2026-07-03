@@ -1038,10 +1038,15 @@ def _routing_token_count(text: str) -> int:
 
 
 def _parse_result_token_count(result: ParseResult) -> int:
-    parsed = result.parsed or result.parsed_original_order
-    if not result.success or parsed is None:
+    """Count text tokens of the rendered result string.
+
+    This is the convention the pp-abstain rules were tuned on: a hyphenated
+    given name renders as one token ("Chang-Qing Zhang" -> 2), and a failed
+    parse counts as 1.
+    """
+    if not result.success:
         return 1
-    return len(parsed.surname_tokens) + len(parsed.given_tokens) + len(parsed.middle_tokens)
+    return _routing_token_count(_result_text(result))
 
 
 def _format_value(value: NameFormat | str) -> str:

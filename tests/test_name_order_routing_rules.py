@@ -10,6 +10,7 @@ import pytest
 
 from sinonym.pipeline.name_order_routing import (
     PP_ABSTAIN_REQUIRED_COLUMNS,
+    PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT,
     PP_VYS_ABSTAIN_REQUIRED_COLUMNS,
     build_pp_abstain_rows,
     build_pp_vys_abstain_rows,
@@ -351,6 +352,15 @@ def test_pp_abstain_builder_converts_batch_evidence_to_router_rows(detector):
     assert len(rows) == len(batch.names)
     assert all(set(PP_ABSTAIN_REQUIRED_COLUMNS) <= row.keys() for row in rows)
     assert all("router_prediction" in row for row in routed)
+
+
+def test_pp_abstain_builder_counts_result_text_tokens_for_hyphenated_given_names(detector):
+    batch = detector.analyze_name_batch(["Zhang Chang-Qing"])
+
+    rows = build_pp_abstain_rows(batch, detector)
+
+    assert batch.results[0].result == "Chang-Qing Zhang"
+    assert rows[0]["pp_result_token_count"] == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
 
 
 def test_pp_abstain_builder_derives_cjk_context_fields(detector):
