@@ -16,20 +16,24 @@ debug-only columns.
   promoted narrow name-prior guards require it, plus parser evidence from the
   PP and VYS runs. It does not store `old_prediction`, `old_reason`,
   `new_prediction`, or `new_reason`; the router derives those audit fields
-  from evidence. Labels are `pp`, `vys`, or `uncertain`.
+  from evidence. Labels are `pp`, `vys`, `either`, or `uncertain`.
 - `pp_abstain_labels.jsonl`: 750 PP/abstain routing examples from the
   corrected train, corrected holdout, and fresh holdout feature sets of the
   missing-venue experiment. Rows store raw `name` so the fixture is
   self-contained for future evidence refreshes (paper IDs stay out by
   design). Labels are `pp`, `abstain`, or `uncertain`.
 
-## Evidence provenance (refreshed at v0.3.0 / PR #18)
+## Evidence provenance (re-refreshed at PR #18 head, July 2026)
 
-Labels and identity columns are unchanged from the original manual labeling
-rounds (June 2026). The evidence columns were regenerated at v0.3.0 (new
-parser, PR #18, commit `bffbad1`) by re-running the original batches and
-building rows with the canonical production builders, so the fixtures match
-exactly what production evidence extraction emits:
+The evidence columns were regenerated on top of commit `80dc166` (PR #18:
+one-sided order suppression, romanization-conditional surname discount,
+corpus-regenerated positional table + ordered-pair bigram feature) by
+re-running the original batches and building rows with the canonical
+production builders, so the fixtures match exactly what production evidence
+extraction emits (331/1000 pp-vys rows and 1/750 pp-abstain rows changed vs
+the previous v0.3.0/`bffbad1` refresh; the pp-abstain columns dropped from the
+builder in PR review — `selected_over_alternate_ratio`, `compact_cjk`,
+`jp_probability` — were dropped from the fixture too):
 
 - PP evidence: `analyze_name_batch()` over the paper's own author list.
 - VYS evidence (pp-vys fixture only): `analyze_name_batch()` over names pooled
@@ -46,6 +50,33 @@ exactly what production evidence extraction emits:
   counted parsed surname+given+middle tokens, splitting hyphenated given
   names and defeating the `pp_result_token_count == 2` accept rules).
 
+## Label provenance (relabeling round, July 2026)
+
+Identity columns are unchanged from the original manual labeling rounds
+(June 2026). The `decision`/`confidence` labels went through one reviewed
+relabeling round (packets in `scratch/relabeling/`, all machine drafts
+accepted by the repo owner) applied on top of the re-refreshed evidence:
+
+- pp-vys, `either` labels (163 rows): every row whose current label was
+  `pp`/`vys` but whose refreshed PP and VYS parses emit the identical string
+  was relabeled `either` — the June route label pretends to test routing
+  behavior it cannot observe, and `either` is future-proof (see Semantics).
+  The set was derived from the refreshed evidence itself, not the June-era
+  draft list: 127 of the 136 drafted rows still had identical strings, 9
+  diverged under the current parser and kept their original label, and 36
+  newly-identical rows joined.
+- pp-vys, suspicious labels (20 rows adjudicated): June label disagreed with
+  both the current router and at least one strong-evidence signal; 10 were
+  overturned, 10 kept as labeled.
+- pp-abstain, `clean_bilingual_given_first` support (36 rows): bilingual
+  aligned Latin+Han rows where the Han gloss verifies the PP parse; 34
+  relabeled `uncertain` -> `pp`, 2 kept `uncertain` (PP mis-segments and both
+  routes emit the same wrong-order string).
+- pp-abstain, curated uncertain triage (24 rows): 18 -> `pp` (material
+  surname-first reorders, verified Han/bilingual glosses, Cantonese embedded
+  Han), 6 -> `abstain` (clearly Japanese names where a pinyin parse is
+  inappropriate).
+
 ### Why the asserted metrics differ from the June numbers
 
 The June fixture froze evidence that no longer matches what the pipeline
@@ -54,20 +85,19 @@ produces, for three stacked reasons:
 1. Batch-evidence fixes landed on main after the June extraction; 980/1000
    pp-vys rows already had at least one changed evidence field when re-run
    under the pre-PR #18 parser.
-2. PR #18's parser changes the PP/VYS parses and batch statistics further.
+2. PR #18's parser changes the PP/VYS parses and batch statistics further
+   (three more parser changes landed between the `bffbad1` refresh and the
+   `80dc166` re-refresh).
 3. The confidence convention changed from `format_pattern.confidence` to
    `decision_confidence` (production convention).
 
-Under fresh v0.3.0 evidence the pre-pruning router scored 830/969 (85.7%)
-label-level on the pp-vys fixture, versus 876/969 (90.4%) asserted against
-the stale June evidence — the old number measured the router against inputs
-production could no longer generate. The regression tests assert the fresh
-numbers for the current (pruned) router: 877/969 at the emitted-string level
-(see Semantics; 825/969 label-level) on pp-vys, and 542/550 on pp-abstain
-(the frozen June fixture scored 540/550 under the pre-pruning rules; -2 of
-the drift is real parser drift — `batch_total_count` changed on 55 rows;
-`has_latin`, `selected_format`, and frequency fields on 7 han rows — and
-rule pruning recovered +4).
+The regression tests assert the current numbers for the current router on
+the re-refreshed, relabeled fixtures: pp-vys 729/806 decisive rows correct at
+the emitted-string level plus 163/163 `either` rows (see Semantics), and
+pp-abstain 587/608 at the route level (the new `pp` labels include rows the
+tuned rules deliberately leave on `abstain`, e.g. below-threshold bilingual
+glosses, so route-level mismatches there document router conservatism, not
+label errors).
 
 ## Semantics
 
@@ -76,10 +106,15 @@ preprocessed input-order parse." The regression test scores decisive rows at
 the emitted-string level: a row is correct iff the string the chosen route
 emits (`pp_result` for `pp`, `vys_result` for `vys`, and for `abstain` the
 result on whichever side `input_order_candidate` says preserves input order)
-equals the labeled route's string. When PP and VYS emit the identical string
-the route is cosmetic and either route scores as correct. Router output
-`not_person` is a terminal non-person decision and means no person parse
-should be emitted.
+equals the labeled route's string. Router output `not_person` is a terminal
+non-person decision and means no person parse should be emitted.
+
+Label `either` marks rows whose PP and VYS parses emit the identical string
+under the current parser: the route is cosmetic, so any person route scores
+as correct. The regression test asserts `pp_result == vys_result` still holds
+for every `either` row — if a later parser change makes the strings diverge
+again, the test fails loudly and the row goes back for relabeling instead of
+silently trusting a label made under different parses.
 
 Abstain rows always have `input_order_candidate` in {`pp`, `vys`} — the only
 abstain-emitting rule requires a defined input-order side — so consumers may
@@ -105,7 +140,14 @@ behavior changes:
   ids, focal positions, and PP batches live in
   `scratch/missing_venue_pp_abstain/labeling*/review_items_250.csv` and
   `scratch/missing_venue_pp_abstain/batches_pp.parquet`; regeneration script:
-  `scratch/routing_overhaul/fixtures/refresh_pp_abstain_textcount.py` (~1 min).
+  `scratch/routing_overhaul/fixtures/refresh_pp_abstain_textcount.py` (~1 min;
+  its token-count override is now a no-op because the canonical builder counts
+  text tokens itself, so plain `build_pp_abstain_rows` output is equivalent).
+
+A refresh regenerates evidence columns only: identity and label columns must
+be preserved byte-for-byte. After a refresh, re-derive the `either` set —
+`pp`/`vys`-labeled rows whose refreshed strings became identical get `either`;
+`either` rows whose strings diverged must go back for manual relabeling.
 
 Both fixtures still depend on untracked `scratch/` artifacts for the batch
 name lists. If those are ever at risk, promote the minimal inputs (batch name
