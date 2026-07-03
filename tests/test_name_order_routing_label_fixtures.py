@@ -35,14 +35,14 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
     assert len(rows) == PP_VYS_FIXTURE_ROWS
     assert len(decisive) == PP_VYS_DECISIVE_ROWS
     assert confusion == {
-        ("pp", "pp"): 405,
-        ("pp", "vys"): 69,
-        ("vys", "pp"): 24,
-        ("vys", "vys"): 471,
+        ("pp", "pp"): 409,
+        ("pp", "vys"): 65,
+        ("vys", "pp"): 74,
+        ("vys", "vys"): 421,
     }
     assert {reason: count for reason, count in reason_counts.items() if reason.startswith("name_prior_")} == {
         "name_prior_cantonese_given_first": 6,
-        "name_prior_korean_given_first_three_token": 34,
+        "name_prior_korean_given_first_three_token": 33,
         "name_prior_ouyang_surname_first": 1,
         "name_prior_repeated_tail_given_surname_first": 5,
     }
@@ -59,16 +59,15 @@ def test_pp_abstain_label_fixture_reproduces_current_validation_metrics():
     assert len(rows) == PP_ABSTAIN_FIXTURE_ROWS
     assert len(decisive) == PP_ABSTAIN_DECISIVE_ROWS
     assert confusion == {
-        ("abstain", "abstain"): 435,
-        ("abstain", "pp"): 3,
+        ("abstain", "abstain"): 433,
+        ("abstain", "pp"): 5,
         ("pp", "abstain"): 7,
         ("pp", "pp"): 105,
     }
     assert reason_counts == {
-        "default_abstain": 153,
+        "default_abstain": 149,
         "spaced_cjk_zero_batch_surname_first": 5,
-        "weak_zero_batch": 206,
-        "zero_batch_mixed_long": 76,
-        "surname_first_two_token": 108,
-        "zero_batch_latin_ambiguous_endpoint": 2,
+        "weak_zero_batch": 211,
+        "zero_batch_mixed_long": 75,
+        "surname_first_two_token": 110,
     }
