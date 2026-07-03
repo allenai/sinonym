@@ -577,12 +577,13 @@ class Predictor:
             if pred == "pp":
                 parsed = res.parsed if res.success else None
             elif pred == "abstain":
-                # Single-batch regime: the "input-order parse" IS the PP-batch parse — there is no
-                # second batch / input_order_candidate to pick (unlike route_pp_vys). res.parsed and
-                # res.parsed_original_order carry the same surname/given (they differ only in the
-                # display `order`, which this endpoint drops), so abstain emits the same name as pp;
-                # the decision differs only as a confidence label.
-                parsed = res.parsed if res.success else None
+                # abstain = "emit the preprocessed input-order parse" (keep the name as typed, don't
+                # apply the batch reorder). res.parsed carries the BATCH reading, which differs from
+                # the input order whenever the batch reordered this name — so re-parse the name in
+                # isolation to get its normalized standalone (input-order) parse. Falls back to the
+                # batch parse only if the name won't parse standalone.
+                standalone = self._detector.normalize_name(names[i])
+                parsed = standalone.parsed if standalone.success else (res.parsed if res.success else None)
             elif pred == "not_person":  # valid Route value; emit nothing (pp-abstain router doesn't produce it today)
                 parsed = None
             else:

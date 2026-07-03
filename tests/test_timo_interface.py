@@ -326,24 +326,29 @@ def test_route_pp_exact_values(predictor: Predictor):
 # The exact-value fixtures above only route to pp/vys. These lock the abstain
 # branches, which the routers do exercise on real batches.
 
-def test_route_pp_abstain_emits_batch_reading(predictor: Predictor):
-    """PP-only abstain: single-batch regime has no input_order_candidate to pick, so the
-    routed answer IS the PP-batch parse (abstain emits the same name as pp would)."""
+def test_route_pp_abstain_emits_input_order_parse(predictor: Predictor):
+    """PP-only abstain = "keep the input-order parse": emit the name's normalized standalone
+    reading, NOT the (possibly reordered) PP-batch reading."""
     pp = ["Lin Yue", "Wang Wei", "Yang Chuang", "Zhao Jun", "Li Hui"]
     out = predictor.route_pp(pp)
 
     assert [r.router_prediction.value for r in out] == ["abstain"] * len(pp)
-    # every abstain row emits its PP candidate parse (not something else)
-    for r in out:
-        assert r.success
-        assert (r.surname, r.given_name) == (r.pp.surname, r.pp.given_name)
-    assert [(r.given_name, r.surname) for r in out] == [
-        ("Lin", "Yue"),
-        ("Wang", "Wei"),
-        ("Yang", "Chuang"),
-        ("Zhao", "Jun"),
-        ("Li", "Hui"),
-    ]
+    assert all(r.success for r in out)
+    # each abstain row is the name's input-order (standalone) reading; assert every component
+    expected = {
+        "Lin Yue": ("Lin", None, "Yue"),
+        "Wang Wei": ("Wei", None, "Wang"),      # input order kept (batch would flip to Wang/Wei)
+        "Yang Chuang": ("Yang", None, "Chuang"),
+        "Zhao Jun": ("Jun", None, "Zhao"),      # input order kept (batch would flip to Zhao/Jun)
+        "Li Hui": ("Li", None, "Hui"),
+    }
+    for name, r in zip(pp, out):
+        assert (r.given_name, r.middle_name, r.surname) == expected[name]
+    # the batch reordered "Wang Wei"/"Zhao Jun"; abstain reverts to input order, so the routed
+    # answer differs from the PP candidate there (proving abstain is not a no-op)
+    for name in ("Wang Wei", "Zhao Jun"):
+        r = next(r for n, r in zip(pp, out) if n == name)
+        assert (r.given_name, r.surname) != (r.pp.given_name, r.pp.surname)
 
 
 def test_route_pp_vys_abstain_picks_input_order_candidate(predictor: Predictor):
@@ -357,9 +362,12 @@ def test_route_pp_vys_abstain_picks_input_order_candidate(predictor: Predictor):
     for r in out:
         assert r.input_order_candidate.value == "pp"
         # the pick is meaningful: pp and vys candidates genuinely disagree here
-        assert (r.pp.surname, r.pp.given_name) != (r.vys.surname, r.vys.given_name)
-        assert (r.surname, r.given_name) == (r.pp.surname, r.pp.given_name)
-    assert [(r.given_name, r.surname) for r in out] == [("Na", "Li"), ("Jie", "Chen")]
+        assert (r.pp.given_name, r.pp.middle_name, r.pp.surname) != (r.vys.given_name, r.vys.middle_name, r.vys.surname)
+        # routed answer equals the chosen (pp) candidate, component by component
+        assert (r.given_name, r.middle_name, r.surname) == (r.pp.given_name, r.pp.middle_name, r.pp.surname)
+    na, jie = out
+    assert (na.given_name, na.middle_name, na.surname) == ("Na", None, "Li")
+    assert (jie.given_name, jie.middle_name, jie.surname) == ("Jie", None, "Chen")
 
     # ioc=vys: the abstaining author resolves to the VYS reading
     pp2 = ["Lei Sun", "Sima Qian"]
@@ -368,9 +376,10 @@ def test_route_pp_vys_abstain_picks_input_order_candidate(predictor: Predictor):
     sima = out2[1]
     assert sima.router_prediction.value == "abstain"
     assert sima.input_order_candidate.value == "vys"
-    assert (sima.pp.surname, sima.pp.given_name) != (sima.vys.surname, sima.vys.given_name)
-    assert (sima.surname, sima.given_name) == (sima.vys.surname, sima.vys.given_name)
-    assert (sima.given_name, sima.surname) == ("Sima", "Qian")
+    assert (sima.pp.given_name, sima.pp.middle_name, sima.pp.surname) != (sima.vys.given_name, sima.vys.middle_name, sima.vys.surname)
+    # routed answer equals the chosen (vys) candidate, component by component
+    assert (sima.given_name, sima.middle_name, sima.surname) == (sima.vys.given_name, sima.vys.middle_name, sima.vys.surname)
+    assert (sima.given_name, sima.middle_name, sima.surname) == ("Sima", None, "Qian")
 
 
 
