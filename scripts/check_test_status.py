@@ -31,10 +31,10 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Fei Hao",
     ),
     (
-        "tests.test_acl::test_acl_order_preservation[Kun Kuang-Kun Kuang]",
-        "Kun Kuang",
-        "Kun Kuang",
-        "Kuang Kun",
+        "tests.test_acl::test_acl_order_preservation[Li Kuang-Li Kuang]",
+        "Li Kuang",
+        "Li Kuang",
+        "Kuang Li",
     ),
     (
         "tests.test_acl::test_acl_order_preservation[Yao Shu-Yao Shu]",
@@ -43,34 +43,10 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Shu Yao",
     ),
     (
-        "tests.test_basic_chinese_names::test_basic_chinese_names[Feng Cha-expected4]",
-        "Feng Cha",
-        "Cha Feng",
-        "Feng Cha",
-    ),
-    (
-        "tests.test_basic_chinese_names::test_basic_chinese_names[He Cha-expected7]",
-        "He Cha",
-        "Cha He",
-        "He Cha",
-    ),
-    (
-        "tests.test_basic_chinese_names::test_basic_chinese_names[Hu Cha-expected9]",
-        "Hu Cha",
-        "Cha Hu",
-        "Hu Cha",
-    ),
-    (
         "tests.test_basic_chinese_names::test_basic_chinese_names[Li Gong-expected13]",
         "Li Gong",
         "Gong Li",
         "Li Gong",
-    ),
-    (
-        "tests.test_basic_chinese_names::test_basic_chinese_names[Gao Wei-expected45]",
-        "Gao Wei",
-        "Wei Gao",
-        "Gao Wei",
     ),
     (
         "tests.test_basic_chinese_names::test_basic_chinese_names[Kong Kung-expected63]",
@@ -89,12 +65,6 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Qin Shi",
         "Shi Qin",
         "Qin Shi",
-    ),
-    (
-        "tests.test_basic_chinese_names::test_basic_chinese_names[Zhou Xun-expected110]",
-        "Zhou Xun",
-        "Xun Zhou",
-        "Zhou Xun",
     ),
     (
         "tests.test_compound_names::test_compound_names[Leung Ka Fai-expected7]",
@@ -133,34 +103,16 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Wen Jing",
     ),
     (
-        "tests.test_mixed_production_cases::test_mixed_cases[Gui Rui-expected_result6]",
-        "Gui Rui",
-        "Rui Gui",
-        "Gui Rui",
-    ),
-    (
         "tests.test_mixed_production_cases::test_mixed_cases[Shu Yao-expected_result13]",
         "Shu Yao",
         "Yao Shu",
         "Shu Yao",
     ),
     (
-        "tests.test_mixed_production_cases::test_mixed_cases[Huang Yu Chang-expected_result19]",
-        "Huang Yu Chang",
-        "Yu-Chang Huang",
-        "Huang-Yu Chang",
-    ),
-    (
         "tests.test_mixed_production_cases::test_mixed_cases[Jia Jian Feng-expected_result24]",
         "Jia Jian Feng",
         "Jian-Feng Jia",
         "Jia-Jian Feng",
-    ),
-    (
-        "tests.test_mixed_production_cases::test_mixed_cases[Fan Jia Liang-expected_result41]",
-        "Fan Jia Liang",
-        "Jia-Liang Fan",
-        "Fan-Jia Liang",
     ),
     (
         "tests.test_mixed_production_cases::test_mixed_cases[Wei Wen Xing-expected_result48]",
@@ -179,12 +131,6 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "xu feng",
         "Feng Xu",
         "Xu Feng",
-    ),
-    (
-        "tests.test_mixed_production_cases::test_mixed_cases[yang guang-expected_result121]",
-        "yang guang",
-        "Guang Yang",
-        "Yang Guang",
     ),
 )
 EXPECTED_FAILURES = len(EXPECTED_NORMALIZED_NAME_FAILURES)

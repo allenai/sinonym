@@ -576,9 +576,9 @@ def test_strong_given_first_batch_still_overrides_ambiguous_name(detector):
     ("names", "expected_results"),
     [
         (["Li Yang Hsu", "Hanwei Cao"], ["Li-Yang Hsu", "Han-Wei Cao"]),
-        (["Yunbo Hu", "Chu Zhang"], ["Yun-Bo Hu", "Chu Zhang"]),
+        (["Yunbo Hu", "Fei Yu"], ["Yun-Bo Hu", "Fei Yu"]),
         (["J. Liu", "Jing Wan"], ["J Liu", "Jing Wan"]),
-        (["Qinggong Ping", "Su Wang"], ["Qing-Gong Ping", "Su Wang"]),
+        (["Qinggong Ping", "Hao Fei"], ["Qing-Gong Ping", "Hao Fei"]),
     ],
 )
 def test_batch_format_uses_weighted_tie_break_with_weak_participants(detector, names, expected_results):

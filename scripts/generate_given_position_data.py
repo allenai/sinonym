@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: PLR2004, SLF001
 """Generate position-conditional given-syllable counts from ACL 2025 authors.
 
 Mines unambiguous two-syllable given names from ``sinonym/data/acl_2025_authors.txt``
