@@ -23,9 +23,16 @@ debug-only columns.
   self-contained for future evidence refreshes (paper IDs stay out by
   design). Labels are `pp`, `abstain`, or `uncertain`.
 
-## Evidence provenance (re-refreshed after the bigram-feature revert, July 2026)
+## Evidence provenance (re-refreshed after the as-written romanization resolver, July 2026)
 
-The evidence columns were regenerated under the PR #18 parser after the
+The evidence columns were last regenerated after surname-frequency evidence
+switched to the canonical as-written romanization resolution
+(`surname_romanizations.csv` rows resolve to as-written mass: full-share rows
+carry the mandarin target's mass, penalty rows the discounted as-written mass,
+so e.g. `Fai` no longer inherits xu's full mass through the fai->hui remap).
+This changed `selected_surname_frequency` on 54/750 pp-abstain rows and at
+least one evidence field on 541/1000 pp-vys rows. Before that they were
+regenerated under the PR #18 parser after the
 ordered-pair bigram feature was removed (one-sided order suppression,
 romanization-conditional surname discount, and the corpus-regenerated
 positional table remain) by re-running the original batches and building rows
@@ -66,7 +73,10 @@ accepted by the repo owner) applied on top of the re-refreshed evidence:
   newly-identical rows joined. After the bigram-feature revert, 7 of those
   rows' PP/VYS strings diverged again (all 3-token names, the removed
   feature's footprint); having no pre-`either` route label, they were demoted
-  to `uncertain` pending relabeling, leaving 156 `either` rows.
+  to `uncertain` pending relabeling, leaving 156 `either` rows. The July 2026
+  as-written romanization-resolver refresh (below) re-derived the set once
+  more: 12 `vys` rows whose strings converged joined and 4 `either` rows whose
+  strings diverged were demoted to `uncertain`, leaving 164 `either` rows.
 - pp-vys, suspicious labels (20 rows adjudicated): June label disagreed with
   both the current router and at least one strong-evidence signal; 10 were
   overturned, 10 kept as labeled.

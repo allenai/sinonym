@@ -968,39 +968,42 @@ def input_order_parsed(result: ParseResult) -> ParsedName | None:
 
     Returns None for failed parses and single-token names.
     """
-    if not result.success or result.parsed_original_order is None:
+    original = result.parsed_original_order if result.success else None
+    if original is None or not original.surname_tokens:
         return None
 
-    original = result.parsed_original_order
     tokens_by_role = {
         "surname": list(original.surname_tokens),
         "given": list(original.given_tokens),
         "middle": list(original.middle_tokens),
     }
     display = [(role, token) for role in original.order for token in tokens_by_role.get(role, ())]
-    if len(display) < MIN_INPUT_ORDER_DISPLAY_TOKENS:
+    if len(display) < MIN_INPUT_ORDER_DISPLAY_TOKENS or display[-1][0] == "middle":
         return None
 
     surname_token_count = len(original.surname_tokens)
     if all(role == "surname" for role, _token in display[-surname_token_count:]):
         # The original reading already puts the surname last: the normalized parse
         # (including compound-surname and hyphenation handling) is the input-order parse.
-        return result.parsed
-
-    surname = display[-1][1]
-    middle_tokens = [token for role, token in display[:-1] if role == "middle"]
-    given_tokens = [token for role, token in display[:-1] if role != "middle"]
-    if not given_tokens:
-        return None
-    return ParsedName(
-        surname=surname,
-        given_name="-".join(given_tokens),
-        surname_tokens=[surname],
-        given_tokens=given_tokens,
-        middle_name=" ".join(middle_tokens),
-        middle_tokens=middle_tokens,
-        order=["given", "middle", "surname"],
-    )
+        parsed = result.parsed
+    else:
+        surname = display[-1][1]
+        middle_tokens = [token for role, token in display[:-1] if role == "middle"]
+        given_tokens = [token for role, token in display[:-1] if role != "middle"]
+        parsed = (
+            ParsedName(
+                surname=surname,
+                given_name="-".join(given_tokens),
+                surname_tokens=[surname],
+                given_tokens=given_tokens,
+                middle_name=" ".join(middle_tokens),
+                middle_tokens=middle_tokens,
+                order=["given", "middle", "surname"],
+            )
+            if given_tokens
+            else None
+        )
+    return parsed
 
 
 def _result_text(result: ParseResult) -> str:

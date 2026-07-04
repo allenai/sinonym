@@ -193,7 +193,8 @@ class RoutedPrediction(TimoModel):
     router_prediction: RoutingDecisionValue = Field(description="pp / vys / abstain / not_person")
     router_reason: str = Field(description="rule that produced router_prediction")
     input_order_candidate: InputOrderCandidateValue | None = Field(
-        default=None, description="pp/vys/unknown; abstain resolves to this side. None in PP-only mode."
+        default=None,
+        description="pp/vys/unknown; abstain resolves to this side. None in PP-only mode.",
     )
     pp: Prediction = Field(description="the paper-batch (PP) parse for this author")
     vys: Prediction | None = Field(default=None, description="the VYS parse; None in PP-only mode (no venue pool)")
@@ -543,9 +544,9 @@ class Predictor:
                     router_prediction=pred,
                     router_reason=row.get("router_reason", ""),
                     input_order_candidate=ioc,
-                    pp=self._to_prediction(pp_res, format_pattern=pp_fp),
-                    vys=self._to_prediction(vys_res, format_pattern=vys_fp),
-                )
+                    pp=self._to_prediction(pp_res, format_pattern=pp_fp.copy(deep=True)),
+                    vys=self._to_prediction(vys_res, format_pattern=vys_fp.copy(deep=True)),
+                ),
             )
         return out
 
@@ -594,8 +595,8 @@ class Predictor:
                     **self._routed_name_fields(parsed),
                     router_prediction=pred,
                     router_reason=row.get("router_reason", ""),
-                    pp=self._to_prediction(res, format_pattern=pp_fp),
-                )
+                    pp=self._to_prediction(res, format_pattern=pp_fp.copy(deep=True)),
+                ),
             )
         return out
 
@@ -618,10 +619,7 @@ class Predictor:
             return self.route_pp_vys(pp_names, vys_pool_names)
         # PPRoutedPrediction is a field-subset of RoutedPrediction; widen each to the unified
         # shape by adding the PP-only sentinels (no venue pool → no vys / input_order_candidate).
-        return [
-            RoutedPrediction(**r.dict(), input_order_candidate=None, vys=None)
-            for r in self.route_pp(pp_names)
-        ]
+        return [RoutedPrediction(**r.dict(), input_order_candidate=None, vys=None) for r in self.route_pp(pp_names)]
 
 
 class RoutingPredictor(Predictor):
@@ -633,7 +631,4 @@ class RoutingPredictor(Predictor):
     """
 
     def predict_batch(self, instances: list[RoutingInstance]) -> list[RoutedPaperPrediction]:  # type: ignore[override]
-        return [
-            RoutedPaperPrediction(authors=self.route(inst.pp_names, inst.vys_pool_names))
-            for inst in instances
-        ]
+        return [RoutedPaperPrediction(authors=self.route(inst.pp_names, inst.vys_pool_names)) for inst in instances]

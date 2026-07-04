@@ -6,8 +6,8 @@ from sinonym.pipeline.name_order_routing import route_pp_abstain_rows, route_pp_
 
 DATA_DIR = Path("sinonym/data/name_order_routing")
 PP_VYS_FIXTURE_ROWS = 1000
-PP_VYS_DECISIVE_ROWS = 806
-PP_VYS_EITHER_ROWS = 156
+PP_VYS_DECISIVE_ROWS = 794
+PP_VYS_EITHER_ROWS = 164
 PP_ABSTAIN_FIXTURE_ROWS = 750
 PP_ABSTAIN_DECISIVE_ROWS = 608
 
@@ -83,14 +83,14 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
     assert len(either) == PP_VYS_EITHER_ROWS
     assert either_scored == {"match": PP_VYS_EITHER_ROWS}
     assert confusion == {
-        ("pp", "match"): 386,
-        ("pp", "mismatch"): 61,
-        ("vys", "match"): 343,
-        ("vys", "mismatch"): 16,
+        ("pp", "match"): 387,
+        ("pp", "mismatch"): 60,
+        ("vys", "match"): 328,
+        ("vys", "mismatch"): 19,
     }
     assert {reason: count for reason, count in reason_counts.items() if reason.startswith("name_prior_")} == {
         "name_prior_cantonese_given_first": 6,
-        "name_prior_korean_given_first_three_token": 30,
+        "name_prior_korean_given_first_three_token": 29,
         "name_prior_repeated_tail_given_surname_first": 4,
     }
 
@@ -115,7 +115,7 @@ def test_pp_abstain_label_fixture_reproduces_current_validation_metrics():
         "clean_bilingual_given_first": 34,
         "default_abstain": 162,
         "spaced_cjk_zero_batch_surname_first": 7,
-        "weak_zero_batch": 206,
-        "zero_batch_mixed_long": 78,
+        "weak_zero_batch": 208,
+        "zero_batch_mixed_long": 76,
         "surname_first_two_token": 121,
     }

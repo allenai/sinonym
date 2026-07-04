@@ -286,12 +286,10 @@ def test_route_pp_vys_matches_manual_pp_then_vys_then_router(predictor: Predicto
     # the wrapper endpoint reproduces the manual PP->VYS->router result
     endpoint = predictor.route_pp_vys(pp_names, vys_pool)
     assert [manual_surname(i) for i in range(len(pp_names))] == [r.surname for r in endpoint]
-    assert [routed_rows[i]["router_prediction"] for i in range(len(pp_names))] == [
-        r.router_prediction for r in endpoint
-    ]
+    assert [routed_rows[i]["router_prediction"] for i in range(len(pp_names))] == [r.router_prediction for r in endpoint]
 
 
-# Fixed-scenario regression: exact routed values for v0.2.9 (batch-composition dependent).
+# Fixed-scenario regression: exact routed values (batch-composition dependent).
 ROUTE_SCENARIO_PP = ["Yue Lin", "Wei Wang", "Chuang Yang"]
 ROUTE_SCENARIO_POOL = ["Yue Lin", "Wei Wang", "Chuang Yang", "Jun Zhao", "Hui Li", "Tao Sun", "Min Guo"]
 
@@ -305,7 +303,7 @@ def test_route_pp_vys_exact_values(predictor: Predictor):
         ("vys", "Chuang", "Yang"),
     ]
     # candidate parses carried through exactly
-    assert (out[1].pp.given_name, out[1].pp.surname) == ("Wang", "Wei")   # PP (paper-batch) reading
+    assert (out[1].pp.given_name, out[1].pp.surname) == ("Wang", "Wei")  # PP (paper-batch) reading
     assert (out[1].vys.given_name, out[1].vys.surname) == ("Wei", "Wang")  # VYS (venue-pool) reading
 
 
@@ -322,9 +320,27 @@ def test_route_pp_exact_values(predictor: Predictor):
     assert predictor.route_pp([]) == []
 
 
+def test_routed_candidate_format_patterns_are_independent(predictor: Predictor):
+    pp_only = predictor.route_pp(["Yue Lin", "Wei Wang"])
+    before = pp_only[1].pp.format_pattern.threshold_met
+    pp_only[0].pp.format_pattern.threshold_met = not before
+    assert pp_only[1].pp.format_pattern.threshold_met is before
+
+    pp_names = ["Yue Lin", "Wei Wang"]
+    pool = ["Yue Lin", "Wei Wang", "Jun Zhao", "Hui Li"]
+    routed = predictor.route_pp_vys(pp_names, pool)
+    pp_before = routed[1].pp.format_pattern.threshold_met
+    vys_before = routed[1].vys.format_pattern.threshold_met
+    routed[0].pp.format_pattern.threshold_met = not pp_before
+    routed[0].vys.format_pattern.threshold_met = not vys_before
+    assert routed[1].pp.format_pattern.threshold_met is pp_before
+    assert routed[1].vys.format_pattern.threshold_met is vys_before
+
+
 # --- abstain coverage -------------------------------------------------------
 # The exact-value fixtures above only route to pp/vys. These lock the abstain
 # branches, which the routers do exercise on real batches.
+
 
 def test_route_pp_abstain_emits_input_order_parse(predictor: Predictor):
     """PP-only abstain = the as-typed input-order reading (trailing token = surname),
@@ -374,11 +390,14 @@ def test_route_pp_vys_abstain_picks_input_order_candidate(predictor: Predictor):
     sima = out2[1]
     assert sima.router_prediction.value == "abstain"
     assert sima.input_order_candidate.value == "vys"
-    assert (sima.pp.given_name, sima.pp.middle_name, sima.pp.surname) != (sima.vys.given_name, sima.vys.middle_name, sima.vys.surname)
+    assert (sima.pp.given_name, sima.pp.middle_name, sima.pp.surname) != (
+        sima.vys.given_name,
+        sima.vys.middle_name,
+        sima.vys.surname,
+    )
     # routed answer equals the chosen (vys) candidate, component by component
     assert (sima.given_name, sima.middle_name, sima.surname) == (sima.vys.given_name, sima.vys.middle_name, sima.vys.surname)
     assert (sima.given_name, sima.middle_name, sima.surname) == ("Sima", None, "Qian")
-
 
 
 def test_route_unified_falls_back_to_pp_when_no_pool(predictor: Predictor):
@@ -398,21 +417,20 @@ def test_route_unified_falls_back_to_pp_when_no_pool(predictor: Predictor):
 
     # with pool -> delegates to route_pp_vys (vys candidate present)
     out = predictor.route(pp_names, pool)
-    assert [(r.given_name, r.surname) for r in out] == [
-        (r.given_name, r.surname) for r in predictor.route_pp_vys(pp_names, pool)
-    ]
+    assert [(r.given_name, r.surname) for r in out] == [(r.given_name, r.surname) for r in predictor.route_pp_vys(pp_names, pool)]
     assert all(r.vys is not None for r in out)
     assert isinstance(out[0].dict(), dict)
 
 
 # --- RoutingPredictor: timo 1:1 instance->prediction contract ----------------
 
+
 def test_routing_predictor_one_prediction_per_instance():
     rp = RoutingPredictor(config=PredictorConfig(), artifacts_dir=".")
     instances = [
         RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Yue Lin", "Wei Wang", "Jun Zhao"]),
         RoutingInstance(pp_names=["Zhang San"]),  # PP-only
-        RoutingInstance(pp_names=[]),              # empty paper must still emit one prediction
+        RoutingInstance(pp_names=[]),  # empty paper must still emit one prediction
     ]
     results = rp.predict_batch(instances)
 

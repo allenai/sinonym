@@ -863,6 +863,11 @@ def test_input_order_parsed_hyphenates_multi_token_given():
     assert as_typed.given_tokens == ["Huang", "Yu"]
 
 
+def test_input_order_parsed_rejects_trailing_middle_initial():
+    result = _parse_result("Wang", ["Wei"], ["surname", "given", "middle"], middle_tokens=["A"])
+    assert input_order_parsed(result) is None
+
+
 def test_input_order_parsed_rejects_failed_and_single_token_parses():
     failed = ParseResult(success=False, result="", error_message="no parse")
     assert input_order_parsed(failed) is None
