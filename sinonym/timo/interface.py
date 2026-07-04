@@ -384,7 +384,7 @@ class Predictor:
         pattern = self._to_format_pattern(batch_result.format_pattern)
 
         predictions = []
-        for parse_result, analysis in zip(batch_result.results, batch_result.individual_analyses, strict=False):
+        for parse_result, analysis in zip(batch_result.results, batch_result.individual_analyses, strict=True):
             prediction = self._to_prediction(
                 parse_result,
                 confidence=analysis.confidence,

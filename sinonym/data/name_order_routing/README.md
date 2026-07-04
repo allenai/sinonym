@@ -61,11 +61,17 @@ builder in PR review — `selected_over_alternate_ratio`, `compact_cjk`,
   thresholds), not the raw vote share `format_pattern.confidence` that the
   original June extraction stored.
 - `pp_result_token_count` counts text tokens of the rendered result string
-  (hyphenated given name = one token, so "Chang-Qing Zhang" = 2; failed parse
-  = 1). This is the convention the pp-abstain rules were tuned on; the
-  builder's `_parse_result_token_count` was fixed to match it (it previously
-  counted parsed surname+given+middle tokens, splitting hyphenated given
-  names and defeating the `pp_result_token_count == 2` accept rules).
+  (a hyphenated given name is one token no matter how many syllables it joins,
+  so "Chang-Qing Zhang" = 2 and "Ka-Wai-Man Wong" = 2; failed parse = 1). This
+  is the convention the pp-abstain rules were tuned on; the builder's
+  `_parse_result_token_count` was fixed to match it (it previously counted
+  parsed surname+given+middle tokens, splitting hyphenated given names and
+  defeating the `pp_result_token_count == 2` accept rules).
+- `pp_success` is a required pp-abstain column (both builders emit it). A failed
+  PP parse (`pp_success == false`, encoded in this fixture as
+  `pp_result_token_count == 1`, always with `selected_format == "mixed"`) routes
+  to the terminal `not_person` decision, so the fixture exercises the same
+  failed-parse path production takes rather than an abstain path it never reaches.
 
 ## Label provenance (relabeling round, July 2026)
 
@@ -121,10 +127,15 @@ produces, for three stacked reasons:
 The regression tests assert the current numbers for the current router on
 the re-refreshed, relabeled fixtures: pp-vys 719/791 decisive rows correct at
 the emitted-string level plus 164/164 `either` rows (see Semantics), and
-pp-abstain 587/608 at the route level (the new `pp` labels include rows the
-tuned rules deliberately leave on `abstain`, e.g. below-threshold bilingual
-glosses, so route-level mismatches there document router conservatism, not
-label errors).
+pp-abstain at the route level as follows. Of the 608 decisive (`pp`/`abstain`)
+rows, 312 are failed PP parses (encoded `pp_result_token_count == 1`, always
+`selected_format == "mixed"` with zero selected-surname frequency) that route to
+the terminal `not_person` decision, matching production — 311 are
+`abstain`-labeled, 1 is `pp`-labeled. Of the 296 rows that receive a person
+route, 276 match their label (`abstain`/`abstain` 127, `pp`/`pp` 149); the 20
+mismatches (6 `abstain`→`pp`, 14 `pp`→`abstain`) are mostly `pp` labels the tuned
+rules deliberately leave on `abstain` (e.g. below-threshold bilingual glosses),
+documenting router conservatism, not label errors.
 
 ## Semantics
 

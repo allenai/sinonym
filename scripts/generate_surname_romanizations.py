@@ -196,6 +196,12 @@ def build_rows(detector: ChineseNameDetector) -> list[dict[str, object]]:
 
 def main() -> None:
     detector = ChineseNameDetector()
+    if detector._data is None:
+        message = (
+            "detector initialization failed (likely a missing/corrupt data CSV); "
+            "restore a working baseline via `git checkout -- sinonym/data/<file>` before regenerating"
+        )
+        raise RuntimeError(message)
     rows = build_rows(detector)
 
     out_path = Path(__file__).resolve().parent.parent / "sinonym" / "data" / OUTPUT_NAME

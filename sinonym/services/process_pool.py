@@ -143,8 +143,10 @@ class PersistentMultiprocessNormalizer:
                 results.extend(chunk_result)
         except BrokenProcessPool as exc:
             message = (
-                "failed to initialize process workers. On Windows/macOS, call this API "
-                "from a module guarded by `if __name__ == '__main__':`."
+                "the multiprocessing worker pool broke. Either the workers failed to "
+                "initialize (on Windows/macOS, call this API from a module guarded by "
+                "`if __name__ == '__main__':`) or a worker died mid-batch (for example, "
+                "out-of-memory or a native crash)."
             )
             raise RuntimeError(message) from exc
         return results

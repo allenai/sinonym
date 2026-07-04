@@ -20,9 +20,6 @@ MIN_TRANSLITERATED_CJK_CHARS = 2
 LATIN_WORD_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)?")
 ASCII_WORD_RE = re.compile(r"[A-Za-z]+")
 INITIAL_RE = re.compile(r"[^\W\d_]")
-# Dot / interpunct characters that bind a Latin initial to a Han transliteration
-# in the foreign-name convention ("G.\u970d\u5f17", "J\u00b7G\u00b7\u9a6c\u5c14\u94a6\u51ef\u7ef4\u5947").
-MIXED_INITIAL_SEPARATOR_CHARS = ".\u00b7\u2022\u30fb"
 
 STRONG_CJK_NON_PERSON_MARKERS = (
     "大学",
@@ -106,24 +103,37 @@ class NonPersonInputDetectionService:
         if self._normalizer.classify_script_representation(normalized_input) == "bilingual_aligned":
             return False
 
-        return self._has_initial_cjk_dot_bridge(raw_name)
+        return self._has_initial_cjk_separator_bridge(raw_name)
 
-    def _has_initial_cjk_dot_bridge(self, raw_name: str) -> bool:
-        """Return whether a dot/interpunct directly joins a Latin initial to a CJK run.
+    def _has_initial_cjk_separator_bridge(self, raw_name: str) -> bool:
+        """Return whether a separator directly joins a Latin initial to a CJK run.
 
-        Scans each separator and inspects the nearest non-space neighbour on each
-        side: a bridge exists when one side is a Latin letter and the other is CJK
-        (in either order), which covers chained initials ("J·G·马尔钦凯维奇") and
-        Han-flanked initials ("罗伯特·M·威恩斯坦"). A trailing period after a
-        space-separated initial ("李 小明 G.") has no CJK neighbour and does not
-        bridge.
+        Scans each separator character and inspects only its *immediate*
+        neighbours (index-1 and index+1) with no whitespace skipping: a bridge
+        exists when one directly-adjacent side is a Latin letter and the other is
+        CJK, in either order. Direct adjacency is the discriminator — a Latin
+        initial that is whitespace-separated from the Han tokens ("李 小明 G.",
+        "G. 李小明", "李 小明 · G") has a space as its immediate neighbour and does
+        not bridge, which is what tells a genuine Chinese name carrying a Latin
+        middle initial apart from a Western transliteration.
+
+        For chained initials the separator adjacent to the Han run is the one that
+        bridges ("J·G·马尔钦凯维奇" bridges on the G·马 separator; "罗伯特·M·威恩斯坦"
+        bridges on the 特·M separator), so those foreign transliterations are still
+        caught.
+
+        Separator membership is derived from ``config.sep_pattern`` (a character is
+        a separator iff that pattern matches it), keeping this rule in sync with
+        the single canonical separator definition instead of a private hardcoded
+        set.
         """
+        sep_pattern = self._config.sep_pattern
         cjk_pattern = self._config.cjk_pattern
         for index, char in enumerate(raw_name):
-            if char not in MIXED_INITIAL_SEPARATOR_CHARS:
+            if not sep_pattern.fullmatch(char):
                 continue
-            left = self._nearest_non_space(raw_name, index - 1, -1)
-            right = self._nearest_non_space(raw_name, index + 1, 1)
+            left = raw_name[index - 1] if index > 0 else ""
+            right = raw_name[index + 1] if index + 1 < len(raw_name) else ""
             left_is_cjk = bool(left) and bool(cjk_pattern.search(left))
             right_is_cjk = bool(right) and bool(cjk_pattern.search(right))
             left_is_latin = bool(left) and left.isascii() and left.isalpha()
@@ -131,16 +141,6 @@ class NonPersonInputDetectionService:
             if (left_is_latin and right_is_cjk) or (left_is_cjk and right_is_latin):
                 return True
         return False
-
-    @staticmethod
-    def _nearest_non_space(text: str, start: int, step: int) -> str:
-        """Return the nearest non-space character from `start` moving by `step`, or ''."""
-        index = start
-        while 0 <= index < len(text):
-            if not text[index].isspace():
-                return text[index]
-            index += step
-        return ""
 
     def _cjk_chunks(self, raw_name: str) -> list[str]:
         """Return contiguous CJK runs split by non-CJK separators."""

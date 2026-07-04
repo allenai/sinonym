@@ -13,6 +13,7 @@ from sinonym.pipeline.name_order_routing import (
     PP_ABSTAIN_REQUIRED_COLUMNS,
     PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT,
     PP_VYS_ABSTAIN_REQUIRED_COLUMNS,
+    ROUTING_TOKEN_RE,
     build_pp_abstain_rows,
     build_pp_vys_abstain_rows,
     input_order_parsed,
@@ -161,6 +162,7 @@ def _pp_vys_row(**overrides):
 
 def _pp_abstain_row(**overrides):
     row = {
+        "pp_success": True,
         "pp_result_token_count": 2,
         "selected_format": "surname_first",
         "batch_total_count": 3,
@@ -208,9 +210,11 @@ def _routing_batch(names, results, evidence, pattern):
 
 
 def test_name_order_routing_script_is_in_sdist_include():
-    pyproject_text = Path("pyproject.toml").read_text(encoding="utf-8")
+    pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    sdist_section = pyproject.split("[tool.hatch.build.targets.sdist]", maxsplit=1)[1]
+    sdist_section = sdist_section.split("\n[", maxsplit=1)[0]
 
-    assert '"scripts/name_order_routing_rules.py"' in pyproject_text
+    assert '"scripts/name_order_routing_rules.py"' in sdist_section
 
 
 def test_name_order_routing_script_preserves_empty_csv_schema(tmp_path, monkeypatch):
@@ -361,6 +365,22 @@ def test_pp_abstain_builder_counts_result_text_tokens_for_hyphenated_given_names
 
     assert batch.results[0].result == "Chang-Qing Zhang"
     assert rows[0]["pp_result_token_count"] == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
+
+
+def test_routing_token_re_counts_multi_hyphen_given_name_as_one_token():
+    def count(text):
+        return len(ROUTING_TOKEN_RE.findall(text))
+
+    # A hyphenated given name is one token regardless of how many syllables it
+    # joins, so a 3-syllable Cantonese given name plus a surname is two tokens.
+    assert count("Ka-Wai-Man Wong") == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
+    assert count("Chang-Qing Zhang") == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
+    assert count("Wei Zhang") == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
+    # Apostrophes continue a token the same way hyphens do, and the two mix.
+    assert count("D'Angelo-Marie O'Brien") == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
+    assert count("Zhang") == 1
+    # Repeated continuations stay within a single token (no spurious splits).
+    assert ROUTING_TOKEN_RE.findall("Ka-Wai-Man Wong") == ["Ka-Wai-Man", "Wong"]
 
 
 def test_pp_abstain_builder_derives_cjk_context_fields(detector):
@@ -631,6 +651,36 @@ def test_pp_vys_abstain_rule_rejects_unknown_enums():
 
     with pytest.raises(ValueError, match="pp_selected_surname_frequency_ratio"):
         route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_surname_frequency_ratio="not-a-number")])
+
+
+def test_pp_vys_abstain_rule_accepts_internal_surname_position():
+    def route_with_pp_position(pp_position):
+        row = _base_pp_vys_row()
+        row.update(
+            {
+                "pp_result": "Jiang Xi",
+                "vys_result": "Xi Jiang",
+                "pp_selected_format": "surname_first",
+                "vys_selected_format": "given_first",
+                "pp_selected_surname_position": pp_position,
+                "vys_selected_surname_position": "last",
+                "pp_selected_surname_frequency": 1.0,
+                "vys_selected_surname_frequency": 100.0,
+                "pp_batch_total_count": 10,
+                "pp_batch_vote_margin": 0.9,
+                "vys_batch_vote_margin": 0.8,
+            },
+        )
+        return route_pp_vys_abstain_rows([row])[0]
+
+    # BatchAnalysisService can emit an "internal" surname position (timo enum
+    # SurnamePositionValue.INTERNAL); the router must accept it, not raise. It is
+    # non-order-preserving like "unknown", so it cannot trigger the endpoint
+    # disagreement backoff that a genuine first/last split does.
+    assert route_with_pp_position("first")["old_prediction"] == "vys"
+    internal = route_with_pp_position("internal")
+    assert internal["old_prediction"] == "pp"
+    assert internal["router_prediction"] in {"pp", "vys", "abstain"}
 
 
 def test_pp_vys_abstain_rule_keeps_not_person_terminal():
@@ -908,3 +958,68 @@ def test_input_order_parsed_rejects_failed_and_single_token_parses():
     assert input_order_parsed(failed) is None
     single = _parse_result("Wang", [], ["surname", "given"])
     assert input_order_parsed(single) is None
+
+
+def test_input_order_parsed_handles_duplicate_middle_labels_surname_last():
+    # normalize_name("J. Ming K. Zhang") yields original order ['middle','given',
+    # 'middle','surname'] with two middle tokens; the surname is already last, so
+    # the normalized parse is the input-order parse and the duplicated 'middle'
+    # labels must not duplicate the ['J','K'] tokens.
+    normalized = ParsedName(
+        surname="Zhang",
+        given_name="Ming",
+        surname_tokens=["Zhang"],
+        given_tokens=["Ming"],
+        middle_name="J K",
+        middle_tokens=["J", "K"],
+        order=["given", "middle", "surname"],
+    )
+    original = ParsedName(
+        surname="Zhang",
+        given_name="Ming",
+        surname_tokens=["Zhang"],
+        given_tokens=["Ming"],
+        middle_name="J K",
+        middle_tokens=["J", "K"],
+        order=["middle", "given", "middle", "surname"],
+    )
+    result = ParseResult.success_with_name("Ming J K Zhang", parsed=normalized, parsed_original_order=original)
+    assert input_order_parsed(result) is result.parsed
+
+
+def test_input_order_parsed_rejects_duplicate_middle_trailing_initial():
+    # normalize_name("Zhang A-Ming K.") yields original order ['surname','middle',
+    # 'given','middle']; the trailing 'middle' initial is not a valid input-order
+    # surname endpoint, so no as-typed parse is materialized.
+    original = ParsedName(
+        surname="Zhang",
+        given_name="Ming",
+        surname_tokens=["Zhang"],
+        given_tokens=["Ming"],
+        middle_name="A K",
+        middle_tokens=["A", "K"],
+        order=["surname", "middle", "given", "middle"],
+    )
+    result = ParseResult.success_with_name("Ming A K Zhang", parsed=original, parsed_original_order=original)
+    assert input_order_parsed(result) is None
+
+
+def test_input_order_parsed_consumes_repeated_roles_positionally():
+    # A surname-first shape whose middles and given tokens interleave forces the
+    # flip/reconstruct branch. Expanding every role occurrence to all its tokens
+    # (the bug) would duplicate the middle tokens and mangle the given name;
+    # positional consumption keeps each token exactly once.
+    original = ParsedName(
+        surname="Zhang",
+        given_name="Wei-Ming",
+        surname_tokens=["Zhang"],
+        given_tokens=["Wei", "Ming"],
+        middle_name="A B",
+        middle_tokens=["A", "B"],
+        order=["surname", "middle", "given", "middle", "given"],
+    )
+    result = ParseResult.success_with_name("Zhang-Wei Ming", parsed=original, parsed_original_order=original)
+    as_typed = input_order_parsed(result)
+    assert as_typed.surname == "Ming"
+    assert as_typed.given_tokens == ["Zhang", "Wei"]
+    assert as_typed.middle_tokens == ["A", "B"]

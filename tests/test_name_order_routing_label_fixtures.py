@@ -96,6 +96,15 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
 
 
 def test_pp_abstain_label_fixture_reproduces_current_validation_metrics():
+    """Score the pp-abstain router at the route level against production behavior.
+
+    Failed PP parses route to the terminal `not_person` decision (the builder emits
+    `pp_success=False` for them; the fixture backfills it from the failed-parse
+    encoding `pp_result_token_count == 1`). The 312 failed-parse rows here (311
+    labeled `abstain`, 1 labeled `pp`) therefore appear as `not_person` cells in
+    the confusion matrix, exercising the real production path rather than the
+    abstain path the fixture used to validate.
+    """
     rows = _load_jsonl(DATA_DIR / "pp_abstain_labels.jsonl")
     routed = route_pp_abstain_rows(rows)
 
@@ -106,16 +115,19 @@ def test_pp_abstain_label_fixture_reproduces_current_validation_metrics():
     assert len(rows) == PP_ABSTAIN_FIXTURE_ROWS
     assert len(decisive) == PP_ABSTAIN_DECISIVE_ROWS
     assert confusion == {
-        ("abstain", "abstain"): 438,
+        ("abstain", "abstain"): 127,
+        ("abstain", "not_person"): 311,
         ("abstain", "pp"): 6,
-        ("pp", "abstain"): 15,
+        ("pp", "abstain"): 14,
+        ("pp", "not_person"): 1,
         ("pp", "pp"): 149,
     }
     assert reason_counts == {
         "clean_bilingual_given_first": 34,
-        "default_abstain": 162,
+        "default_abstain": 17,
+        "not_person": 312,
         "spaced_cjk_zero_batch_surname_first": 7,
-        "weak_zero_batch": 208,
-        "zero_batch_mixed_long": 76,
         "surname_first_two_token": 121,
+        "weak_zero_batch": 41,
+        "zero_batch_mixed_long": 76,
     }

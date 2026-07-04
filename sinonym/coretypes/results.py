@@ -19,8 +19,15 @@ class ParsedName:
     parts appear when combined. For normalized output this is typically
     ["given", "middle", "surname"], while for original input order it may
     be ["surname", "given", "middle"], etc.
-    Component labels remain stable: `surname`/`given_name` always identify
-    those components regardless of `order`.
+
+    `order` is a positional label sequence, not a set: a role may legitimately
+    repeat. For example `parsed_original_order` for "J. Ming K. Zhang" is
+    ["middle", "given", "middle", "surname"] with middle_tokens ["J", "K"] — the
+    two "middle" entries flank the given name. Consumers rebuilding the token
+    stream must walk `order` in sequence and draw from each role's token list
+    (surname_tokens/given_tokens/middle_tokens) in order, never assuming a role
+    appears at most once. Component labels remain stable: `surname`/`given_name`
+    always identify those components regardless of `order`.
     """
 
     surname: str
@@ -30,7 +37,8 @@ class ParsedName:
     # Optional middle name components (e.g., single-letter initials)
     middle_name: str = ""
     middle_tokens: list[str] = field(default_factory=list)
-    # Component order helper (values drawn from {"given","middle","surname"})
+    # Positional component-order labels (each entry one of "given"/"middle"/"surname";
+    # a label may repeat, e.g. ["middle", "given", "middle", "surname"]).
     order: list[str] = field(default_factory=lambda: ["given", "middle", "surname"])
 
 

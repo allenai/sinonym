@@ -76,7 +76,13 @@ class NameDataStructures:
 
     # Canonical per-spelling romanization resolution (surname_romanizations.csv),
     # keyed by as-written (norm_light) spelling. Shared by parser scoring and
-    # batch/routing evidence so both sides resolve a spelling identically.
+    # batch/routing evidence via ``resolve_surname_spelling``. The as-written-vs-
+    # remapped key decision differs by consumer: batch/routing evidence uses the
+    # shared ``surname_lookup_key`` resolver, while parser scoring applies a
+    # stricter romanization-conditional key so its ``_surname_spelling_share_logp``
+    # discount can operate on remapped penalty-spelling mass. The two converge on
+    # the same effective surname mass through different keys (see
+    # ``surname_lookup_key``), not the same literal key.
     surname_romanizations: Mapping[str, SurnameRomanization]
     surname_as_written_aliases: frozenset[str]
 
@@ -103,6 +109,26 @@ class NameDataStructures:
     def resolve_surname_spelling(self, spelling: str) -> SurnameRomanization | None:
         """Resolve an as-written (norm_light) spelling against the curated romanization table."""
         return self.surname_romanizations.get(spelling)
+
+    def surname_lookup_key(self, light_key: str, remapped_key: str) -> str:
+        """Resolve a surname spelling to a single frequency-table lookup key.
+
+        The as-written (norm_light) ``light_key`` wins when the spelling has a
+        curated romanization-table row or carries direct surname frequency mass;
+        otherwise the Wade-Giles/pinyin ``remapped_key`` applies. This is the
+        resolver batch/routing evidence uses (paired with
+        ``get_surname_freq_as_written``) so a spelling resolves to its attested
+        as-written mass. Parser scoring deliberately does *not* call this: it
+        keeps the remapped key for remap-only penalty spellings (e.g. fai, kung)
+        and incidental as-written mass (e.g. cha) so its
+        ``_surname_spelling_share_logp`` discount and comparative order scoring
+        operate on the remapped target mass. Both sides reach the same effective
+        surname mass, one via this as-written key, the other via the remapped key
+        plus a discount; a single literal key cannot serve both.
+        """
+        if self.resolve_surname_spelling(light_key) is not None or self.get_surname_freq(light_key, 0.0) > 0:
+            return light_key
+        return remapped_key
 
     def get_surname_freq_as_written(self, spelling: str, default: float = 0.0) -> float:
         """Surname frequency for an as-written (norm_light) spelling.

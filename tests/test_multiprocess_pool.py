@@ -2,6 +2,8 @@
 Tests for persistent multi-process normalization.
 """
 
+from concurrent.futures.process import BrokenProcessPool
+
 import pytest
 
 TEST_NAMES = [
@@ -83,3 +85,26 @@ def test_persistent_multiprocess_pool_rejects_calls_after_close(detector):
 
     with pytest.raises(RuntimeError, match="closed"):
         pool.normalize_names(["Li Wei"])
+
+
+def test_persistent_multiprocess_pool_surfaces_broken_pool_causes(detector):
+    """A broken worker pool surfaces both init failure and mid-batch worker death."""
+
+    class _BrokenExecutor:
+        """Stand-in executor whose map fails as a broken pool would."""
+
+        def map(self, *_args, **_kwargs):
+            raise BrokenProcessPool
+
+    pool = detector.create_persistent_multiprocess_pool(max_workers=2, chunk_size=2)
+    pool.close()  # Shut the real workers down; we only exercise the error handler.
+    pool._closed = False  # noqa: SLF001 - reopen so normalize_names reaches executor.map.
+    pool._executor = _BrokenExecutor()  # noqa: SLF001 - inject the broken executor.
+
+    with pytest.raises(RuntimeError) as excinfo:
+        pool.normalize_names(["Li Wei"])
+
+    message = str(excinfo.value)
+    assert "initialize" in message  # initialization-failure cause
+    assert "mid-batch" in message  # worker-death-mid-run cause
+    assert isinstance(excinfo.value.__cause__, BrokenProcessPool)  # original chained

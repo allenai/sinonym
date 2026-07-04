@@ -34,7 +34,6 @@ LONG_GIVEN_NAME_TOKEN_MIN_LENGTH = 6
 TWO_TOKEN_NAME_LENGTH = 2
 MIN_CANDIDATES_FOR_CONFIDENCE_GAP = 2
 BATCH_PARTICIPANT_MIN = 2
-BATCH_FORMAT_MIN_VOTER_SHARE = 0.5
 BATCH_FORMAT_DIRECTION_MIN_CONFIDENCE = 0.5
 HIGH_SURNAME_FREQUENCY_MIN = 1000
 MEDIUM_SURNAME_FREQUENCY_MIN = 100
@@ -113,13 +112,6 @@ class BatchVoteStats:
     def total_preferences(self) -> int:
         """Return total format votes."""
         return self.surname_first_preferences + self.given_first_preferences
-
-    @property
-    def voter_share(self) -> float:
-        """Return the share of candidate participants that cast a format vote."""
-        if self.names_with_candidates <= 0:
-            return 0.0
-        return self.total_preferences / self.names_with_candidates
 
 
 if TYPE_CHECKING:
@@ -237,7 +229,6 @@ class BatchAnalysisService:
             results = self._apply_batch_format(
                 format_candidates,
                 format_pattern.dominant_format,
-                normalizer,
                 formatting_service,
             )
             improvements = self._find_improvements(individual_candidates, results)
@@ -704,10 +695,7 @@ class BatchAnalysisService:
             has_decisive_vote or has_unopposed_dominant_vote
         )
         has_enough_voters = stats.total_preferences >= BATCH_PARTICIPANT_MIN
-        has_enough_voter_share = stats.voter_share >= BATCH_FORMAT_MIN_VOTER_SHARE
-        threshold_met = (
-            decision_confidence >= format_threshold and has_confident_direction and has_enough_voters and has_enough_voter_share
-        )
+        threshold_met = decision_confidence >= format_threshold and has_confident_direction and has_enough_voters
 
         return BatchFormatPattern(
             dominant_format=dominant_format,
@@ -792,14 +780,12 @@ class BatchAnalysisService:
         self,
         name_candidates: list[BatchCandidateEntry],
         target_format: NameFormat,
-        normalizer,
         formatting_service,
     ) -> list[ParseResult]:
         """Apply the detected batch format by selecting best candidate matching the format."""
         results = []
-        unambiguous_names = []
 
-        # Process all names in one pass - check for unambiguous names and apply format
+        # Process all names in one pass and apply the target format.
         for entry in name_candidates:
             input_failure = self._input_failure(entry.name)
             if input_failure is not None:
@@ -810,33 +796,15 @@ class BatchAnalysisService:
                 results.append(self._locked_representation_result(entry.name))
                 continue
 
-            # Find candidates that match the target format
+            # Participation guarantees a non-empty candidate list and a best_candidate,
+            # so a candidate is always selected below.
             matching_candidates = [c for c in entry.candidates if c.format == target_format]
-
-            if entry.candidates and not matching_candidates:
-                # This name has no candidates for the target format - it's unambiguous
-                unambiguous_names.append(entry.name)
-                # Use the best available candidate
-                selected_candidate = entry.best_candidate
-            elif matching_candidates:
-                # Use the best candidate that matches the batch format
+            if matching_candidates:
+                # Use the best candidate that matches the batch format.
                 selected_candidate = max(matching_candidates, key=lambda x: x.score)
             else:
-                # No candidates at all
-                selected_candidate = None
-
-            # If no candidate could be selected (likely non-Chinese), try to return
-            # a specific ethnicity-based failure to mirror single-name behavior.
-            if selected_candidate is None and self._ethnicity_service is not None:
-                normalized_input = normalizer.apply(entry.name)
-                eth = self._ethnicity_service.classify_ethnicity(
-                    normalized_input.roman_tokens,
-                    normalized_input.norm_map,
-                    entry.name,
-                )
-                if eth.success is False:
-                    results.append(eth)
-                    continue
+                # No candidate matches the target format: keep this name's own best parse.
+                selected_candidate = entry.best_candidate
 
             result = self._candidate_to_parse_result(
                 selected_candidate,
@@ -1326,17 +1294,14 @@ class BatchAnalysisService:
 
     @staticmethod
     def _surname_lookup_key_for_token(token: str, normalizer, data) -> str:
-        """Return the evidence surname key, preferring the attested as-written romanization.
+        """Return the evidence surname key via the shared surname-key resolver.
 
         The as-written (norm_light) key wins when the canonical romanization
         table enumerates it (full-share and penalty rows alike, so e.g. fai
         stays fai rather than remapping through hui to xu's mass) or when it
         carries direct surname mass; otherwise the remapped key applies.
         """
-        light_key = normalizer.norm_light(token)
-        if data.resolve_surname_spelling(light_key) is not None or data.get_surname_freq(light_key, 0) > 0:
-            return light_key
-        return normalizer.norm(token)
+        return data.surname_lookup_key(normalizer.norm_light(token), normalizer.norm(token))
 
     def _selected_endpoint_frequency_evidence(
         self,

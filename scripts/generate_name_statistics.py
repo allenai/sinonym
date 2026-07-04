@@ -19,8 +19,10 @@ Sources
          "https://github.com/wainshine/Chinese-Names-Corpus/raw/refs/heads/master/Chinese_Names_Corpus/Chinese_Names_Corpus%EF%BC%88120W%EF%BC%89.txt"
 
    Names are split deterministically against the familyname_orcid.csv inventory
-   (2-char compound surname first, then 1-char) and romanized per character with
-   pypinyin plus conventional surname-reading fixes.
+   (2-char compound surname first, then 1-char); only the given-name characters
+   are romanized, per character, with raw ``pypinyin.lazy_pinyin`` (surname
+   characters are discarded once the split is made, so no surname-reading
+   correction is needed here).
 2. Optional in-house byline supplement (``--parquet``): two-token romanized
    author names with exactly one hyphenated token, mined from an author-mention
    parquet (columns ``name``, ``script``). The hyphen convention (the hyphenated
@@ -63,18 +65,6 @@ from sinonym.utils.string_manipulation import StringManipulationUtils
 DATA_DIR = Path(__file__).resolve().parent.parent / "sinonym" / "data"
 
 BYLINE_POSITION_MIN_DISTINCT = 10
-
-# Conventional surname readings where pypinyin's default differs
-# (mirrors PYPINYIN_FREQUENCY_ALIASES, applied at romanization time).
-SURNAME_READING_FIX = {
-    "曾": "zeng",
-    "单": "shan",
-    "解": "xie",
-    "仇": "qiu",
-    "区": "ou",
-    "查": "zha",
-    "繆": "miao",
-}
 
 HYPHEN_NAME_PATTERN = re.compile(
     r"^([A-Za-z]+) ([A-Za-z]+-[A-Za-z]+)$|^([A-Za-z]+-[A-Za-z]+) ([A-Za-z]+)$",
@@ -208,6 +198,9 @@ def _scale(count: int, factor: float) -> int:
 def emit_given_position(corpus: PositionStats, byline: PositionStats | None) -> None:
     """Emit given_position.csv: pooled initial/final counts inside 2-syllable given names."""
     rows: list[tuple[str, int, int, str]] = []
+    if byline is not None and sum(byline.initial.values()) == 0:
+        message = "byline parquet produced no usable rows -- check the file has latin-script hyphenated names"
+        raise ValueError(message)
     factor = sum(corpus.initial.values()) / sum(byline.initial.values()) if byline is not None else 0.0
     corpus_vocabulary = set(corpus.initial) | set(corpus.final)
     byline_vocabulary = (set(byline.initial) | set(byline.final)) if byline is not None else set()
@@ -245,6 +238,12 @@ def main() -> None:
     args = parser.parse_args()
 
     detector = ChineseNameDetector()
+    if detector._data is None:
+        message = (
+            "detector initialization failed (likely a missing/corrupt data CSV); "
+            "restore a working baseline via `git checkout -- sinonym/data/<file>` before regenerating"
+        )
+        raise RuntimeError(message)
     corpus = mine_corpus(Path(args.corpus), detector._normalizer.norm_light)
     byline = mine_byline(Path(args.parquet), detector) if args.parquet else None
     if byline is None:

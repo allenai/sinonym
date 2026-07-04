@@ -1017,7 +1017,17 @@ class NameParsingService:
         return key
 
     def _surname_key(self, surname_tokens: list[str], normalized_cache: dict[str, str]) -> str:
-        """Convert surname tokens to lookup key, preferring Chinese characters when available."""
+        """Convert surname tokens to lookup key, preferring Chinese characters when available.
+
+        Parser scoring uses a stricter romanization-conditional key than the
+        shared ``NameDataStructures.surname_lookup_key`` resolver (used by
+        batch/routing evidence): a spelling only wins its as-written key here
+        when it is a full-share row or carries direct mass, so that remap-only
+        penalty and incidental as-written spellings keep the remapped key their
+        downstream ``_surname_spelling_share_logp`` discount and comparative
+        order scoring depend on. See that method for why the two sides cannot
+        share one literal key.
+        """
         if len(surname_tokens) == 1:
             token = surname_tokens[0]
 

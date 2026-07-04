@@ -959,6 +959,56 @@ def test_mixed_initial_transliteration_gate_preserves_bilingual_names(detector, 
     assert result.result == expected
 
 
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # The bridge requires DIRECT adjacency between the Latin initial and the Han
+        # run. Whitespace between the initial and the Han tokens breaks the bridge, so
+        # the mixed-initial transliteration gate must not reject these genuine Chinese
+        # names that merely carry a Latin initial across a space.
+        "王 M. 小明",  # 王 M. 小明 (dot's Han-side neighbour is a space)
+        "M.D. 王小明",  # M.D. 王小明 (trailing dot's Han-side neighbour is a space)
+        "G. 李小明",  # G. 李小明 (leading initial, space before Han)
+        "李 小明 . G",  # 李 小明 . G (dot flanked by spaces)
+        "李 小明 · G",  # 李 小明 · G (interpunct flanked by spaces)
+        "李 小明 G.",  # 李 小明 G. (trailing initial, already accepted)
+    ],
+)
+def test_mixed_initial_gate_ignores_whitespace_separated_initials(detector, raw_name):
+    """A separator only bridges when it is directly adjacent to both scripts.
+
+    Whitespace between the Latin initial and the Han run must break the bridge, so
+    the non-person gate must not fire for these inputs (they should parse, or fail
+    for some reason other than the non-person rejection).
+    """
+    result = detector.normalize_name(raw_name)
+
+    assert result.success or result.error_message != NON_PERSON_FAILURE_REASON, (
+        f"{raw_name!r}: wrongly rejected as non-person"
+    )
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "G.霍弗",  # G.霍弗 (ASCII full stop)
+        "G·霍弗",  # G·霍弗 (U+00B7 middle dot, legacy set)
+        "G‧霍弗",  # G‧霍弗 (U+2027 hyphenation point, sep_pattern-only)
+        "G∙霍弗",  # G∙霍弗 (U+2219 bullet operator, sep_pattern-only)
+        "G⋅霍弗",  # G⋅霍弗 (U+22C5 dot operator, sep_pattern-only)
+        "J·G·马尔钦凯维奇",  # J·G·马尔钦凯维奇 (chained initials)
+        "罗伯特·M·威恩斯坦",  # 罗伯特·M·威恩斯坦 (Han-flanked initial)
+    ],
+)
+def test_mixed_initial_gate_rejects_separator_variant_transliterations(detector, raw_name):
+    """Every separator that ``config.sep_pattern`` recognises must bridge a Latin
+    initial to its Han transliteration, not just the four legacy dot characters."""
+    result = detector.normalize_name(raw_name)
+
+    assert not result.success
+    assert result.error_message == NON_PERSON_FAILURE_REASON
+
+
 def test_cjk_non_person_markers_do_not_match_internal_substrings(detector):
     result = detector.normalize_name("\u738b\u5927\u5b66\u95ee\u5bb6")
 

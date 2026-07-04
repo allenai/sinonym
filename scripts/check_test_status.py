@@ -437,7 +437,7 @@ def main() -> None:
         junit_error=junit_error,
         failures=failures,
     )
-    print(f"\n{status_message}")
+    print(f"\n{_safe_for_console(status_message)}")
     sys.exit(exit_code)
 
 

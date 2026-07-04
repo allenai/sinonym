@@ -93,6 +93,7 @@ PP_VYS_ABSTAIN_REQUIRED_COLUMNS = (
 )
 
 PP_ABSTAIN_REQUIRED_COLUMNS = (
+    "pp_success",
     "pp_result_token_count",
     "selected_format",
     "batch_total_count",
@@ -130,7 +131,7 @@ PP_VYS_OLD_WEAK_PP_MARGIN_MAX = 0.20
 PP_VYS_OLD_WEAK_PP_VYS_MARGIN_MIN = 0.35
 PP_VYS_GARBAGE_RESULT_TOKEN_MAX = 4
 MIN_INPUT_ORDER_DISPLAY_TOKENS = 2
-ROUTING_TOKEN_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)?", flags=re.UNICODE)
+ROUTING_TOKEN_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", flags=re.UNICODE)
 
 NAME_PRIOR_COMMON_CHINESE_SURNAMES = frozenset(
     {
@@ -903,9 +904,15 @@ def _old_pp_vys_decision_from_row(row: Row) -> tuple[str, str]:
 
     pp_freq = _optional_float(row, "pp_selected_surname_frequency", default=0.0)
     vys_freq = _optional_float(row, "vys_selected_surname_frequency", default=0.0)
-    vys_over_pp_freq_ratio = vys_freq / pp_freq if pp_freq > 0 else 0.0
-    pp_position = _required_string(row, "pp_selected_surname_position", allowed=("first", "last", "unknown"))
-    vys_position = _required_string(row, "vys_selected_surname_position", allowed=("first", "last", "unknown"))
+    if pp_freq > 0:
+        vys_over_pp_freq_ratio = vys_freq / pp_freq
+    elif vys_freq > 0:
+        # PP surname is unseen while VYS surname is attested: maximal VYS evidence.
+        vys_over_pp_freq_ratio = math.inf
+    else:
+        vys_over_pp_freq_ratio = 0.0
+    pp_position = _required_string(row, "pp_selected_surname_position", allowed=("first", "last", "internal", "unknown"))
+    vys_position = _required_string(row, "vys_selected_surname_position", allowed=("first", "last", "internal", "unknown"))
     endpoint_disagrees = pp_position in {"first", "last"} and vys_position in {"first", "last"} and pp_position != vys_position
     vys_batch_dominant_format = _required_string(row, "vys_batch_dominant_format", allowed=FORMAT_VALUES)
     use_vys = (
@@ -966,6 +973,38 @@ def _format_pattern_decision_confidence(pattern: Any) -> float:
     return float(confidence)
 
 
+def _input_order_display(parsed: ParsedName) -> list[tuple[str, str]]:
+    """Rebuild the input-order (role, token) sequence from a parse's positional labels.
+
+    `ParsedName.order` is a positional label sequence in which a role may repeat
+    (e.g. ``["middle", "given", "middle", "surname"]`` for ``J. Ming K. Zhang``).
+    Tokens are drawn from each role's list in order: the final occurrence of a role
+    drains its remaining tokens and every earlier occurrence consumes exactly one.
+    This keeps a single-occurrence role that owns several tokens intact (e.g.
+    ``["surname", "given"]`` with two given tokens) while never emitting a token
+    twice when a label repeats.
+    """
+    tokens_by_role = {
+        "surname": list(parsed.surname_tokens),
+        "given": list(parsed.given_tokens),
+        "middle": list(parsed.middle_tokens),
+    }
+    last_occurrence = {role: index for index, role in enumerate(parsed.order)}
+    consumed = dict.fromkeys(tokens_by_role, 0)
+    display: list[tuple[str, str]] = []
+    for index, role in enumerate(parsed.order):
+        tokens = tokens_by_role.get(role)
+        if not tokens or consumed[role] >= len(tokens):
+            continue
+        if index == last_occurrence[role]:
+            display.extend((role, token) for token in tokens[consumed[role]:])
+            consumed[role] = len(tokens)
+        else:
+            display.append((role, tokens[consumed[role]]))
+            consumed[role] += 1
+    return display
+
+
 def input_order_parsed(result: ParseResult) -> ParsedName | None:
     """Materialize the preprocessed input-order (as-typed) parse for an abstain route.
 
@@ -982,12 +1021,7 @@ def input_order_parsed(result: ParseResult) -> ParsedName | None:
     if original is None or not original.surname_tokens:
         return None
 
-    tokens_by_role = {
-        "surname": list(original.surname_tokens),
-        "given": list(original.given_tokens),
-        "middle": list(original.middle_tokens),
-    }
-    display = [(role, token) for role in original.order for token in tokens_by_role.get(role, ())]
+    display = _input_order_display(original)
     if len(display) < MIN_INPUT_ORDER_DISPLAY_TOKENS or display[-1][0] == "middle":
         return None
 
@@ -1116,7 +1150,14 @@ def _name_tokens(name: str) -> tuple[str, ...]:
 
 
 def _pp_abstain_failed_parse(row: Row) -> bool:
-    return "pp_success" in row and not _required_bool(row, "pp_success")
+    """Return whether the PP parse failed, routing the row to a terminal non-person decision.
+
+    `pp_success` is a required pp-abstain column (see `PP_ABSTAIN_REQUIRED_COLUMNS`),
+    so a failed parse always routes `not_person`, matching production. This is the
+    real path for the fixture's failed-parse rows (encoded as `pp_result_token_count
+    == 1` with `selected_format == "mixed"`).
+    """
+    return not _required_bool(row, "pp_success")
 
 
 def _pp_abstain_uses_pp_parse_for_abstain(row: Row) -> bool:

@@ -87,6 +87,25 @@ def test_full_share_rows_resolve_to_runtime_surname_mass(detector):
         assert detector._data.get_surname_freq(key) >= float(row["surname_ppm_as_written"]), spelling
 
 
+def test_surname_lookup_key_resolves_as_written_vs_remapped(detector):
+    """The shared resolver keeps the as-written key for rows/direct-mass, else remapped.
+
+    'kuang' carries direct surname mass (234 ppm) with no romanization row and
+    would remap to the unattested 'guang'; batch/routing evidence resolves it to
+    its attested as-written key via this shared resolver.
+    """
+    data = detector._data
+    # Direct mass, no table row -> as-written key.
+    assert data.surname_lookup_key("kuang", "guang") == "kuang"
+    assert data.get_surname_freq("kuang") > 0
+    # Romanization-table penalty row, no direct light mass -> as-written key.
+    assert data.surname_lookup_key("fai", "hui") == "fai"
+    # Full-share table row -> as-written key.
+    assert data.surname_lookup_key("chien", "jian") == "chien"
+    # No row and no direct mass -> remapped key.
+    assert data.surname_lookup_key("zzqq", "wang") == "wang"
+
+
 def test_evidence_frequencies_use_as_written_resolution(detector):
     """Batch/routing evidence resolves a spelling exactly like the curated table.
 
