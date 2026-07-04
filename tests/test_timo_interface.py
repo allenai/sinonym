@@ -452,3 +452,45 @@ def test_routing_predictor_one_prediction_per_instance():
     # timo reconstructs each prediction via prediction_class(**raw_pred); round-trip must hold
     rebuilt = [RoutedPaperPrediction(**p.dict()) for p in results]
     assert rebuilt == results
+
+
+def test_routing_predictor_isolates_malformed_instance_in_batch():
+    """A malformed pool in one co-batched instance must not abort the whole batch.
+
+    NB: `route_pp_vys` itself still raises on a bad pool (strict validation is unchanged, see
+    `test_route_pp_vys_requires_paper_authors_first`). The isolation is applied only at the
+    `RoutingPredictor.predict_batch` boundary, which catches the precondition error PER INSTANCE.
+    """
+    rp = RoutingPredictor(config=PredictorConfig(), artifacts_dir=".")
+    good_a = RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Yue Lin", "Wei Wang", "Jun Zhao"])
+    # middle: paper authors are NOT the leading slice of the pool -> pool precondition violated
+    malformed = RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Wei Wang", "Yue Lin", "Tao Sun"])
+    good_b = RoutingInstance(pp_names=["Chuang Yang"], vys_pool_names=["Chuang Yang", "Hui Li", "Tao Sun"])
+
+    results = rp.predict_batch([good_a, malformed, good_b])
+
+    # 1:1 ordering preserved; the malformed slot is present but empty.
+    assert len(results) == EXPECTED_BATCH_CONTEXT_RESULT_COUNT
+    assert all(isinstance(p, RoutedPaperPrediction) for p in results)
+    assert [len(p.authors) for p in results] == [2, 0, 1]
+    assert results[1].authors == []
+
+    # flanking instances equal exactly what they'd produce alone.
+    assert results[0] == rp.predict_batch([good_a])[0]
+    assert results[2] == rp.predict_batch([good_b])[0]
+
+
+def test_routing_predictor_all_malformed_instances_yield_empty_predictions():
+    """Every instance malformed -> N empty predictions, no exception raised."""
+    rp = RoutingPredictor(config=PredictorConfig(), artifacts_dir=".")
+    instances = [
+        RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Wei Wang", "Yue Lin", "Tao Sun"]),
+        # pool smaller than the paper -> also a pool precondition violation
+        RoutingInstance(pp_names=["Chuang Yang", "Hui Li"], vys_pool_names=["Chuang Yang"]),
+    ]
+
+    results = rp.predict_batch(instances)
+
+    assert len(results) == len(instances)
+    assert all(isinstance(p, RoutedPaperPrediction) for p in results)
+    assert all(p.authors == [] for p in results)

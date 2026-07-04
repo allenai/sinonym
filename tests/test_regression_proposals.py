@@ -998,11 +998,20 @@ def test_mixed_initial_gate_ignores_whitespace_separated_initials(detector, raw_
         "G⋅霍弗",  # G⋅霍弗 (U+22C5 dot operator, sep_pattern-only)
         "J·G·马尔钦凯维奇",  # J·G·马尔钦凯维奇 (chained initials)
         "罗伯特·M·威恩斯坦",  # 罗伯特·M·威恩斯坦 (Han-flanked initial)
+        # Multi-character separator RUNS between the Latin initial and the Han run
+        # must bridge too: sep_pattern matches whole runs, so a run scan sees the
+        # Latin/CJK characters flanking the run even though the interior separators
+        # only neighbour other separators.
+        "G..霍弗",  # G..霍弗 (doubled ASCII full stop)
+        "G.·霍弗",  # G.·霍弗 (mixed full stop + interpunct)
+        "G··霍弗",  # G··霍弗 (doubled interpunct)
+        "H··纳格尔斯",  # H··纳格尔斯 (doubled interpunct, longer Han run)
     ],
 )
 def test_mixed_initial_gate_rejects_separator_variant_transliterations(detector, raw_name):
     """Every separator that ``config.sep_pattern`` recognises must bridge a Latin
-    initial to its Han transliteration, not just the four legacy dot characters."""
+    initial to its Han transliteration, not just the four legacy dot characters,
+    and multi-character separator runs must bridge as well."""
     result = detector.normalize_name(raw_name)
 
     assert not result.success

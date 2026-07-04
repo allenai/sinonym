@@ -1,3 +1,4 @@
+import logging
 from enum import Enum
 
 from pydantic import BaseModel, BaseSettings, Field, root_validator
@@ -10,6 +11,19 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_abstain_rows,
     route_pp_vys_abstain_batches,
 )
+
+_LOGGER = logging.getLogger(__name__)
+
+
+class _PoolPreconditionError(ValueError):
+    """A `RoutingInstance`'s `vys_pool_names` violates the `route_pp_vys` pool precondition.
+
+    Raised only at the `route_pp_vys` pool-shape validation sites (paper authors must be the leading
+    slice of the pool). Subclasses `ValueError` so any existing caller that catches `ValueError`
+    keeps working (contract preserved), while `RoutingPredictor.predict_batch` can catch THIS narrow
+    type to isolate one malformed instance instead of aborting a whole co-batched request. It is
+    deliberately module-private: an internal signalling type, never part of a serving DTO/schema.
+    """
 
 
 class TimoModel(BaseModel):
@@ -495,10 +509,10 @@ class Predictor:
                 f"vys_pool_names (len {len(vys_pool_names)}) must contain at least the paper's "
                 f"{n} authors — the paper is a subset of the venue pool"
             )
-            raise ValueError(message)
+            raise _PoolPreconditionError(message)
         if list(vys_pool_names[:n]) != list(pp_names):
             message = "vys_pool_names must start with the paper's authors: vys_pool_names[:len(pp_names)] == pp_names"
-            raise ValueError(message)
+            raise _PoolPreconditionError(message)
 
         pp_batch = self._detector.analyze_name_batch(pp_names)
         pool = self._detector.analyze_name_batch(vys_pool_names)
@@ -625,7 +639,32 @@ class RoutingPredictor(Predictor):
     Wraps `Predictor.route`. Stays 1:1 with the timo instance/prediction contract — the paper's
     per-author routed results are nested in `RoutedPaperPrediction.authors` (aligned to pp_names),
     so paper boundaries are explicit and empty papers still emit one prediction.
+
+    Batch robustness: `route` (via `route_pp_vys`) raises `_PoolPreconditionError` when an
+    instance's `vys_pool_names` violates the pool precondition (the paper's authors must be the
+    leading slice). Because timo co-batches independent requests, one malformed instance must not
+    abort the batch, so `predict_batch` catches that precondition error PER INSTANCE and emits an
+    empty-authors prediction (`RoutedPaperPrediction(authors=[])`) in its slot, keeping the strict
+    1:1 ordering intact so instances never silently vanish. The empty-authors result is the same
+    valid contract shape an author-less paper already produces; the anomaly is surfaced via a
+    `logging.warning` (this module's logger) rather than swallowed. Only the narrow precondition
+    error is caught — genuine programming errors (unexpected router decisions, etc.) still propagate.
     """
 
     def predict_batch(self, instances: list[RoutingInstance]) -> list[RoutedPaperPrediction]:  # type: ignore[override]
-        return [RoutedPaperPrediction(authors=self.route(inst.pp_names, inst.vys_pool_names)) for inst in instances]
+        predictions: list[RoutedPaperPrediction] = []
+        for inst in instances:
+            try:
+                authors = self.route(inst.pp_names, inst.vys_pool_names)
+            except _PoolPreconditionError:
+                _LOGGER.warning(
+                    "Dropping RoutingInstance authors: vys_pool_names violates the route_pp_vys "
+                    "pool precondition (pp_names must be the leading slice of vys_pool_names); "
+                    "emitting authors=[] to preserve the 1:1 instance->prediction contract. "
+                    "pp_names=%r",
+                    inst.pp_names,
+                    exc_info=True,
+                )
+                authors = []
+            predictions.append(RoutedPaperPrediction(authors=authors))
+        return predictions

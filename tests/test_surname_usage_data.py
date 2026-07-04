@@ -16,7 +16,7 @@ def test_surname_usage_keys_match_lookup_normalization(detector):
     can never be queried by the scorer and silently drops its corpus counts.
     """
     usage = detector._data.surname_usage_logodds
-    assert len(usage) > 500
+    assert len(usage) == 702
     unstable = [key for key in usage if detector._normalizer.norm_light(key) != key]
     assert unstable == []
 

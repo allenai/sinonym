@@ -4,7 +4,7 @@ from pathlib import Path
 
 from sinonym.pipeline.name_order_routing import route_pp_abstain_rows, route_pp_vys_abstain_rows
 
-DATA_DIR = Path("sinonym/data/name_order_routing")
+DATA_DIR = Path(__file__).resolve().parents[1] / "sinonym" / "data" / "name_order_routing"
 PP_VYS_FIXTURE_ROWS = 1000
 PP_VYS_DECISIVE_ROWS = 791
 PP_VYS_EITHER_ROWS = 164

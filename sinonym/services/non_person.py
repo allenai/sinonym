@@ -106,34 +106,35 @@ class NonPersonInputDetectionService:
         return self._has_initial_cjk_separator_bridge(raw_name)
 
     def _has_initial_cjk_separator_bridge(self, raw_name: str) -> bool:
-        """Return whether a separator directly joins a Latin initial to a CJK run.
+        """Return whether a separator run directly joins a Latin initial to a CJK run.
 
-        Scans each separator character and inspects only its *immediate*
-        neighbours (index-1 and index+1) with no whitespace skipping: a bridge
-        exists when one directly-adjacent side is a Latin letter and the other is
-        CJK, in either order. Direct adjacency is the discriminator — a Latin
-        initial that is whitespace-separated from the Han tokens ("李 小明 G.",
-        "G. 李小明", "李 小明 · G") has a space as its immediate neighbour and does
-        not bridge, which is what tells a genuine Chinese name carrying a Latin
-        middle initial apart from a Western transliteration.
+        Scans each maximal separator *run* (``config.sep_pattern`` matches whole
+        runs of separator characters) and inspects the two characters flanking the
+        run — ``raw_name[start-1]`` and ``raw_name[end]`` — with no whitespace
+        skipping: a bridge exists when one directly-adjacent side is a Latin letter
+        and the other is CJK, in either order. Scanning whole runs is what catches
+        multi-separator bridges ("G..霍弗", "G··霍弗", "H··纳格尔斯") that a
+        one-character-at-a-time scan would miss, since the interior separators'
+        immediate neighbours are other separators. Direct adjacency is the
+        discriminator — a Latin initial that is whitespace-separated from the Han
+        tokens ("李 小明 G.", "G. 李小明", "李 小明 · G") has a space flanking the run
+        and does not bridge, which is what tells a genuine Chinese name carrying a
+        Latin middle initial apart from a Western transliteration.
 
-        For chained initials the separator adjacent to the Han run is the one that
+        For chained initials the run adjacent to the Han run is the one that
         bridges ("J·G·马尔钦凯维奇" bridges on the G·马 separator; "罗伯特·M·威恩斯坦"
         bridges on the 特·M separator), so those foreign transliterations are still
         caught.
 
-        Separator membership is derived from ``config.sep_pattern`` (a character is
-        a separator iff that pattern matches it), keeping this rule in sync with
-        the single canonical separator definition instead of a private hardcoded
-        set.
+        Separator membership is derived from ``config.sep_pattern``, keeping this
+        rule in sync with the single canonical separator definition instead of a
+        private hardcoded set.
         """
         sep_pattern = self._config.sep_pattern
         cjk_pattern = self._config.cjk_pattern
-        for index, char in enumerate(raw_name):
-            if not sep_pattern.fullmatch(char):
-                continue
-            left = raw_name[index - 1] if index > 0 else ""
-            right = raw_name[index + 1] if index + 1 < len(raw_name) else ""
+        for match in sep_pattern.finditer(raw_name):
+            left = raw_name[match.start() - 1] if match.start() > 0 else ""
+            right = raw_name[match.end()] if match.end() < len(raw_name) else ""
             left_is_cjk = bool(left) and bool(cjk_pattern.search(left))
             right_is_cjk = bool(right) and bool(cjk_pattern.search(right))
             left_is_latin = bool(left) and left.isascii() and left.isalpha()

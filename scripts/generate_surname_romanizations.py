@@ -19,11 +19,41 @@ mass it keeps when scored as a surname:
   "Kong Kung" with zero regressions; 2.0 log-units flips Leung Ka Fai, Kong
   Kung needs more than 3.0).
 
-Column semantics are documented in ``sinonym/data/README.md``. The scoring
-hook (``NameParsingService``) consumes only ``spelling`` and ``target_share``;
-``mandarin_target`` and ``surname_ppm_as_written`` document the seeding so a
-future corpus-derived estimate (ORCID-with-country) can replace the numbers
-without a schema change.
+Column semantics are documented in ``sinonym/data/README.md``. Every column is
+runtime-consumed: ``NameParsingService`` scores single-token surname candidates
+from ``target_share``, and ``surname_ppm_as_written`` is loaded as the effective
+surname frequency for penalty rows (``initialization.py`` seeds
+``surname_frequencies`` from it and ``get_surname_freq_as_written`` returns
+``max(direct, as_written_ppm)``). ``mandarin_target`` names the remap target and
+also drives that seeding. ``surname_ppm_as_written`` is therefore load-bearing,
+not documentation, so a corrupted committed value has runtime effect and this
+generator must not regenerate it *from itself*.
+
+Regeneration idempotence invariant
+----------------------------------
+Running this script against a healthy committed CSV must reproduce that CSV
+byte-for-byte. The generator reads ``detector._data``, which initialization
+builds partly *from* this same CSV, so any column computed from a value the CSV
+itself supplied for that spelling would be a self-referential fixed point that
+silently propagates a corrupted committed value into the regenerated output.
+To avoid that for the mass columns:
+
+- Full-share ``CANTONESE_SURNAMES`` rows read the frequency from the *Mandarin
+  target* key (which comes from the ``familyname_orcid.csv`` base data), not from
+  the as-written spelling's own frequency entry (which the CSV seeds).
+- The remap-only loop excludes the table's own as-written aliases from the
+  "attested -> keep full mass" skip, so a corrupted CSV cannot suppress penalty
+  rows by injecting spurious spellings into ``surnames``.
+
+Residual circularity (documented, not fixed): 13 Mandarin targets are themselves
+full-share spellings in this table (they are ``CANTONESE_SURNAMES`` keys, e.g.
+``li``, ``huang``, ``yu``). Corrupting *their own* row can still perturb their
+``surname_frequencies`` entry (via ``initialization._build_surname_log_probabilities``,
+which overwrites with the CSV's ``as_written_ppm`` when it exceeds the base mass),
+which then flows to rows that target them (e.g. corrupting ``li`` reaches both
+``li`` and ``lee``). Fully breaking this would require the generator to read the
+raw ``familyname_orcid.csv`` base frequencies instead of the initialized data;
+that is a larger change and is left as a known limitation.
 
 Usage:
     uv run python scripts/generate_surname_romanizations.py
@@ -151,10 +181,17 @@ def build_rows(detector: ChineseNameDetector) -> list[dict[str, object]]:
                 "target_share": round(PENALTY_SHARE, 10),
             }
             continue
+        # Read the frequency from the Mandarin *target* key, not the as-written
+        # Cantonese key. In a healthy state initialization sets
+        # frequencies[cantonese_key] == frequencies[mandarin] for full-share
+        # rows, so this is value-identical; but the target key does not route
+        # through surname_romanizations.csv, so a corrupted committed value for
+        # THIS spelling's own row no longer feeds back into its regenerated
+        # mass (see the idempotence invariant in the module docstring).
         rows[cantonese_key] = {
             "spelling": cantonese_key,
             "mandarin_target": mandarin,
-            "surname_ppm_as_written": round(data.surname_frequencies.get(cantonese_key, 0.0), 4),
+            "surname_ppm_as_written": round(data.surname_frequencies.get(mandarin, 0.0), 4),
             "target_share": 1.0,
         }
 
@@ -182,8 +219,16 @@ def build_rows(detector: ChineseNameDetector) -> list[dict[str, object]]:
         target_mass = data.surname_frequencies.get(remapped, 0.0)
         if target_mass <= 0:
             continue  # inherits no surname mass -> harmless
-        if light in data.surnames:
-            continue  # attested as-written -> keeps full mass
+        if light in data.surnames and light not in data.surname_as_written_aliases:
+            # Attested as-written with its own (familyname-derived) surname mass
+            # -> keeps full mass. Exclude spellings the table itself injected into
+            # `surnames` (the full-share/penalty as-written aliases): those are
+            # this generator's own output, so skipping on them would let a
+            # corrupted committed CSV suppress penalty rows it should still emit.
+            # In a healthy state every alias is already in `rows` (produced by the
+            # CANTONESE_SURNAMES / WADE_GILES loops above) and skipped earlier, so
+            # this guard is value-identical while breaking that circularity.
+            continue
         rows[light] = {
             "spelling": light,
             "mandarin_target": remapped,

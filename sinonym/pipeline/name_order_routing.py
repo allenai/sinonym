@@ -19,9 +19,12 @@ Materializing `abstain`:
   via `input_order_parsed(result)` (trailing token is the surname, everything
   else keeps its position), except spaced Han surname-first rows, where source
   spacing already marks the surname boundary and the PP parse is the input-order
-  reading. Do NOT re-parse the name standalone: the single-name detector
-  re-decides order, which defeats the point of abstaining and couples the routed
-  output to parser-version behavior.
+  reading. If the as-typed reading cannot be materialized (e.g. the
+  original-order parse ends in a middle initial), the abstain surfaces as an
+  explicit failure (no parsed person) — never fall back to the reordered PP
+  parse the abstain declined to trust. Do NOT re-parse the name standalone: the
+  single-name detector re-decides order, which defeats the point of abstaining
+  and couples the routed output to parser-version behavior.
 """
 
 from __future__ import annotations
@@ -1056,10 +1059,14 @@ def pp_abstain_parsed(result: ParseResult, route_row: Row) -> ParsedName | None:
     Latin-only abstain keeps the as-typed given-first reading. Spaced Han rows
     guarded by `spaced_cjk_zero_batch_surname_first` already have a source
     surname boundary, so the PP parse is the stable input-order reading.
+    Returns None when the as-typed reading cannot be materialized (e.g. the
+    original-order parse ends in a middle initial): an abstain must surface as
+    an explicit failure, never fall back to the reordered PP parse it declined
+    to trust.
     """
     if _pp_abstain_uses_pp_parse_for_abstain(route_row):
         return result.parsed if result.success else None
-    return input_order_parsed(result) or (result.parsed if result.success else None)
+    return input_order_parsed(result)
 
 
 def _result_text(result: ParseResult) -> str:

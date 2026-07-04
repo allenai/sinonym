@@ -23,6 +23,9 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_vys_abstain_rows,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+ROUTING_SCRIPT_PATH = REPO_ROOT / "scripts" / "name_order_routing_rules.py"
+
 JSONL_SCALAR_COUNT = 3
 JSONL_SCALAR_SCORE = 0.25
 
@@ -210,7 +213,7 @@ def _routing_batch(names, results, evidence, pattern):
 
 
 def test_name_order_routing_script_is_in_sdist_include():
-    pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     sdist_section = pyproject.split("[tool.hatch.build.targets.sdist]", maxsplit=1)[1]
     sdist_section = sdist_section.split("\n[", maxsplit=1)[0]
 
@@ -235,7 +238,7 @@ def test_name_order_routing_script_preserves_empty_csv_schema(tmp_path, monkeypa
             str(output_path),
         ],
     )
-    runpy.run_path("scripts/name_order_routing_rules.py", run_name="__main__")
+    runpy.run_path(str(ROUTING_SCRIPT_PATH), run_name="__main__")
 
     with output_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -261,7 +264,7 @@ def test_name_order_routing_script_preserves_empty_pp_vys_csv_schema(tmp_path, m
             str(output_path),
         ],
     )
-    runpy.run_path("scripts/name_order_routing_rules.py", run_name="__main__")
+    runpy.run_path(str(ROUTING_SCRIPT_PATH), run_name="__main__")
 
     with output_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -280,7 +283,7 @@ def test_name_order_routing_script_preserves_empty_pp_vys_csv_schema(tmp_path, m
 
 def test_name_order_routing_script_writes_numpy_scalars_to_jsonl(tmp_path):
     output_path = tmp_path / "rows.jsonl"
-    script_module = runpy.run_path("scripts/name_order_routing_rules.py")
+    script_module = runpy.run_path(str(ROUTING_SCRIPT_PATH))
 
     script_module["_write_rows"](
         [
@@ -319,7 +322,7 @@ def test_name_order_routing_script_rejects_empty_csv_with_missing_schema(tmp_pat
     )
 
     with pytest.raises(ValueError, match="missing required columns"):
-        runpy.run_path("scripts/name_order_routing_rules.py", run_name="__main__")
+        runpy.run_path(str(ROUTING_SCRIPT_PATH), run_name="__main__")
 
 
 def test_name_order_routing_script_rejects_headerless_empty_csv(tmp_path, monkeypatch):
@@ -341,7 +344,7 @@ def test_name_order_routing_script_rejects_headerless_empty_csv(tmp_path, monkey
     )
 
     with pytest.raises(ValueError, match="missing required columns"):
-        runpy.run_path("scripts/name_order_routing_rules.py", run_name="__main__")
+        runpy.run_path(str(ROUTING_SCRIPT_PATH), run_name="__main__")
 
 
 def test_pp_abstain_builder_converts_batch_evidence_to_router_rows(detector):
@@ -946,6 +949,44 @@ def test_pp_abstain_parsed_uses_input_order_for_regular_abstain():
     parsed = pp_abstain_parsed(result, {"router_reason": "default_abstain"})
 
     assert (parsed.given_name, parsed.surname) == ("Wang", "Wei")
+
+
+def test_pp_abstain_parsed_fails_instead_of_pp_fallback_when_input_order_unavailable():
+    # The original-order parse ends in a middle initial, so the as-typed reading
+    # cannot be materialized. A regular abstain must surface None (explicit
+    # failure), never fall back to the reordered PP parse it declined to trust.
+    result = _parse_result("Zhang", ["Wei"], ["surname", "given", "middle"], middle_tokens=["K"])
+
+    assert input_order_parsed(result) is None
+    assert pp_abstain_parsed(result, {"router_reason": "default_abstain"}) is None
+    assert pp_abstain_parsed(result, {"router_reason": "weak_zero_batch"}) is None
+
+
+def test_pp_abstain_parsed_spaced_cjk_exception_keeps_pp_parse_when_input_order_unavailable():
+    # The spaced-Han exception emits the PP parse even when the as-typed reading
+    # cannot be materialized: the source space already marks the surname boundary.
+    result = _parse_result("Zhang", ["Wei"], ["surname", "given", "middle"], middle_tokens=["K"])
+
+    parsed = pp_abstain_parsed(result, {"router_reason": "spaced_cjk_zero_batch_surname_first"})
+
+    assert parsed is result.parsed
+
+
+def test_pp_abstain_route_with_failed_input_order_materialization_emits_no_parse(detector):
+    # End-to-end: "Zhang Wei K." parses with original order ['surname', 'given',
+    # 'middle'], routes to abstain, and the trailing middle initial blocks the
+    # as-typed reading — the materialized abstain parse must be None, not the
+    # PP reordered parse ("Wei K Zhang").
+    batch = detector.analyze_name_batch(["Zhang Wei K."])
+    result = batch.results[0]
+    assert result.success
+    assert result.parsed_original_order.order[-1] == "middle"
+
+    (routed,) = route_pp_abstain_rows(build_pp_abstain_rows(batch, detector))
+    assert routed["router_prediction"] == "abstain"
+    assert routed["router_reason"] != "spaced_cjk_zero_batch_surname_first"
+
+    assert pp_abstain_parsed(result, routed) is None
 
 
 def test_input_order_parsed_rejects_trailing_middle_initial():

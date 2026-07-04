@@ -31,4 +31,4 @@ def test_given_position_includes_byline_supplement():
 def test_given_position_scale(detector):
     """Positional counts must stay at corpus scale (deadband calibrated to it)."""
     total = sum(int(row["initial_count"]) for row in open_csv_reader("given_position.csv"))
-    assert total > 900_000
+    assert total == 1_927_487

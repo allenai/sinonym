@@ -166,6 +166,9 @@ already marks the surname boundary, so `spaced_cjk_zero_batch_surname_first`
 abstains emit the PP parse instead of flipping to trailing-token surname. It
 is an emitted person parse, not a defer signal, and it deliberately does NOT
 re-parse the name standalone, since the single-name detector re-decides order.
+If the as-typed reading cannot be materialized (e.g. the original-order parse
+ends in a middle initial), the abstain surfaces as an explicit failure (no
+parsed person) rather than falling back to the reordered PP parse.
 
 ## Refreshing these fixtures after parser changes
 

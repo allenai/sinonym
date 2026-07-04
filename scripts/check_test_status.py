@@ -324,6 +324,32 @@ def _unexpected_failure_sample(failures: list[FailureDetail]) -> str:
     return f"{', '.join(samples)}{suffix}"
 
 
+def _execution_status_error(
+    total_failures: int,
+    *,
+    pytest_returncode: int | None,
+    junit_error: str | None,
+) -> str | None:
+    """Return a failure message if the run cannot be scored against the baseline.
+
+    These conditions describe a run that never produced a trustworthy JUnit
+    failure list (crash, non-baseline exit code, or a returncode/total mismatch),
+    so signature-level comparison would be meaningless. Returns None when the run
+    is well-formed enough to be scored.
+    """
+    if pytest_returncode is None:
+        return "Test execution failed before pytest returned a status."
+    if junit_error is not None:
+        return junit_error
+    if pytest_returncode not in PYTEST_BASELINE_RETURN_CODES:
+        return f"Pytest execution failed with exit code {pytest_returncode}."
+    if pytest_returncode == 1 and total_failures == 0:
+        return "Pytest failed without JUnit-reported failures."
+    if pytest_returncode == 0 and total_failures > 0:
+        return "JUnit reported failures even though pytest exited successfully."
+    return None
+
+
 def status_exit_decision(
     total_failures: int,
     *,
@@ -332,38 +358,44 @@ def status_exit_decision(
     junit_error: str | None = None,
     failures: Iterable[FailureDetail] | None = None,
 ) -> tuple[int, str]:
-    """Return process exit code and final status message."""
-    unexpected_signatures = unexpected_failure_signatures(failures or ())
-    if pytest_returncode is None:
-        exit_code = 1
-        status_message = "Test execution failed before pytest returned a status."
-    elif junit_error is not None:
-        exit_code = 1
-        status_message = junit_error
-    elif pytest_returncode not in PYTEST_BASELINE_RETURN_CODES:
-        exit_code = 1
-        status_message = f"Pytest execution failed with exit code {pytest_returncode}."
-    elif pytest_returncode == 1 and total_failures == 0:
-        exit_code = 1
-        status_message = "Pytest failed without JUnit-reported failures."
-    elif pytest_returncode == 0 and total_failures > 0:
-        exit_code = 1
-        status_message = "JUnit reported failures even though pytest exited successfully."
-    elif unexpected_signatures:
-        exit_code = 1
-        status_message = f"Unexpected pytest failure signatures: {_unexpected_failure_sample(unexpected_signatures)}"
-    elif not perf_passed:
-        exit_code = 1
-        status_message = "Performance tests failed!"
+    """Return process exit code and final status message.
+
+    The exit-0 (baseline / improvement) paths are only reached once the concrete
+    failure list has been validated against ``total_failures`` and cleared of any
+    signature outside the known baseline. A missing or length-inconsistent list is
+    treated as caller misuse and fails loudly rather than being guessed into a
+    false pass.
+    """
+    execution_error = _execution_status_error(
+        total_failures,
+        pytest_returncode=pytest_returncode,
+        junit_error=junit_error,
+    )
+    # Past the execution guard signatures must be checked, so the concrete list is
+    # required and must agree with the reported total before it can be scored.
+    failures_list = None if failures is None else list(failures)
+    length_ok = failures_list is not None and len(failures_list) == total_failures
+    unexpected_signatures = unexpected_failure_signatures(failures_list) if length_ok else []
+
+    if execution_error is not None:
+        exit_code, status_message = 1, execution_error
+    elif failures_list is None:
+        exit_code, status_message = 1, "Cannot verify failures against the baseline: no failure list was provided."
+    elif len(failures_list) != total_failures:
+        exit_code, status_message = 1, (
+            f"Failure count mismatch: received {len(failures_list)} JUnit failures but total_failures={total_failures}."
+        )
     elif total_failures > EXPECTED_FAILURES:
-        exit_code = 1
-        status_message = f"REGRESSION! Too many failures ({total_failures} > {EXPECTED_FAILURES})"
+        exit_code, status_message = 1, f"REGRESSION! Too many failures ({total_failures} > {EXPECTED_FAILURES})"
+    elif unexpected_signatures:
+        sample = _unexpected_failure_sample(unexpected_signatures)
+        exit_code, status_message = 1, f"Unexpected pytest failure signatures: {sample}"
+    elif not perf_passed:
+        exit_code, status_message = 1, "Performance tests failed!"
     elif total_failures == EXPECTED_FAILURES:
-        exit_code = 0
-        status_message = f"Tests are at expected baseline ({EXPECTED_FAILURES} failures, performance OK)"
+        exit_code, status_message = 0, f"Tests are at expected baseline ({EXPECTED_FAILURES} failures, performance OK)"
     else:
-        exit_code = 0
-        status_message = (
+        exit_code, status_message = 0, (
             f"IMPROVEMENT! Tests are better than baseline ({total_failures} < {EXPECTED_FAILURES} failures, performance OK)"
         )
 
