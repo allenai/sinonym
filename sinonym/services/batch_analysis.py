@@ -1051,7 +1051,11 @@ class BatchAnalysisService:
 
             normalized_input = normalizer.apply(entry.name)
             raw_tokens = list(normalized_input.roman_tokens)
-            normalized_raw_tokens = [normalizer.norm(token) for token in raw_tokens]
+
+            def surname_lookup_key(token: str) -> str:
+                return self._surname_lookup_key_for_token(token, normalizer, data)
+
+            normalized_raw_tokens = [surname_lookup_key(token) for token in raw_tokens]
             first_freq, last_freq = self._endpoint_surname_frequencies(raw_tokens, normalizer, data)
             selected_format = self._format_from_parse_result(result)
             individual_format = entry.best_candidate.format if entry.best_candidate else self._format_from_parse_result(result)
@@ -1059,7 +1063,7 @@ class BatchAnalysisService:
                 result,
                 raw_tokens,
                 normalized_raw_tokens,
-                normalizer,
+                surname_lookup_key,
                 normalized_input.compound_metadata,
             )
             selected_position = selected_span.position if selected_span is not None else "unknown"
@@ -1121,7 +1125,7 @@ class BatchAnalysisService:
         result: ParseResult,
         raw_tokens: list[str],
         normalized_raw_tokens: list[str],
-        normalizer,
+        surname_lookup_key: collections.abc.Callable[[str], str],
         compound_metadata,
     ) -> SurnameEndpointSpan | None:
         """Return the selected surname's matched span in the normalized input."""
@@ -1132,7 +1136,7 @@ class BatchAnalysisService:
         if not surname_tokens or not raw_tokens:
             return None
 
-        normalized_surname_tokens = [normalizer.norm(token) for token in surname_tokens]
+        normalized_surname_tokens = [surname_lookup_key(token) for token in surname_tokens]
         selected_surname = "".join(normalized_surname_tokens)
         selected_surname_key = self._selected_compound_surname_lookup_key(
             surname_tokens,
@@ -1308,9 +1312,31 @@ class BatchAnalysisService:
         if not raw_tokens:
             return None, None
 
-        first_freq = float(data.get_surname_freq(normalizer.norm(raw_tokens[0]), 0))
-        last_freq = float(data.get_surname_freq(normalizer.norm(raw_tokens[-1]), 0))
+        first_freq = float(
+            data.get_surname_freq_as_written(
+                BatchAnalysisService._surname_lookup_key_for_token(raw_tokens[0], normalizer, data),
+            ),
+        )
+        last_freq = float(
+            data.get_surname_freq_as_written(
+                BatchAnalysisService._surname_lookup_key_for_token(raw_tokens[-1], normalizer, data),
+            ),
+        )
         return first_freq, last_freq
+
+    @staticmethod
+    def _surname_lookup_key_for_token(token: str, normalizer, data) -> str:
+        """Return the evidence surname key, preferring the attested as-written romanization.
+
+        The as-written (norm_light) key wins when the canonical romanization
+        table enumerates it (full-share and penalty rows alike, so e.g. fai
+        stays fai rather than remapping through hui to xu's mass) or when it
+        carries direct surname mass; otherwise the remapped key applies.
+        """
+        light_key = normalizer.norm_light(token)
+        if data.resolve_surname_spelling(light_key) is not None or data.get_surname_freq(light_key, 0) > 0:
+            return light_key
+        return normalizer.norm(token)
 
     def _selected_endpoint_frequency_evidence(
         self,
@@ -1324,7 +1350,7 @@ class BatchAnalysisService:
         if selected_span is None or selected_span.position not in {"first", "last"}:
             return None, None, None
 
-        selected_freq = float(data.get_surname_freq(selected_span.lookup_key, 0))
+        selected_freq = float(data.get_surname_freq_as_written(selected_span.lookup_key))
         alternate_span = self._alternate_endpoint_span(
             selected_span,
             raw_tokens,
@@ -1333,7 +1359,7 @@ class BatchAnalysisService:
         )
         alternate_freq = None
         if alternate_span is not None:
-            alternate_freq = float(data.get_surname_freq(alternate_span.lookup_key, 0))
+            alternate_freq = float(data.get_surname_freq_as_written(alternate_span.lookup_key))
 
         if alternate_freq is None or alternate_freq <= 0:
             return selected_freq, alternate_freq, None

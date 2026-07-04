@@ -11,6 +11,7 @@ documented in sinonym/data/README.md.
 import pytest
 
 from sinonym.resources import open_csv_reader
+from sinonym.services.batch_analysis import BatchAnalysisService
 from tests._case_assertions import assert_normalized_name
 
 
@@ -51,6 +52,47 @@ def test_discount_skips_whitelisted_wade_giles_surnames(detector):
     service = detector._parsing_service
     assert service._surname_spelling_share_logp("Tsai") == 0.0
     assert service._surname_spelling_share_logp("Chuang") == 0.0
+
+
+def test_full_share_rows_resolve_to_runtime_surname_mass(detector):
+    """Full-share rows resolve to their as-written key with at least target mass.
+
+    The parser's as-written key preference relies on initialization loading
+    every full-share spelling into surname_frequencies with the mandarin
+    target's mass (e.g. chien -> qian's 1864.96, not the remapped jian's
+    208.64), so this asserts the invariant the preference depends on.
+    """
+    rows = list(open_csv_reader("surname_romanizations.csv"))
+    full_share_rows = [row for row in rows if float(row["target_share"]) == 1.0]
+
+    assert full_share_rows
+    for row in full_share_rows:
+        spelling = row["spelling"]
+        key = detector._parsing_service._surname_key([spelling.title()], {})
+        assert key == spelling, spelling
+        assert detector._data.get_surname_freq(key) >= float(row["surname_ppm_as_written"]), spelling
+
+
+def test_evidence_frequencies_use_as_written_resolution(detector):
+    """Batch/routing evidence resolves a spelling exactly like the curated table.
+
+    Penalty rows keep the discounted as-written mass instead of remapping into
+    the target's full mass (fai must not inherit xu's 13,395 ppm through the
+    fai -> hui remap), and full-share rows keep the mandarin target's mass even
+    when the remapped form has incidental mass of its own (chien -> qian's
+    1864.96, not jian's 208.64).
+    """
+    data = detector._data
+    normalizer = detector._normalizer
+
+    def evidence_freq(token: str) -> float:
+        key = BatchAnalysisService._surname_lookup_key_for_token(token, normalizer, data)
+        return data.get_surname_freq_as_written(key)
+
+    assert evidence_freq("fai") == pytest.approx(245.344)
+    assert evidence_freq("chien") == pytest.approx(1864.9567)
+    # spellings outside the table keep their attested as-written mass
+    assert evidence_freq("cha") == pytest.approx(255.4735, abs=1e-3)
 
 
 def test_remap_only_surname_candidates_lose_to_attested_parses(detector):

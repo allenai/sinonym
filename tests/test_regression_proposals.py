@@ -374,19 +374,19 @@ def test_total_given_frequency_denominator_matches_finalized_map(detector):
 
 def test_compound_surname_log_probabilities_use_compound_inclusive_total(detector):
     data_service = detector._data_service
-    surnames_raw, surname_frequencies = data_service._build_surname_data()
+    surname_romanizations = data_service._load_surname_romanizations()
+    surnames_raw, surname_frequencies, _surname_aliases = data_service._build_surname_data(surname_romanizations)
     base_total = sum(surname_frequencies.values())
 
     compound_surnames = _build_compound_surnames(surnames_raw)
-    compound_hyphen_map = data_service._build_compound_hyphen_map(compound_surnames)
     surname_log_probabilities = data_service._build_surname_log_probabilities(
         surname_frequencies,
         compound_surnames,
-        compound_hyphen_map,
+        surname_romanizations,
     )
 
     # Replay compound updates to derive the expected denominator.
-    _, replay_frequencies = data_service._build_surname_data()
+    _, replay_frequencies, _surname_aliases = data_service._build_surname_data(surname_romanizations)
     compound_delta = 0.0
     for compound_surname in compound_surnames:
         parts = compound_surname.split()

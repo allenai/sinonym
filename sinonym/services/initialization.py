@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from sinonym.chinese_names_data import CANTONESE_SURNAMES, COMPOUND_VARIANTS, PYPINYIN_FREQUENCY_ALIASES
 from sinonym.resources import open_csv_reader
@@ -21,6 +21,20 @@ from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
     from sinonym.coretypes import ChineseNameConfig
+
+
+class SurnameRomanization(NamedTuple):
+    """One curated row of surname_romanizations.csv, keyed by as-written spelling.
+
+    ``target_share`` is the share of ``mandarin_target``'s surname mass the
+    as-written spelling keeps when scored as a surname (1.0 for attested
+    romanizations, ~e^-4 for remap-only spellings). ``as_written_ppm`` is the
+    already-discounted mass: target mass times ``target_share``.
+    """
+
+    mandarin_target: str
+    target_share: float
+    as_written_ppm: float
 
 
 @dataclass(frozen=True)
@@ -60,10 +74,11 @@ class NameDataStructures:
     # Per-syllable log-odds of surname-position usage in romanized author names
     surname_usage_logodds: Mapping[str, float]
 
-    # Per-spelling log(target_share) from surname_romanizations.csv: the share of
-    # the remap target's surname mass an as-written spelling keeps when scored
-    # as a surname (0.0 for attested romanizations, ~-4.0 for remap-only ones)
-    surname_spelling_share_logp: Mapping[str, float]
+    # Canonical per-spelling romanization resolution (surname_romanizations.csv),
+    # keyed by as-written (norm_light) spelling. Shared by parser scoring and
+    # batch/routing evidence so both sides resolve a spelling identically.
+    surname_romanizations: Mapping[str, SurnameRomanization]
+    surname_as_written_aliases: frozenset[str]
 
     def get_surname_logp(self, surname_key: str, default: float) -> float:
         """Get surname log probability with default fallback."""
@@ -85,13 +100,37 @@ class NameDataStructures:
         """Get surname frequency with default fallback."""
         return self.surname_frequencies.get(surname_key, default)
 
+    def resolve_surname_spelling(self, spelling: str) -> SurnameRomanization | None:
+        """Resolve an as-written (norm_light) spelling against the curated romanization table."""
+        return self.surname_romanizations.get(spelling)
+
+    def get_surname_freq_as_written(self, spelling: str, default: float = 0.0) -> float:
+        """Surname frequency for an as-written (norm_light) spelling.
+
+        Curated table rows honor the mandarin target's mass (full-share rows) or
+        the discounted as-written mass (penalty rows), even when the spelling's
+        remapped form has incidental mass of its own. Spellings outside the
+        table fall back to the runtime frequency table.
+        """
+        direct = self.surname_frequencies.get(spelling, 0.0)
+        resolution = self.surname_romanizations.get(spelling)
+        if resolution is not None:
+            return max(direct, resolution.as_written_ppm)
+        return direct if direct > 0 else default
+
     def get_surname_rank(self, surname_key: str, default: float = 0.0) -> float:
         """Get surname percentile rank with default fallback."""
         return self.surname_percentile_ranks.get(surname_key, default)
 
     def is_surname(self, token: str, normalized_token: str) -> bool:
         """Check if token is a surname using both original and normalized forms."""
-        return token in self.surnames or normalized_token in self.surnames or normalized_token in self.surnames_normalized
+        token_key = token.lower()
+        return (
+            token_key in self.surname_as_written_aliases
+            or token in self.surnames
+            or normalized_token in self.surnames
+            or normalized_token in self.surnames_normalized
+        )
 
     def is_given_name(self, normalized_token: str) -> bool:
         """Check if normalized token is a given name."""
@@ -120,8 +159,11 @@ class DataInitializationService:
     def initialize_data_structures(self) -> NameDataStructures:
         """Initialize all immutable data structures."""
 
+        # Canonical romanization table: one load shared by scoring and evidence
+        surname_romanizations = self._load_surname_romanizations()
+
         # Build core surname data
-        surnames_raw, surname_frequencies = self._build_surname_data()
+        surnames_raw, surname_frequencies, surname_as_written_aliases = self._build_surname_data(surname_romanizations)
         surnames = frozenset(StringManipulationUtils.remove_spaces(s.lower()) for s in surnames_raw)
         compound_surnames = frozenset(s.lower() for s in surnames_raw if " " in s)
 
@@ -159,7 +201,7 @@ class DataInitializationService:
         surname_log_probabilities = self._build_surname_log_probabilities(
             surname_frequencies,
             compound_surnames,
-            compound_hyphen_map,
+            surname_romanizations,
         )
 
         # Build pre-computed percentile ranks for ML features
@@ -167,9 +209,6 @@ class DataInitializationService:
 
         # Build romanized surname-position usage statistics
         surname_usage_logodds = self._build_surname_usage_logodds()
-
-        # Build romanization-conditional surname spelling shares
-        surname_spelling_share_logp = self._build_surname_romanization_shares()
 
         return NameDataStructures(
             surnames=surnames,
@@ -190,7 +229,8 @@ class DataInitializationService:
             compound_hyphen_map=MappingProxyType(dict(compound_hyphen_map)),
             compound_original_format_map=MappingProxyType(dict(compound_original_format_map)),
             surname_usage_logodds=MappingProxyType(surname_usage_logodds),
-            surname_spelling_share_logp=MappingProxyType(surname_spelling_share_logp),
+            surname_romanizations=MappingProxyType(surname_romanizations),
+            surname_as_written_aliases=frozenset(surname_as_written_aliases),
         )
 
     def _is_plausible_chinese_syllable(self, component: str) -> bool:
@@ -228,10 +268,25 @@ class DataInitializationService:
 
         return True
 
-    def _build_surname_data(self) -> tuple[set[str], dict[str, float]]:
+    def _load_surname_romanizations(self) -> dict[str, SurnameRomanization]:
+        """Load surname_romanizations.csv into the canonical per-spelling map."""
+        return {
+            row["spelling"]: SurnameRomanization(
+                mandarin_target=row["mandarin_target"],
+                target_share=float(row["target_share"]),
+                as_written_ppm=float(row["surname_ppm_as_written"]),
+            )
+            for row in open_csv_reader("surname_romanizations.csv")
+        }
+
+    def _build_surname_data(
+        self,
+        surname_romanizations: dict[str, SurnameRomanization],
+    ) -> tuple[set[str], dict[str, float], set[str]]:
         """Build surname sets and frequency data."""
         surnames_raw = set()
         surname_frequencies = {}
+        surname_as_written_aliases = set()
 
         for row in open_csv_reader("familyname_orcid.csv"):
             han = row["surname"]
@@ -273,21 +328,18 @@ class DataInitializationService:
                     surname_frequencies.get(cant_surname, 0),
                     surname_frequencies[mand_key],
                 )
+                surname_as_written_aliases.add(cant_surname)
 
-        return surnames_raw, surname_frequencies
+        # Add curated full-share romanization spellings as as-written surname aliases.
+        # Penalty-share spellings stay out of the surname tables so they still
+        # inherit discounted target mass through the parser's scoring hook.
+        for spelling, resolution in surname_romanizations.items():
+            if resolution.target_share != 1.0:
+                continue
+            surnames_raw.add(spelling.title())
+            surname_as_written_aliases.add(spelling)
 
-    def _build_surname_romanization_shares(self) -> dict[str, float]:
-        """Build per-spelling log(target_share) from surname_romanizations.csv.
-
-        The table is keyed by as-written (norm_light) spelling and generated by
-        scripts/generate_surname_romanizations.py. Attested surname
-        romanizations carry target_share 1.0 (log-share 0.0); spellings that
-        inherit surname mass only through romanization remapping carry the
-        penalty share (~e^-4). Only the scoring discount in NameParsingService
-        consumes this; surname key resolution and every other
-        surname_frequencies consumer are unaffected.
-        """
-        return {row["spelling"]: math.log(float(row["target_share"])) for row in open_csv_reader("surname_romanizations.csv")}
+        return surnames_raw, surname_frequencies, surname_as_written_aliases
 
     def _build_given_name_data(self) -> tuple[frozenset[str], dict[str, float], frozenset[str]]:
         """Build given name data, log probabilities, and dynamically generate plausible components."""
@@ -416,7 +468,7 @@ class DataInitializationService:
         self,
         surname_frequencies: dict[str, float],
         compound_surnames: frozenset[str],
-        compound_hyphen_map: dict[str, str],
+        surname_romanizations: dict[str, SurnameRomanization],
     ) -> dict[str, float]:
         """Build surname log probabilities including compound surnames."""
         surname_log_probabilities = {}
@@ -469,6 +521,23 @@ class DataInitializationService:
                 surname_log_probabilities[variant_compound] = surname_log_probabilities[standard_compound]
             if standard_compound in surname_frequencies:
                 surname_frequencies[variant_compound] = surname_frequencies[standard_compound]
+
+        # Add full-share as-written romanization aliases after the base
+        # distribution is built. Each full-share spelling ends up carrying at
+        # least the mandarin target's mass under its as-written key (even when
+        # the remapped spelling has incidental mass of its own, e.g. chien ->
+        # qian, not jian) without inflating the global denominator. Spellings
+        # already at or above the target mass keep their own entries.
+        for spelling, resolution in surname_romanizations.items():
+            if resolution.target_share != 1.0 or resolution.as_written_ppm <= 0:
+                continue
+            if surname_frequencies.get(spelling, 0.0) >= resolution.as_written_ppm:
+                continue
+            surname_frequencies[spelling] = resolution.as_written_ppm
+            surname_log_probabilities[spelling] = surname_log_probabilities.get(
+                resolution.mandarin_target,
+                math.log(resolution.as_written_ppm / total_with_compounds),
+            )
 
         return surname_log_probabilities
 

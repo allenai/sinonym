@@ -864,10 +864,10 @@ class NameParsingService:
         spelling = self._normalizer.norm_light(token)
         if spelling in self._data.surnames:
             return 0.0
-        return self._data.surname_spelling_share_logp.get(
-            spelling,
-            REMAP_ONLY_SURNAME_DEFAULT_LOG_SHARE,
-        )
+        resolution = self._data.resolve_surname_spelling(spelling)
+        if resolution is None:
+            return REMAP_ONLY_SURNAME_DEFAULT_LOG_SHARE
+        return math.log(resolution.target_share)
 
     def _decompose_unknown_given(
         self,
@@ -1026,7 +1026,18 @@ class NameParsingService:
                 if token in self._data.surname_frequencies:
                     return token
 
-            # Try original form first (more likely to preserve correct romanization)
+            # Prefer the as-written romanization for curated full-share spellings
+            # (surname_romanizations.csv): initialization guarantees they carry
+            # the mandarin target's full mass under this key (e.g. chien ->
+            # qian mass, not the remapped jian mass). Everything else (penalty
+            # rows, incidental as-written mass such as Cantonese-block aliases)
+            # keeps the pre-existing remapped-key scoring.
+            light_key = self._normalizer.norm_light(token)
+            resolution = self._data.resolve_surname_spelling(light_key)
+            if resolution is not None and resolution.target_share == 1.0:
+                return light_key
+
+            # Try normalized form next.
             original_key = self._normalizer.norm(token)
             if original_key in self._data.surname_frequencies:
                 return original_key
