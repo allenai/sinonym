@@ -1026,15 +1026,18 @@ class NameParsingService:
                 if token in self._data.surname_frequencies:
                     return token
 
-            # Prefer the as-written romanization for curated full-share spellings
-            # (surname_romanizations.csv): initialization guarantees they carry
-            # the mandarin target's full mass under this key (e.g. chien ->
-            # qian mass, not the remapped jian mass). Everything else (penalty
-            # rows, incidental as-written mass such as Cantonese-block aliases)
-            # keeps the pre-existing remapped-key scoring.
+            # Prefer the as-written romanization for curated spellings
+            # (surname_romanizations.csv) that carry their own frequency
+            # entry: initialization guarantees full-share rows the mandarin
+            # target's full mass under this key (e.g. chien -> qian mass, not
+            # the remapped jian mass) and Korean-dominant trimmed penalty rows
+            # their discounted as-written mass (e.g. jung, not zheng's mass).
+            # Everything else (remap-only penalty rows like fai, incidental
+            # as-written mass such as the Cantonese-block 'cha') keeps the
+            # pre-existing remapped-key scoring.
             light_key = self._normalizer.norm_light(token)
             resolution = self._data.resolve_surname_spelling(light_key)
-            if resolution is not None and resolution.target_share == 1.0:
+            if resolution is not None and (resolution.target_share == 1.0 or light_key in self._data.surname_frequencies):
                 return light_key
 
             # Try normalized form next.

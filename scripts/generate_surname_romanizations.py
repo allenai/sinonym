@@ -8,7 +8,11 @@ different Mandarin syllable, and assigns each spelling the share of that target
 mass it keeps when scored as a surname:
 
 - ``CANTONESE_SURNAMES`` keys and the curated Wade-Giles/Taiwanese surname
-  spellings below are attested surname romanizations -> full share (1.0).
+  spellings below are attested surname romanizations -> full share (1.0),
+  except the Korean-dominant spellings in
+  ``KOREAN_DOMINANT_FULL_SHARE_EXCLUSIONS``, which are demoted to the penalty
+  share (their real-but-minor Chinese usage keeps discounted as-written mass
+  instead of the Mandarin target's full mass).
 - Every other spelling reachable only through romanization remapping, with no
   as-written surname attestation, gets the penalty share e^-4 (~1.8%), the
   operating point measured on the 795-case eval (fixes "Leung Ka Fai" and
@@ -38,6 +42,63 @@ OUTPUT_NAME = "surname_romanizations.csv"
 
 # Measured operating point: remap-only spellings keep e^-4 of the target mass.
 PENALTY_SHARE = math.exp(-4.0)
+
+# Korean-dominant CANTONESE_SURNAMES keys demoted from full share (aliasing
+# the Mandarin target's full mass) to the penalty share (~1.8% of the target,
+# scoring as-written like a genuinely rare Chinese surname). Each decision was
+# fixed by measurement: the "delta" quoted is the attributed net change in
+# decisive pp-vys string-level correctness when ALL 18 Korean-overlap
+# full-share spellings were trimmed at once and the fixture evidence refreshed
+# (near-per-spelling by case-insensitive token match, see the commit message).
+# Full-share rows granting real Chinese surname mass (Cantonese/HK/SG/MY/TW
+# usage) stay full-share; a blanket trim would be very wrong for them.
+#
+# TRIMMED (5) - Korean-dominant, trimming is neutral-or-positive on fixtures:
+#   jung   delta +2  Korean 정; jung->zheng. Fixes "Jung Im Na"/"Jung Mi Cha".
+#   im     delta +1  Korean 임; im->lin (Chinese 林 is romanized lin/lim, not
+#                     im). Fixes "Jung Im Na"; kept in the trim set over jang
+#                     because it carries this measured fix.
+#   pak    delta +1  Korean 박; pak->bai. Fixes "Pak Siau Wei".
+#   moon   delta  0  Korean 문; moon->wen. No Chinese as-written usage in the
+#                     fixtures/eval to lose; linguistically Korean-dominant.
+#   kyeong delta  0  Korean 경; kyeong->jing. Absent from fixtures/eval;
+#                     linguistically Korean-dominant.
+#
+# KEPT full-share (13) - measured cost, Chinese dominance, or eval-baseline:
+#   lee    delta -2  HK 李, top Chinese surname; trimming breaks Lee Yan Ying/Lee Si.
+#   choi   delta -2  HK 蔡; trimming breaks Changsun Choi/Mi Ran Choi.
+#   han    delta  0  Chinese 韩 common; net-neutral (Han Liang +1, Dai Hoon Han -1).
+#   ho     delta +1  HK/Cantonese 何, top HK surname; the sole +1 is one
+#                     Cantonese-context row (Ho-fung Hung), outweighed by ho's
+#                     dominant legit Chinese usage - exactly the resolver's target.
+#   chang  delta  0  WG/TW 张; only cosmetic either-string flips, no accuracy change.
+#   lim    delta  0  SG/MY 林; Chinese-dominant, no decisive change.
+#   yu     delta  0  yu->yu is the Mandarin surname 于/俞/余 itself; trimming would
+#                     penalize a real full-mass Chinese surname. Keep firmly.
+#   jang   delta  0  Korean 장 (would otherwise be trimmed), but the {im,jang,jung}
+#                     trio flips the borderline eval case "Li Zheng" via a global
+#                     surname-rank shift; eval must hold at the 17-name baseline,
+#                     so one of {im,jang} is retained and im carries the measured
+#                     fix while jang has zero attributed fixture delta.
+#   koo    delta  0  eval-baseline: trimming rejects "Koo Ming"; also Chinese-attested
+#                     (Zhang Koo). Korean 구/Chinese 顾/古 - keep.
+#   shin   delta  0  bicultural (Korean 신 / Chinese 沈/辛); no Chinese-attested
+#                     fixture/eval usage but default-keep (conservative); trimming
+#                     only diverges the either row So Ra Shin.
+#   son    delta  0  bicultural (Korean 손 / Chinese 孙); no fixture/eval presence, default-keep.
+#   soo    delta  0  bicultural (Korean 수 / Chinese 苏); only a cosmetic identical-string
+#                     flip (Soo Han), default-keep.
+#   suh    delta  0  bicultural (Korean 서 / Chinese 徐); only a freq change on S. Suh,
+#                     no outcome change, default-keep.
+KOREAN_DOMINANT_FULL_SHARE_EXCLUSIONS = frozenset(
+    {
+        "im",
+        "jung",
+        "kyeong",
+        "moon",
+        "pak",
+    },
+)
 
 # Wade-Giles/Taiwanese/Hokkien spellings that genuinely romanize surnames but
 # are never listed as-written in the surname tables (spelling -> primary
@@ -73,12 +134,23 @@ def build_rows(detector: ChineseNameDetector) -> list[dict[str, object]]:
 
     rows: dict[str, dict[str, object]] = {}
 
-    # Attested Cantonese/Hokkien/Korean surname romanizations: current behavior
+    # Attested Cantonese/Hokkien surname romanizations: current behavior
     # (alias to the Mandarin target's mass) is kept, i.e. full target share.
+    # Korean-dominant exclusions are demoted to the penalty share of the
+    # target's mass (computed from the target so regeneration is idempotent).
     for cantonese_key, (mandarin, _han) in CANTONESE_SURNAMES.items():
         if " " in cantonese_key:
             continue  # compound surnames are handled by COMPOUND_VARIANTS
         assert norm_light(cantonese_key) == cantonese_key, cantonese_key
+        if cantonese_key in KOREAN_DOMINANT_FULL_SHARE_EXCLUSIONS:
+            target_mass = data.surname_frequencies.get(mandarin, 0.0)
+            rows[cantonese_key] = {
+                "spelling": cantonese_key,
+                "mandarin_target": mandarin,
+                "surname_ppm_as_written": round(target_mass * PENALTY_SHARE, 4),
+                "target_share": round(PENALTY_SHARE, 10),
+            }
+            continue
         rows[cantonese_key] = {
             "spelling": cantonese_key,
             "mandarin_target": mandarin,

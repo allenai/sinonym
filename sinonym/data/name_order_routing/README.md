@@ -23,15 +23,26 @@ debug-only columns.
   self-contained for future evidence refreshes (paper IDs stay out by
   design). Labels are `pp`, `abstain`, or `uncertain`.
 
-## Evidence provenance (re-refreshed after the as-written romanization resolver, July 2026)
+## Evidence provenance (re-refreshed after the Korean-dominant full-share trim, July 2026)
 
-The evidence columns were last regenerated after surname-frequency evidence
-switched to the canonical as-written romanization resolution
-(`surname_romanizations.csv` rows resolve to as-written mass: full-share rows
-carry the mandarin target's mass, penalty rows the discounted as-written mass,
-so e.g. `Fai` no longer inherits xu's full mass through the fai->hui remap).
-This changed `selected_surname_frequency` on 54/750 pp-abstain rows and at
-least one evidence field on 541/1000 pp-vys rows. Before that they were
+The evidence columns were last regenerated after five Korean-dominant
+`CANTONESE_SURNAMES` keys (`jung`, `moon`, `im`, `kyeong`, `pak`) were demoted
+from full share to the penalty share in `surname_romanizations.csv`: they now
+score as-written like rare Chinese surnames (their discounted mass) instead of
+inheriting their Mandarin target's full mass (zheng/wen/lin/jing/bai). Heavily
+Chinese-used overlap spellings stay full share (`lee`, `lim`, `chang`/`jang`,
+`choi`, `ho`, `han`, `yu`, `koo`, and the bicultural `shin`/`son`/`soo`/`suh`);
+see the generator's `KOREAN_DOMINANT_FULL_SHARE_EXCLUSIONS` for the
+per-spelling measured rationale. This refresh changed `selected_surname_frequency`
+on 1/750 pp-abstain rows (plus `batch_total_count` on 2 more from batch
+recomposition) and at least one evidence field on 331/1000 pp-vys rows; no
+pp-abstain routing outcome moved.
+
+The prior refresh switched surname-frequency evidence to the canonical
+as-written romanization resolution (`surname_romanizations.csv` rows resolve to
+as-written mass: full-share rows carry the mandarin target's mass, penalty rows
+the discounted as-written mass, so e.g. `Fai` no longer inherits xu's full mass
+through the fai->hui remap). Before that they were
 regenerated under the PR #18 parser after the
 ordered-pair bigram feature was removed (one-sided order suppression,
 romanization-conditional surname discount, and the corpus-regenerated
@@ -76,7 +87,10 @@ accepted by the repo owner) applied on top of the re-refreshed evidence:
   to `uncertain` pending relabeling, leaving 156 `either` rows. The July 2026
   as-written romanization-resolver refresh (below) re-derived the set once
   more: 12 `vys` rows whose strings converged joined and 4 `either` rows whose
-  strings diverged were demoted to `uncertain`, leaving 164 `either` rows.
+  strings diverged were demoted to `uncertain`, leaving 164 `either` rows. The
+  Korean-dominant full-share trim refresh re-derived the set again: 2 `pp` and
+  1 `vys` row whose strings converged joined and 3 `either` rows whose strings
+  diverged were demoted to `uncertain`, still 164 `either` rows (net zero).
 - pp-vys, suspicious labels (20 rows adjudicated): June label disagreed with
   both the current router and at least one strong-evidence signal; 10 were
   overturned, 10 kept as labeled.
@@ -105,8 +119,8 @@ produces, for three stacked reasons:
    `decision_confidence` (production convention).
 
 The regression tests assert the current numbers for the current router on
-the re-refreshed, relabeled fixtures: pp-vys 729/806 decisive rows correct at
-the emitted-string level plus 156/156 `either` rows (see Semantics), and
+the re-refreshed, relabeled fixtures: pp-vys 719/791 decisive rows correct at
+the emitted-string level plus 164/164 `either` rows (see Semantics), and
 pp-abstain 587/608 at the route level (the new `pp` labels include rows the
 tuned rules deliberately leave on `abstain`, e.g. below-threshold bilingual
 glosses, so route-level mismatches there document router conservatism, not

@@ -318,21 +318,19 @@ class DataInitializationService:
                 )
                 surnames_raw.add(alias_key.title())
 
-        # Add Cantonese surnames
-        for cant_surname, (mand_surname, _han_char) in CANTONESE_SURNAMES.items():
-            surnames_raw.add(cant_surname.title())
-            # Use lowercase key to match the frequency mapping format
-            mand_key = mand_surname.lower()
-            if mand_key in surname_frequencies:
-                surname_frequencies[cant_surname] = max(
-                    surname_frequencies.get(cant_surname, 0),
-                    surname_frequencies[mand_key],
-                )
-                surname_as_written_aliases.add(cant_surname)
+        # Add Cantonese surnames (frequency aliasing driven by the romanization table).
+        self._add_cantonese_surname_aliases(
+            surname_romanizations,
+            surnames_raw,
+            surname_frequencies,
+            surname_as_written_aliases,
+        )
 
         # Add curated full-share romanization spellings as as-written surname aliases.
-        # Penalty-share spellings stay out of the surname tables so they still
-        # inherit discounted target mass through the parser's scoring hook.
+        # Remap-only penalty spellings (e.g. fai) stay out of the surname tables so
+        # they still inherit discounted target mass through the parser's scoring hook;
+        # Korean-dominant penalty Cantonese keys were already added above as attested
+        # as-written spellings carrying their discounted frequency directly.
         for spelling, resolution in surname_romanizations.items():
             if resolution.target_share != 1.0:
                 continue
@@ -340,6 +338,34 @@ class DataInitializationService:
             surname_as_written_aliases.add(spelling)
 
         return surnames_raw, surname_frequencies, surname_as_written_aliases
+
+    @staticmethod
+    def _add_cantonese_surname_aliases(
+        surname_romanizations: dict[str, SurnameRomanization],
+        surnames_raw: set[str],
+        surname_frequencies: dict[str, float],
+        surname_as_written_aliases: set[str],
+    ) -> None:
+        """Alias each CANTONESE_SURNAMES key to a surname frequency, per the table.
+
+        ``surname_romanizations.csv`` is the source of truth for how much of the
+        Mandarin target's mass each single-token spelling keeps: full-share rows
+        alias the target's full mass (pre-existing behavior), while penalty rows
+        (Korean-dominant spellings trimmed by
+        ``scripts/generate_surname_romanizations.py``, e.g. jung/moon/im) keep only
+        the discounted as-written mass, scoring like genuinely rare Chinese surnames
+        instead of their Mandarin targets. Every key is still an attested as-written
+        surname; only its frequency differs.
+        """
+        for cant_surname, (mand_surname, _han_char) in CANTONESE_SURNAMES.items():
+            surnames_raw.add(cant_surname.title())
+            resolution = surname_romanizations.get(cant_surname)
+            penalty = resolution is not None and resolution.target_share != 1.0
+            source_freq = resolution.as_written_ppm if penalty else surname_frequencies.get(mand_surname.lower(), 0.0)
+            if source_freq <= 0:
+                continue
+            surname_frequencies[cant_surname] = max(surname_frequencies.get(cant_surname, 0), source_freq)
+            surname_as_written_aliases.add(cant_surname)
 
     def _build_given_name_data(self) -> tuple[frozenset[str], dict[str, float], frozenset[str]]:
         """Build given name data, log probabilities, and dynamically generate plausible components."""

@@ -6,7 +6,7 @@ from sinonym.pipeline.name_order_routing import route_pp_abstain_rows, route_pp_
 
 DATA_DIR = Path("sinonym/data/name_order_routing")
 PP_VYS_FIXTURE_ROWS = 1000
-PP_VYS_DECISIVE_ROWS = 794
+PP_VYS_DECISIVE_ROWS = 791
 PP_VYS_EITHER_ROWS = 164
 PP_ABSTAIN_FIXTURE_ROWS = 750
 PP_ABSTAIN_DECISIVE_ROWS = 608
@@ -83,10 +83,10 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
     assert len(either) == PP_VYS_EITHER_ROWS
     assert either_scored == {"match": PP_VYS_EITHER_ROWS}
     assert confusion == {
-        ("pp", "match"): 387,
-        ("pp", "mismatch"): 60,
-        ("vys", "match"): 328,
-        ("vys", "mismatch"): 19,
+        ("pp", "match"): 388,
+        ("pp", "mismatch"): 57,
+        ("vys", "match"): 331,
+        ("vys", "mismatch"): 15,
     }
     assert {reason: count for reason, count in reason_counts.items() if reason.startswith("name_prior_")} == {
         "name_prior_cantonese_given_first": 6,

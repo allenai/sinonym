@@ -19,18 +19,32 @@ def test_table_keys_match_lookup_normalization(detector):
     """Every spelling must be a unique norm_light fixed point with a valid share.
 
     A spelling that norm_light rewrites can never be queried by the scoring
-    discount; penalty rows that are attested as-written would contradict the
-    surname tables the discount defers to.
+    discount. Penalty rows come in two kinds:
+
+    - remap-only spellings (no as-written attestation) must stay out of the
+      surname tables, so the scoring discount fires on their remapped target
+      mass rather than being short-circuited by an attested-as-written entry;
+    - Korean-dominant CANTONESE_SURNAMES keys trimmed from full share (e.g.
+      jung, moon, im) stay attested as-written but must carry the *discounted*
+      as-written mass directly (their surname frequency equals the penalty
+      ppm, not the Mandarin target's full mass), so no extra discount is owed.
     """
+    data = detector._data
     rows = list(open_csv_reader("surname_romanizations.csv"))
     assert len(rows) > 200
     spellings = [row["spelling"] for row in rows]
     assert len(set(spellings)) == len(spellings)
     for row in rows:
-        assert detector._normalizer.norm_light(row["spelling"]) == row["spelling"]
-        assert 0.0 < float(row["target_share"]) <= 1.0
-        if float(row["target_share"]) < 1.0:
-            assert row["spelling"] not in detector._data.surnames
+        spelling = row["spelling"]
+        assert detector._normalizer.norm_light(spelling) == spelling
+        share = float(row["target_share"])
+        assert 0.0 < share <= 1.0
+        if share < 1.0 and spelling in data.surnames:
+            # Attested-but-trimmed penalty row: frequency must be the discounted
+            # as-written mass (a rare Chinese surname), never the full target.
+            assert data.get_surname_freq(spelling) == pytest.approx(
+                float(row["surname_ppm_as_written"]),
+            ), spelling
 
 
 def test_discount_fires_for_remap_only_spellings(detector):
