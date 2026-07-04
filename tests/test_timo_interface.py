@@ -30,6 +30,11 @@ LEGACY_SURNAME_FIRST_COUNT = 3
 LEGACY_GIVEN_FIRST_COUNT = 1
 LEGACY_TOTAL_COUNT = 4
 LEGACY_VOTE_MARGIN_COUNT = 2
+TIMO_TEST_MAX_WORKERS = 3
+TIMO_TEST_CHUNK_SIZE = 11
+TIMO_TEST_MIN_PARALLEL_BATCHES = 7
+TIMO_TEST_FORMAT_THRESHOLD = 0.7
+TIMO_TEST_MINIMUM_BATCH_SIZE = 3
 
 
 @pytest.fixture(scope="module")
@@ -219,6 +224,49 @@ def test_name_order_evidence_required_fields_precede_defaulted_fields():
 def test_empty_batch(predictor: Predictor):
     results = predictor.predict_batch([])
     assert len(results) == 0
+
+
+def test_process_name_batch_multiprocess_preserves_batch_context(predictor: Predictor):
+    names = ["Wang An", "Yan Li", "Wu Gang", "Li Bao"]
+
+    expected = predictor.process_name_batch(names)
+    actual = predictor.process_name_batch_multiprocess(names, max_workers=2, chunk_size=1)
+
+    assert [(result.given_name, result.surname) for result in actual] == [
+        (result.given_name, result.surname) for result in expected
+    ]
+
+
+def test_process_name_batches_forwards_auto_parallel_options(predictor: Predictor, monkeypatch):
+    captured = {}
+    detector = object.__getattribute__(predictor, "_detector")
+    parse_result = detector.normalize_name("Li Wei")
+
+    def fake_process_name_batches(batches, **kwargs):
+        captured["batches"] = batches
+        captured.update(kwargs)
+        return [[parse_result]]
+
+    monkeypatch.setattr(detector, "process_name_batches", fake_process_name_batches)
+
+    actual = predictor.process_name_batches(
+        [["Li Wei"]],
+        parallel="never",
+        max_workers=TIMO_TEST_MAX_WORKERS,
+        chunk_size=TIMO_TEST_CHUNK_SIZE,
+        min_parallel_batches=TIMO_TEST_MIN_PARALLEL_BATCHES,
+        format_threshold=TIMO_TEST_FORMAT_THRESHOLD,
+        minimum_batch_size=TIMO_TEST_MINIMUM_BATCH_SIZE,
+    )
+
+    assert captured["batches"] == [["Li Wei"]]
+    assert captured["parallel"] == "never"
+    assert captured["max_workers"] == TIMO_TEST_MAX_WORKERS
+    assert captured["chunk_size"] == TIMO_TEST_CHUNK_SIZE
+    assert captured["min_parallel_batches"] == TIMO_TEST_MIN_PARALLEL_BATCHES
+    assert captured["format_threshold"] == TIMO_TEST_FORMAT_THRESHOLD
+    assert captured["minimum_batch_size"] == TIMO_TEST_MINIMUM_BATCH_SIZE
+    assert actual[0][0].surname == "Li"
 
 
 def test_analyze_name_batch_handles_detector_fallback_evidence(predictor: Predictor):
@@ -452,6 +500,46 @@ def test_routing_predictor_one_prediction_per_instance():
     # timo reconstructs each prediction via prediction_class(**raw_pred); round-trip must hold
     rebuilt = [RoutedPaperPrediction(**p.dict()) for p in results]
     assert rebuilt == results
+
+
+def test_routing_predictor_batches_instance_analysis_through_auto_wrapper(monkeypatch):
+    rp = RoutingPredictor(
+        config=PredictorConfig(
+            parallel="never",
+            mp_max_workers=TIMO_TEST_MAX_WORKERS,
+            mp_chunk_size=TIMO_TEST_CHUNK_SIZE,
+            mp_min_parallel_batches=TIMO_TEST_MIN_PARALLEL_BATCHES,
+        ),
+        artifacts_dir=".",
+    )
+    detector = object.__getattribute__(rp, "_detector")
+    original_analyze_name_batches = detector.analyze_name_batches
+    captured = {}
+
+    def wrapped_analyze_name_batches(batches, **kwargs):
+        captured["batches"] = batches
+        captured.update(kwargs)
+        return original_analyze_name_batches(batches, **kwargs)
+
+    monkeypatch.setattr(detector, "analyze_name_batches", wrapped_analyze_name_batches)
+
+    good_vys = RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Yue Lin", "Wei Wang", "Jun Zhao"])
+    pp_only = RoutingInstance(pp_names=["Zhang San"])
+    empty = RoutingInstance(pp_names=[])
+
+    results = rp.predict_batch([good_vys, pp_only, empty])
+
+    assert len(results) == TIMO_TEST_MAX_WORKERS
+    assert [len(result.authors) for result in results] == [2, 1, 0]
+    assert captured["batches"] == [
+        good_vys.pp_names,
+        good_vys.vys_pool_names,
+        pp_only.pp_names,
+    ]
+    assert captured["parallel"] == "never"
+    assert captured["max_workers"] == TIMO_TEST_MAX_WORKERS
+    assert captured["chunk_size"] == TIMO_TEST_CHUNK_SIZE
+    assert captured["min_parallel_batches"] == TIMO_TEST_MIN_PARALLEL_BATCHES
 
 
 def test_routing_predictor_isolates_malformed_instance_in_batch():

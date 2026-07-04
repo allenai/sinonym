@@ -373,15 +373,25 @@ def main():
     detector = ChineseNameDetector()
     names_a = ["Li Wei", "Wang Weiming", "Zhang Ming"]
     names_b = ["Xin Liu", "Yang Li", "Chen Huang"]
+    author_batches = [
+        ["Wang An", "Yan Li", "Wu Gang", "Li Bao"],
+        ["Li Wei", "Wang Weiming", "Zhang Ming"],
+    ]
+
+    # High-level auto wrappers choose local vs process-pool execution.
+    # Each inner author list remains an independent batch-context boundary.
+    normalized = detector.normalize_names(names_a, parallel="auto")
+    batch_results = detector.process_name_batches(author_batches, parallel="auto")
 
     # Reuse workers across many calls
     with detector.create_persistent_multiprocess_pool(max_workers=6, chunk_size=64) as pool:
         results_a = pool.normalize_names(names_a)
         results_b = pool.normalize_names(names_b)
+        persistent_batch_results = pool.process_name_batches(author_batches)
 
-    # One-off compatibility wrapper with full batch-context semantics
+    # One-off temporary pool with per-name normalize_name semantics
     single_batch = detector.process_name_batch_multiprocess(names_a, max_workers=6, chunk_size=64)
-    return results_a, results_b, single_batch
+    return normalized, batch_results, results_a, results_b, persistent_batch_results, single_batch
 
 if __name__ == "__main__":
     main()
@@ -389,6 +399,17 @@ if __name__ == "__main__":
 
 Use the `if __name__ == "__main__":` guard in scripts to ensure safe process
 spawning on Windows and macOS.
+
+`normalize_names()` has per-name `normalize_name()` semantics. `process_name_batches()`
+is the high-level wrapper for many independent author lists: each inner list
+gets normal batch-format correction, and `parallel="auto"` uses conservative
+platform-aware thresholds to avoid one-off process-startup regressions.
+
+For repeated high-throughput calls, keep a persistent pool open. The persistent
+pool exposes `normalize_names()` for independent names and `process_name_batches()`
+for independent author-list batches. The one-off
+`process_name_batch_multiprocess()` method is kept for compatibility and has
+per-name semantics, not batch-context semantics.
 
 ### When to Use Batch Processing
 

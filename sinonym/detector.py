@@ -163,7 +163,9 @@ data structures and the detector can be safely used from multiple threads.
 """
 
 import logging
+import platform
 import string
+from typing import Literal
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.coretypes import (
@@ -193,8 +195,13 @@ from sinonym.services import (
     ServiceContext,
 )
 from sinonym.services.order_metadata import original_component_order
-from sinonym.services.process_pool import PersistentMultiprocessNormalizer, validate_multiprocess_options
+from sinonym.services.process_pool import PersistentMultiprocessNormalizer, normalize_names_multiprocess
 
+ParallelMode = Literal["auto", "never", "always"]
+AUTO_MULTIPROCESS_MIN_NAMES = 25000
+AUTO_MULTIPROCESS_MIN_BATCHES = 4000
+LINUX_AUTO_MULTIPROCESS_MIN_NAMES = 10000
+LINUX_AUTO_MULTIPROCESS_MIN_BATCHES = 2000
 BILINGUAL_SURNAME_STRENGTH_RATIO_MIN = 5.0
 BILINGUAL_ROMAN_HAN_SOURCE_ORDER_RATIO_MAX = 12.0
 BILINGUAL_ENDPOINT_PAIR_COUNT = 2
@@ -202,6 +209,40 @@ SPACED_HAN_PREFIX_SURNAME_RATIO_MIN = 5.0
 CAMEL_CASE_LAST_SURNAME_RATIO_MIN = 5.0
 CURATED_COMPOUND_SURNAME_FORMS = frozenset((*COMPOUND_VARIANTS.keys(), *COMPOUND_VARIANTS.values()))
 CompactHanRomanCandidate = tuple[list[str], list[str], list[str], float, bool]
+
+
+def _should_use_multiprocessing(
+    *,
+    item_count: int,
+    parallel: ParallelMode,
+    auto_threshold: int | None,
+    default_auto_threshold: int,
+    linux_auto_threshold: int,
+    max_workers: int | None,
+) -> bool:
+    """Return whether a high-level wrapper should use a process pool."""
+    if parallel not in ("auto", "never", "always"):
+        message = "parallel must be 'auto', 'never', or 'always'"
+        raise ValueError(message)
+    resolved_threshold = auto_threshold
+    if resolved_threshold is None:
+        resolved_threshold = linux_auto_threshold if platform.system() == "Linux" else default_auto_threshold
+    if resolved_threshold < 1:
+        message = "auto multiprocessing threshold must be >= 1"
+        raise ValueError(message)
+    if item_count == 0 or parallel == "never":
+        return False
+    if parallel == "always":
+        return True
+    return max_workers != 1 and item_count >= resolved_threshold
+
+
+def _auto_start_method(mp_start_method: str) -> str:
+    """Resolve the high-level auto start method."""
+    if mp_start_method != "auto":
+        return mp_start_method
+    return "fork" if platform.system() == "Linux" else "spawn"
+
 
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CHINESE NAME DETECTOR CLASS
@@ -1202,6 +1243,119 @@ class ChineseNameDetector:
         batch_result = self.analyze_name_batch(names, format_threshold, minimum_batch_size)
         return batch_result.results
 
+    def normalize_names(
+        self,
+        names: list[str],
+        *,
+        parallel: ParallelMode = "auto",
+        min_parallel_names: int | None = None,
+        max_workers: int | None = None,
+        chunk_size: int = 64,
+        mp_start_method: str = "auto",
+    ) -> list[ParseResult]:
+        """
+        Normalize independent names with automatic multiprocessing selection.
+
+        This wrapper has per-name `normalize_name()` semantics. With
+        `parallel="auto"`, it uses the local detector for small inputs and a
+        persistent process pool for larger inputs. Use `parallel="always"` to
+        force the process-pool path or `parallel="never"` for deterministic
+        single-process execution.
+        """
+        self._ensure_initialized()
+        if _should_use_multiprocessing(
+            item_count=len(names),
+            parallel=parallel,
+            auto_threshold=min_parallel_names,
+            default_auto_threshold=AUTO_MULTIPROCESS_MIN_NAMES,
+            linux_auto_threshold=LINUX_AUTO_MULTIPROCESS_MIN_NAMES,
+            max_workers=max_workers,
+        ):
+            with self.create_persistent_multiprocess_pool(
+                max_workers=max_workers,
+                chunk_size=chunk_size,
+                mp_start_method=_auto_start_method(mp_start_method),
+            ) as pool:
+                return pool.normalize_names(names)
+        return [self.normalize_name(name) for name in names]
+
+    def analyze_name_batches(
+        self,
+        batches: list[list[str]],
+        *,
+        parallel: ParallelMode = "auto",
+        min_parallel_batches: int | None = None,
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+        max_workers: int | None = None,
+        chunk_size: int = 64,
+        mp_start_method: str = "auto",
+    ) -> list[BatchParseResult]:
+        """
+        Analyze independent name batches with automatic multiprocessing selection.
+
+        Each inner list is one batch-context boundary. With `parallel="auto"`,
+        small batch lists run in-process and large batch lists use a persistent
+        process pool. Output order matches the submitted batch order.
+        """
+        self._ensure_initialized()
+        if _should_use_multiprocessing(
+            item_count=len(batches),
+            parallel=parallel,
+            auto_threshold=min_parallel_batches,
+            default_auto_threshold=AUTO_MULTIPROCESS_MIN_BATCHES,
+            linux_auto_threshold=LINUX_AUTO_MULTIPROCESS_MIN_BATCHES,
+            max_workers=max_workers,
+        ):
+            with self.create_persistent_multiprocess_pool(
+                max_workers=max_workers,
+                chunk_size=chunk_size,
+                mp_start_method=_auto_start_method(mp_start_method),
+            ) as pool:
+                return pool.analyze_name_batches(
+                    batches,
+                    format_threshold=format_threshold,
+                    minimum_batch_size=minimum_batch_size,
+                )
+        return [
+            self.analyze_name_batch(
+                batch,
+                format_threshold=format_threshold,
+                minimum_batch_size=minimum_batch_size,
+            )
+            for batch in batches
+        ]
+
+    def process_name_batches(
+        self,
+        batches: list[list[str]],
+        *,
+        parallel: ParallelMode = "auto",
+        min_parallel_batches: int | None = None,
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+        max_workers: int | None = None,
+        chunk_size: int = 64,
+        mp_start_method: str = "auto",
+    ) -> list[list[ParseResult]]:
+        """
+        Process independent name batches with automatic multiprocessing selection.
+
+        This is the high-level API for workloads such as many paper author
+        lists. Each inner list gets normal `process_name_batch()` semantics.
+        """
+        batch_results = self.analyze_name_batches(
+            batches,
+            parallel=parallel,
+            min_parallel_batches=min_parallel_batches,
+            format_threshold=format_threshold,
+            minimum_batch_size=minimum_batch_size,
+            max_workers=max_workers,
+            chunk_size=chunk_size,
+            mp_start_method=mp_start_method,
+        )
+        return [batch_result.results for batch_result in batch_results]
+
     def create_persistent_multiprocess_pool(
         self,
         *,
@@ -1210,10 +1364,13 @@ class ChineseNameDetector:
         mp_start_method: str = "spawn",
     ) -> PersistentMultiprocessNormalizer:
         """
-        Create a persistent multi-process pool for repeated normalization calls.
+        Create a persistent multi-process pool for repeated processing calls.
 
         Notes:
         - Uses one detector instance per worker process.
+        - Use `normalize_names()` for independent per-name parsing.
+        - Use `process_name_batches()` for many independent author lists that
+          each need batch-format correction.
         - For Windows/macOS scripts, call this behind an
           `if __name__ == "__main__":` guard.
         """
@@ -1235,18 +1392,22 @@ class ChineseNameDetector:
         mp_start_method: str = "spawn",
     ) -> list[ParseResult]:
         """
-        Process one batch and preserve the same batch-context semantics as process_name_batch().
+        Normalize a list of names in a temporary process pool.
 
-        The multiprocessing knobs are accepted for source compatibility. For
-        true per-name parallel normalization, use create_persistent_multiprocess_pool().
+        This method has per-name `normalize_name()` semantics and does not apply
+        batch-format correction. Use `process_name_batch()` when batch-context
+        parsing is required, or `create_persistent_multiprocess_pool()` to reuse
+        workers across repeated per-name normalization calls.
         """
         self._ensure_initialized()
-        validate_multiprocess_options(
+        return normalize_names_multiprocess(
+            names,
             max_workers=max_workers,
             chunk_size=chunk_size,
             mp_start_method=mp_start_method,
+            detector_config=self._config,
+            detector_weights=self._weights,
         )
-        return self.process_name_batch(names)
 
     def _create_fallback_batch_result(
         self,

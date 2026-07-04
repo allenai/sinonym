@@ -4,7 +4,7 @@ from enum import Enum
 from pydantic import BaseModel, BaseSettings, Field, root_validator
 
 from sinonym.coretypes import BatchParseResult
-from sinonym.detector import ChineseNameDetector
+from sinonym.detector import ChineseNameDetector, ParallelMode
 from sinonym.pipeline.name_order_routing import (
     build_pp_abstain_rows,
     pp_abstain_parsed,
@@ -271,7 +271,11 @@ class RoutedPaperPrediction(TimoModel):
 
 
 class PredictorConfig(BaseSettings):
-    pass
+    parallel: ParallelMode = "auto"
+    mp_max_workers: int | None = None
+    mp_chunk_size: int = 64
+    mp_min_parallel_batches: int | None = None
+    mp_start_method: str = "auto"
 
 
 class Predictor:
@@ -451,8 +455,38 @@ class Predictor:
         max_workers: int | None = None,
         chunk_size: int = 64,
     ) -> list[Prediction]:
-        results = self._detector.process_name_batch_multiprocess(names, max_workers=max_workers, chunk_size=chunk_size)
+        results = self._detector.process_name_batches(
+            [names],
+            parallel="always",
+            min_parallel_batches=1,
+            max_workers=max_workers,
+            chunk_size=chunk_size,
+        )[0]
         return [self._to_prediction(r) for r in results]
+
+    def process_name_batches(  # noqa: PLR0913
+        self,
+        batches: list[list[str]],
+        *,
+        parallel: ParallelMode | None = None,
+        max_workers: int | None = None,
+        chunk_size: int | None = None,
+        min_parallel_batches: int | None = None,
+        format_threshold: float | None = None,
+        minimum_batch_size: int | None = None,
+    ) -> list[list[Prediction]]:
+        results = self._detector.process_name_batches(
+            batches,
+            parallel=parallel or self._config.parallel,
+            min_parallel_batches=(
+                self._config.mp_min_parallel_batches if min_parallel_batches is None else min_parallel_batches
+            ),
+            max_workers=self._config.mp_max_workers if max_workers is None else max_workers,
+            chunk_size=self._config.mp_chunk_size if chunk_size is None else chunk_size,
+            mp_start_method=self._config.mp_start_method,
+            **self._batch_kwargs(format_threshold, minimum_batch_size),
+        )
+        return [[self._to_prediction(r) for r in batch_results] for batch_results in results]
 
     def score_name_batch(
         self,
@@ -568,6 +602,102 @@ class Predictor:
             )
         return out
 
+    @staticmethod
+    def _validate_vys_pool_names(pp_names: list[str], vys_pool_names: list[str]) -> None:
+        """Validate that the VYS pool starts with the PP author slice."""
+        n = len(pp_names)
+        if len(vys_pool_names) < n:
+            message = (
+                f"vys_pool_names (len {len(vys_pool_names)}) must contain at least the paper's "
+                f"{n} authors - the paper is a subset of the venue pool"
+            )
+            raise _PoolPreconditionError(message)
+        if list(vys_pool_names[:n]) != list(pp_names):
+            message = "vys_pool_names must start with the paper's authors: vys_pool_names[:len(pp_names)] == pp_names"
+            raise _PoolPreconditionError(message)
+
+    def _route_pp_vys_batches(
+        self,
+        pp_batch: BatchParseResult,
+        pool: BatchParseResult,
+        n: int,
+    ) -> list[RoutedPrediction]:
+        """Route one PP batch against one analyzed VYS pool batch."""
+        vys_batch = BatchParseResult(
+            names=list(pool.names[:n]),
+            results=list(pool.results[:n]),
+            format_pattern=pool.format_pattern,
+            individual_analyses=list(pool.individual_analyses[:n]),
+            improvements=[i for i in pool.improvements if i < n],
+            name_order_evidence=list(pool.name_order_evidence[:n]),
+        )
+        rows = route_pp_vys_abstain_batches(pp_batch, vys_batch)
+
+        pp_fp = self._to_format_pattern(pp_batch.format_pattern)
+        vys_fp = self._to_format_pattern(vys_batch.format_pattern)
+        out: list[RoutedPrediction] = []
+        for i, row in enumerate(rows):
+            pred = row["router_prediction"]
+            ioc = row.get("input_order_candidate", "unknown")
+            pp_res = pp_batch.results[i]
+            vys_res = vys_batch.results[i]
+            if pred == "pp":
+                chosen = pp_res
+            elif pred == "vys":
+                chosen = vys_res
+            elif pred == "abstain":
+                chosen = {"pp": pp_res, "vys": vys_res}.get(ioc)
+                if chosen is None:
+                    message = f"abstain with unexpected input_order_candidate={ioc!r} (expected 'pp'/'vys')"
+                    raise ValueError(message)
+            elif pred == "not_person":
+                chosen = None
+            else:
+                message = f"pp-vys router returned unexpected router_prediction={pred!r}"
+                raise ValueError(message)
+            parsed = chosen.parsed if (chosen is not None and chosen.success) else None
+            out.append(
+                RoutedPrediction(
+                    success=bool(chosen is not None and chosen.success),
+                    **self._routed_name_fields(parsed),
+                    router_prediction=pred,
+                    router_reason=row.get("router_reason", ""),
+                    input_order_candidate=ioc,
+                    pp=self._to_prediction(pp_res, format_pattern=pp_fp.copy(deep=True)),
+                    vys=self._to_prediction(vys_res, format_pattern=vys_fp.copy(deep=True)),
+                ),
+            )
+        return out
+
+    def _route_pp_batch(self, pp_batch: BatchParseResult) -> list[PPRoutedPrediction]:
+        """Route one analyzed PP-only batch."""
+        rows = route_pp_abstain_rows(build_pp_abstain_rows(pp_batch, self._detector))
+        pp_fp = self._to_format_pattern(pp_batch.format_pattern)
+
+        out: list[PPRoutedPrediction] = []
+        for i, row in enumerate(rows):
+            pred = row["router_prediction"]
+            res = pp_batch.results[i]
+            if pred == "pp":
+                parsed = res.parsed if res.success else None
+            elif pred == "abstain":
+                parsed = pp_abstain_parsed(res, row)
+            elif pred == "not_person":
+                parsed = None
+            else:
+                message = f"pp-abstain router returned unexpected router_prediction={pred!r}"
+                raise ValueError(message)
+            out.append(
+                PPRoutedPrediction(
+                    success=bool(parsed is not None),
+                    **self._routed_name_fields(parsed),
+                    router_prediction=pred,
+                    router_reason=row.get("router_reason", ""),
+                    pp=self._to_prediction(res, format_pattern=pp_fp.copy(deep=True)),
+                ),
+            )
+        return out
+
     def route_pp(self, names: list[str]) -> list[PPRoutedPrediction]:
         """PP-only (pp-abstain) router — for when there is no VYS venue pool.
 
@@ -652,10 +782,27 @@ class RoutingPredictor(Predictor):
     """
 
     def predict_batch(self, instances: list[RoutingInstance]) -> list[RoutedPaperPrediction]:  # type: ignore[override]
-        predictions: list[RoutedPaperPrediction] = []
-        for inst in instances:
+        predictions: list[RoutedPaperPrediction | None] = [None] * len(instances)
+        batch_inputs: list[list[str]] = []
+        plans: list[tuple[int, str, int, int | None, int]] = []
+
+        for instance_index, inst in enumerate(instances):
             try:
-                authors = self.route(inst.pp_names, inst.vys_pool_names)
+                if not inst.pp_names:
+                    predictions[instance_index] = RoutedPaperPrediction(authors=[])
+                    continue
+
+                if inst.vys_pool_names:
+                    self._validate_vys_pool_names(inst.pp_names, inst.vys_pool_names)
+                    pp_batch_index = len(batch_inputs)
+                    batch_inputs.append(inst.pp_names)
+                    vys_batch_index = len(batch_inputs)
+                    batch_inputs.append(inst.vys_pool_names)
+                    plans.append((instance_index, "pp_vys", pp_batch_index, vys_batch_index, len(inst.pp_names)))
+                else:
+                    pp_batch_index = len(batch_inputs)
+                    batch_inputs.append(inst.pp_names)
+                    plans.append((instance_index, "pp_only", pp_batch_index, None, 0))
             except _PoolPreconditionError:
                 _LOGGER.warning(
                     "Dropping RoutingInstance authors: vys_pool_names violates the route_pp_vys "
@@ -665,6 +812,33 @@ class RoutingPredictor(Predictor):
                     inst.pp_names,
                     exc_info=True,
                 )
-                authors = []
-            predictions.append(RoutedPaperPrediction(authors=authors))
-        return predictions
+                predictions[instance_index] = RoutedPaperPrediction(authors=[])
+
+        batch_results = self._detector.analyze_name_batches(
+            batch_inputs,
+            parallel=self._config.parallel,
+            min_parallel_batches=self._config.mp_min_parallel_batches,
+            max_workers=self._config.mp_max_workers,
+            chunk_size=self._config.mp_chunk_size,
+            mp_start_method=self._config.mp_start_method,
+        )
+
+        for instance_index, mode, pp_batch_index, vys_batch_index, pp_count in plans:
+            if mode == "pp_vys":
+                if vys_batch_index is None:
+                    message = "pp_vys routing plan missing VYS batch index"
+                    raise RuntimeError(message)
+                authors = self._route_pp_vys_batches(
+                    batch_results[pp_batch_index],
+                    batch_results[vys_batch_index],
+                    pp_count,
+                )
+            else:
+                pp_only = self._route_pp_batch(batch_results[pp_batch_index])
+                authors = [RoutedPrediction(**r.dict(), input_order_candidate=None, vys=None) for r in pp_only]
+            predictions[instance_index] = RoutedPaperPrediction(authors=authors)
+
+        if any(prediction is None for prediction in predictions):
+            message = "routing prediction plan did not fill every instance slot"
+            raise RuntimeError(message)
+        return [prediction for prediction in predictions if prediction is not None]

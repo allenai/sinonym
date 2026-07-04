@@ -47,6 +47,16 @@ Persistent multi-process throughput and parity check. Compares single-process th
 uv run python scripts/profile_multiprocess.py --names 12000 --warmup 3000 --runs 3 --workers 6 --chunk-size 64
 ```
 
+### `verify_multiprocess.py`
+Cross-platform multiprocessing verifier. Checks correctness parity for local,
+one-shot, auto-wrapper, and persistent-pool paths, then reports throughput for
+flat independent names and independent author-list batches.
+
+```bash
+uv run python scripts/verify_multiprocess.py --json-output scratch/mp_verify_windows.json
+UV_PROJECT_ENVIRONMENT=/tmp/sinonym-wsl-venv uv run python scripts/verify_multiprocess.py --json-output scratch/mp_verify_wsl.json
+```
+
 ### `train_ml_classifier_for_chinese_vs_japanese.py`
 Trains the Chinese-vs-Japanese name classifier used in production. Downloads Chinese (~1.2M) and Japanese (~180K) name corpora, trains a scikit-learn pipeline (TF-IDF character n-grams + 20 linguistic heuristic features + logistic regression), and saves the model to `data/chinese_japanese_classifier.skops`.
 
