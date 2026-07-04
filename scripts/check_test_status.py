@@ -357,14 +357,14 @@ def status_exit_decision(
         status_message = "Performance tests failed!"
     elif total_failures > EXPECTED_FAILURES:
         exit_code = 1
-        status_message = f"REGRESSION! Too many failures ({total_failures} > EXPECTED_FAILURES)"
+        status_message = f"REGRESSION! Too many failures ({total_failures} > {EXPECTED_FAILURES})"
     elif total_failures == EXPECTED_FAILURES:
         exit_code = 0
-        status_message = "Tests are at expected baseline (EXPECTED_FAILURES failures, performance OK)"
+        status_message = f"Tests are at expected baseline ({EXPECTED_FAILURES} failures, performance OK)"
     else:
         exit_code = 0
         status_message = (
-            f"IMPROVEMENT! Tests are better than baseline ({total_failures} < EXPECTED_FAILURES failures, performance OK)"
+            f"IMPROVEMENT! Tests are better than baseline ({total_failures} < {EXPECTED_FAILURES} failures, performance OK)"
         )
 
     return exit_code, status_message

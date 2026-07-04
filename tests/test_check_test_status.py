@@ -124,6 +124,8 @@ def test_status_detects_regressions_beyond_expected_baseline():
 
     assert exit_code == 1
     assert "Too many failures" in message
+    assert f"> {check_test_status.EXPECTED_FAILURES}" in message
+    assert "EXPECTED_FAILURES" not in message
 
 
 def test_status_allows_expected_baseline():
@@ -138,6 +140,8 @@ def test_status_allows_expected_baseline():
 
     assert exit_code == 0
     assert "expected baseline" in message
+    assert f"({check_test_status.EXPECTED_FAILURES} failures" in message
+    assert "EXPECTED_FAILURES" not in message
 
 
 def test_status_fails_on_unexpected_failure_with_same_total_count():
@@ -195,6 +199,8 @@ def test_status_allows_improvement():
 
     assert exit_code == 0
     assert "IMPROVEMENT" in message
+    assert f"< {check_test_status.EXPECTED_FAILURES}" in message
+    assert "EXPECTED_FAILURES" not in message
 
 
 def test_performance_status_requires_successful_pytest_return_code(monkeypatch):
