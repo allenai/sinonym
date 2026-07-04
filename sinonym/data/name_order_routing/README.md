@@ -147,10 +147,13 @@ Abstain rows always have `input_order_candidate` in {`pp`, `vys`} — the only
 abstain-emitting rule requires a defined input-order side — so consumers may
 treat abstain + `unknown` as a contract violation.
 
-In the PP-only regime there is no second run to pick from: `abstain` is
-materialized with `input_order_parsed(result)` (the as-typed reading — the
-trailing token is the surname, everything else keeps its position). It is an
-emitted person parse, not a defer signal, and it deliberately does NOT
+In the PP-only regime there is no second run to pick from: most `abstain`
+rows are materialized with `input_order_parsed(result)` (the as-typed reading
+where the trailing token is the surname and everything else keeps its
+position). Spaced Han surname-first rows are the exception: the source space
+already marks the surname boundary, so `spaced_cjk_zero_batch_surname_first`
+abstains emit the PP parse instead of flipping to trailing-token surname. It
+is an emitted person parse, not a defer signal, and it deliberately does NOT
 re-parse the name standalone, since the single-name detector re-decides order.
 
 ## Refreshing these fixtures after parser changes

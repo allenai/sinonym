@@ -1,6 +1,13 @@
 import pytest
 from pydantic import ValidationError
 
+from sinonym.coretypes import BatchParseResult
+from sinonym.detector import ChineseNameDetector
+from sinonym.pipeline.name_order_routing import (
+    build_pp_vys_abstain_rows,
+    route_pp_vys_abstain_rows,
+)
+from sinonym.services.non_person import NON_PERSON_FAILURE_REASON
 from sinonym.timo.interface import (
     FormatPattern,
     Instance,
@@ -10,6 +17,7 @@ from sinonym.timo.interface import (
     Predictor,
     PredictorConfig,
     RoutedPaperPrediction,
+    RoutedPrediction,
     RoutingInstance,
     RoutingPredictor,
     ScriptRepresentationValue,
@@ -242,13 +250,6 @@ def test_route_pp_vys_matches_manual_pp_then_vys_then_router(predictor: Predicto
     `route_pp_vys` is a thin wrapper over exactly these steps; this test rebuilds them by hand
     and asserts the routed answers match.
     """
-    from sinonym.coretypes import BatchParseResult
-    from sinonym.detector import ChineseNameDetector
-    from sinonym.pipeline.name_order_routing import (
-        build_pp_vys_abstain_rows,
-        route_pp_vys_abstain_rows,
-    )
-
     pp_names = ["Yue Lin", "Wei Wang", "Chuang Yang"]
     # paper authors first, then the other venue authors
     vys_pool = ["Yue Lin", "Wei Wang", "Chuang Yang", "Jun Zhao", "Hui Li", "Tao Sun", "Min Guo"]
@@ -342,18 +343,20 @@ def test_routed_candidate_format_patterns_are_independent(predictor: Predictor):
 # branches, which the routers do exercise on real batches.
 
 
-def test_route_pp_abstain_emits_input_order_parse(predictor: Predictor):
-    """PP-only abstain = the as-typed input-order reading (trailing token = surname),
-    NOT the PP-batch reorder and NOT the standalone parser's own order choice."""
-    # Spaced-Han zero-batch input: the PP reading is surname-first (surname=Wang),
-    # the router abstains, and abstain must undo the reorder.
-    (reordered,) = predictor.route_pp(["王 伟"])
+def test_route_pp_abstain_is_script_aware(predictor: Predictor):
+    """Latin abstain keeps trailing-token surname; spaced Han abstain keeps its source boundary."""
+    # Spaced-Han zero-batch input: the source space marks surname-first order,
+    # so abstain preserves the PP parse instead of flipping to trailing surname.
+    (reordered,) = predictor.route_pp(["\u738b \u4f1f"])
     assert reordered.router_prediction.value == "abstain"
     assert reordered.success
-    assert (reordered.given_name, reordered.middle_name, reordered.surname) == ("Wang", None, "Wei")
-    # the PP candidate genuinely disagrees: abstain is not a no-op here
     assert (reordered.pp.given_name, reordered.pp.surname) == ("Wei", "Wang")
-    assert (reordered.given_name, reordered.surname) != (reordered.pp.given_name, reordered.pp.surname)
+    assert (reordered.given_name, reordered.middle_name, reordered.surname) == ("Wei", None, "Wang")
+    assert (reordered.given_name, reordered.surname) == (reordered.pp.given_name, reordered.pp.surname)
+
+    liu, zheng = predictor.route_pp(["\u5289 \u6587\u69ae", "\u912d \u4fe1\u529b"])
+    assert (liu.router_prediction.value, liu.given_name, liu.surname) == ("abstain", "Wen-Rong", "Liu")
+    assert (zheng.router_prediction.value, zheng.given_name, zheng.surname) == ("abstain", "Xin-Li", "Zheng")
 
     # Latin pair: the given-first read abstains and keeps its (input-order) reading;
     # the surname-first read is accepted as pp and keeps the batch reorder.
@@ -363,6 +366,15 @@ def test_route_pp_abstain_emits_input_order_parse(predictor: Predictor):
     assert (lin.given_name, lin.surname) == (lin.pp.given_name, lin.pp.surname)
     assert wang.router_prediction.value == "pp"
     assert (wang.given_name, wang.middle_name, wang.surname) == ("Wei", None, "Wang")
+
+
+def test_route_pp_rejects_mixed_initial_cjk_transliterations(predictor: Predictor):
+    for raw_name in ("G.\u970d\u5f17", "H\u00b7\u7eb3\u683c\u5c14\u65af"):
+        (routed,) = predictor.route_pp([raw_name])
+
+        assert not routed.success
+        assert routed.router_prediction.value == "not_person"
+        assert routed.pp.error_message == NON_PERSON_FAILURE_REASON
 
 
 def test_route_pp_vys_abstain_picks_input_order_candidate(predictor: Predictor):
@@ -401,8 +413,6 @@ def test_route_pp_vys_abstain_picks_input_order_candidate(predictor: Predictor):
 
 
 def test_route_unified_falls_back_to_pp_when_no_pool(predictor: Predictor):
-    from sinonym.timo.interface import RoutedPrediction
-
     pp_names = ["Yue Lin", "Wei Wang", "Chuang Yang"]
     pool = ["Yue Lin", "Wei Wang", "Chuang Yang", "Jun Zhao", "Hui Li", "Tao Sun", "Min Guo"]
 

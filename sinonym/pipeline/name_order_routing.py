@@ -17,9 +17,11 @@ Materializing `abstain`:
   abstain + "unknown" as a contract violation and raise.
 - PP-only regime: there is no second run to pick from; emit the as-typed reading
   via `input_order_parsed(result)` (trailing token is the surname, everything
-  else keeps its position). Do NOT re-parse the name standalone: the single-name
-  detector re-decides order, which defeats the point of abstaining and couples
-  the routed output to parser-version behavior.
+  else keeps its position), except spaced Han surname-first rows, where source
+  spacing already marks the surname boundary and the PP parse is the input-order
+  reading. Do NOT re-parse the name standalone: the single-name detector
+  re-decides order, which defeats the point of abstaining and couples the routed
+  output to parser-version behavior.
 """
 
 from __future__ import annotations
@@ -44,6 +46,7 @@ __all__ = [
     "build_pp_abstain_rows",
     "build_pp_vys_abstain_rows",
     "input_order_parsed",
+    "pp_abstain_parsed",
     "pp_abstain_router",
     "pp_vys_abstain_router",
     "route_pp_abstain_rows",
@@ -422,6 +425,7 @@ def build_pp_abstain_rows(batch_result: BatchParseResult, detector_context: Any)
         script_representation = _script_representation_for_routing(detector_context, normalized_input, evidence)
         rows.append(
             {
+                "pp_success": result.success,
                 "pp_result_token_count": _parse_result_token_count(result),
                 "selected_format": _format_value(evidence.selected_format),
                 "batch_total_count": batch_result.format_pattern.total_count,
@@ -785,6 +789,12 @@ def route_pp_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
     for row in rows:
         _require_columns(row, PP_ABSTAIN_REQUIRED_COLUMNS)
         routed = dict(row)
+        if _pp_abstain_failed_parse(row):
+            routed["router_prediction"] = "not_person"
+            routed["router_reason"] = "not_person"
+            output.append(routed)
+            continue
+
         predicates = _pp_abstain_predicates(row)
 
         route: Route = "abstain"
@@ -1006,6 +1016,18 @@ def input_order_parsed(result: ParseResult) -> ParsedName | None:
     return parsed
 
 
+def pp_abstain_parsed(result: ParseResult, route_row: Row) -> ParsedName | None:
+    """Return the final parsed person components for a PP-only abstain row.
+
+    Latin-only abstain keeps the as-typed given-first reading. Spaced Han rows
+    guarded by `spaced_cjk_zero_batch_surname_first` already have a source
+    surname boundary, so the PP parse is the stable input-order reading.
+    """
+    if _pp_abstain_uses_pp_parse_for_abstain(route_row):
+        return result.parsed if result.success else None
+    return input_order_parsed(result) or (result.parsed if result.success else None)
+
+
 def _result_text(result: ParseResult) -> str:
     return str(result.result) if result.success else ""
 
@@ -1091,6 +1113,14 @@ def _input_order_candidate(row: Row) -> str:
 
 def _name_tokens(name: str) -> tuple[str, ...]:
     return tuple(token.lower() for token in re.findall(r"[A-Za-z]+", name))
+
+
+def _pp_abstain_failed_parse(row: Row) -> bool:
+    return "pp_success" in row and not _required_bool(row, "pp_success")
+
+
+def _pp_abstain_uses_pp_parse_for_abstain(row: Row) -> bool:
+    return row.get("router_reason") == "spaced_cjk_zero_batch_surname_first"
 
 
 def _pp_abstain_predicates(row: Row) -> dict[str, bool]:

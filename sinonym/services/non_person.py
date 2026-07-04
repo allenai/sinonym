@@ -15,9 +15,14 @@ NON_PERSON_FAILURE_REASON = "not a personal name"
 MIN_CJK_NON_PERSON_PREFIX_CHARS = 2
 MIN_AUTHOR_LIST_LATIN_TOKENS = 6
 MIN_AUTHOR_LIST_SURNAME_TOKENS = 3
+MIN_TRANSLITERATED_CJK_CHARS = 2
 
 LATIN_WORD_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)?")
+ASCII_WORD_RE = re.compile(r"[A-Za-z]+")
 INITIAL_RE = re.compile(r"[^\W\d_]")
+# Dot / interpunct characters that bind a Latin initial to a Han transliteration
+# in the foreign-name convention ("G.\u970d\u5f17", "J\u00b7G\u00b7\u9a6c\u5c14\u94a6\u51ef\u7ef4\u5947").
+MIXED_INITIAL_SEPARATOR_CHARS = ".\u00b7\u2022\u30fb"
 
 STRONG_CJK_NON_PERSON_MARKERS = (
     "大学",
@@ -54,18 +59,20 @@ class NonPersonInputDetectionService:
 
     def failure_reason(self, raw_name: str) -> str | None:
         """Return a failure reason when the input is clearly not one personal name."""
-        if self._has_cjk_non_person_marker(raw_name) or self._has_latin_author_list_shape(raw_name):
+        if (
+            self._has_cjk_non_person_marker(raw_name)
+            or self._has_latin_author_list_shape(raw_name)
+            or self._has_mixed_initial_cjk_transliteration_shape(raw_name)
+        ):
             return NON_PERSON_FAILURE_REASON
         return None
 
     def _has_cjk_non_person_marker(self, raw_name: str) -> bool:
         """Return whether a CJK string contains strong organization/editor evidence."""
         cjk_chunks = self._cjk_chunks(raw_name)
-        if any(chunk in STANDALONE_CJK_NON_PERSON_MARKERS for chunk in cjk_chunks):
-            return True
-        if any(self._has_marker_suffix(chunk) for chunk in cjk_chunks):
-            return True
-        return False
+        return any(chunk in STANDALONE_CJK_NON_PERSON_MARKERS for chunk in cjk_chunks) or any(
+            self._has_marker_suffix(chunk) for chunk in cjk_chunks
+        )
 
     @staticmethod
     def _has_marker_suffix(cjk_chunk: str) -> bool:
@@ -74,6 +81,66 @@ class NonPersonInputDetectionService:
             cjk_chunk.endswith(marker) and len(cjk_chunk) - len(marker) >= MIN_CJK_NON_PERSON_PREFIX_CHARS
             for marker in CJK_NON_PERSON_SUFFIX_MARKERS
         )
+
+    def _has_mixed_initial_cjk_transliteration_shape(self, raw_name: str) -> bool:
+        """Return whether mixed input is an initial plus CJK Western transliteration.
+
+        The foreign-name convention binds a Latin initial to its Han transliteration
+        with a dot or interpunct ("G.霍弗", "H·纳格尔斯"). A genuine Chinese name that
+        carries a trailing Latin middle initial ("李 小明 G.") instead separates the
+        initial from the Han tokens with whitespace, so the dot-bridge is what tells
+        the two apart — a bare initial count or trailing period is not enough.
+        """
+        if not self._config.cjk_pattern.search(raw_name) or not self._config.ascii_alpha_pattern.search(raw_name):
+            return False
+
+        ascii_tokens = ASCII_WORD_RE.findall(raw_name)
+        if not ascii_tokens or any(len(token) > 1 for token in ascii_tokens):
+            return False
+
+        cjk_chunks = self._cjk_chunks(raw_name)
+        if not any(len(chunk) >= MIN_TRANSLITERATED_CJK_CHARS for chunk in cjk_chunks):
+            return False
+
+        normalized_input = self._normalizer.apply(raw_name)
+        if self._normalizer.classify_script_representation(normalized_input) == "bilingual_aligned":
+            return False
+
+        return self._has_initial_cjk_dot_bridge(raw_name)
+
+    def _has_initial_cjk_dot_bridge(self, raw_name: str) -> bool:
+        """Return whether a dot/interpunct directly joins a Latin initial to a CJK run.
+
+        Scans each separator and inspects the nearest non-space neighbour on each
+        side: a bridge exists when one side is a Latin letter and the other is CJK
+        (in either order), which covers chained initials ("J·G·马尔钦凯维奇") and
+        Han-flanked initials ("罗伯特·M·威恩斯坦"). A trailing period after a
+        space-separated initial ("李 小明 G.") has no CJK neighbour and does not
+        bridge.
+        """
+        cjk_pattern = self._config.cjk_pattern
+        for index, char in enumerate(raw_name):
+            if char not in MIXED_INITIAL_SEPARATOR_CHARS:
+                continue
+            left = self._nearest_non_space(raw_name, index - 1, -1)
+            right = self._nearest_non_space(raw_name, index + 1, 1)
+            left_is_cjk = bool(left) and bool(cjk_pattern.search(left))
+            right_is_cjk = bool(right) and bool(cjk_pattern.search(right))
+            left_is_latin = bool(left) and left.isascii() and left.isalpha()
+            right_is_latin = bool(right) and right.isascii() and right.isalpha()
+            if (left_is_latin and right_is_cjk) or (left_is_cjk and right_is_latin):
+                return True
+        return False
+
+    @staticmethod
+    def _nearest_non_space(text: str, start: int, step: int) -> str:
+        """Return the nearest non-space character from `start` moving by `step`, or ''."""
+        index = start
+        while 0 <= index < len(text):
+            if not text[index].isspace():
+                return text[index]
+            index += step
+        return ""
 
     def _cjk_chunks(self, raw_name: str) -> list[str]:
         """Return contiguous CJK runs split by non-CJK separators."""
@@ -103,9 +170,7 @@ class NonPersonInputDetectionService:
         if len(tokens) < MIN_AUTHOR_LIST_LATIN_TOKENS:
             return False
 
-        surname_like_positions = [
-            index for index, token in enumerate(tokens) if self._is_surname_like_token(token)
-        ]
+        surname_like_positions = [index for index, token in enumerate(tokens) if self._is_surname_like_token(token)]
         if len(surname_like_positions) < MIN_AUTHOR_LIST_SURNAME_TOKENS:
             return False
 

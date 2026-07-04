@@ -888,6 +888,10 @@ def test_non_person_inputs_are_rejected_before_parsing(detector):
     cases = [
         "\u5ef6\u5b89\u5927\u5b66 \u7269\u7406\u4e0e\u7535\u5b50\u4fe1\u606f\u5b66\u9662",
         "Tian Qiang Zhou Hui Zhu Rui",
+        "G.\u970d\u5f17",
+        "H\u00b7\u7eb3\u683c\u5c14\u65af",
+        "J\u00b7G\u00b7\u9a6c\u5c14\u94a6\u51ef\u7ef4\u5947",
+        "\u7f57\u4f2f\u7279\u00b7M\u00b7\u5a01\u6069\u65af\u5766",
     ]
 
     for raw_name in cases:
@@ -929,6 +933,26 @@ def test_short_standalone_cjk_non_person_markers_are_rejected(detector, raw_name
     ],
 )
 def test_short_cjk_non_person_marker_gate_preserves_person_names(detector, raw_name, expected):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success, f"{raw_name!r}: expected accepted name, got {result.error_message!r}"
+    assert result.result == expected
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("Kai \u51ef Xi \u4e60", "Kai Xi"),
+        ("Hongqing \u7ea2\u5e86 Dai \u4ee3", "Hong-Qing Dai"),
+        ("Zhang \u5f20 Wei \u4f1f A \u963f", "Wei A Zhang"),
+        # Genuine Chinese names carrying a trailing Latin middle initial: the initial
+        # is space-separated from the Han tokens (no dot bridges the two scripts), so
+        # the mixed-initial transliteration gate must not reject them.
+        ("\u674e \u5c0f\u660e G.", "Xiao-Ming G Li"),
+        ("\u674e \u5c0f\u660e H. K.", "Xiao-Ming H K Li"),
+    ],
+)
+def test_mixed_initial_transliteration_gate_preserves_bilingual_names(detector, raw_name, expected):
     result = detector.normalize_name(raw_name)
 
     assert result.success, f"{raw_name!r}: expected accepted name, got {result.error_message!r}"

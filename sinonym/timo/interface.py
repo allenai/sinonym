@@ -2,7 +2,14 @@ from enum import Enum
 
 from pydantic import BaseModel, BaseSettings, Field, root_validator
 
+from sinonym.coretypes import BatchParseResult
 from sinonym.detector import ChineseNameDetector
+from sinonym.pipeline.name_order_routing import (
+    build_pp_abstain_rows,
+    pp_abstain_parsed,
+    route_pp_abstain_rows,
+    route_pp_vys_abstain_batches,
+)
 
 
 class TimoModel(BaseModel):
@@ -204,14 +211,14 @@ class PPRoutedPrediction(TimoModel):
     """PP-only (pp-abstain) routed result for one author.
 
     `given_name`/`surname`/`middle_name`/`success` are the FINAL routed answer: the PP parse when
-    `router_prediction=='pp'`, the input-order parse when `'abstain'`, empty when `'not_person'`.
+    `router_prediction=='pp'`, the script-aware input-order parse when `'abstain'`, empty when `'not_person'`.
     """
 
     success: bool = Field(description="Whether the routed answer is a recognized Chinese person")
     given_name: str | None = Field(default=None)
     surname: str | None = Field(default=None)
     middle_name: str | None = Field(default=None)
-    router_prediction: RoutingDecisionValue = Field(description="pp / abstain (pp-abstain router never emits vys or not_person)")
+    router_prediction: RoutingDecisionValue = Field(description="pp / abstain / not_person (pp-abstain never emits vys)")
     router_reason: str = Field(description="rule that produced router_prediction")
     pp: Prediction = Field(description="the paper-batch (PP) parse for this author")
 
@@ -480,9 +487,6 @@ class Predictor:
 
         Returns 2 RoutedPredictions (one per pp author), aligned to `pp_names`.
         """
-        from sinonym.coretypes import BatchParseResult
-        from sinonym.pipeline.name_order_routing import route_pp_vys_abstain_batches
-
         if not pp_names:
             return []
         n = len(pp_names)
@@ -558,12 +562,6 @@ class Predictor:
         parse), and `not_person`. Returns one PPRoutedPrediction per name (aligned to `names`):
         the final routed parse + decision/reason + the PP candidate parse.
         """
-        from sinonym.pipeline.name_order_routing import (
-            build_pp_abstain_rows,
-            input_order_parsed,
-            route_pp_abstain_rows,
-        )
-
         if not names:
             return []
 
@@ -579,12 +577,11 @@ class Predictor:
             if pred == "pp":
                 parsed = res.parsed if res.success else None
             elif pred == "abstain":
-                # abstain = "emit the preprocessed input-order parse": the as-typed reading
-                # (trailing token = surname), independent of both the batch reorder and the
-                # standalone parser's own order choice. Falls back to the batch parse only
-                # when no as-typed reading exists (failed parse / single token).
-                parsed = input_order_parsed(res) or (res.parsed if res.success else None)
-            elif pred == "not_person":  # valid Route value; emit nothing (pp-abstain router doesn't produce it today)
+                # abstain = emit the preprocessed input-order parse. This is usually
+                # the as-typed trailing-surname reading, but spaced Han rows keep
+                # the PP parse because the source space already marks the surname.
+                parsed = pp_abstain_parsed(res, row)
+            elif pred == "not_person":
                 parsed = None
             else:
                 message = f"pp-abstain router returned unexpected router_prediction={pred!r}"

@@ -16,6 +16,7 @@ from sinonym.pipeline.name_order_routing import (
     build_pp_abstain_rows,
     build_pp_vys_abstain_rows,
     input_order_parsed,
+    pp_abstain_parsed,
     route_pp_abstain_rows,
     route_pp_vys_abstain_batches,
     route_pp_vys_abstain_rows,
@@ -585,6 +586,23 @@ def test_pp_abstain_rule_applies_spaced_cjk_guard():
     assert routed[0]["router_reason"] == "spaced_cjk_zero_batch_surname_first"
 
 
+def test_pp_abstain_rule_marks_failed_builder_rows_not_person():
+    routed = route_pp_abstain_rows(
+        [
+            _pp_abstain_row(
+                pp_success=False,
+                pp_result_token_count=1,
+                selected_format="mixed",
+                batch_total_count=0,
+                selected_surname_frequency=0,
+            ),
+        ],
+    )
+
+    assert routed[0]["router_prediction"] == "not_person"
+    assert routed[0]["router_reason"] == "not_person"
+
+
 def test_pp_abstain_rule_rejects_malformed_feature_values():
     with pytest.raises(ValueError, match="selected_surname_frequency"):
         route_pp_abstain_rows([_pp_abstain_row(batch_total_count=0, selected_surname_frequency="not-a-number")])
@@ -861,6 +879,23 @@ def test_input_order_parsed_hyphenates_multi_token_given():
     as_typed = input_order_parsed(result)
     assert (as_typed.given_name, as_typed.surname) == ("Huang-Yu", "Qiang")
     assert as_typed.given_tokens == ["Huang", "Yu"]
+
+
+def test_pp_abstain_parsed_keeps_spaced_han_pp_parse():
+    result = _parse_result("Liu", ["Wen", "Rong"], ["surname", "given"])
+
+    parsed = pp_abstain_parsed(result, {"router_reason": "spaced_cjk_zero_batch_surname_first"})
+
+    assert parsed is result.parsed
+    assert (parsed.given_name, parsed.surname) == ("Wen-Rong", "Liu")
+
+
+def test_pp_abstain_parsed_uses_input_order_for_regular_abstain():
+    result = _parse_result("Wang", ["Wei"], ["surname", "given"])
+
+    parsed = pp_abstain_parsed(result, {"router_reason": "default_abstain"})
+
+    assert (parsed.given_name, parsed.surname) == ("Wang", "Wei")
 
 
 def test_input_order_parsed_rejects_trailing_middle_initial():
