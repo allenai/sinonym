@@ -461,6 +461,8 @@ class NameParsingService:
             return []
 
         parses = []
+        first_is_hyphenated_compound = self._is_hyphenated_compound_metadata(compound_metadata.get(tokens[0]))
+        last_is_hyphenated_compound = self._is_hyphenated_compound_metadata(compound_metadata.get(tokens[-1]))
 
         # 1. Check compound surnames using centralized metadata
         if len(tokens) >= 3:
@@ -507,7 +509,7 @@ class NameParsingService:
             compound_parts = StringManipulationUtils.split_compound_token(first_token, first_meta)
             original_format = self._get_compound_original_format(first_meta, [first_token])
             parses.append((compound_parts, tokens[1:], original_format))
-        elif len(first_token) > 1 and "-" not in first_token:
+        elif len(first_token) > 1 and "-" not in first_token and not last_is_hyphenated_compound:
             # Check for regular single surnames
             is_regular_surname = self._data.is_surname(
                 first_token,
@@ -529,7 +531,7 @@ class NameParsingService:
                 compound_parts = StringManipulationUtils.split_compound_token(last_token, last_meta)
                 original_format = self._get_compound_original_format(last_meta, [last_token])
                 parses.append((compound_parts, tokens[:-1], original_format))
-            elif len(last_token) > 1 and "-" not in last_token:
+            elif len(last_token) > 1 and "-" not in last_token and not first_is_hyphenated_compound:
                 # Check for regular single surnames
                 is_regular_surname = self._data.is_surname(
                     last_token,
@@ -545,7 +547,7 @@ class NameParsingService:
             first_meta
             and first_meta.is_compound
             and first_meta.format_type == "hyphenated"
-            and first_meta.compound_target in CURATED_COMPOUND_TARGETS
+            and first_meta.compound_target
         ):
             target_compound = first_meta.compound_target
             compound_parts = [StringManipulationUtils.capitalize_name_part(part) for part in target_compound.split()]
@@ -560,7 +562,7 @@ class NameParsingService:
                 last_meta
                 and last_meta.is_compound
                 and last_meta.format_type == "hyphenated"
-                and last_meta.compound_target in CURATED_COMPOUND_TARGETS
+                and last_meta.compound_target
             ):
                 target_compound = last_meta.compound_target
                 compound_parts = [StringManipulationUtils.capitalize_name_part(part) for part in target_compound.split()]
@@ -569,6 +571,16 @@ class NameParsingService:
                     parses.append((compound_parts, tokens[:-1], original_format))
 
         return parses
+
+    @staticmethod
+    def _is_hyphenated_compound_metadata(compound_meta: CompoundMetadata | None) -> bool:
+        """Return whether metadata identifies a token as a hyphenated compound surname."""
+        return bool(
+            compound_meta
+            and compound_meta.is_compound
+            and compound_meta.format_type == "hyphenated"
+            and compound_meta.compound_target
+        )
 
     def _get_compound_original_format(self, compound_meta: CompoundMetadata, tokens: list[str]) -> str | None:
         """Get the original format for a compound surname from centralized metadata."""
@@ -729,7 +741,7 @@ class NameParsingService:
                 else:
                     is_ambiguous = self._is_ambiguous_case(surname_tokens[0], given_tokens[0], normalized_cache)
 
-                if is_ambiguous:
+                if is_ambiguous or self._is_wade_giles_initial_remapped_surname_token(surname_tokens[0]):
                     order_preservation_bonus = 1.0
                 elif allow_guarded_given_first_bonus and self._has_guarded_given_first_surname_ratio(
                     surname_tokens[0],
@@ -887,13 +899,16 @@ class NameParsingService:
         1. Both tokens are valid as surnames AND given names
         2. Surname frequencies are similar (ratio < 3x)
         """
-        # Get normalized forms
+        # Use parser surname keys for surname checks/frequencies so curated
+        # romanizations do not get flattened through broader normalization.
+        surname_key = self._surname_key([surname_token], normalized_cache)
+        given_surname_key = self._surname_key([given_token], normalized_cache)
         surname_norm = self._normalizer.get_normalized(surname_token, normalized_cache)
         given_norm = self._normalizer.get_normalized(given_token, normalized_cache)
 
         # Check if both can be surnames
-        surname_is_surname = self._data.is_surname(surname_token, surname_norm)
-        given_is_surname = self._data.is_surname(given_token, given_norm)
+        surname_is_surname = self._data.is_surname(surname_token, surname_key)
+        given_is_surname = self._data.is_surname(given_token, given_surname_key)
 
         if not (surname_is_surname and given_is_surname):
             return False  # Not ambiguous if one clearly can't be a surname
@@ -911,8 +926,8 @@ class NameParsingService:
             return False  # Not ambiguous if one clearly can't be a given name
 
         # Check frequency similarity - ambiguous if frequencies are similar
-        surname_freq = self._data.get_surname_freq(surname_norm)
-        given_freq = self._data.get_surname_freq(given_norm)
+        surname_freq = self._data.get_surname_freq(surname_key)
+        given_freq = self._data.get_surname_freq(given_surname_key)
 
         if surname_freq == 0 or given_freq == 0:
             # An unattested token can plausibly tie with a modest surname, but not
@@ -944,6 +959,20 @@ class NameParsingService:
             return False
 
         return surname_freq / given_surname_freq > GIVEN_FIRST_SURNAME_FREQ_RATIO_MIN
+
+    def _is_wade_giles_initial_remapped_surname_token(self, token: str) -> bool:
+        """Return whether a direct surname was remapped by a Wade-Giles initial rule."""
+        light_key = self._normalizer.norm_light(token)
+        remapped_key = self._normalizer.norm(token)
+        return (
+            light_key != remapped_key
+            and bool(light_key)
+            and bool(remapped_key)
+            and light_key[0] in {"k", "p", "t"}
+            and remapped_key[0] in {"g", "b", "d"}
+            and self._data.get_surname_freq(light_key) > 0
+            and self._data.get_surname_freq(remapped_key) == 0
+        )
 
     def _is_compound_surname_token(self, token: str, _normalized_cache: dict[str, str]) -> bool:
         """Return whether a single token is a curated compact or hyphenated compound surname."""
@@ -1012,12 +1041,11 @@ class NameParsingService:
             # target's full mass under this key (e.g. chien -> qian mass, not
             # the remapped jian mass) and Korean-dominant trimmed penalty rows
             # their discounted as-written mass (e.g. jung, not zheng's mass).
-            # Everything else (remap-only penalty rows like fai, incidental
-            # as-written mass such as the Cantonese-block 'cha') keeps the
-            # pre-existing remapped-key scoring.
             light_key = self._normalizer.norm_light(token)
             resolution = self._data.resolve_surname_spelling(light_key)
             if resolution is not None and (resolution.target_share == 1.0 or light_key in self._data.surname_frequencies):
+                return light_key
+            if self._is_wade_giles_initial_remapped_surname_token(token):
                 return light_key
 
             # Try normalized form next.

@@ -1,0 +1,282 @@
+# ruff: noqa: PLR2004, RUF012, EM101, PLC0415, SLF001, SIM117, TRY003
+import logging
+
+import numpy as np
+import pytest
+
+from sinonym import chinese_names_data
+from sinonym.coretypes import BatchFormatPattern, NameFormat
+from sinonym.pipeline import name_order_routing
+from sinonym.pipeline.name_order_routing import (
+    _input_order_display,
+    _required_bool,
+    route_pp_abstain_rows,
+    route_pp_vys_abstain_rows,
+)
+from sinonym.services.batch_analysis import LATIN_ONLY_REPRESENTATION, BatchCandidateEntry
+from sinonym.timo.interface import Instance, Predictor, PredictorConfig
+
+
+def _pp_abstain_row(**overrides):
+    row = {
+        "pp_success": True,
+        "pp_result_token_count": 2,
+        "selected_format": "given_first",
+        "batch_total_count": 1,
+        "selected_surname_frequency": 100.0,
+        "has_cjk": False,
+        "has_latin": True,
+        "cjk_has_space": False,
+        "raw_tokens": 2,
+    }
+    row.update(overrides)
+    return row
+
+
+def _pp_vys_row(**overrides):
+    row = {
+        "name": "Zhang Wei",
+        "pp_success": True,
+        "pp_result": "Wei Zhang",
+        "pp_selected_format": "surname_first",
+        "pp_selected_surname_position": "first",
+        "pp_selected_surname_frequency": 100.0,
+        "pp_batch_dominant_format": "surname_first",
+        "pp_batch_threshold_met": True,
+        "pp_batch_total_count": 3,
+        "pp_batch_confidence": 0.69,
+        "pp_batch_vote_margin": 0.9,
+        "pp_selected_surname_frequency_ratio": 2.0,
+        "vys_success": True,
+        "vys_result": "Zhang Wei",
+        "vys_selected_format": "given_first",
+        "vys_selected_surname_position": "first",
+        "vys_selected_surname_frequency": 100.0,
+        "vys_batch_dominant_format": "given_first",
+        "vys_batch_threshold_met": True,
+        "vys_batch_total_count": 3,
+        "vys_batch_confidence": 0.85,
+        "vys_batch_vote_margin": 0.0,
+    }
+    row.update(overrides)
+    return row
+
+
+def test_chinese_first_surname_blocks_korean_pair_rejection(detector):
+    expected = {
+        "Zhang Ye Jin Lee": "Zhang-Ye-Jin Lee",
+        "Wang Min Soo Han": "Min-Soo-Han Wang",
+    }
+
+    for raw_name, normalized in expected.items():
+        result = detector.normalize_name(raw_name)
+        assert result.success, raw_name
+        assert result.result == normalized
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected", "surname"),
+    [
+        ("Duan-Gan Mu", "Mu Duan-Gan", "Duan-Gan"),
+        ("Zhong-Shan Li", "Li Zhong-Shan", "Zhong-Shan"),
+        ("Zong-Zheng Li", "Li Zong-Zheng", "Zong-Zheng"),
+        ("Nan-Gong Li", "Li Nan-Gong", "Nan-Gong"),
+    ],
+)
+def test_csv_backed_hyphenated_compound_surnames_win(detector, raw_name, expected, surname):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+    assert result.parsed.surname == surname
+
+
+def test_attested_remapped_wade_giles_surname_preserves_source_order(detector):
+    result = detector.normalize_name("Li Kuang")
+
+    assert result.success
+    assert result.result == "Li Kuang"
+    assert result.parsed.surname == "Kuang"
+
+
+def test_mixed_cjk_trailing_initial_is_not_rejected_as_non_person(detector):
+    accepted = detector.normalize_name("\u738b\u5c0f\u660e\u00b7J")
+    rejected = detector.normalize_name("G.\u970d\u5f17")
+    embedded = detector.normalize_name("\u7f57\u4f2f\u7279\u00b7M\u00b7\u5a01\u6069\u65af\u5766")
+
+    assert accepted.success
+    assert accepted.result == "Xiao-Ming J Wang"
+    assert not rejected.success
+    assert rejected.error_message == "not a personal name"
+    assert not embedded.success
+    assert embedded.error_message == "not a personal name"
+
+
+def test_flat_timo_predict_batch_uses_independent_name_semantics():
+    predictor = Predictor(PredictorConfig(), "")
+    solo = predictor.predict_batch([Instance(name="Zhang Wei")])[0]
+    cobatched = predictor.predict_batch(
+        [
+            Instance(name=name)
+            for name in [
+                "Zhang Wei",
+                "Wei Zhang",
+                "Ming Li",
+                "Xiao Li",
+                "Hua Wang",
+                "Feng Zhang",
+                "Jun Liu",
+                "Chen Li",
+                "Hui Zhou",
+                "Yong Wang",
+                "Bo Chen",
+            ]
+        ],
+    )[0]
+
+    assert (solo.given_name, solo.surname) == ("Wei", "Zhang")
+    assert (cobatched.given_name, cobatched.surname) == ("Wei", "Zhang")
+    assert cobatched.format_pattern is None
+
+
+def test_predictor_config_uses_sinonym_env_prefix(monkeypatch):
+    monkeypatch.setenv("PARALLEL", "1")
+    monkeypatch.setenv("MP_CHUNK_SIZE", "999")
+    config = PredictorConfig()
+    assert config.parallel == "auto"
+    assert config.mp_chunk_size == 64
+
+    monkeypatch.setenv("SINONYM_MP_CHUNK_SIZE", "17")
+    assert PredictorConfig().mp_chunk_size == 17
+
+
+def test_pp_abstain_treats_single_author_count_as_unreliable_batch():
+    weak = route_pp_abstain_rows([_pp_abstain_row()])[0]
+    mixed_long = route_pp_abstain_rows(
+        [
+            _pp_abstain_row(
+                selected_surname_frequency=1000.0,
+                has_cjk=True,
+                has_latin=True,
+                raw_tokens=3,
+            ),
+        ],
+    )[0]
+
+    assert weak["router_reason"] == "weak_zero_batch"
+    assert mixed_long["router_reason"] == "zero_batch_mixed_long"
+
+
+def test_pp_vys_accepts_mixed_selected_format_as_unknown_input_order():
+    routed = route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_format="mixed", vys_selected_format="mixed")])[0]
+
+    assert routed["input_order_candidate"] == "unknown"
+    assert routed["router_prediction"] in {"pp", "vys", "abstain"}
+
+
+def test_required_bool_accepts_numpy_integer_booleans():
+    assert _required_bool({"value": np.int64(0)}, "value") is False
+    assert _required_bool({"value": np.int64(1)}, "value") is True
+    with pytest.raises(ValueError, match="value must be a boolean"):
+        _required_bool({"value": np.int64(2)}, "value")
+
+
+def test_strong_vys_context_requires_real_batch_count():
+    low_count = route_pp_vys_abstain_rows([_pp_vys_row(vys_batch_total_count=1)])[0]
+    enough_count = route_pp_vys_abstain_rows([_pp_vys_row(vys_batch_total_count=3)])[0]
+
+    assert low_count["new_reason"] == "weak_or_conflicting_evidence"
+    assert enough_count["new_reason"] == "strong_vys_batch_context"
+    assert enough_count["router_prediction"] == "vys"
+
+
+def test_input_order_display_preserves_repeated_middle_initials(detector):
+    result = detector.normalize_name("J. K. Ming L. Zhang")
+
+    assert result.success
+    assert result.parsed_original_order.order == ["middle", "middle", "given", "middle", "surname"]
+    assert " ".join(token for _role, token in _input_order_display(result.parsed_original_order)) == "J K Ming L Zhang"
+
+
+class BrokenJapaneseProbabilityModel:
+    classes_ = ["cn", "jp"]
+
+    def predict_proba(self, names):
+        raise RuntimeError("boom")
+
+    def predict(self, names):
+        return ["jp"]
+
+
+def test_japanese_probability_raises_when_loaded_model_errors(caplog):
+    from sinonym.services import ethnicity
+
+    classifier = ethnicity._MLJapaneseClassifier(confidence_threshold=0.8)
+    classifier._available = True
+    classifier._model = BrokenJapaneseProbabilityModel()
+
+    with caplog.at_level(logging.WARNING, logger=ethnicity.__name__):
+        with pytest.raises(RuntimeError, match="probability failed"):
+            classifier.japanese_probability("\u5c71\u7530")
+
+    assert "ML Japanese classifier probability error" in caplog.text
+    assert any(record.exc_info for record in caplog.records)
+
+
+def test_route_pp_and_pp_vys_delegate_to_single_materialization_helpers(monkeypatch):
+    predictor = Predictor(PredictorConfig(), "")
+    called = []
+
+    def fake_route_pp_batch(pp_batch):
+        called.append(("pp", list(pp_batch.names)))
+        return []
+
+    def fake_route_pp_vys_batches(pp_batch, pool, n):
+        called.append(("pp_vys", list(pp_batch.names), list(pool.names), n))
+        return []
+
+    monkeypatch.setattr(predictor, "_route_pp_batch", fake_route_pp_batch)
+    monkeypatch.setattr(predictor, "_route_pp_vys_batches", fake_route_pp_vys_batches)
+
+    assert predictor.route_pp(["Li Wei"]) == []
+    assert predictor.route_pp_vys(["Li Wei"], ["Li Wei", "Zhang Ming"]) == []
+    assert called[0] == ("pp", ["Li Wei"])
+    assert called[1] == ("pp_vys", ["Li Wei"], ["Li Wei", "Zhang Ming"], 1)
+
+
+def test_name_order_evidence_uses_cached_raw_tokens(detector):
+    batch = detector.analyze_name_batch(["Li Wei"])
+    result = batch.results[0]
+    entry = BatchCandidateEntry(
+        "Li Wei",
+        [],
+        None,
+        {},
+        LATIN_ONLY_REPRESENTATION,
+        raw_tokens=("Li", "Wei"),
+    )
+
+    class NoApplyNormalizer:
+        def __init__(self, wrapped):
+            self._wrapped = wrapped
+
+        def apply(self, name):
+            raise AssertionError("normalizer.apply should not run when raw_tokens are cached")
+
+        def __getattr__(self, name):
+            return getattr(self._wrapped, name)
+
+    evidence = detector._batch_analysis_service._build_name_order_evidence(
+        [entry],
+        [result],
+        NoApplyNormalizer(detector._normalizer),
+        detector._data,
+        BatchFormatPattern(NameFormat.SURNAME_FIRST, 1.0, 1, 0, 1, False, 1.0),
+    )
+
+    assert evidence[0].raw_tokens == ["Li", "Wei"]
+
+
+def test_name_order_routing_priors_are_imported_from_canonical_data():
+    assert name_order_routing.NAME_PRIOR_COMMON_CHINESE_SURNAMES is chinese_names_data.NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES
+    assert name_order_routing.NAME_PRIOR_KOREAN_SURNAMES is chinese_names_data.NAME_ORDER_ROUTING_KOREAN_SURNAMES

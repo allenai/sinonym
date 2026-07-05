@@ -389,7 +389,7 @@ def main():
         results_b = pool.normalize_names(names_b)
         persistent_batch_results = pool.process_name_batches(author_batches)
 
-    # One-off temporary pool with per-name normalize_name semantics
+    # One-off temporary pool with process_name_batch batch-context semantics
     single_batch = detector.process_name_batch_multiprocess(names_a, max_workers=6, chunk_size=64)
     return normalized, batch_results, results_a, results_b, persistent_batch_results, single_batch
 
@@ -409,7 +409,9 @@ For repeated high-throughput calls, keep a persistent pool open. The persistent
 pool exposes `normalize_names()` for independent names and `process_name_batches()`
 for independent author-list batches. The one-off
 `process_name_batch_multiprocess()` method is kept for compatibility and has
-per-name semantics, not batch-context semantics.
+`process_name_batch()` batch-context semantics. For per-name multiprocessing,
+use `normalize_names(..., parallel="always")` or a persistent pool's
+`normalize_names()` method.
 
 ### When to Use Batch Processing
 

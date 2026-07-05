@@ -1,4 +1,4 @@
-# ruff: noqa: PLR2004, SLF001
+# ruff: noqa: PLR2004, SIM117, SLF001
 """Regression tests that implement the proposals tracked in TEST_PROPOSAL.md."""
 
 from __future__ import annotations
@@ -872,13 +872,14 @@ class BrokenJapaneseProbabilityModel:
         return ["jp"]
 
 
-def test_japanese_probability_degrades_when_loaded_model_errors(caplog):
+def test_japanese_probability_raises_when_loaded_model_errors(caplog):
     classifier = ethnicity._MLJapaneseClassifier(confidence_threshold=0.8)
     classifier._available = True
     classifier._model = BrokenJapaneseProbabilityModel()
 
     with caplog.at_level(logging.WARNING, logger=ethnicity.__name__):
-        assert classifier.japanese_probability("\u5c71\u7530") == 0.0
+        with pytest.raises(RuntimeError, match="probability failed"):
+            classifier.japanese_probability("\u5c71\u7530")
 
     assert "ML Japanese classifier probability error" in caplog.text
     assert any(record.exc_info for record in caplog.records)

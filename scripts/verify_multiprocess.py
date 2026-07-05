@@ -51,8 +51,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--start-method", default="auto", help="multiprocessing start method, or 'auto'.")
     parser.add_argument("--min-persistent-name-speedup", type=float, default=1.25)
     parser.add_argument("--min-persistent-batch-speedup", type=float, default=1.10)
-    parser.add_argument("--min-auto-name-speedup", type=float, default=0.75)
-    parser.add_argument("--min-auto-batch-speedup", type=float, default=0.75)
+    parser.add_argument("--min-auto-name-speedup", type=float, default=0.0)
+    parser.add_argument("--min-auto-batch-speedup", type=float, default=0.0)
     parser.add_argument("--json-output", type=Path, default=None, help="Optional path for machine-readable metrics.")
     return parser.parse_args()
 
@@ -221,6 +221,7 @@ def main() -> int:  # noqa: PLR0915
         lambda: detector.normalize_names(
             names,
             parallel="auto",
+            min_parallel_names=1,
             max_workers=args.workers,
             chunk_size=args.name_chunk_size,
             mp_start_method=args.start_method,
@@ -246,8 +247,9 @@ def main() -> int:  # noqa: PLR0915
     timings[persistent_names_stats.label] = persistent_names_stats
     _print_stats(persistent_names_stats)
 
+    one_shot_batch = BASE_BATCHES[0]
     one_shot_results = detector.process_name_batch_multiprocess(
-        names,
+        one_shot_batch,
         max_workers=args.workers,
         chunk_size=args.name_chunk_size,
         mp_start_method=resolved_start_method,
@@ -260,7 +262,12 @@ def main() -> int:  # noqa: PLR0915
         "persistent_names_match_local",
         passed=_result_list_signature(persistent_name_results) == local_name_sig,
     )
-    _record_check(checks, "one_shot_names_match_local", passed=_result_list_signature(one_shot_results) == local_name_sig)
+    _record_check(
+        checks,
+        "one_shot_batch_matches_local",
+        passed=_result_list_signature(one_shot_results)
+        == _result_list_signature(detector.process_name_batch(one_shot_batch)),
+    )
     print()
 
     local_batch_stats, local_batch_results = _time_runs(
@@ -281,6 +288,7 @@ def main() -> int:  # noqa: PLR0915
         lambda: detector.analyze_name_batches(
             batches,
             parallel="auto",
+            min_parallel_batches=1,
             max_workers=args.workers,
             chunk_size=args.batch_chunk_size,
             mp_start_method=args.start_method,

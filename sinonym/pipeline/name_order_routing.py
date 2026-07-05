@@ -37,6 +37,21 @@ from typing import Any, Literal
 
 import numpy as np
 
+from sinonym.chinese_names_data import (
+    NAME_ORDER_ROUTING_CANTONESE_GIVEN_SYLLABLES as NAME_PRIOR_CANTONESE_GIVEN_SYLLABLES,
+)
+from sinonym.chinese_names_data import (
+    NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES as NAME_PRIOR_CANTONESE_SOUTHEAST_ASIAN_SURNAMES,
+)
+from sinonym.chinese_names_data import (
+    NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES as NAME_PRIOR_COMMON_CHINESE_SURNAMES,
+)
+from sinonym.chinese_names_data import (
+    NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES as NAME_PRIOR_KOREAN_GIVEN_SYLLABLES,
+)
+from sinonym.chinese_names_data import (
+    NAME_ORDER_ROUTING_KOREAN_SURNAMES as NAME_PRIOR_KOREAN_SURNAMES,
+)
 from sinonym.coretypes import BatchParseResult, NameFormat, NameOrderEvidence, ParsedName, ParseResult
 
 Route = Literal["pp", "vys", "abstain", "not_person"]
@@ -91,6 +106,7 @@ PP_VYS_ABSTAIN_REQUIRED_COLUMNS = (
     "vys_selected_surname_frequency",
     "vys_batch_dominant_format",
     "vys_batch_threshold_met",
+    "vys_batch_total_count",
     "vys_batch_confidence",
     "vys_batch_vote_margin",
 )
@@ -112,6 +128,7 @@ PP_ABSTAIN_CLEAN_BILINGUAL_SURNAME_FREQUENCY_MIN = 2500.0
 PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT = 2
 PP_ABSTAIN_MIXED_LONG_RAW_TOKEN_MIN = 3
 PP_ABSTAIN_CLEAN_BILINGUAL_RAW_TOKEN_COUNT = 2
+PP_ABSTAIN_RELIABLE_BATCH_COUNT_MIN = 2
 PP_VYS_REAL_PAPER_VOTES_MIN = 3
 PP_VYS_LOW_BATCH_MAX = 2
 PP_VYS_VERY_LOW_BATCH_MAX = 1
@@ -136,271 +153,13 @@ PP_VYS_GARBAGE_RESULT_TOKEN_MAX = 4
 MIN_INPUT_ORDER_DISPLAY_TOKENS = 2
 ROUTING_TOKEN_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", flags=re.UNICODE)
 
-NAME_PRIOR_COMMON_CHINESE_SURNAMES = frozenset(
-    {
-        "bai",
-        "bi",
-        "cai",
-        "cao",
-        "chen",
-        "cheng",
-        "chong",
-        "chou",
-        "dai",
-        "deng",
-        "ding",
-        "dong",
-        "du",
-        "duan",
-        "fan",
-        "fang",
-        "feng",
-        "fu",
-        "gao",
-        "gu",
-        "guo",
-        "han",
-        "he",
-        "hou",
-        "hu",
-        "huang",
-        "jia",
-        "jiang",
-        "jiao",
-        "jin",
-        "kan",
-        "kong",
-        "lee",
-        "lei",
-        "li",
-        "liang",
-        "liao",
-        "lin",
-        "liu",
-        "long",
-        "lu",
-        "luo",
-        "ma",
-        "meng",
-        "pan",
-        "peng",
-        "qian",
-        "qin",
-        "qiu",
-        "ren",
-        "shao",
-        "sha",
-        "shen",
-        "shi",
-        "song",
-        "su",
-        "sun",
-        "tan",
-        "tang",
-        "tian",
-        "tong",
-        "wang",
-        "wei",
-        "wu",
-        "xiao",
-        "xie",
-        "xu",
-        "xue",
-        "yan",
-        "yang",
-        "yao",
-        "ye",
-        "yin",
-        "yu",
-        "yuan",
-        "zeng",
-        "zhang",
-        "zhao",
-        "zheng",
-        "zhou",
-        "zhu",
-    },
-)
-
-NAME_PRIOR_KOREAN_SURNAMES = frozenset(
-    {
-        "ahn",
-        "an",
-        "bae",
-        "baek",
-        "cha",
-        "chang",
-        "cho",
-        "choi",
-        "chung",
-        "go",
-        "han",
-        "hong",
-        "hwang",
-        "jang",
-        "jeon",
-        "jeong",
-        "jo",
-        "jung",
-        "kang",
-        "kim",
-        "ko",
-        "kwon",
-        "lee",
-        "lim",
-        "moon",
-        "oh",
-        "paik",
-        "pak",
-        "park",
-        "ryu",
-        "seo",
-        "shin",
-        "sim",
-        "song",
-        "suh",
-        "yang",
-        "yim",
-        "yoo",
-        "yoon",
-        "yu",
-        "yun",
-    },
-)
-
-NAME_PRIOR_KOREAN_GIVEN_SYLLABLES = frozenset(
-    {
-        "ae",
-        "bin",
-        "bo",
-        "chan",
-        "cheol",
-        "chul",
-        "dae",
-        "dong",
-        "eun",
-        "gi",
-        "ha",
-        "hae",
-        "han",
-        "hee",
-        "ho",
-        "hong",
-        "hoon",
-        "hun",
-        "hwan",
-        "hye",
-        "hyun",
-        "hyung",
-        "il",
-        "jae",
-        "jin",
-        "jong",
-        "joon",
-        "jun",
-        "jung",
-        "ki",
-        "kyu",
-        "kyung",
-        "kyeong",
-        "min",
-        "sang",
-        "seok",
-        "seong",
-        "seung",
-        "sik",
-        "soo",
-        "su",
-        "suk",
-        "sun",
-        "sung",
-        "tae",
-        "uk",
-        "woo",
-        "won",
-        "yeon",
-        "yong",
-        "young",
-        "yun",
-    },
-)
-
-NAME_PRIOR_CANTONESE_SOUTHEAST_ASIAN_SURNAMES = frozenset(
-    {
-        "chan",
-        "chang",
-        "chew",
-        "chia",
-        "chong",
-        "chung",
-        "fong",
-        "ho",
-        "hong",
-        "khoo",
-        "lai",
-        "lee",
-        "leong",
-        "leung",
-        "lim",
-        "lin",
-        "low",
-        "ng",
-        "ong",
-        "pak",
-        "pang",
-        "tan",
-        "teoh",
-        "tiong",
-        "wong",
-        "yap",
-        "yeo",
-        "yong",
-    },
-)
-
-NAME_PRIOR_CANTONESE_GIVEN_SYLLABLES = frozenset(
-    {
-        "boon",
-        "chih",
-        "ching",
-        "chiu",
-        "guan",
-        "hee",
-        "hong",
-        "kai",
-        "ke",
-        "kwan",
-        "ling",
-        "man",
-        "mei",
-        "meng",
-        "mun",
-        "pei",
-        "peng",
-        "ping",
-        "seng",
-        "siau",
-        "sin",
-        "sook",
-        "sze",
-        "wai",
-        "wan",
-        "wei",
-        "wen",
-        "yee",
-        "yong",
-        "yu",
-        "yue",
-    },
-)
-
-
 @dataclass(frozen=True)
 class PPVysFeatures:
     """Parsed feature values for one PP/VYS/abstain routing row."""
 
     ratio: float
     pp_batch_total_count: float
+    vys_batch_total_count: float
     pp_batch_confidence: float
     old_prediction: str
     new_prediction: str
@@ -560,13 +319,14 @@ def _pp_vys_policy_row(row: Row) -> MutableRow:
 def _pp_vys_features(row: Row) -> PPVysFeatures:
     ratio = _optional_float(row, "pp_selected_surname_frequency_ratio", default=math.nan)
     pp_batch_total_count = _required_float(row, "pp_batch_total_count")
+    vys_batch_total_count = _required_float(row, "vys_batch_total_count")
     pp_batch_confidence = _required_float(row, "pp_batch_confidence")
     old_prediction = _required_string(row, "old_prediction", allowed=("pp", "vys"))
     new_prediction = _required_string(row, "new_prediction", allowed=PREDICTION_VALUES)
     new_reason = _required_string(row, "new_reason", allowed=PP_VYS_REASON_VALUES)
     _require_consistent_new_prediction_reason(new_prediction, new_reason)
-    pp_selected_format = _required_string(row, "pp_selected_format", allowed=ORDER_FORMAT_VALUES)
-    vys_selected_format = _required_string(row, "vys_selected_format", allowed=ORDER_FORMAT_VALUES)
+    pp_selected_format = _required_string(row, "pp_selected_format", allowed=FORMAT_VALUES)
+    vys_selected_format = _required_string(row, "vys_selected_format", allowed=FORMAT_VALUES)
     old_new_vys = old_prediction == "vys" and new_prediction == "vys"
     old_pp_new_vys = old_prediction == "pp" and new_prediction == "vys"
     old_vys_new_abstain = old_prediction == "vys" and new_prediction == "abstain"
@@ -575,6 +335,7 @@ def _pp_vys_features(row: Row) -> PPVysFeatures:
     return PPVysFeatures(
         ratio=ratio,
         pp_batch_total_count=pp_batch_total_count,
+        vys_batch_total_count=vys_batch_total_count,
         pp_batch_confidence=pp_batch_confidence,
         old_prediction=old_prediction,
         new_prediction=new_prediction,
@@ -965,6 +726,7 @@ def _strong_vys_batch_context_from_row(row: Row) -> bool:
         _required_bool(row, "vys_batch_threshold_met")
         and _required_string(row, "vys_batch_dominant_format", allowed=FORMAT_VALUES)
         == _required_string(row, "vys_selected_format", allowed=FORMAT_VALUES)
+        and _required_float(row, "vys_batch_total_count") >= PP_VYS_REAL_PAPER_VOTES_MIN
         and _required_float(row, "vys_batch_confidence") >= PP_VYS_SELECTED_CLEAN_STRONG_VYS_CONFIDENCE_MIN
     )
 
@@ -1133,7 +895,7 @@ def _input_order_candidate(row: Row) -> str:
         _required_string(
             row,
             "pp_selected_format",
-            allowed=ORDER_FORMAT_VALUES,
+            allowed=FORMAT_VALUES,
         )
         == "given_first"
     )
@@ -1141,7 +903,7 @@ def _input_order_candidate(row: Row) -> str:
         _required_string(
             row,
             "vys_selected_format",
-            allowed=ORDER_FORMAT_VALUES,
+            allowed=FORMAT_VALUES,
         )
         == "given_first"
     )
@@ -1181,11 +943,14 @@ def _pp_abstain_predicates(row: Row) -> dict[str, bool]:
     cjk_has_space = _required_bool(row, "cjk_has_space")
     selected_format = _required_string(row, "selected_format", allowed=FORMAT_VALUES)
 
+    below_reliable_batch_min = batch_total_count < PP_ABSTAIN_RELIABLE_BATCH_COUNT_MIN
     surname_first_two_token = pp_result_token_count == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT and selected_format == "surname_first"
-    weak_zero_batch = batch_total_count == 0 and selected_surname_frequency < PP_ABSTAIN_WEAK_SURNAME_FREQUENCY_MAX
-    zero_batch_mixed_long = batch_total_count == 0 and has_cjk and has_latin and raw_tokens >= PP_ABSTAIN_MIXED_LONG_RAW_TOKEN_MIN
+    weak_zero_batch = below_reliable_batch_min and selected_surname_frequency < PP_ABSTAIN_WEAK_SURNAME_FREQUENCY_MAX
+    zero_batch_mixed_long = (
+        below_reliable_batch_min and has_cjk and has_latin and raw_tokens >= PP_ABSTAIN_MIXED_LONG_RAW_TOKEN_MIN
+    )
     spaced_cjk_zero_batch_surname_first = (
-        surname_first_two_token and batch_total_count == 0 and has_cjk and not has_latin and cjk_has_space
+        surname_first_two_token and below_reliable_batch_min and has_cjk and not has_latin and cjk_has_space
     )
     accept_surname_first = surname_first_two_token and not zero_batch_mixed_long and not spaced_cjk_zero_batch_surname_first
     clean_bilingual_given_first = (
@@ -1294,6 +1059,8 @@ def _required_bool(row: Row, column: str) -> bool:
     if value is None or _is_nan(value):
         message = f"{column} must be a boolean"
         raise ValueError(message)
+    if isinstance(value, np.integer) and int(value) in {0, 1}:
+        return bool(value)
     if isinstance(value, int | float) and value in {0, 1}:
         return bool(value)
     if isinstance(value, str):

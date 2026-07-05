@@ -71,6 +71,7 @@ class BatchCandidateEntry:
     compound_metadata: dict | None
     representation: str
     vote_eligible: bool = True
+    raw_tokens: tuple[str, ...] = ()
 
     @property
     def participates(self) -> bool:
@@ -180,8 +181,16 @@ class BatchAnalysisService:
             normalized_input = normalizer.apply(name)
             representation = self._script_representation(normalizer, normalized_input)
             vote_eligible = self._batch_vote_eligible(normalized_input)
+            raw_tokens = tuple(normalized_input.roman_tokens)
             if not self._is_batch_format_participant(representation):
-                entry = BatchCandidateEntry(name, [], None, normalized_input.compound_metadata, representation)
+                entry = BatchCandidateEntry(
+                    name,
+                    [],
+                    None,
+                    normalized_input.compound_metadata,
+                    representation,
+                    raw_tokens=raw_tokens,
+                )
                 format_candidates.append(entry)
                 individual_candidates.append(entry)
                 continue
@@ -203,6 +212,7 @@ class BatchAnalysisService:
                     normalized_input.compound_metadata,
                     representation,
                     vote_eligible,
+                    raw_tokens,
                 ),
             )
             individual_candidates.append(
@@ -213,6 +223,7 @@ class BatchAnalysisService:
                     normalized_input.compound_metadata,
                     representation,
                     vote_eligible,
+                    raw_tokens,
                 ),
             )
 
@@ -287,8 +298,9 @@ class BatchAnalysisService:
             normalized_input = normalizer.apply(name)
             representation = self._script_representation(normalizer, normalized_input)
             vote_eligible = self._batch_vote_eligible(normalized_input)
+            raw_tokens = tuple(normalized_input.roman_tokens)
             if not self._is_batch_format_participant(representation):
-                name_candidates.append(BatchCandidateEntry(name, [], None, None, representation))
+                name_candidates.append(BatchCandidateEntry(name, [], None, None, representation, raw_tokens=raw_tokens))
                 continue
 
             candidates, best_candidate = self._analyze_individual_name_with_normalized(
@@ -297,7 +309,7 @@ class BatchAnalysisService:
                 allow_guarded_given_first_bonus=False,
             )
             name_candidates.append(
-                BatchCandidateEntry(name, candidates, best_candidate, None, representation, vote_eligible),
+                BatchCandidateEntry(name, candidates, best_candidate, None, representation, vote_eligible, raw_tokens),
             )
 
         name_candidates = self._promote_guarded_given_first_batch_votes(name_candidates, normalizer, data)
@@ -323,10 +335,29 @@ class BatchAnalysisService:
             normalized_input = normalizer.apply(name)
             representation = self._script_representation(normalizer, normalized_input)
             vote_eligible = self._batch_vote_eligible(normalized_input)
+            raw_tokens = tuple(normalized_input.roman_tokens)
             if not self._is_batch_format_participant(representation):
                 results.append(self._locked_representation_result(name))
-                name_candidates.append(BatchCandidateEntry(name, [], None, normalized_input.compound_metadata, representation))
-                format_candidates.append(BatchCandidateEntry(name, [], None, normalized_input.compound_metadata, representation))
+                name_candidates.append(
+                    BatchCandidateEntry(
+                        name,
+                        [],
+                        None,
+                        normalized_input.compound_metadata,
+                        representation,
+                        raw_tokens=raw_tokens,
+                    ),
+                )
+                format_candidates.append(
+                    BatchCandidateEntry(
+                        name,
+                        [],
+                        None,
+                        normalized_input.compound_metadata,
+                        representation,
+                        raw_tokens=raw_tokens,
+                    ),
+                )
                 continue
 
             format_candidate_votes, format_best_candidate = self._analyze_individual_name_with_normalized(
@@ -370,6 +401,7 @@ class BatchAnalysisService:
                     normalized_input.compound_metadata,
                     representation,
                     vote_eligible,
+                    raw_tokens,
                 ),
             )
             format_candidates.append(
@@ -380,6 +412,7 @@ class BatchAnalysisService:
                     normalized_input.compound_metadata,
                     representation,
                     vote_eligible,
+                    raw_tokens,
                 ),
             )
 
@@ -525,6 +558,7 @@ class BatchAnalysisService:
                 entry.compound_metadata,
                 entry.representation,
                 entry.vote_eligible,
+                entry.raw_tokens,
             )
         return adjusted
 
@@ -1017,8 +1051,13 @@ class BatchAnalysisService:
                 )
                 continue
 
-            normalized_input = normalizer.apply(entry.name)
-            raw_tokens = list(normalized_input.roman_tokens)
+            if entry.raw_tokens:
+                raw_tokens = list(entry.raw_tokens)
+                compound_metadata = entry.compound_metadata or {}
+            else:
+                normalized_input = normalizer.apply(entry.name)
+                raw_tokens = list(normalized_input.roman_tokens)
+                compound_metadata = normalized_input.compound_metadata
 
             def surname_lookup_key(token: str) -> str:
                 return self._surname_lookup_key_for_token(token, normalizer, data)
@@ -1032,14 +1071,14 @@ class BatchAnalysisService:
                 raw_tokens,
                 normalized_raw_tokens,
                 surname_lookup_key,
-                normalized_input.compound_metadata,
+                compound_metadata,
             )
             selected_position = selected_span.position if selected_span is not None else "unknown"
             selected_freq, alternate_freq, selected_ratio = self._selected_endpoint_frequency_evidence(
                 selected_span,
                 raw_tokens,
                 normalized_raw_tokens,
-                normalized_input.compound_metadata,
+                compound_metadata,
                 data,
             )
             all_caps_tokens = self._all_caps_tokens(raw_tokens)

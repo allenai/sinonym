@@ -6,6 +6,8 @@ from concurrent.futures.process import BrokenProcessPool
 
 import pytest
 
+from sinonym.detector import _should_use_multiprocessing
+
 TEST_NAMES = [
     "Li Wei",
     "Wang Weiming",
@@ -37,9 +39,9 @@ def _batch_decision_signatures(batch_results):
     return [_decision_signatures(results) for results in batch_results]
 
 
-def test_process_name_batch_multiprocess_matches_per_name_normalization(detector):
-    """One-shot multi-process normalization should match per-name normalize_name semantics."""
-    expected = [detector.normalize_name(name) for name in TEST_NAMES]
+def test_process_name_batch_multiprocess_matches_batch_context(detector):
+    """One-shot multi-process batch processing should match process_name_batch semantics."""
+    expected = detector.process_name_batch(TEST_NAMES)
     actual = detector.process_name_batch_multiprocess(
         TEST_NAMES,
         max_workers=2,
@@ -49,31 +51,28 @@ def test_process_name_batch_multiprocess_matches_per_name_normalization(detector
     assert _decision_signatures(actual) == _decision_signatures(expected)
 
 
-def test_process_name_batch_multiprocess_does_not_apply_batch_overrides(detector):
-    """One-shot multi-process normalization is parallel per-name parsing, not batch correction."""
+def test_process_name_batch_multiprocess_preserves_batch_overrides(detector):
+    """One-shot multi-process batch processing should preserve batch correction."""
     names = ["Wang An", "Yan Li", "Wu Gang", "Li Bao"]
-    expected = [detector.normalize_name(name) for name in names]
-    batch = detector.process_name_batch(names)
+    individual_results = [detector.normalize_name(name) for name in names]
+    expected = detector.process_name_batch(names)
     actual = detector.process_name_batch_multiprocess(names, max_workers=2, chunk_size=2)
 
-    assert [result.result for result in expected] != [result.result for result in batch]
+    assert [result.result for result in individual_results] != [result.result for result in expected]
     assert _decision_signatures(actual) == _decision_signatures(expected)
 
 
 def test_process_name_batch_multiprocess_uses_temporary_process_pool(detector, monkeypatch):
-    """Wrapper should delegate to the real temporary process-pool helper with detector state."""
+    """Wrapper should delegate to process_name_batches through a temporary pool."""
     captured = {}
-    expected = [detector.normalize_name("Li Wei")]
+    expected = [detector.process_name_batch(["Li Wei"])[0]]
 
-    def fake_normalize_names_multiprocess(names, **kwargs):
-        captured["names"] = names
+    def fake_process_name_batches(batches, **kwargs):
+        captured["batches"] = batches
         captured.update(kwargs)
-        return expected
+        return [expected]
 
-    monkeypatch.setattr(
-        "sinonym.detector.normalize_names_multiprocess",
-        fake_normalize_names_multiprocess,
-    )
+    monkeypatch.setattr(detector, "process_name_batches", fake_process_name_batches)
 
     actual = detector.process_name_batch_multiprocess(
         ["Li Wei"],
@@ -83,12 +82,12 @@ def test_process_name_batch_multiprocess_uses_temporary_process_pool(detector, m
     )
 
     assert actual is expected
-    assert captured["names"] == ["Li Wei"]
+    assert captured["batches"] == [["Li Wei"]]
+    assert captured["parallel"] == "always"
+    assert captured["min_parallel_batches"] == 1
     assert captured["max_workers"] == TEMP_POOL_WORKERS
     assert captured["chunk_size"] == TEMP_POOL_CHUNK_SIZE
     assert captured["mp_start_method"] == "spawn"
-    assert captured["detector_config"] is detector._config  # noqa: SLF001
-    assert captured["detector_weights"] == detector._weights  # noqa: SLF001
 
 
 @pytest.mark.parametrize(
@@ -230,6 +229,22 @@ def test_detector_parallel_wrappers_reject_invalid_parallel_mode(detector):
 
     with pytest.raises(ValueError, match="parallel"):
         detector.process_name_batches([["Li Wei"]], parallel="sometimes")
+
+
+def test_multiprocessing_threshold_is_validated_only_for_auto_mode():
+    """Manual parallel modes should not validate an unused auto threshold."""
+    common = {
+        "item_count": 1,
+        "auto_threshold": 0,
+        "default_auto_threshold": 2,
+        "linux_auto_threshold": 2,
+        "max_workers": None,
+    }
+
+    assert not _should_use_multiprocessing(parallel="never", **common)
+    assert _should_use_multiprocessing(parallel="always", **common)
+    with pytest.raises(ValueError, match="threshold"):
+        _should_use_multiprocessing(parallel="auto", **common)
 
 
 def test_persistent_multiprocess_pool_rejects_calls_after_close(detector):

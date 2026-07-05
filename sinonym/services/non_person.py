@@ -139,9 +139,22 @@ class NonPersonInputDetectionService:
             right_is_cjk = bool(right) and bool(cjk_pattern.search(right))
             left_is_latin = bool(left) and left.isascii() and left.isalpha()
             right_is_latin = bool(right) and right.isascii() and right.isalpha()
+            if left_is_cjk and right_is_latin and self._is_trailing_latin_initial_suffix(raw_name, match.end()):
+                continue
             if (left_is_latin and right_is_cjk) or (left_is_cjk and right_is_latin):
                 return True
         return False
+
+    @staticmethod
+    def _is_trailing_latin_initial_suffix(raw_name: str, letter_index: int) -> bool:
+        """Return whether a CJK-joined Latin letter is only a final middle initial."""
+        if letter_index >= len(raw_name):
+            return False
+        letter = raw_name[letter_index]
+        if not (letter.isascii() and letter.isalpha()):
+            return False
+        suffix = raw_name[letter_index + 1 :]
+        return not any(char.isascii() and char.isalpha() for char in suffix)
 
     def _cjk_chunks(self, raw_name: str) -> list[str]:
         """Return contiguous CJK runs split by non-CJK separators."""

@@ -49,7 +49,8 @@ def test_single_chinese_name(predictor: Predictor):
     assert result.success
     assert result.surname == "Li"
     assert result.given_name == "Wei"
-    assert result.confidence is not None
+    assert result.confidence is None
+    assert result.format_pattern is None
     assert result.error_message is None
 
 
@@ -144,8 +145,22 @@ def test_prediction_models_keep_mutable_backwards_compatible_shapes_and_enum_typ
 
     first_pattern = results[0].format_pattern
     second_pattern = results[1].format_pattern
-    assert first_pattern is not None
-    assert second_pattern is not None
+    assert first_pattern is None
+    assert second_pattern is None
+
+    first_pattern = FormatPattern(
+        dominant_format="surname_first",
+        confidence=1.0,
+        decision_confidence=1.0,
+        surname_first_count=2,
+        given_first_count=0,
+        total_count=2,
+        voting_count=2,
+        vote_margin_count=2,
+        vote_margin=1.0,
+        threshold_met=True,
+    )
+    second_pattern = first_pattern.copy(deep=True)
 
     second_threshold = second_pattern.threshold_met
     first_threshold = not second_threshold
@@ -189,7 +204,21 @@ def test_format_pattern_accepts_legacy_payload_and_dict_serializes_enum_values()
 
 
 def test_prediction_dict_serializes_nested_format_pattern_enum_values(predictor: Predictor):
-    result = predictor.predict_batch([Instance(name="Li Wei")])[0]
+    result = Prediction(
+        success=True,
+        format_pattern=FormatPattern(
+            dominant_format="surname_first",
+            confidence=1.0,
+            decision_confidence=1.0,
+            surname_first_count=1,
+            given_first_count=0,
+            total_count=1,
+            voting_count=1,
+            vote_margin_count=1,
+            vote_margin=1.0,
+            threshold_met=True,
+        ),
+    )
 
     assert result.dict()["format_pattern"]["dominant_format"] == "surname_first"
 
@@ -542,34 +571,23 @@ def test_routing_predictor_batches_instance_analysis_through_auto_wrapper(monkey
     assert captured["min_parallel_batches"] == TIMO_TEST_MIN_PARALLEL_BATCHES
 
 
-def test_routing_predictor_isolates_malformed_instance_in_batch():
-    """A malformed pool in one co-batched instance must not abort the whole batch.
-
-    NB: `route_pp_vys` itself still raises on a bad pool (strict validation is unchanged, see
-    `test_route_pp_vys_requires_paper_authors_first`). The isolation is applied only at the
-    `RoutingPredictor.predict_batch` boundary, which catches the precondition error PER INSTANCE.
-    """
+def test_routing_predictor_rejects_malformed_instance_in_batch():
+    """A malformed pool in one co-batched instance should fail loudly."""
     rp = RoutingPredictor(config=PredictorConfig(), artifacts_dir=".")
     good_a = RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Yue Lin", "Wei Wang", "Jun Zhao"])
     # middle: paper authors are NOT the leading slice of the pool -> pool precondition violated
     malformed = RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Wei Wang", "Yue Lin", "Tao Sun"])
     good_b = RoutingInstance(pp_names=["Chuang Yang"], vys_pool_names=["Chuang Yang", "Hui Li", "Tao Sun"])
 
-    results = rp.predict_batch([good_a, malformed, good_b])
+    with pytest.raises(ValueError, match="must start with the paper"):
+        rp.predict_batch([good_a, malformed, good_b])
 
-    # 1:1 ordering preserved; the malformed slot is present but empty.
-    assert len(results) == EXPECTED_BATCH_CONTEXT_RESULT_COUNT
-    assert all(isinstance(p, RoutedPaperPrediction) for p in results)
-    assert [len(p.authors) for p in results] == [2, 0, 1]
-    assert results[1].authors == []
-
-    # flanking instances equal exactly what they'd produce alone.
-    assert results[0] == rp.predict_batch([good_a])[0]
-    assert results[2] == rp.predict_batch([good_b])[0]
+    assert len(rp.predict_batch([good_a])[0].authors) == len(good_a.pp_names)
+    assert len(rp.predict_batch([good_b])[0].authors) == len(good_b.pp_names)
 
 
-def test_routing_predictor_all_malformed_instances_yield_empty_predictions():
-    """Every instance malformed -> N empty predictions, no exception raised."""
+def test_routing_predictor_all_malformed_instances_raise():
+    """Malformed pools should not be serialized as valid empty-paper predictions."""
     rp = RoutingPredictor(config=PredictorConfig(), artifacts_dir=".")
     instances = [
         RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Wei Wang", "Yue Lin", "Tao Sun"]),
@@ -577,8 +595,5 @@ def test_routing_predictor_all_malformed_instances_yield_empty_predictions():
         RoutingInstance(pp_names=["Chuang Yang", "Hui Li"], vys_pool_names=["Chuang Yang"]),
     ]
 
-    results = rp.predict_batch(instances)
-
-    assert len(results) == len(instances)
-    assert all(isinstance(p, RoutedPaperPrediction) for p in results)
-    assert all(p.authors == [] for p in results)
+    with pytest.raises(ValueError, match="must start with the paper"):
+        rp.predict_batch(instances)

@@ -51,6 +51,7 @@ def _base_pp_vys_row():
         "vys_selected_surname_frequency": 10.0,
         "vys_batch_dominant_format": "surname_first",
         "vys_batch_threshold_met": False,
+        "vys_batch_total_count": 3,
         "vys_batch_confidence": 0.0,
         "vys_batch_vote_margin": 0.0,
     }
@@ -110,6 +111,7 @@ def _apply_pp_vys_vys_fixture(row, reason):
                 "pp_batch_threshold_met": False,
                 "vys_batch_dominant_format": row["vys_selected_format"],
                 "vys_batch_threshold_met": True,
+                "vys_batch_total_count": 3,
                 "vys_batch_confidence": 0.85,
             },
         )
@@ -650,7 +652,7 @@ def test_pp_vys_abstain_rule_rejects_unknown_enums():
         )
 
     with pytest.raises(ValueError, match="pp_selected_format"):
-        route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_format="mixed")])
+        route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_format="sideways", pp_batch_dominant_format="surname_first")])
 
     with pytest.raises(ValueError, match="pp_selected_surname_frequency_ratio"):
         route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_surname_frequency_ratio="not-a-number")])

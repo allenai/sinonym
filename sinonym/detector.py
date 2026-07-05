@@ -195,7 +195,7 @@ from sinonym.services import (
     ServiceContext,
 )
 from sinonym.services.order_metadata import original_component_order
-from sinonym.services.process_pool import PersistentMultiprocessNormalizer, normalize_names_multiprocess
+from sinonym.services.process_pool import PersistentMultiprocessNormalizer
 
 ParallelMode = Literal["auto", "never", "always"]
 AUTO_MULTIPROCESS_MIN_NAMES = 25000
@@ -224,16 +224,16 @@ def _should_use_multiprocessing(
     if parallel not in ("auto", "never", "always"):
         message = "parallel must be 'auto', 'never', or 'always'"
         raise ValueError(message)
+    if item_count == 0 or parallel == "never":
+        return False
+    if parallel == "always":
+        return True
     resolved_threshold = auto_threshold
     if resolved_threshold is None:
         resolved_threshold = linux_auto_threshold if platform.system() == "Linux" else default_auto_threshold
     if resolved_threshold < 1:
         message = "auto multiprocessing threshold must be >= 1"
         raise ValueError(message)
-    if item_count == 0 or parallel == "never":
-        return False
-    if parallel == "always":
-        return True
     return max_workers != 1 and item_count >= resolved_threshold
 
 
@@ -1392,22 +1392,22 @@ class ChineseNameDetector:
         mp_start_method: str = "spawn",
     ) -> list[ParseResult]:
         """
-        Normalize a list of names in a temporary process pool.
+        Process one author list in a temporary process pool.
 
-        This method has per-name `normalize_name()` semantics and does not apply
-        batch-format correction. Use `process_name_batch()` when batch-context
-        parsing is required, or `create_persistent_multiprocess_pool()` to reuse
-        workers across repeated per-name normalization calls.
+        This method has `process_name_batch()` semantics, including batch-format
+        correction. Use `normalize_names()` for independent per-name parsing, or
+        `create_persistent_multiprocess_pool()` to reuse workers across repeated
+        calls.
         """
         self._ensure_initialized()
-        return normalize_names_multiprocess(
-            names,
+        return self.process_name_batches(
+            [names],
+            parallel="always",
+            min_parallel_batches=1,
             max_workers=max_workers,
             chunk_size=chunk_size,
             mp_start_method=mp_start_method,
-            detector_config=self._config,
-            detector_weights=self._weights,
-        )
+        )[0]
 
     def _create_fallback_batch_result(
         self,

@@ -27,6 +27,7 @@ from sinonym.utils.string_manipulation import StringManipulationUtils
 from sinonym.utils.thread_cache import ThreadLocalCache
 
 MIN_COMPOUND_SURNAME_TOKEN_COUNT = 3
+DOMINANT_CHINESE_SURNAME_FREQ_MIN = 10_000.0
 
 # Optional ML Japanese classifier imports - consolidated from separate service
 try:
@@ -90,14 +91,14 @@ class _MLJapaneseClassifier:
                     return ParseResult.failure("japanese")
                 return ParseResult.success_with_name("")
 
-            except Exception as e:
-                logging.warning(f"ML Japanese classifier error: {e}")
-                return ParseResult.success_with_name("")  # Default to allowing through
+            except Exception as e:  # noqa: BLE001 - model-backed classifiers may raise arbitrary runtime errors.
+                LOGGER.warning("ML Japanese classifier error for %r: %s", name, e, exc_info=True)
+                return ParseResult.failure("Japanese classifier error")
 
         return self._cache.get_or_compute(name, compute_classification)
 
     def japanese_probability(self, name: str) -> float:
-        """Return the Japanese-class probability, logging model failures and degrading to 0.0."""
+        """Return the Japanese-class probability, raising on model runtime failures."""
         if not self.is_available():
             return 0.0
 
@@ -110,8 +111,10 @@ class _MLJapaneseClassifier:
             prediction = self._model.predict([name])[0]
             if prediction == "jp":
                 return float(max(probabilities))
-        except Exception as e:  # noqa: BLE001 - model-backed classifiers may raise arbitrary runtime errors.
+        except Exception as e:
             LOGGER.warning("ML Japanese classifier probability error for %r: %s", name, e, exc_info=True)
+            message = "ML Japanese classifier probability failed"
+            raise RuntimeError(message) from e
         return 0.0
 
 
@@ -136,8 +139,8 @@ class EthnicityClassificationService:
     def japanese_probability(self, compact_chinese_text: str) -> float:
         """Return the Japanese-class probability for compact all-CJK text.
 
-        Classifier probability failures are logged by the model wrapper and
-        intentionally degrade to 0.0 so serving can continue.
+        Missing classifiers are treated as unavailable; loaded classifiers that
+        fail at prediction time raise after logging context.
         """
         if not compact_chinese_text:
             return 0.0
@@ -382,6 +385,13 @@ class EthnicityClassificationService:
             and StringManipulationUtils.remove_spaces(tokens[-1]).lower() in OVERLAPPING_KOREAN_SURNAMES,
         )
 
+    def _first_token_surname_frequency(self, tokens: tuple[str, ...]) -> float:
+        """Return the Chinese surname frequency for the first token."""
+        if not tokens:
+            return 0.0
+        key = StringManipulationUtils.remove_spaces(tokens[0]).lower()
+        return self._data.get_surname_freq(key)
+
     def _calculate_non_chinese_patterns_unified(
         self,
         tokens: tuple[str, ...],
@@ -412,12 +422,11 @@ class EthnicityClassificationService:
         normalized_cache: dict[str, str] | None = None,
     ) -> float:
         """Calculate Korean score from pre-computed analysis."""
-        # Early returns for definitive cases. Strong Korean given-pair evidence
-        # with a trailing overlapping Korean surname must still be scored.
-        if analysis["surname_type"] == "chinese_only" and not (
-            self._has_trailing_overlapping_korean_surname(tokens) and analysis["korean_given_pairs"]
-        ):
-            return 0.0  # Block Korean scoring for non-overlapping Chinese surnames
+        # Early returns for definitive cases.
+        if analysis["surname_type"] == "chinese_only":
+            trailing_korean_pair = self._has_trailing_overlapping_korean_surname(tokens) and analysis["korean_given_pairs"]
+            if not trailing_korean_pair or self._first_token_surname_frequency(tokens) >= DOMINANT_CHINESE_SURNAME_FREQ_MIN:
+                return 0.0  # Block Korean scoring for non-overlapping Chinese surnames
         if analysis["surname_type"] == "korean_only":
             return 10.0  # Definitive Korean evidence
 
