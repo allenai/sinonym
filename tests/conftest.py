@@ -5,7 +5,7 @@ This module provides shared fixtures to optimize test performance by avoiding
 repeated expensive initialization of ChineseNameDetector instances.
 
 Also supports injecting candidate weight vectors via the optional
-environment variable `SINONYM_WEIGHTS` (JSON-encoded list of 8, 9, or 10
+environment variable `SINONYM_WEIGHTS` (JSON-encoded list of 8 or 9
 floats; shorter vectors are padded with the default trailing coefficients by
 `NameParsingService`), to enable automated optimization scripts to evaluate
 weight configurations. A malformed or wrong-shaped value raises immediately
@@ -37,7 +37,7 @@ def detector():
         ChineseNameDetector: Fully initialized detector instance
     """
     # Optionally override weight vector via environment for optimization runs.
-    # Production (NameParsingService) accepts 8/9/10-element vectors and pads
+    # Production (NameParsingService) accepts 8/9-element vectors and pads
     # the trailing defaults, so we mirror that here; anything else is a
     # configuration error and must fail the session rather than silently
     # falling back to default weights.
@@ -49,8 +49,8 @@ def detector():
         except json.JSONDecodeError as e:
             message = f"SINONYM_WEIGHTS is not valid JSON: {raw!r}"
             raise ValueError(message) from e
-        if not isinstance(parsed, list) or len(parsed) not in (8, 9, 10):
-            message = f"SINONYM_WEIGHTS must be a JSON list of 8, 9, or 10 floats; got {raw!r}"
+        if not isinstance(parsed, list) or len(parsed) not in (8, 9):
+            message = f"SINONYM_WEIGHTS must be a JSON list of 8 or 9 floats; got {raw!r}"
             raise ValueError(message)
         weights = [float(x) for x in parsed]
 

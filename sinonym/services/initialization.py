@@ -71,9 +71,6 @@ class NameDataStructures:
     # Maps normalized compound surnames back to their original input format
     compound_original_format_map: Mapping[str, str]
 
-    # Per-syllable log-odds of surname-position usage in romanized author names
-    surname_usage_logodds: Mapping[str, float]
-
     # Canonical per-spelling romanization resolution (surname_romanizations.csv),
     # keyed by as-written (norm_light) spelling. Shared by parser scoring and
     # batch/routing evidence via ``resolve_surname_spelling``. The as-written-vs-
@@ -233,9 +230,6 @@ class DataInitializationService:
         # Build pre-computed percentile ranks for ML features
         surname_percentile_ranks = self._build_percentile_ranks(surname_frequencies)
 
-        # Build romanized surname-position usage statistics
-        surname_usage_logodds = self._build_surname_usage_logodds()
-
         return NameDataStructures(
             surnames=surnames,
             surnames_normalized=surnames_normalized,
@@ -254,7 +248,6 @@ class DataInitializationService:
             surname_percentile_ranks=MappingProxyType(dict(surname_percentile_ranks)),
             compound_hyphen_map=MappingProxyType(dict(compound_hyphen_map)),
             compound_original_format_map=MappingProxyType(dict(compound_original_format_map)),
-            surname_usage_logodds=MappingProxyType(surname_usage_logodds),
             surname_romanizations=MappingProxyType(surname_romanizations),
             surname_as_written_aliases=frozenset(surname_as_written_aliases),
         )
@@ -606,20 +599,3 @@ class DataInitializationService:
     def _build_percentile_ranks(self, surname_frequencies: dict[str, float]) -> dict[str, float]:
         """Build pre-computed percentile ranks for ML features (0-1 scale)."""
         return self._percentiles(surname_frequencies)
-
-    def _build_surname_usage_logodds(self, add_k: float = 2.0, min_total: int = 3) -> dict[str, float]:
-        """Build per-syllable surname-position usage log-odds from surname_usage_acl.csv.
-
-        The counts are mined offline by scripts/generate_surname_usage_data.py,
-        which keys syllables with the same norm_light normalization the scorer
-        uses at lookup time. Add-k smoothing plus a minimum-count gate keeps
-        thin syllables neutral (absent from the map).
-        """
-        logodds = {}
-        for row in open_csv_reader("surname_usage_acl.csv"):
-            s_count = int(row["surname_count"])
-            g_count = int(row["given_count"])
-            if s_count + g_count < min_total:
-                continue
-            logodds[row["syllable"]] = math.log((s_count + add_k) / (g_count + add_k))
-        return logodds

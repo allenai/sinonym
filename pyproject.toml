@@ -65,7 +65,6 @@ include = [
     "scripts/name_order_routing_rules.py",
     "scripts/generate_surname_romanizations.py",
     "scripts/generate_name_statistics.py",
-    "scripts/generate_surname_usage_data.py",
     "scripts/train_ml_classifier_for_chinese_vs_japanese.py",
     "README.md",
     "pyproject.toml",

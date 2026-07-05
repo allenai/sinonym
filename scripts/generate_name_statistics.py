@@ -6,10 +6,6 @@ Produces ``given_position.csv``, consumed by ``DataInitializationService``:
 per-syllable initial/final counts inside two-syllable given names. Feeds the
 positional feature for 3-token parses.
 
-(The surname-position usage table, surname_usage_acl.csv, intentionally stays
-ACL-mined: replacing it with corpus-scale marginal counts was measured to be
-incompatible with the current 1+1 mirror expectations - see the data README.)
-
 Sources
 -------
 1. wainshine/Chinese-Names-Corpus 120W (Apache-2.0), ~1.14M Han full names.

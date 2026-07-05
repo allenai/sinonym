@@ -21,13 +21,6 @@ if TYPE_CHECKING:
 LOW_FREQUENCY_SURNAME_MAX = 500.0
 GIVEN_FIRST_SURNAME_FREQ_RATIO_MIN = 50.0
 GIVEN_FIRST_ORDER_PRESERVATION_BONUS = 4.0
-# Surname-position usage evidence for 1+1 parses: the hinge keeps mildly skewed
-# syllables neutral (only lopsided usage beyond this many log-units counts), the
-# clamp bounds the feature, and the evidence scale is the hinged margin at which
-# the ambiguous order-preservation prior is fully overridden.
-USAGE_EVIDENCE_HINGE = 2.25
-USAGE_EVIDENCE_CLAMP = 3.0
-ORDER_BONUS_EVIDENCE_SCALE = 1.25
 # Unattested-vs-attested ambiguity ceiling: an unattested token can plausibly tie
 # with a modest surname, but not with a dominant one (see _is_ambiguous_case and
 # the comparative-feature gating).
@@ -61,7 +54,6 @@ DEFAULT_WEIGHTS = (
     -0.042,  # surname_freq_log_ratio (log-based comparative feature)
     -0.573,  # surname_rank_difference (comparative feature)
     0.06,  # given_position_logp (comparative positional given-syllable feature)
-    0.1,  # surname_usage_delta (surname-position usage evidence, 1+1 parses)
 )
 
 
@@ -84,7 +76,7 @@ class NameParsingService:
         # Weight parameters - can be overridden. Legacy shorter vectors (e.g. from
         # pickled configs or process-pool workers) get the default coefficients for
         # the newer trailing features appended, keeping index order stable.
-        if weights and len(weights) in (8, 9, 10):
+        if weights and len(weights) in (8, 9):
             self._weights = list(weights) + list(DEFAULT_WEIGHTS[len(weights) :])
         else:
             self._weights = list(DEFAULT_WEIGHTS)
@@ -694,7 +686,6 @@ class NameParsingService:
         # Comparative features for 1+1 parses: my surname token vs the competing token
         surname_freq_log_ratio = 0.0
         surname_rank_difference = 0.0
-        surname_usage_delta = 0.0
 
         if len(surname_tokens) == 1 and len(given_tokens) == 1:
             given_as_surname_key = self._surname_key_cached(given_tokens, normalized_cache, surname_key_cache)
@@ -710,19 +701,6 @@ class NameParsingService:
                 surname_freq_log_ratio = math.log(max(my_surname_freq, 0.001) / max(alt_surname_freq, 0.001))
                 # Reuse precomputed rank from the same scoring pass.
                 surname_rank_difference = surname_rank_bonus - self._data.get_surname_rank(given_as_surname_key)
-
-            # Surname-position usage evidence (antisymmetric between the two orders):
-            # positive when the corpus uses my surname token in surname position far
-            # more than the competing token, hinged so only lopsided usage counts.
-            usage = self._data.surname_usage_logodds
-            lo_surname = usage.get(self._normalizer.norm_light(surname_tokens[0]))
-            lo_given = usage.get(self._normalizer.norm_light(given_tokens[0]))
-            if lo_surname is not None and lo_given is not None:
-                usage_diff = lo_surname - lo_given
-                if usage_diff > USAGE_EVIDENCE_HINGE:
-                    surname_usage_delta = min(usage_diff - USAGE_EVIDENCE_HINGE, USAGE_EVIDENCE_CLAMP)
-                elif usage_diff < -USAGE_EVIDENCE_HINGE:
-                    surname_usage_delta = max(usage_diff + USAGE_EVIDENCE_HINGE, -USAGE_EVIDENCE_CLAMP)
 
         # Order preservation bonus for ambiguous romanized cases
         order_preservation_bonus = 0.0
@@ -752,14 +730,7 @@ class NameParsingService:
                     is_ambiguous = self._is_ambiguous_case(surname_tokens[0], given_tokens[0], normalized_cache)
 
                 if is_ambiguous:
-                    # Order prior applies only where usage evidence does not already
-                    # decide the case against it; a lopsided usage margin favoring
-                    # the flipped order overrides it. Confirming evidence (positive
-                    # delta for this order-preserving parse) leaves the prior intact.
-                    order_preservation_bonus = max(
-                        0.0,
-                        1.0 - max(0.0, -surname_usage_delta) / ORDER_BONUS_EVIDENCE_SCALE,
-                    )
+                    order_preservation_bonus = 1.0
                 elif allow_guarded_given_first_bonus and self._has_guarded_given_first_surname_ratio(
                     surname_tokens[0],
                     given_tokens[0],
@@ -848,7 +819,6 @@ class NameParsingService:
             + surname_freq_log_ratio * self._weights[6]  # Surname frequency log ratio weight
             + surname_rank_difference * self._weights[7]  # Surname rank difference weight
             + given_position_logp * self._weights[8]  # Positional given-syllable weight
-            + surname_usage_delta * self._weights[9]  # Surname-position usage evidence weight
         )
 
         return total_score
