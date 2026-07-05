@@ -9,15 +9,19 @@ instance and reuses it for all subsequent chunks.
 from __future__ import annotations
 
 import pickle
+from collections.abc import Callable  # noqa: TC003 - required for runtime get_type_hints().
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from multiprocessing import get_all_start_methods, get_context
 from typing import TYPE_CHECKING, TypeVar
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
+from sinonym.coretypes import (  # noqa: TC001 - required for runtime get_type_hints().
+    BatchParseResult,
+    ChineseNameConfig,
+    ParseResult,
+)
 
-    from sinonym.coretypes import BatchParseResult, ChineseNameConfig, ParseResult
+if TYPE_CHECKING:
     from sinonym.detector import ChineseNameDetector
 
 

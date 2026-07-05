@@ -200,7 +200,7 @@ def test_status_fails_on_changed_failure_message_with_same_nodeids():
     assert expected_failures[0].nodeid in message
 
 
-def test_status_allows_improvement():
+def test_status_fails_when_expected_baseline_failure_is_missing():
     subset_failures = _expected_failure_details()[:-1]
 
     exit_code, message = check_test_status.status_exit_decision(
@@ -210,10 +210,22 @@ def test_status_allows_improvement():
         failures=subset_failures,
     )
 
-    assert exit_code == 0
-    assert "IMPROVEMENT" in message
-    assert f"< {check_test_status.EXPECTED_FAILURES}" in message
+    assert exit_code == 1
+    assert "Missing expected pytest failure signatures" in message
+    assert _expected_failure_details()[-1].nodeid in message
     assert "EXPECTED_FAILURES" not in message
+
+
+def test_status_fails_until_baseline_is_updated_when_all_tests_pass():
+    exit_code, message = check_test_status.status_exit_decision(
+        total_failures=0,
+        perf_passed=True,
+        pytest_returncode=0,
+        failures=[],
+    )
+
+    assert exit_code == 1
+    assert "Missing expected pytest failure signatures" in message
 
 
 def test_status_improvement_requires_failure_list_when_pytest_reported_failures():

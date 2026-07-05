@@ -2,12 +2,14 @@
 Tests for persistent multi-process normalization.
 """
 
+import typing
 from concurrent.futures.process import BrokenProcessPool
 
 import pytest
 
 from scripts.verify_multiprocess import _rate_per_second
 from sinonym.detector import _should_use_multiprocessing
+from sinonym.services import process_pool
 
 TEST_NAMES = [
     "Li Wei",
@@ -42,6 +44,14 @@ def test_verify_multiprocess_rate_per_second_handles_zero_elapsed():
 
 def _batch_decision_signatures(batch_results):
     return [_decision_signatures(results) for results in batch_results]
+
+
+def test_process_pool_public_annotations_resolve_at_runtime():
+    """Public process-pool APIs should support runtime type introspection."""
+    hints = typing.get_type_hints(process_pool.normalize_names_multiprocess)
+
+    assert "detector_config" in hints
+    assert "return" in hints
 
 
 def test_process_name_batch_multiprocess_matches_batch_context(detector):

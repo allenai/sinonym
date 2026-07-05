@@ -307,6 +307,20 @@ def unexpected_failure_signatures(failures: Iterable[FailureDetail]) -> list[Fai
     return sorted(unexpected, key=_failure_signature)
 
 
+def missing_expected_failure_signatures(failures: Iterable[FailureDetail]) -> list[FailureDetail]:
+    """Return known baseline failures that were not present in the current failure list."""
+    observed_counts = Counter(_failure_signature(failure) for failure in failures)
+    missing = []
+    for nodeid, kind, message in EXPECTED_FAILURE_SIGNATURES:
+        signature = (nodeid, kind, message)
+        if observed_counts[signature] > 0:
+            observed_counts[signature] -= 1
+        else:
+            missing.append(FailureDetail(nodeid, kind, message))
+
+    return sorted(missing, key=_failure_signature)
+
+
 def _unexpected_failure_sample(failures: list[FailureDetail]) -> str:
     """Return a concise sample of unexpected failure signatures for the status line."""
     samples = [f"{failure.nodeid} ({failure.kind}: {failure.message})" for failure in failures[:UNEXPECTED_FAILURE_SAMPLE_SIZE]]
@@ -370,28 +384,29 @@ def status_exit_decision(
     failures_list = None if failures is None else list(failures)
     length_ok = failures_list is not None and len(failures_list) == total_failures
     unexpected_signatures = unexpected_failure_signatures(failures_list) if length_ok else []
+    missing_signatures = missing_expected_failure_signatures(failures_list) if length_ok else []
 
     if execution_error is not None:
         exit_code, status_message = 1, execution_error
     elif failures_list is None:
         exit_code, status_message = 1, "Cannot verify failures against the baseline: no failure list was provided."
     elif len(failures_list) != total_failures:
-        exit_code, status_message = 1, (
-            f"Failure count mismatch: received {len(failures_list)} JUnit failures but total_failures={total_failures}."
+        exit_code, status_message = (
+            1,
+            (f"Failure count mismatch: received {len(failures_list)} JUnit failures but total_failures={total_failures}."),
         )
     elif total_failures > EXPECTED_FAILURES:
         exit_code, status_message = 1, f"REGRESSION! Too many failures ({total_failures} > {EXPECTED_FAILURES})"
     elif unexpected_signatures:
         sample = _unexpected_failure_sample(unexpected_signatures)
         exit_code, status_message = 1, f"Unexpected pytest failure signatures: {sample}"
+    elif missing_signatures:
+        sample = _unexpected_failure_sample(missing_signatures)
+        exit_code, status_message = 1, f"Missing expected pytest failure signatures: {sample}"
     elif not perf_passed:
         exit_code, status_message = 1, "Performance tests failed!"
-    elif total_failures == EXPECTED_FAILURES:
-        exit_code, status_message = 0, f"Tests are at expected baseline ({EXPECTED_FAILURES} failures, performance OK)"
     else:
-        exit_code, status_message = 0, (
-            f"IMPROVEMENT! Tests are better than baseline ({total_failures} < {EXPECTED_FAILURES} failures, performance OK)"
-        )
+        exit_code, status_message = 0, f"Tests are at expected baseline ({EXPECTED_FAILURES} failures, performance OK)"
 
     return exit_code, status_message
 

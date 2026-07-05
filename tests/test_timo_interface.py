@@ -590,10 +590,11 @@ def test_routing_predictor_batches_instance_analysis_through_auto_wrapper(monkey
     good_vys = RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Yue Lin", "Wei Wang", "Jun Zhao"])
     pp_only = RoutingInstance(pp_names=["Zhang San"])
     empty = RoutingInstance(pp_names=[])
+    instances = [good_vys, pp_only, empty]
 
-    results = rp.predict_batch([good_vys, pp_only, empty])
+    results = rp.predict_batch(instances)
 
-    assert len(results) == TIMO_TEST_MAX_WORKERS
+    assert len(results) == len(instances)
     assert [len(result.authors) for result in results] == [2, 1, 0]
     assert captured["batches"] == [
         good_vys.pp_names,
