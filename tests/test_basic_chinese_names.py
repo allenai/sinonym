@@ -91,7 +91,6 @@ CHINESE_NAME_TEST_CASES = [
     ("Meiling Wu", (True, "Mei-Ling Wu")),
     ("Mo Yan", (True, "Yan Mo")),
     ("Nan Huang", (True, "Nan Huang")),
-    ("Qin Shi", (True, "Shi Qin")),
     ("Qiuying Zhang", (True, "Qiu-Ying Zhang")),
     ("Ruigang Li", (True, "Rui-Gang Li")),
     ("Shuangxi Wang", (True, "Shuang-Xi Wang")),

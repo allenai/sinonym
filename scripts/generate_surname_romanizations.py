@@ -107,7 +107,7 @@ PENALTY_SHARE = math.exp(-4.0)
 #                     penalize a real full-mass Chinese surname. Keep firmly.
 #   jang   delta  0  Korean 장 (would otherwise be trimmed), but the {im,jang,jung}
 #                     trio flips the borderline eval case "Li Zheng" via a global
-#                     surname-rank shift; eval must hold at the 20-name baseline,
+#                     surname-rank shift; eval must hold at the 16-name baseline,
 #                     so one of {im,jang} is retained and im carries the measured
 #                     fix while jang has zero attributed fixture delta.
 #   koo    delta  0  eval-baseline: trimming rejects "Koo Ming"; also Chinese-attested

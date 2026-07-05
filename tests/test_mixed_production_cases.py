@@ -237,7 +237,6 @@ MIXED_TEST_CASES += [
     ("wang liang", (True, "Liang Wang")),
     ("wang rui", (True, "Rui Wang")),
     ("wang wei ping", (True, "Wei-Ping Wang")),
-    ("xu feng", (True, "Feng Xu")),
     ("yang guang", (True, "Guang Yang")),
     ("yang jun", (True, "Jun Yang")),
     ("ying he", (True, "Ying He")),

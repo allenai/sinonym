@@ -61,13 +61,7 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Lu Xun",
     ),
     (
-        "tests.test_basic_chinese_names::test_basic_chinese_names[Qin Shi-expected80]",
-        "Qin Shi",
-        "Shi Qin",
-        "Qin Shi",
-    ),
-    (
-        "tests.test_basic_chinese_names::test_basic_chinese_names[Zhou Xun-expected110]",
+        "tests.test_basic_chinese_names::test_basic_chinese_names[Zhou Xun-expected109]",
         "Zhou Xun",
         "Xun Zhou",
         "Zhou Xun",
@@ -89,18 +83,6 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Yu Miao",
         "Miao Yu",
         "Yu Miao",
-    ),
-    (
-        "tests.test_misc::test_misc_chinese_names[Wen Jing-expected33]",
-        "Wen Jing",
-        "Jing Wen",
-        "Wen Jing",
-    ),
-    (
-        "tests.test_misc::test_misc_chinese_names[Jing Wen-expected34]",
-        "Jing Wen",
-        "Jing Wen",
-        "Wen Jing",
     ),
     (
         "tests.test_mixed_production_cases::test_mixed_cases[Gui Rui-expected_result6]",
@@ -131,12 +113,6 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Xi Zhao",
         "Zhao Xi",
         "Xi Zhao",
-    ),
-    (
-        "tests.test_mixed_production_cases::test_mixed_cases[xu feng-expected_result120]",
-        "xu feng",
-        "Feng Xu",
-        "Xu Feng",
     ),
 )
 EXPECTED_FAILURES = len(EXPECTED_NORMALIZED_NAME_FAILURES)

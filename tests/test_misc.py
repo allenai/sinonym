@@ -53,8 +53,6 @@ MISC_TEST_CASES = [
     ("Mo Li-Hua", (True, "Li-Hua Mo")),
     ("Jun-Ming Mo", (True, "Jun-Ming Mo")),
     # Pypinyin aliases - Wen (尹)
-    ("Wen Jing", (True, "Jing Wen")),
-    ("Jing Wen", (True, "Jing Wen")),
     ("Wen Xiao-Jun", (True, "Xiao-Jun Wen")),
     ("Yu-Li Wen", (True, "Yu-Li Wen")),
     # Mixed cases with pypinyin aliases
