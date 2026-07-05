@@ -387,19 +387,31 @@ class Predictor:
     # ---- predict_batch: timo-served entrypoint for sinonym_v1 (flat name->Prediction) ----
 
     def predict_batch(self, instances: list[Instance]) -> list[Prediction]:
-        """timo HTTP entrypoint for independent flat name normalization."""
+        """timo HTTP entrypoint. Analyze the whole batch jointly."""
         if not instances:
             return []
 
         names = [i.name for i in instances]
-        results = self._detector.normalize_names(
-            names,
+        batch_result = self._detector.analyze_name_batches(
+            [names],
             parallel=self._config.parallel,
+            min_parallel_batches=self._config.mp_min_parallel_batches,
             max_workers=self._config.mp_max_workers,
             chunk_size=self._config.mp_chunk_size,
             mp_start_method=self._config.mp_start_method,
-        )
-        return [self._to_prediction(result) for result in results]
+        )[0]
+        pattern = self._to_format_pattern(batch_result.format_pattern)
+
+        predictions = []
+        for parse_result, analysis in zip(batch_result.results, batch_result.individual_analyses, strict=False):
+            predictions.append(
+                self._to_prediction(
+                    parse_result,
+                    confidence=analysis.confidence,
+                    format_pattern=pattern.copy(deep=True),
+                ),
+            )
+        return predictions
 
     # ---- exposed detector functions --------------------------------------
 
@@ -443,14 +455,15 @@ class Predictor:
         self,
         names: list[str],
         max_workers: int | None = None,
-        chunk_size: int = 64,
+        chunk_size: int | None = None,
     ) -> list[Prediction]:
         results = self._detector.process_name_batches(
             [names],
             parallel="always",
             min_parallel_batches=1,
-            max_workers=max_workers,
-            chunk_size=chunk_size,
+            max_workers=self._config.mp_max_workers if max_workers is None else max_workers,
+            chunk_size=self._config.mp_chunk_size if chunk_size is None else chunk_size,
+            mp_start_method=self._config.mp_start_method,
         )[0]
         return [self._to_prediction(r) for r in results]
 

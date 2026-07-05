@@ -31,10 +31,10 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Fei Hao",
     ),
     (
-        "tests.test_acl::test_acl_order_preservation[Li Kuang-Li Kuang]",
-        "Li Kuang",
-        "Li Kuang",
-        "Kuang Li",
+        "tests.test_acl::test_acl_order_preservation[Hao-Ran Wei-Hao-Ran Wei]",
+        "Hao-Ran Wei",
+        "Hao-Ran Wei",
+        "Wei Hao-Ran",
     ),
     (
         "tests.test_acl::test_acl_order_preservation[Yao Shu-Yao Shu]",

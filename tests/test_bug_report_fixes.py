@@ -112,31 +112,41 @@ def test_mixed_cjk_trailing_initial_is_not_rejected_as_non_person(detector):
     assert embedded.error_message == "not a personal name"
 
 
-def test_flat_timo_predict_batch_uses_independent_name_semantics():
-    predictor = Predictor(PredictorConfig(), "")
-    solo = predictor.predict_batch([Instance(name="Zhang Wei")])[0]
+def test_flat_timo_predict_batch_uses_batch_context():
+    predictor = Predictor(PredictorConfig(parallel="never"), "")
+    solo = predictor.predict_batch([Instance(name="Yan Li")])[0]
     cobatched = predictor.predict_batch(
         [
             Instance(name=name)
             for name in [
-                "Zhang Wei",
-                "Wei Zhang",
-                "Ming Li",
-                "Xiao Li",
-                "Hua Wang",
-                "Feng Zhang",
-                "Jun Liu",
-                "Chen Li",
-                "Hui Zhou",
-                "Yong Wang",
-                "Bo Chen",
+                "Wang An",
+                "Yan Li",
+                "Wu Gang",
+                "Li Bao",
             ]
         ],
-    )[0]
+    )[1]
 
-    assert (solo.given_name, solo.surname) == ("Wei", "Zhang")
-    assert (cobatched.given_name, cobatched.surname) == ("Wei", "Zhang")
-    assert cobatched.format_pattern is None
+    assert (solo.given_name, solo.surname) == ("Yan", "Li")
+    assert (cobatched.given_name, cobatched.surname) == ("Li", "Yan")
+    assert cobatched.confidence is not None
+    assert cobatched.format_pattern is not None
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_result"),
+    [
+        ("Qin Shi", "Qin Shi"),
+        ("Wen Jing", "Wen Jing"),
+        ("Jing Wen", "Wen Jing"),
+        ("xu feng", "Xu Feng"),
+    ],
+)
+def test_reclassified_ambiguous_baseline_cases_are_explicit(detector, raw_name, expected_result):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected_result
 
 
 def test_predictor_config_uses_sinonym_env_prefix(monkeypatch):

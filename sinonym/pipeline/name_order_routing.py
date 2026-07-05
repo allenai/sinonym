@@ -807,7 +807,7 @@ def input_order_parsed(result: ParseResult) -> ParsedName | None:
                 given_tokens=given_tokens,
                 middle_name=" ".join(middle_tokens),
                 middle_tokens=middle_tokens,
-                order=["given", "middle", "surname"],
+                order=["given", "middle", "surname"] if middle_tokens else ["given", "surname"],
             )
             if given_tokens
             else None

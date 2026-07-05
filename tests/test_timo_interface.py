@@ -49,8 +49,8 @@ def test_single_chinese_name(predictor: Predictor):
     assert result.success
     assert result.surname == "Li"
     assert result.given_name == "Wei"
-    assert result.confidence is None
-    assert result.format_pattern is None
+    assert result.confidence is not None
+    assert result.format_pattern is not None
     assert result.error_message is None
 
 
@@ -145,8 +145,12 @@ def test_prediction_models_keep_mutable_backwards_compatible_shapes_and_enum_typ
 
     first_pattern = results[0].format_pattern
     second_pattern = results[1].format_pattern
-    assert first_pattern is None
-    assert second_pattern is None
+    assert first_pattern is not None
+    assert second_pattern is not None
+    assert first_pattern is not second_pattern
+    second_threshold = second_pattern.threshold_met
+    first_pattern.threshold_met = not first_pattern.threshold_met
+    assert second_pattern.threshold_met is second_threshold
 
     first_pattern = FormatPattern(
         dominant_format="surname_first",
@@ -264,6 +268,37 @@ def test_process_name_batch_multiprocess_preserves_batch_context(predictor: Pred
     assert [(result.given_name, result.surname) for result in actual] == [
         (result.given_name, result.surname) for result in expected
     ]
+
+
+def test_process_name_batch_multiprocess_uses_config_defaults(monkeypatch):
+    predictor = Predictor(
+        PredictorConfig(
+            mp_max_workers=TIMO_TEST_MAX_WORKERS,
+            mp_chunk_size=TIMO_TEST_CHUNK_SIZE,
+            mp_start_method="spawn",
+        ),
+        ".",
+    )
+    captured = {}
+    detector = object.__getattribute__(predictor, "_detector")
+    parse_result = detector.normalize_name("Li Wei")
+
+    def fake_process_name_batches(batches, **kwargs):
+        captured["batches"] = batches
+        captured.update(kwargs)
+        return [[parse_result]]
+
+    monkeypatch.setattr(detector, "process_name_batches", fake_process_name_batches)
+
+    actual = predictor.process_name_batch_multiprocess(["Li Wei"])
+
+    assert captured["batches"] == [["Li Wei"]]
+    assert captured["parallel"] == "always"
+    assert captured["min_parallel_batches"] == 1
+    assert captured["max_workers"] == TIMO_TEST_MAX_WORKERS
+    assert captured["chunk_size"] == TIMO_TEST_CHUNK_SIZE
+    assert captured["mp_start_method"] == "spawn"
+    assert actual[0].surname == "Li"
 
 
 def test_process_name_batches_forwards_auto_parallel_options(predictor: Predictor, monkeypatch):

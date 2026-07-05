@@ -108,6 +108,12 @@ def _make_batches(count: int) -> list[list[str]]:
     return [list(BASE_BATCHES[index % len(BASE_BATCHES)]) for index in range(count)]
 
 
+def _rate_per_second(unit_count: int, elapsed: float) -> float:
+    """Return throughput while guarding timer-resolution zero elapsed values."""
+    measured_elapsed = max(elapsed, time.get_clock_info("perf_counter").resolution)
+    return unit_count / measured_elapsed
+
+
 def _time_runs(label: str, unit: str, unit_count: int, runs: int, fn) -> tuple[TimingStats, Any]:
     run_times: list[float] = []
     first_result = None
@@ -119,7 +125,7 @@ def _time_runs(label: str, unit: str, unit_count: int, runs: int, fn) -> tuple[T
             first_result = result
         run_times.append(elapsed)
 
-    rates = [unit_count / elapsed for elapsed in run_times]
+    rates = [_rate_per_second(unit_count, elapsed) for elapsed in run_times]
     mean_rate = statistics.mean(rates)
     median_rate = statistics.median(rates)
     cv_percent = (statistics.stdev(rates) / mean_rate * 100.0) if len(rates) > 1 and mean_rate > 0 else 0.0

@@ -921,7 +921,7 @@ def test_input_order_parsed_flips_surname_first_reading():
     result = _parse_result("Wang", ["Wei"], ["surname", "given"])
     as_typed = input_order_parsed(result)
     assert (as_typed.given_name, as_typed.surname) == ("Wang", "Wei")
-    assert as_typed.order == ["given", "middle", "surname"]
+    assert as_typed.order == ["given", "surname"]
 
 
 def test_input_order_parsed_keeps_surname_last_reading():

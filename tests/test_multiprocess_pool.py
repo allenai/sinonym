@@ -6,6 +6,7 @@ from concurrent.futures.process import BrokenProcessPool
 
 import pytest
 
+from scripts.verify_multiprocess import _rate_per_second
 from sinonym.detector import _should_use_multiprocessing
 
 TEST_NAMES = [
@@ -33,6 +34,10 @@ def _decision_signature(result):
 
 def _decision_signatures(results):
     return [_decision_signature(result) for result in results]
+
+
+def test_verify_multiprocess_rate_per_second_handles_zero_elapsed():
+    assert _rate_per_second(unit_count=1, elapsed=0.0) > 0
 
 
 def _batch_decision_signatures(batch_results):
