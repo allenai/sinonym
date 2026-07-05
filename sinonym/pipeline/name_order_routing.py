@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -115,6 +116,8 @@ PP_ABSTAIN_REQUIRED_COLUMNS = (
     "pp_success",
     "pp_result_token_count",
     "selected_format",
+    "selected_surname_position",
+    "selected_surname_token_count",
     "batch_total_count",
     "selected_surname_frequency",
     "has_cjk",
@@ -157,7 +160,7 @@ ROUTING_TOKEN_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", flags=re.UNICODE)
 class PPVysFeatures:
     """Parsed feature values for one PP/VYS/abstain routing row."""
 
-    ratio: float
+    ratio: float | None
     pp_batch_total_count: float
     vys_batch_total_count: float
     pp_batch_confidence: float
@@ -191,6 +194,8 @@ def build_pp_abstain_rows(batch_result: BatchParseResult, detector_context: Any)
                 "pp_success": result.success,
                 "pp_result_token_count": _parse_result_token_count(result),
                 "selected_format": _format_value(evidence.selected_format),
+                "selected_surname_position": evidence.selected_surname_position,
+                "selected_surname_token_count": evidence.selected_surname_token_count,
                 "batch_total_count": batch_result.format_pattern.total_count,
                 "selected_surname_frequency": _float_or_zero(evidence.selected_surname_frequency),
                 "has_cjk": _has_cjk(script_representation),
@@ -317,7 +322,7 @@ def _pp_vys_policy_row(row: Row) -> MutableRow:
 
 
 def _pp_vys_features(row: Row) -> PPVysFeatures:
-    ratio = _optional_float(row, "pp_selected_surname_frequency_ratio", default=math.nan)
+    ratio = _optional_float(row, "pp_selected_surname_frequency_ratio", default=None)
     pp_batch_total_count = _required_float(row, "pp_batch_total_count")
     vys_batch_total_count = _required_float(row, "vys_batch_total_count")
     pp_batch_confidence = _required_float(row, "pp_batch_confidence")
@@ -419,13 +424,15 @@ def _endpoint_pp_with_real_paper_votes(features: PPVysFeatures) -> bool:
 
 
 def _strong_pp_allowed_ratio(features: PPVysFeatures) -> bool:
+    ratio_allowed = (
+        features.ratio is None
+        or features.ratio <= PP_VYS_ALLOWED_RATIO_LOW_MAX
+        or PP_VYS_ALLOWED_RATIO_HIGH_MIN < features.ratio <= PP_VYS_ALLOWED_RATIO_HIGH_MAX
+    )
     return (
         features.old_vys_new_pp
         and features.new_reason == "strong_pp_paper_context"
-        and (
-            features.ratio <= PP_VYS_ALLOWED_RATIO_LOW_MAX
-            or PP_VYS_ALLOWED_RATIO_HIGH_MIN < features.ratio <= PP_VYS_ALLOWED_RATIO_HIGH_MAX
-        )
+        and ratio_allowed
     )
 
 
@@ -442,13 +449,13 @@ def _reliable_input_order_abstain(features: PPVysFeatures) -> bool:
         features.input_order_candidate == "vys"
         and features.new_reason == "weak_or_conflicting_evidence"
         and features.pp_batch_total_count <= PP_VYS_VERY_LOW_BATCH_MAX
-        and features.ratio <= PP_VYS_LOW_RATIO_MAX
+        and (features.ratio is None or features.ratio <= PP_VYS_LOW_RATIO_MAX)
     )
     strong_vys_small_pp_context = (
         features.input_order_candidate == "vys"
         and features.new_reason == "strong_vys_batch_context"
         and features.pp_batch_total_count <= PP_VYS_LOW_BATCH_MAX
-        and features.ratio <= PP_VYS_LOW_RATIO_MAX
+        and (features.ratio is None or features.ratio <= PP_VYS_LOW_RATIO_MAX)
     )
     return input_pp_old_new_pp or endpoint_vys_small_pp_context or weak_vys_small_pp_context or strong_vys_small_pp_context
 
@@ -566,7 +573,11 @@ def route_pp_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
         reason = "default_abstain"
         if predicates["accept_surname_first"]:
             route = "pp"
-            reason = "surname_first_two_token"
+            reason = (
+                "surname_first_two_token"
+                if predicates["surname_first_two_token"]
+                else "compound_surname_first_input_start"
+            )
         if predicates["clean_bilingual_given_first"]:
             route = "pp"
             reason = "clean_bilingual_given_first"
@@ -699,11 +710,12 @@ def _old_pp_vys_decision_from_row(row: Row) -> tuple[str, str]:
 
 def _selected_clean_pp_vys_decision_from_row(row: Row) -> tuple[str, str]:
     """Return the selected clean PP/VYS/abstain decision before hybrid overrides."""
-    ratio = _optional_float(row, "pp_selected_surname_frequency_ratio", default=math.nan)
-    if ratio <= PP_VYS_SELECTED_CLEAN_ENDPOINT_VYS_RATIO_MAX:
-        return "vys", "endpoint_frequency_strongly_favors_vys"
-    if ratio >= PP_VYS_SELECTED_CLEAN_ENDPOINT_PP_RATIO_MIN:
-        return "pp", "endpoint_frequency_strongly_favors_pp"
+    ratio = _optional_float(row, "pp_selected_surname_frequency_ratio", default=None)
+    if ratio is not None:
+        if ratio <= PP_VYS_SELECTED_CLEAN_ENDPOINT_VYS_RATIO_MAX:
+            return "vys", "endpoint_frequency_strongly_favors_vys"
+        if ratio >= PP_VYS_SELECTED_CLEAN_ENDPOINT_PP_RATIO_MIN:
+            return "pp", "endpoint_frequency_strongly_favors_pp"
     if _strong_pp_paper_context_from_row(row):
         return "pp", "strong_pp_paper_context"
     if _strong_vys_batch_context_from_row(row):
@@ -770,6 +782,15 @@ def _input_order_display(parsed: ParsedName) -> list[tuple[str, str]]:
     return display
 
 
+def _input_order_given_tokens(display: list[tuple[str, str]], original: ParsedName) -> list[str]:
+    """Return as-typed given tokens without splitting compact compound surnames."""
+    given_tokens = [token for role, token in display[:-1] if role != "middle"]
+    surname_tokens = list(original.surname_tokens)
+    if len(surname_tokens) > 1 and " " not in original.surname and given_tokens[: len(surname_tokens)] == surname_tokens:
+        return [original.surname, *given_tokens[len(surname_tokens) :]]
+    return given_tokens
+
+
 def input_order_parsed(result: ParseResult) -> ParsedName | None:
     """Materialize the preprocessed input-order (as-typed) parse for an abstain route.
 
@@ -798,7 +819,7 @@ def input_order_parsed(result: ParseResult) -> ParsedName | None:
     else:
         surname = display[-1][1]
         middle_tokens = [token for role, token in display[:-1] if role == "middle"]
-        given_tokens = [token for role, token in display[:-1] if role != "middle"]
+        given_tokens = _input_order_given_tokens(display, original)
         parsed = (
             ParsedName(
                 surname=surname,
@@ -915,7 +936,13 @@ def _input_order_candidate(row: Row) -> str:
 
 
 def _name_tokens(name: str) -> tuple[str, ...]:
-    return tuple(token.lower() for token in re.findall(r"[A-Za-z]+", name))
+    return tuple(_normalize_name_token(token) for token in ROUTING_TOKEN_RE.findall(name))
+
+
+def _normalize_name_token(token: str) -> str:
+    """Normalize one routing-prior token with Unicode letters and stripped accents."""
+    decomposed = unicodedata.normalize("NFKD", token)
+    return "".join(char for char in decomposed if not unicodedata.combining(char)).casefold()
 
 
 def _pp_abstain_failed_parse(row: Row) -> bool:
@@ -942,17 +969,31 @@ def _pp_abstain_predicates(row: Row) -> dict[str, bool]:
     has_latin = _required_bool(row, "has_latin")
     cjk_has_space = _required_bool(row, "cjk_has_space")
     selected_format = _required_string(row, "selected_format", allowed=FORMAT_VALUES)
+    selected_surname_position = _required_string(
+        row,
+        "selected_surname_position",
+        allowed=("first", "last", "internal", "unknown"),
+    )
+    selected_surname_token_count = _required_float(row, "selected_surname_token_count")
 
     below_reliable_batch_min = batch_total_count < PP_ABSTAIN_RELIABLE_BATCH_COUNT_MIN
-    surname_first_two_token = pp_result_token_count == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT and selected_format == "surname_first"
+    surname_first_at_input_start = selected_format == "surname_first" and selected_surname_position == "first"
+    surname_first_two_token = (
+        pp_result_token_count == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT and surname_first_at_input_start
+    )
+    compound_surname_first_input_start = surname_first_at_input_start and selected_surname_token_count > 1
     weak_zero_batch = below_reliable_batch_min and selected_surname_frequency < PP_ABSTAIN_WEAK_SURNAME_FREQUENCY_MAX
     zero_batch_mixed_long = (
         below_reliable_batch_min and has_cjk and has_latin and raw_tokens >= PP_ABSTAIN_MIXED_LONG_RAW_TOKEN_MIN
     )
     spaced_cjk_zero_batch_surname_first = (
-        surname_first_two_token and below_reliable_batch_min and has_cjk and not has_latin and cjk_has_space
+        surname_first_at_input_start and below_reliable_batch_min and has_cjk and not has_latin and cjk_has_space
     )
-    accept_surname_first = surname_first_two_token and not zero_batch_mixed_long and not spaced_cjk_zero_batch_surname_first
+    accept_surname_first = (
+        (surname_first_two_token or compound_surname_first_input_start)
+        and not zero_batch_mixed_long
+        and not spaced_cjk_zero_batch_surname_first
+    )
     clean_bilingual_given_first = (
         pp_result_token_count == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
         and selected_format == "given_first"
@@ -963,6 +1004,8 @@ def _pp_abstain_predicates(row: Row) -> dict[str, bool]:
     )
     return {
         "surname_first_two_token": surname_first_two_token,
+        "surname_first_at_input_start": surname_first_at_input_start,
+        "compound_surname_first_input_start": compound_surname_first_input_start,
         "weak_zero_batch": weak_zero_batch,
         "zero_batch_mixed_long": zero_batch_mixed_long,
         "spaced_cjk_zero_batch_surname_first": spaced_cjk_zero_batch_surname_first,
@@ -1043,7 +1086,7 @@ def _required_float(row: Row, column: str) -> float:
     return parsed
 
 
-def _optional_float(row: Row, column: str, *, default: float) -> float:
+def _optional_float(row: Row, column: str, *, default: float | None) -> float | None:
     value = row[column]
     if value is None or value == "" or _is_nan(value):
         return default

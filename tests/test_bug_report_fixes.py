@@ -1,11 +1,11 @@
-# ruff: noqa: PLR2004, RUF012, EM101, PLC0415, SLF001, SIM117, TRY003
+# ruff: noqa: RUF012, EM101, PLC0415, SLF001, SIM117, TRY003
 import logging
 
 import numpy as np
 import pytest
 
 from sinonym import chinese_names_data
-from sinonym.coretypes import BatchFormatPattern, NameFormat
+from sinonym.coretypes import BatchFormatPattern, NameFormat, ParseResult
 from sinonym.pipeline import name_order_routing
 from sinonym.pipeline.name_order_routing import (
     _input_order_display,
@@ -22,6 +22,8 @@ def _pp_abstain_row(**overrides):
         "pp_success": True,
         "pp_result_token_count": 2,
         "selected_format": "given_first",
+        "selected_surname_position": "last",
+        "selected_surname_token_count": 1,
         "batch_total_count": 1,
         "selected_surname_frequency": 100.0,
         "has_cjk": False,
@@ -112,6 +114,31 @@ def test_mixed_cjk_trailing_initial_is_not_rejected_as_non_person(detector):
     assert embedded.error_message == "not a personal name"
 
 
+def test_mixed_initial_keeps_strong_chinese_cjk_name_shapes(detector):
+    accepted = [
+        "Y.\u5f20\u4f1f",
+        "G.\u674e\u660e",
+        "A.\u738b\u660e",
+        "O.\u6b27\u9633",
+    ]
+
+    for raw_name in accepted:
+        result = detector.normalize_name(raw_name)
+        assert result.success, raw_name
+
+    western_transliteration = detector.normalize_name("G.\u970d\u5f17")
+    assert not western_transliteration.success
+    assert western_transliteration.error_message == "not a personal name"
+
+
+def test_parenthetical_surname_first_hint_suppresses_guarded_given_first_bonus(detector):
+    result = detector.normalize_name("Diao (Alice) Wang")
+
+    assert result.success
+    assert result.parsed.surname == "Diao"
+    assert result.parsed.given_name == "Wang"
+
+
 def test_flat_timo_predict_batch_uses_batch_context():
     predictor = Predictor(PredictorConfig(parallel="never"), "")
     solo = predictor.predict_batch([Instance(name="Yan Li")])[0]
@@ -177,6 +204,102 @@ def test_pp_abstain_treats_single_author_count_as_unreliable_batch():
     assert mixed_long["router_reason"] == "zero_batch_mixed_long"
 
 
+def test_pp_abstain_accepts_compound_surname_first_at_input_start():
+    ordinary_three_token = route_pp_abstain_rows(
+        [
+            _pp_abstain_row(
+                pp_result_token_count=3,
+                selected_format="surname_first",
+                selected_surname_position="first",
+                selected_surname_token_count=1,
+                raw_tokens=3,
+            ),
+        ],
+    )[0]
+    compound = route_pp_abstain_rows(
+        [
+            _pp_abstain_row(
+                pp_result_token_count=3,
+                selected_format="surname_first",
+                selected_surname_position="first",
+                selected_surname_token_count=2,
+                raw_tokens=3,
+            ),
+        ],
+    )[0]
+
+    assert ordinary_three_token["router_prediction"] == "abstain"
+    assert ordinary_three_token["router_reason"] == "weak_zero_batch"
+    assert compound["router_prediction"] == "pp"
+    assert compound["router_reason"] == "compound_surname_first_input_start"
+
+
+def test_route_pp_preserves_latin_compound_surname_first_parse():
+    predictor = Predictor(PredictorConfig(parallel="never"), "")
+
+    au, ou, given_first = predictor.route_pp(["Au Yeung Ming", "Ou Yang Ming", "Ming Au Yeung"])
+
+    assert (au.router_prediction.value, au.given_name, au.surname) == ("pp", "Ming", "Au Yeung")
+    assert (ou.router_prediction.value, ou.given_name, ou.surname) == ("pp", "Ming", "Ou Yang")
+    assert (given_first.router_prediction.value, given_first.given_name, given_first.surname) == (
+        "abstain",
+        "Ming",
+        "Au Yeung",
+    )
+
+
+def test_internal_compound_surname_span_reports_real_width(detector):
+    batch = detector.analyze_name_batch(["Wei Zhu Ge Ming"])
+    evidence = batch.name_order_evidence[0]
+
+    assert batch.results[0].success
+    assert evidence.selected_surname_position == "internal"
+    assert evidence.selected_surname_token_count == 2
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_result", "expected_surname", "expected_given"),
+    [
+        ("AuyeongWei", "Wei Auyeong", "Auyeong", "Wei"),
+        ("ZhaWei", "Wei Zha", "Zha", "Wei"),
+    ],
+)
+def test_camel_case_pair_does_not_let_zero_frequency_first_surname_auto_lose(
+    detector,
+    raw_name,
+    expected_result,
+    expected_surname,
+    expected_given,
+):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected_result
+    assert result.parsed.surname == expected_surname
+    assert result.parsed.given_name == expected_given
+
+
+def test_camel_case_pair_uses_as_written_frequency_before_zero_frequency_guard(detector):
+    result = detector.normalize_name("GunWei")
+    spaced = detector.normalize_name("Gun Wei")
+
+    assert result.success
+    assert result.result == spaced.result == "Gun Wei"
+    assert result.parsed.surname == spaced.parsed.surname == "Wei"
+    assert result.parsed.given_name == spaced.parsed.given_name == "Gun"
+
+
+def test_route_pp_abstain_preserves_compact_compound_token_when_flipping_to_input_order():
+    predictor = Predictor(PredictorConfig(parallel="never"), "")
+
+    (routed,) = predictor.route_pp(["Ouyang K. Wei"])
+
+    assert routed.router_prediction.value == "abstain"
+    assert routed.router_reason == "weak_zero_batch"
+    assert (routed.given_name, routed.middle_name, routed.surname) == ("Ouyang", "K", "Wei")
+    assert (routed.pp.given_name, routed.pp.middle_name, routed.pp.surname) == ("Wei", "K", "Ouyang")
+
+
 def test_pp_vys_accepts_mixed_selected_format_as_unknown_input_order():
     routed = route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_format="mixed", vys_selected_format="mixed")])[0]
 
@@ -231,6 +354,22 @@ def test_japanese_probability_raises_when_loaded_model_errors(caplog):
 
     assert "ML Japanese classifier probability error" in caplog.text
     assert any(record.exc_info for record in caplog.records)
+
+
+def test_ml_classifier_runtime_failure_surfaces_in_detector():
+    detector = Predictor(PredictorConfig(parallel="never"), "")._detector
+    service = detector._ethnicity_service
+    service._ml_classifier._available = True
+    service._ml_classifier._model = object()
+    service._ml_classifier.is_available = lambda: True
+    service._ml_classifier.classify_all_chinese_name = lambda _name: ParseResult.failure(
+        "ML Japanese classifier failed",
+    )
+
+    result = detector.normalize_name("\u738b\u4f1f")
+
+    assert not result.success
+    assert result.error_message == "ML Japanese classifier failed"
 
 
 def test_route_pp_and_pp_vys_delegate_to_single_materialization_helpers(monkeypatch):

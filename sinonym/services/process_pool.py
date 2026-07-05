@@ -61,7 +61,13 @@ def _init_worker(config: ChineseNameConfig | None, weights: tuple[float, ...] | 
 
     global _WORKER_DETECTOR  # noqa: PLW0603
     worker_weights = list(weights) if weights is not None else None
-    _WORKER_DETECTOR = ChineseNameDetector(config=config, weights=worker_weights)
+    try:
+        detector = ChineseNameDetector(config=config, weights=worker_weights)
+        detector._ensure_initialized()  # noqa: SLF001 - worker startup must force detector readiness.
+    except Exception as exc:
+        message = "failed to initialize multiprocessing worker detector"
+        raise RuntimeError(message) from exc
+    _WORKER_DETECTOR = detector
 
 
 def _normalize_chunk(names: list[str]) -> list[ParseResult]:
@@ -185,11 +191,21 @@ class PersistentMultiprocessNormalizer:
             for chunk_result in self._executor.map(worker, chunks, chunksize=1):
                 results.extend(chunk_result)
         except BrokenProcessPool as exc:
+            self._executor.shutdown(wait=False, cancel_futures=True)
+            self._closed = True
             message = (
                 "the multiprocessing worker pool broke. Either the workers failed to "
                 "initialize (on Windows/macOS, call this API from a module guarded by "
                 "`if __name__ == '__main__':`) or a worker died mid-batch (for example, "
                 "out-of-memory or a native crash)."
+            )
+            raise RuntimeError(message) from exc
+        except Exception as exc:
+            self._executor.shutdown(wait=False, cancel_futures=True)
+            self._closed = True
+            message = (
+                "multiprocessing worker task failed while processing "
+                f"{len(items)} item(s) in {len(chunks)} chunk(s) of up to {self._chunk_size}"
             )
             raise RuntimeError(message) from exc
         return results

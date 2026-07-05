@@ -16,6 +16,7 @@ MIN_CJK_NON_PERSON_PREFIX_CHARS = 2
 MIN_AUTHOR_LIST_LATIN_TOKENS = 6
 MIN_AUTHOR_LIST_SURNAME_TOKENS = 3
 MIN_TRANSLITERATED_CJK_CHARS = 2
+DOMINANT_CHINESE_SURNAME_FREQ_MIN = 10_000.0
 
 LATIN_WORD_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)?")
 ASCII_WORD_RE = re.compile(r"[A-Za-z]+")
@@ -98,12 +99,29 @@ class NonPersonInputDetectionService:
         cjk_chunks = self._cjk_chunks(raw_name)
         if not any(len(chunk) >= MIN_TRANSLITERATED_CJK_CHARS for chunk in cjk_chunks):
             return False
+        if len(ascii_tokens) == 1 and any(self._looks_like_chinese_name_chunk(chunk) for chunk in cjk_chunks):
+            return False
 
         normalized_input = self._normalizer.apply(raw_name)
         if self._normalizer.classify_script_representation(normalized_input) == "bilingual_aligned":
             return False
 
         return self._has_initial_cjk_separator_bridge(raw_name)
+
+    def _looks_like_chinese_name_chunk(self, cjk_chunk: str) -> bool:
+        """Return whether a CJK chunk has strong Chinese surname evidence."""
+        normalized_input = self._normalizer.apply(cjk_chunk)
+        tokens = list(normalized_input.roman_tokens)
+        if len(tokens) < MIN_TRANSLITERATED_CJK_CHARS:
+            return False
+
+        normalized_tokens = [self._normalizer.norm(token) for token in tokens]
+        first_key = normalized_tokens[0]
+        if self._data.get_surname_freq(first_key) >= DOMINANT_CHINESE_SURNAME_FREQ_MIN:
+            return True
+
+        first_two = " ".join(normalized_tokens[:2])
+        return first_two in self._data.compound_surnames or first_two in self._data.compound_surnames_normalized
 
     def _has_initial_cjk_separator_bridge(self, raw_name: str) -> bool:
         """Return whether a separator run directly joins a Latin initial to a CJK run.

@@ -197,6 +197,8 @@ from sinonym.services import (
 from sinonym.services.order_metadata import original_component_order
 from sinonym.services.process_pool import PersistentMultiprocessNormalizer
 
+LOGGER = logging.getLogger(__name__)
+
 ParallelMode = Literal["auto", "never", "always"]
 AUTO_MULTIPROCESS_MIN_NAMES = 25000
 AUTO_MULTIPROCESS_MIN_BATCHES = 4000
@@ -205,6 +207,8 @@ LINUX_AUTO_MULTIPROCESS_MIN_BATCHES = 2000
 BILINGUAL_SURNAME_STRENGTH_RATIO_MIN = 5.0
 BILINGUAL_ROMAN_HAN_SOURCE_ORDER_RATIO_MAX = 12.0
 BILINGUAL_ENDPOINT_PAIR_COUNT = 2
+SPACED_ALL_CHINESE_GROUP_COUNT = 2
+THREE_CHARACTER_ALL_CHINESE_TOKEN_COUNT = 3
 SPACED_HAN_PREFIX_SURNAME_RATIO_MIN = 5.0
 CAMEL_CASE_LAST_SURNAME_RATIO_MIN = 5.0
 CURATED_COMPOUND_SURNAME_FORMS = frozenset((*COMPOUND_VARIANTS.keys(), *COMPOUND_VARIANTS.values()))
@@ -241,7 +245,7 @@ def _auto_start_method(mp_start_method: str) -> str:
     """Resolve the high-level auto start method."""
     if mp_start_method != "auto":
         return mp_start_method
-    return "fork" if platform.system() == "Linux" else "spawn"
+    return "spawn"
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -278,8 +282,8 @@ class ChineseNameDetector:
             self._normalizer.set_data_context(self._data)
             # Initialize services
             self._initialize_services()
-        except Exception as e:
-            logging.warning(f"Failed to initialize at construction: {e}. Will initialize lazily.")
+        except Exception as e:  # noqa: BLE001 - construction keeps lazy initialization fallback semantics.
+            LOGGER.warning("Failed to initialize at construction: %s. Will initialize lazily.", e)
 
     def _initialize_services(self) -> None:
         """Initialize service instances with data context."""
@@ -415,7 +419,7 @@ class ChineseNameDetector:
     def _normalize_camel_case_pair(self, normalized_input: NormalizedInput) -> ParseResult | None:
         """Parse a whole-input camelCase pair using surname-first provenance."""
         tokens = list(normalized_input.roman_tokens)
-        if len(tokens) != 2 or self._is_compound_surname_group(tokens, normalized_input.norm_map):
+        if len(tokens) != BILINGUAL_ENDPOINT_PAIR_COUNT or self._is_compound_surname_group(tokens, normalized_input.norm_map):
             return None
 
         first, last = tokens
@@ -426,10 +430,12 @@ class ChineseNameDetector:
         if not first_is_surname and not last_is_surname:
             return None
 
-        first_freq = self._data.get_surname_freq(first_key)
-        last_freq = self._data.get_surname_freq(last_key)
+        first_freq = self._data.get_surname_freq_as_written(first_key)
+        last_freq = self._data.get_surname_freq_as_written(last_key)
         last_wins = last_is_surname and (
-            not first_is_surname or last.isupper() or last_freq >= CAMEL_CASE_LAST_SURNAME_RATIO_MIN * first_freq
+            not first_is_surname
+            or last.isupper()
+            or (first_freq > 0 and last_freq >= CAMEL_CASE_LAST_SURNAME_RATIO_MIN * first_freq)
         )
         if last_wins:
             surname_tokens, given_tokens = [last], [first]
@@ -730,8 +736,8 @@ class ChineseNameDetector:
     def _normalize_spaced_all_chinese_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
         """Parse all-Han names whose whitespace already separates name components."""
         if (
-            len(normalized_input.tokens) != self._config.min_tokens_required
-            or len(normalized_input.roman_tokens) <= self._config.min_tokens_required
+            len(normalized_input.tokens) != SPACED_ALL_CHINESE_GROUP_COUNT
+            or len(normalized_input.roman_tokens) <= SPACED_ALL_CHINESE_GROUP_COUNT
         ):
             return None
 
@@ -750,17 +756,17 @@ class ChineseNameDetector:
             first_is_surname = self._is_surname_group(first_group, normalized_input.norm_map)
             last_is_surname = self._is_surname_group(last_group, normalized_input.norm_map)
             last_is_compound_surname = self._is_compound_surname_group(last_group, normalized_input.norm_map)
+            first_strength = self._surname_group_strength(
+                first_group,
+                normalized_input.tokens[0],
+            )
+            last_strength = self._surname_group_strength(
+                last_group,
+                normalized_input.tokens[1],
+            )
             last_compound_surname_wins = last_is_compound_surname and (
                 self._is_curated_compound_surname_group(last_group, normalized_input.norm_map)
-                or self._surname_group_strength(
-                    last_group,
-                    normalized_input.tokens[1],
-                )
-                >= self._surname_group_strength(
-                    first_group,
-                    normalized_input.tokens[0],
-                )
-                * BILINGUAL_SURNAME_STRENGTH_RATIO_MIN
+                or (last_strength > 0 and last_strength >= first_strength * BILINGUAL_SURNAME_STRENGTH_RATIO_MIN)
             )
 
             if (
@@ -887,10 +893,7 @@ class ChineseNameDetector:
                 # Fallback: if token1 is not a surname, try token2 as surname (less common but possible)
                 token2_norm = normalized_input.norm_map.get(token2, self._normalizer.norm(token2))
                 token2_is_surname = self._data.is_surname(token2, token2_norm)
-                if token2_is_surname:
-                    best_result = ([token2], [token1])
-                else:
-                    best_result = None
+                best_result = ([token2], [token1]) if token2_is_surname else None
 
             if best_result:
                 surname_tokens, given_tokens = best_result
@@ -945,7 +948,7 @@ class ChineseNameDetector:
                     )
                 except ValueError as e:
                     return ParseResult.failure(str(e))
-        elif is_all_chinese and len(normalized_input.roman_tokens) == 3:
+        elif is_all_chinese and len(normalized_input.roman_tokens) == THREE_CHARACTER_ALL_CHINESE_TOKEN_COUNT:
             # For 3-character all-Chinese names: check compound surname vs single surname
             tokens = list(normalized_input.roman_tokens)
 
@@ -957,7 +960,11 @@ class ChineseNameDetector:
                 normalized_input.compound_metadata,
             )
 
-            if compound_parse is not None and len(compound_parse[0]) == 2 and len(compound_parse[1]) == 1:
+            if (
+                compound_parse is not None
+                and len(compound_parse[0]) == BILINGUAL_ENDPOINT_PAIR_COUNT
+                and len(compound_parse[1]) == 1
+            ):
                 # Parsing service recognized first two as compound surname
                 best_result = (compound_parse[0], compound_parse[1])
             else:
@@ -1194,8 +1201,6 @@ class ChineseNameDetector:
 
         if self._batch_analysis_service is None:
             # Return a fallback pattern indicating mixed format
-            from sinonym.coretypes import NameFormat
-
             return BatchFormatPattern(
                 dominant_format=NameFormat.MIXED,
                 confidence=0.0,
@@ -1426,16 +1431,15 @@ class ChineseNameDetector:
         )
 
         # Create dummy individual analyses
-        individual_analyses = []
-        for name in names:
-            individual_analyses.append(
-                IndividualAnalysis(
-                    raw_name=name,
-                    candidates=[],
-                    best_candidate=None,
-                    confidence=0.0,
-                ),
+        individual_analyses = [
+            IndividualAnalysis(
+                raw_name=name,
+                candidates=[],
+                best_candidate=None,
+                confidence=0.0,
             )
+            for name in names
+        ]
         name_order_evidence = [NameOrderEvidence(raw_name=name) for name in names]
 
         return BatchParseResult(

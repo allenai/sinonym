@@ -149,6 +149,7 @@ class NameOrderEvidence(TimoModel):
     individual_format: NameFormatValue
     selected_format: NameFormatValue
     selected_surname_position: SurnamePositionValue
+    selected_surname_token_count: int
     has_all_caps_token: bool
     all_caps_tokens: list[str]
     first_token_surname_frequency: float | None = None
@@ -357,6 +358,7 @@ class Predictor:
             individual_format=evidence.individual_format.value,
             selected_format=evidence.selected_format.value,
             selected_surname_position=evidence.selected_surname_position,
+            selected_surname_token_count=evidence.selected_surname_token_count,
             first_token_surname_frequency=evidence.first_token_surname_frequency,
             last_token_surname_frequency=evidence.last_token_surname_frequency,
             selected_surname_frequency=evidence.selected_surname_frequency,
@@ -403,7 +405,7 @@ class Predictor:
         pattern = self._to_format_pattern(batch_result.format_pattern)
 
         predictions = []
-        for parse_result, analysis in zip(batch_result.results, batch_result.individual_analyses, strict=False):
+        for parse_result, analysis in zip(batch_result.results, batch_result.individual_analyses, strict=True):
             predictions.append(
                 self._to_prediction(
                     parse_result,

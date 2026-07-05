@@ -61,8 +61,10 @@ include = [
 include = [
     "sinonym",
     "tests",
+    "scripts/README.md",
     "scripts/check_test_status.py",
     "scripts/name_order_routing_rules.py",
+    "scripts/verify_multiprocess.py",
     "scripts/generate_surname_romanizations.py",
     "scripts/generate_name_statistics.py",
     "scripts/train_ml_classifier_for_chinese_vs_japanese.py",
@@ -85,7 +87,32 @@ select = ["E", "F", "W", "C90", "I", "N", "UP", "YTT", "S", "BLE", "FBT", "B", "
 ignore = ["S101", "T201"]  # Allow assert statements and print statements
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "T201", "ARG", "FBT", "INP001"]
+"tests/*" = ["S101", "T201", "ARG", "FBT", "INP001", "PLR2004"]
+"sinonym/detector.py" = ["C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915", "SLF001"]
+"sinonym/services/ethnicity.py" = ["C901", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "ARG002", "SLF001"]
+"scripts/generate_acl_data.py" = ["B007", "BLE001", "C901", "F841", "PLC0415", "PLR0912", "PLR0915", "PLR2004", "PLW2901", "PTH123", "SIM102", "SIM108", "SLF001"]
+"scripts/generate_chinese_name_corpus_data.py" = ["ARG001", "BLE001", "C901", "ERA001", "N806", "PLC0415", "PLR0912", "PLR2004", "PTH123", "SLF001", "TRY300"]
+"scripts/profile_multiprocess.py" = ["EM101", "PLR0913", "TRY003"]
+"scripts/profile_run.py" = ["FBT002", "PLR2004"]
+"scripts/profile_threaded.py" = ["E501", "PLR2004", "SIM108"]
+"scripts/train_ml_classifier_for_chinese_vs_japanese.py" = ["N806", "PLC0415"]
+"sinonym/__init__.py" = ["BLE001", "EM102", "PLC0415", "PTH100", "PTH109", "PTH120", "S110", "TRY003"]
+"sinonym/chinese_names_data.py" = ["ERA001"]
+"sinonym/coretypes/config.py" = ["E501", "RUF001", "RUF003"]
+"sinonym/ml_model_components.py" = ["ARG002", "N803", "PLR2004", "UP038"]
+"sinonym/patterns/regex_builders.py" = ["N806", "PLR2004", "RUF001"]
+"sinonym/resources.py" = ["PLC0415", "TC003"]
+"sinonym/services/cache.py" = ["BLE001", "PERF203", "PLC0415", "RUF002", "S112"]
+"sinonym/services/formatting.py" = ["C901", "E741", "EM101", "FIX002", "PLR0911", "PLR0912", "PLR0915", "RUF003", "SIM114", "TD002", "TD003", "TRY003"]
+"sinonym/services/initialization.py" = ["C901", "PLR0911", "PLR0912", "PLR2004", "RUF003", "SIM102", "TC003"]
+"sinonym/services/normalization.py" = ["ARG002", "C901", "FBT001", "FBT002", "FBT003", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "SLF001"]
+"sinonym/services/parsing.py" = ["C901", "COM812", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "RET504", "SIM102", "SIM114"]
+"sinonym/text_processing/compound_detector.py" = ["E501", "PLC0415", "SIM102"]
+"sinonym/text_processing/text_normalizer.py" = ["B019", "RUF001", "S105"]
+"sinonym/text_processing/text_preprocessor.py" = ["ARG002", "PLC0415", "PLR2004", "SLF001"]
+"sinonym/timo/integration_test.py" = ["PT009", "RUF005"]
+"sinonym/utils/string_manipulation.py" = ["C901", "ERA001", "F841", "PLC0415", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "RUF013", "SIM102", "SIM108", "W293"]
+"tests/test_performance.py" = ["C414", "S311", "SIM108", "SLF001"]
 "tests/test_mixed_scripts.py" = ["RUF001"]
 "tests/test_non_chinese_rejection.py" = ["RUF001"]
 

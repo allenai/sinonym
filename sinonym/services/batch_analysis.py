@@ -833,12 +833,9 @@ class BatchAnalysisService:
             # Participation guarantees a non-empty candidate list and a best_candidate,
             # so a candidate is always selected below.
             matching_candidates = [c for c in entry.candidates if c.format == target_format]
-            if matching_candidates:
-                # Use the best candidate that matches the batch format.
-                selected_candidate = max(matching_candidates, key=lambda x: x.score)
-            else:
-                # No candidate matches the target format: keep this name's own best parse.
-                selected_candidate = entry.best_candidate
+            selected_candidate = (
+                max(matching_candidates, key=lambda x: x.score) if matching_candidates else entry.best_candidate
+            )
 
             result = self._candidate_to_parse_result(
                 selected_candidate,
@@ -996,11 +993,11 @@ class BatchAnalysisService:
         name_candidates: list[BatchCandidateEntry],
         batch_results: list[ParseResult],
     ) -> list[int]:
-        """Find indices of names that were improved by batch processing."""
+        """Find indices whose selected parse format changed under batch context."""
         improvements = []
 
         for i, (entry, batch_result) in enumerate(
-            zip(name_candidates, batch_results, strict=False),
+            zip(name_candidates, batch_results, strict=True),
         ):
             if not self._candidate_entry_participates(entry):
                 continue
@@ -1008,23 +1005,12 @@ class BatchAnalysisService:
             if not entry.best_candidate or not batch_result.success:
                 continue
 
-            # Check if the batch result is different from the individual best result
-            # For now, we'll consider any change in format as an improvement
-            # A more sophisticated approach would compare the actual format changes
-
-            # Simple heuristic: if the batch applied a different format than what was individually preferred
-            if len(entry.candidates) >= MIN_CANDIDATES_FOR_CONFIDENCE_GAP:
-                # Try to determine the format from the batch result
-                # This is a simplification - in a full implementation we'd track this better
-                tokens = entry.name.split()
-                if len(tokens) == TWO_TOKEN_NAME_LENGTH:
-                    # Simple heuristic: check if the order was changed
-                    expected_individual = (
-                        f"{entry.best_candidate.given_tokens[0].capitalize()} "
-                        f"{entry.best_candidate.surname_tokens[0].capitalize()}"
-                    )
-                    if expected_individual != batch_result.result:
-                        improvements.append(i)
+            batch_format = self._format_from_parse_result(batch_result)
+            if (
+                NameFormat.MIXED not in {entry.best_candidate.format, batch_format}
+                and entry.best_candidate.format != batch_format
+            ):
+                improvements.append(i)
 
         return improvements
 
@@ -1040,7 +1026,7 @@ class BatchAnalysisService:
         evidence: list[NameOrderEvidence] = []
         batch_format_applied = format_pattern.threshold_met and format_pattern.total_count > 0
 
-        for entry, result in zip(name_candidates, results, strict=False):
+        for entry, result in zip(name_candidates, results, strict=True):
             if entry.representation == REJECTED_INPUT_REPRESENTATION:
                 evidence.append(
                     NameOrderEvidence(
@@ -1074,6 +1060,7 @@ class BatchAnalysisService:
                 compound_metadata,
             )
             selected_position = selected_span.position if selected_span is not None else "unknown"
+            selected_token_count = selected_span.width if selected_span is not None else 0
             selected_freq, alternate_freq, selected_ratio = self._selected_endpoint_frequency_evidence(
                 selected_span,
                 raw_tokens,
@@ -1102,6 +1089,7 @@ class BatchAnalysisService:
                     individual_format=individual_format,
                     selected_format=selected_format,
                     selected_surname_position=selected_position,
+                    selected_surname_token_count=selected_token_count,
                     first_token_surname_frequency=first_freq,
                     last_token_surname_frequency=last_freq,
                     selected_surname_frequency=selected_freq,
@@ -1186,18 +1174,21 @@ class BatchAnalysisService:
                         lookup_key,
                     )
 
-        if selected_surname and self._internal_window_joins_to(normalized_raw_tokens, selected_surname):
+        internal_window = self._internal_window_span(normalized_raw_tokens, selected_surname)
+        if selected_surname and internal_window is not None:
+            start, end = internal_window
+            lookup_key = self._raw_surname_span_lookup_key(
+                raw_tokens,
+                normalized_raw_tokens,
+                start,
+                end,
+                compound_metadata,
+            )
             return SurnameEndpointSpan(
                 position="internal",
-                start=-1,
-                end=-1,
-                lookup_key=self._selected_surname_lookup_key(
-                    normalized_surname_tokens,
-                    raw_tokens,
-                    0,
-                    None,
-                    compound_metadata,
-                ),
+                start=start,
+                end=end,
+                lookup_key=lookup_key,
             )
         return None
 
@@ -1272,13 +1263,13 @@ class BatchAnalysisService:
         return "".join(char.lower() for part in parts for char in part if char.isalpha())
 
     @staticmethod
-    def _internal_window_joins_to(tokens: list[str], target: str) -> bool:
-        """Return whether any non-endpoint token window joins to target."""
+    def _internal_window_span(tokens: list[str], target: str) -> tuple[int, int] | None:
+        """Return the non-endpoint token window whose joined text matches target."""
         for start in range(1, len(tokens) - 1):
             for end in range(start + 1, len(tokens)):
                 if "".join(tokens[start:end]) == target:
-                    return True
-        return False
+                    return start, end
+        return None
 
     @staticmethod
     def _compound_target_for_span(raw_tokens: list[str], start: int, end: int, compound_metadata) -> str | None:
@@ -1446,14 +1437,14 @@ class BatchAnalysisService:
         - Multiple: exp(score_i - max)/sum(exp(score_j - max)) for best candidate
         """
         analyses: list[IndividualAnalysis] = []
-        for entry, result in zip(name_candidates, results, strict=False):
+        for entry, _result in zip(name_candidates, results, strict=True):
             if not entry.candidates or entry.best_candidate is None:
                 analyses.append(
                     IndividualAnalysis(
                         raw_name=entry.name,
                         candidates=[],
                         best_candidate=None,
-                        confidence=1.0 if result.success else 0.0,
+                        confidence=0.0,
                     ),
                 )
                 continue

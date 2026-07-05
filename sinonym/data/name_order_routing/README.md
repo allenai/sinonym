@@ -19,9 +19,9 @@ debug-only columns.
   from evidence. Labels are `pp`, `vys`, `either`, or `uncertain`.
 - `pp_abstain_labels.jsonl`: 750 PP/abstain routing examples from the
   corrected train, corrected holdout, and fresh holdout feature sets of the
-  missing-venue experiment. Rows store raw `name` so the fixture is
-  self-contained for future evidence refreshes (paper IDs stay out by
-  design). Labels are `pp`, `abstain`, or `uncertain`.
+  missing-venue experiment. Rows store raw `name`, but the batch context needed
+  for a full evidence refresh still lives in the scratch artifacts listed below
+  (paper IDs stay out by design). Labels are `pp`, `abstain`, or `uncertain`.
 
 ## Evidence provenance (re-refreshed after the Korean-dominant full-share trim, July 2026)
 
@@ -37,6 +37,12 @@ per-spelling measured rationale. This refresh changed `selected_surname_frequenc
 on 1/750 pp-abstain rows (plus `batch_total_count` on 2 more from batch
 recomposition) and at least one evidence field on 331/1000 pp-vys rows; no
 pp-abstain routing outcome moved.
+
+The PP-abstain fixture later added `selected_surname_position` and
+`selected_surname_token_count` to match the production builder's endpoint-span
+evidence. The added fields are derived from the existing selected format and
+raw name against the same compound-surname tables; routing metrics stayed
+unchanged.
 
 The prior refresh switched surname-frequency evidence to the canonical
 as-written romanization resolution (`surname_romanizations.csv` rows resolve to
@@ -67,6 +73,11 @@ builder in PR review — `selected_over_alternate_ratio`, `compact_cjk`,
   `_parse_result_token_count` was fixed to match it (it previously counted
   parsed surname+given+middle tokens, splitting hyphenated given names and
   defeating the `pp_result_token_count == 2` accept rules).
+- `selected_surname_position` records the selected surname's endpoint in the
+  input tokens (`first`, `last`, `internal`, or `unknown`), and
+  `selected_surname_token_count` records the width of that selected raw-token
+  span. PP-only routing uses these to accept compound surname-first parses
+  without relying on the rendered result's token count.
 - `pp_success` is a required pp-abstain column (both builders emit it). A failed
   PP parse (`pp_success == false`, encoded in this fixture as
   `pp_result_token_count == 1`, always with `selected_format == "mixed"`) routes
@@ -80,7 +91,7 @@ Identity columns are unchanged from the original manual labeling rounds
 relabeling round (packets in `scratch/relabeling/`, all machine drafts
 accepted by the repo owner) applied on top of the re-refreshed evidence:
 
-- pp-vys, `either` labels (163 rows): every row whose current label was
+- pp-vys, `either` labels (164 rows): every row whose current label was
   `pp`/`vys` but whose refreshed PP and VYS parses emit the identical string
   was relabeled `either` — the June route label pretends to test routing
   behavior it cannot observe, and `either` is future-proof (see Semantics).

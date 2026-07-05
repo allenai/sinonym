@@ -61,12 +61,17 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import csv
 import math
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sinonym import ChineseNameDetector
 from sinonym.chinese_names_data import CANTONESE_SURNAMES, ROMANIZATION_EXCEPTIONS, SYLLABLE_RULES
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 OUTPUT_NAME = "surname_romanizations.csv"
 
@@ -239,7 +244,16 @@ def build_rows(detector: ChineseNameDetector) -> list[dict[str, object]]:
     return sorted(rows.values(), key=lambda row: str(row["spelling"]))
 
 
-def main() -> None:
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    _parse_args(argv)
     detector = ChineseNameDetector()
     if detector._data is None:
         message = (

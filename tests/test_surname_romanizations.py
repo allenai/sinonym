@@ -1,4 +1,4 @@
-# ruff: noqa: PLR2004, SLF001
+# ruff: noqa: SLF001
 """Romanization-conditional surname table tests (surname_romanizations.csv).
 
 The table gives each as-written spelling the share of its remap target's
@@ -17,11 +17,12 @@ import pytest
 from sinonym.chinese_names_data import CANTONESE_SURNAMES
 from sinonym.resources import open_csv_reader
 from sinonym.services.batch_analysis import BatchAnalysisService
+from sinonym.services.initialization import DataInitializationService
 from tests._case_assertions import assert_normalized_name
 
 
-def _load_build_rows():
-    """Import ``build_rows`` from the generator script by absolute path.
+def _load_generator_module():
+    """Import the generator script by absolute path.
 
     Anchored at the repo root (``parents[1]``), not the CWD, and loaded via an
     import spec so the script's ``__main__`` guard does not run ``main()``.
@@ -30,6 +31,12 @@ def _load_build_rows():
     spec = importlib.util.spec_from_file_location("_gen_surname_romanizations", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
+
+
+def _load_build_rows():
+    """Import ``build_rows`` from the generator script by absolute path."""
+    module = _load_generator_module()
     return module.build_rows
 
 
@@ -63,6 +70,38 @@ def test_table_keys_match_lookup_normalization(detector):
             assert data.get_surname_freq(spelling) == pytest.approx(
                 float(row["surname_ppm_as_written"]),
             ), spelling
+
+
+def test_surname_romanization_loader_rejects_invalid_target_share(monkeypatch):
+    rows = [
+        {
+            "spelling": "bad",
+            "mandarin_target": "wang",
+            "surname_ppm_as_written": "1.0",
+            "target_share": "0",
+        },
+    ]
+    monkeypatch.setattr("sinonym.services.initialization.open_csv_reader", lambda _name: iter(rows))
+    service = DataInitializationService.__new__(DataInitializationService)
+
+    with pytest.raises(ValueError, match=r"row 2: target_share"):
+        service._load_surname_romanizations()
+
+
+def test_surname_romanization_loader_rejects_invalid_as_written_ppm(monkeypatch):
+    rows = [
+        {
+            "spelling": "bad",
+            "mandarin_target": "wang",
+            "surname_ppm_as_written": "nan",
+            "target_share": "1.0",
+        },
+    ]
+    monkeypatch.setattr("sinonym.services.initialization.open_csv_reader", lambda _name: iter(rows))
+    service = DataInitializationService.__new__(DataInitializationService)
+
+    with pytest.raises(ValueError, match=r"row 2: surname_ppm_as_written"):
+        service._load_surname_romanizations()
 
 
 def test_discount_fires_for_remap_only_spellings(detector):
@@ -154,6 +193,25 @@ def test_remap_only_surname_candidates_lose_to_attested_parses(detector):
     """
     assert_normalized_name(detector, "Leung Ka Fai", (True, "Ka-Fai Leung"))
     assert_normalized_name(detector, "Kong Kung", (True, "Kung Kong"))
+
+
+def test_generator_help_exits_before_regeneration(monkeypatch, capsys):
+    """``--help`` must print usage without touching detector/data generation."""
+    module = _load_generator_module()
+
+    def fail_detector():
+        pytest.fail("help should exit before constructing the detector")
+
+    monkeypatch.setattr(module, "ChineseNameDetector", fail_detector)
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main(["--help"])
+
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert "usage:" in captured.out
+    assert "surname_romanizations.csv" in captured.out
+    assert captured.err == ""
 
 
 def test_build_rows_full_share_resists_self_row_corruption(detector):

@@ -730,7 +730,11 @@ class NameParsingService:
                 if is_ambiguous:
                     order_preservation_bonus = 1.0
             # Check if this parse maintains the original given-surname order (given first, surname last)
-            elif given_tokens[0] == tokens[0] and surname_tokens[0] == tokens[1]:
+            elif (
+                not surname_first_parenthetical_hint
+                and given_tokens[0] == tokens[0]
+                and surname_tokens[0] == tokens[1]
+            ):
                 # This maintains the original order - check if case is ambiguous
                 ambiguous_key = (surname_tokens[0], given_tokens[0])
                 if ambiguous_cache is not None:

@@ -1,4 +1,4 @@
-# ruff: noqa: PLR2004, SLF001
+# ruff: noqa: SLF001
 """Invariants for the corpus-derived positional asset.
 
 given_position.csv is generated offline by scripts/generate_name_statistics.py

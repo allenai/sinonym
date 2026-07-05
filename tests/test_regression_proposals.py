@@ -1,4 +1,4 @@
-# ruff: noqa: PLR2004, SIM117, SLF001
+# ruff: noqa: SIM117, SLF001
 """Regression tests that implement the proposals tracked in TEST_PROPOSAL.md."""
 
 from __future__ import annotations

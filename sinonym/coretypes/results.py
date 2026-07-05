@@ -120,7 +120,7 @@ class ParseResult:
                     self.parsed,
                     self.parsed_original_order,
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - user-provided callbacks may raise arbitrary exceptions.
                 return ParseResult.failure(str(e))
         return self
 
@@ -129,6 +129,9 @@ class ParseResult:
         if self.success:
             try:
                 result = f(self.result)
+            except Exception as e:  # noqa: BLE001 - user-provided callbacks may raise arbitrary exceptions.
+                return ParseResult.failure(str(e))
+            else:
                 # Preserve the original compound surname if the result doesn't already have one
                 if result.success and result.original_compound_surname is None:
                     return ParseResult(
@@ -140,8 +143,6 @@ class ParseResult:
                         result.parsed_original_order,
                     )
                 return result
-            except Exception as e:
-                return ParseResult.failure(str(e))
         return self
 
 
@@ -204,6 +205,7 @@ class NameOrderEvidence:
     individual_format: NameFormat = NameFormat.MIXED
     selected_format: NameFormat = NameFormat.MIXED
     selected_surname_position: str = "unknown"
+    selected_surname_token_count: int = 0
     first_token_surname_frequency: float | None = None
     last_token_surname_frequency: float | None = None
     selected_surname_frequency: float | None = None

@@ -8,6 +8,8 @@ linguistic patterns and cultural markers.
 
 from __future__ import annotations
 
+import logging
+
 from sinonym.chinese_names_data import (
     COMPOUND_VARIANTS,
     JAPANESE_SURNAMES,
@@ -28,11 +30,11 @@ from sinonym.utils.thread_cache import ThreadLocalCache
 
 MIN_COMPOUND_SURNAME_TOKEN_COUNT = 3
 DOMINANT_CHINESE_SURNAME_FREQ_MIN = 10_000.0
+JAPANESE_CLASSIFIER_REJECTION = "japanese"
+JAPANESE_CLASSIFIER_RUNTIME_ERROR = "ML Japanese classifier failed"
 
 # Optional ML Japanese classifier imports - consolidated from separate service
 try:
-    import logging
-
     # Ensure custom model components are importable when deserializing
     import sinonym.ml_model_components  # noqa: F401
     ML_AVAILABLE = True
@@ -55,18 +57,19 @@ class _MLJapaneseClassifier:
         if ML_AVAILABLE:
             try:
                 # Prefer skops artifact; fall back to legacy joblib if needed
-                from sinonym.resources import load_joblib, load_skops
+                from sinonym.resources import load_joblib, load_skops  # noqa: PLC0415
 
                 try:
                     self._model = load_skops("chinese_japanese_classifier.skops")
-                except Exception as skops_err:
-                    logging.info(
-                        f"SKOPS model not available or failed to load ({skops_err}); "
+                except Exception as skops_err:  # noqa: BLE001 - skops may raise several deserialization errors.
+                    LOGGER.info(
+                        "SKOPS model not available or failed to load (%s); "
                         "falling back to legacy joblib artifact.",
+                        skops_err,
                     )
                     self._model = load_joblib("chinese_japanese_classifier.joblib")
-            except Exception as e:
-                logging.warning(f"Failed to load ML Japanese classifier: {e}")
+            except Exception as e:  # noqa: BLE001 - optional classifier load failure disables the ML path.
+                LOGGER.warning("Failed to load ML Japanese classifier: %s", e)
                 self._available = False
 
     def is_available(self) -> bool:
@@ -88,12 +91,12 @@ class _MLJapaneseClassifier:
 
                 # Only reject as Japanese if we're very confident
                 if prediction == "jp" and confidence >= self._confidence_threshold:
-                    return ParseResult.failure("japanese")
+                    return ParseResult.failure(JAPANESE_CLASSIFIER_REJECTION)
                 return ParseResult.success_with_name("")
 
             except Exception as e:  # noqa: BLE001 - model-backed classifiers may raise arbitrary runtime errors.
                 LOGGER.warning("ML Japanese classifier error for %r: %s", name, e, exc_info=True)
-                return ParseResult.failure("Japanese classifier error")
+                return ParseResult.failure(JAPANESE_CLASSIFIER_RUNTIME_ERROR)
 
         return self._cache.get_or_compute(name, compute_classification)
 
@@ -193,12 +196,11 @@ class EthnicityClassificationService:
             ml_result = self._ml_classifier.classify_all_chinese_name(compact_chinese_text)
 
             # If ML classifier confidently identifies it as Japanese, reject it
-            if (
-                ml_result.success is False
-                and "japanese" in ml_result.error_message
-                and not self._starts_with_chinese_compound_surname(tokens, normalized_cache)
-            ):
-                return ParseResult.failure("Japanese name detected by ML classifier")
+            if ml_result.success is False:
+                if ml_result.error_message != JAPANESE_CLASSIFIER_REJECTION:
+                    return ml_result
+                if not self._starts_with_chinese_compound_surname(tokens, normalized_cache):
+                    return ParseResult.failure("Japanese name detected by ML classifier")
 
         # Prepare expanded keys for pattern matching
         expanded_tokens = []
@@ -440,10 +442,7 @@ class EthnicityClassificationService:
 
         # Helper functions (reused from original)
         def is_chinese_given_strict(tok: str) -> bool:
-            if normalized_cache and tok in normalized_cache:
-                normalized = normalized_cache[tok]
-            else:
-                normalized = self._normalizer.norm(tok)
+            normalized = normalized_cache[tok] if normalized_cache and tok in normalized_cache else self._normalizer.norm(tok)
             return (
                 normalized in self._data.given_names_normalized or tok.lower() in self._data.given_names_normalized
             )

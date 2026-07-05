@@ -170,6 +170,8 @@ def _pp_abstain_row(**overrides):
         "pp_success": True,
         "pp_result_token_count": 2,
         "selected_format": "surname_first",
+        "selected_surname_position": "first",
+        "selected_surname_token_count": 1,
         "batch_total_count": 3,
         "selected_surname_frequency": 10_000,
         "has_cjk": False,
@@ -220,6 +222,8 @@ def test_name_order_routing_script_is_in_sdist_include():
     sdist_section = sdist_section.split("\n[", maxsplit=1)[0]
 
     assert '"scripts/name_order_routing_rules.py"' in sdist_section
+    assert '"scripts/verify_multiprocess.py"' in sdist_section
+    assert '"scripts/README.md"' in sdist_section
 
 
 def test_name_order_routing_script_preserves_empty_csv_schema(tmp_path, monkeypatch):
@@ -504,6 +508,34 @@ def test_pp_vys_abstain_rule_allows_strong_pp_override_before_abstain_guard():
     ]
 
 
+def test_pp_vys_abstain_rule_treats_missing_ratio_as_explicit_policy_input():
+    routed = route_pp_vys_abstain_rows(
+        [
+            _pp_vys_row(
+                old_prediction="vys",
+                new_prediction="pp",
+                new_reason="strong_pp_paper_context",
+                pp_selected_surname_frequency_ratio=None,
+            ),
+            _pp_vys_row(
+                old_prediction="vys",
+                new_prediction="vys",
+                new_reason="strong_vys_batch_context",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+                pp_batch_total_count=2,
+                pp_selected_surname_frequency_ratio=None,
+            ),
+        ],
+    )
+
+    assert [row["router_prediction"] for row in routed] == ["pp", "abstain"]
+    assert [row["router_reason"] for row in routed] == [
+        "strong_pp_allowed_ratio",
+        "reliable_input_order_abstain",
+    ]
+
+
 def test_pp_vys_abstain_rule_routes_reliable_input_order_to_abstain():
     routed = route_pp_vys_abstain_rows(
         [
@@ -737,8 +769,8 @@ def test_pp_vys_abstain_rule_allows_empty_ratio_sentinel():
         ],
     )
 
-    assert routed[0]["router_prediction"] == "vys"
-    assert routed[0]["router_reason"] == "old_new_vys"
+    assert routed[0]["router_prediction"] == "abstain"
+    assert routed[0]["router_reason"] == "reliable_input_order_abstain"
 
 
 def test_pp_vys_builder_preserves_missing_ratio_evidence():
@@ -772,8 +804,8 @@ def test_pp_vys_builder_preserves_missing_ratio_evidence():
     assert "new_prediction" not in rows[0]
     assert routed[0]["new_prediction"] == "abstain"
     assert routed[0]["new_reason"] == "weak_or_conflicting_evidence"
-    assert routed[0]["router_prediction"] == "pp"
-    assert routed[0]["router_reason"] == "default_pp"
+    assert routed[0]["router_prediction"] == "abstain"
+    assert routed[0]["router_reason"] == "reliable_input_order_abstain"
 
 
 def test_pp_vys_builder_accepts_mixed_format_for_not_person(detector):
@@ -836,6 +868,11 @@ def test_pp_vys_abstain_rule_applies_promoted_name_priors():
                 vys_selected_format="given_first",
             ),
             _pp_vys_row(
+                name="Woo Jin Chúng",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+            ),
+            _pp_vys_row(
                 name="Ching Yee Yong",
                 pp_selected_format="surname_first",
                 vys_selected_format="given_first",
@@ -843,9 +880,10 @@ def test_pp_vys_abstain_rule_applies_promoted_name_priors():
         ],
     )
 
-    assert [row["router_prediction"] for row in routed] == ["pp", "vys", "vys"]
+    assert [row["router_prediction"] for row in routed] == ["pp", "vys", "vys", "vys"]
     assert [row["router_reason"] for row in routed] == [
         "name_prior_repeated_tail_given_surname_first",
+        "name_prior_korean_given_first_three_token",
         "name_prior_korean_given_first_three_token",
         "name_prior_cantonese_given_first",
     ]

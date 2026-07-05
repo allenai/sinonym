@@ -289,14 +289,23 @@ class DataInitializationService:
 
     def _load_surname_romanizations(self) -> dict[str, SurnameRomanization]:
         """Load surname_romanizations.csv into the canonical per-spelling map."""
-        return {
-            row["spelling"]: SurnameRomanization(
+        rows: dict[str, SurnameRomanization] = {}
+        for row_number, row in enumerate(open_csv_reader("surname_romanizations.csv"), start=2):
+            spelling = row["spelling"]
+            target_share = float(row["target_share"])
+            as_written_ppm = float(row["surname_ppm_as_written"])
+            if not (math.isfinite(target_share) and 0.0 < target_share <= 1.0):
+                message = f"surname_romanizations.csv row {row_number}: target_share must be in (0, 1]"
+                raise ValueError(message)
+            if not (math.isfinite(as_written_ppm) and as_written_ppm >= 0.0):
+                message = f"surname_romanizations.csv row {row_number}: surname_ppm_as_written must be finite and >= 0"
+                raise ValueError(message)
+            rows[spelling] = SurnameRomanization(
                 mandarin_target=row["mandarin_target"],
-                target_share=float(row["target_share"]),
-                as_written_ppm=float(row["surname_ppm_as_written"]),
+                target_share=target_share,
+                as_written_ppm=as_written_ppm,
             )
-            for row in open_csv_reader("surname_romanizations.csv")
-        }
+        return rows
 
     def _build_surname_data(
         self,

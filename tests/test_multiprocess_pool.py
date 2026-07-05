@@ -8,6 +8,7 @@ from concurrent.futures.process import BrokenProcessPool
 import pytest
 
 from scripts.verify_multiprocess import _rate_per_second
+from sinonym import detector as detector_module
 from sinonym.detector import _should_use_multiprocessing
 from sinonym.services import process_pool
 
@@ -262,6 +263,34 @@ def test_multiprocessing_threshold_is_validated_only_for_auto_mode():
         _should_use_multiprocessing(parallel="auto", **common)
 
 
+def test_high_level_auto_start_method_prefers_spawn_on_linux(detector, monkeypatch):
+    """High-level auto should not fork by default inside serving processes."""
+    captured = {}
+
+    class FakePool:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            captured["closed"] = True
+
+        @staticmethod
+        def normalize_names(names):
+            return []
+
+    def fake_create_pool(**kwargs):
+        captured["pool_kwargs"] = kwargs
+        return FakePool()
+
+    monkeypatch.setattr(detector_module.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(detector, "create_persistent_multiprocess_pool", fake_create_pool)
+
+    detector.normalize_names(["Li Wei"], parallel="auto", min_parallel_names=1, max_workers=2)
+
+    assert captured["pool_kwargs"]["mp_start_method"] == "spawn"
+    assert captured["closed"]
+
+
 def test_persistent_multiprocess_pool_rejects_calls_after_close(detector):
     """Closed pool should raise a clear error on subsequent use."""
     pool = detector.create_persistent_multiprocess_pool(max_workers=2, chunk_size=2)
@@ -269,6 +298,36 @@ def test_persistent_multiprocess_pool_rejects_calls_after_close(detector):
 
     with pytest.raises(RuntimeError, match="closed"):
         pool.normalize_names(["Li Wei"])
+
+
+def test_persistent_multiprocess_pool_wraps_worker_task_errors(detector):
+    """Ordinary worker exceptions should include pool context and close the pool."""
+
+    class _FailingExecutor:
+        def __init__(self):
+            self.shutdown_calls = []
+
+        def map(self, *_args, **_kwargs):
+            message = "worker exploded"
+            raise ValueError(message)
+
+        def shutdown(self, **kwargs):
+            self.shutdown_calls.append(kwargs)
+
+    pool = detector.create_persistent_multiprocess_pool(max_workers=2, chunk_size=2)
+    pool.close()
+    pool._closed = False  # noqa: SLF001 - force the injected executor path.
+    failing_executor = _FailingExecutor()
+    pool._executor = failing_executor  # noqa: SLF001 - inject failing executor.
+
+    with pytest.raises(RuntimeError, match="multiprocessing worker task failed") as excinfo:
+        pool.normalize_names(["Li Wei", "Wang Wei", "Chen Ming"])
+
+    assert isinstance(excinfo.value.__cause__, ValueError)
+    assert "3 item" in str(excinfo.value)
+    assert "2 chunk" in str(excinfo.value)
+    assert pool.closed
+    assert failing_executor.shutdown_calls == [{"wait": False, "cancel_futures": True}]
 
     with pytest.raises(RuntimeError, match="closed"):
         pool.process_name_batches([["Li Wei"]])
@@ -280,13 +339,20 @@ def test_persistent_multiprocess_pool_surfaces_broken_pool_causes(detector):
     class _BrokenExecutor:
         """Stand-in executor whose map fails as a broken pool would."""
 
+        def __init__(self):
+            self.shutdown_calls = []
+
         def map(self, *_args, **_kwargs):
             raise BrokenProcessPool
+
+        def shutdown(self, **kwargs):
+            self.shutdown_calls.append(kwargs)
 
     pool = detector.create_persistent_multiprocess_pool(max_workers=2, chunk_size=2)
     pool.close()  # Shut the real workers down; we only exercise the error handler.
     pool._closed = False  # noqa: SLF001 - reopen so normalize_names reaches executor.map.
-    pool._executor = _BrokenExecutor()  # noqa: SLF001 - inject the broken executor.
+    broken_executor = _BrokenExecutor()
+    pool._executor = broken_executor  # noqa: SLF001 - inject the broken executor.
 
     with pytest.raises(RuntimeError) as excinfo:
         pool.normalize_names(["Li Wei"])
@@ -295,3 +361,7 @@ def test_persistent_multiprocess_pool_surfaces_broken_pool_causes(detector):
     assert "initialize" in message  # initialization-failure cause
     assert "mid-batch" in message  # worker-death-mid-run cause
     assert isinstance(excinfo.value.__cause__, BrokenProcessPool)  # original chained
+    assert pool.closed
+    assert broken_executor.shutdown_calls == [{"wait": False, "cancel_futures": True}]
+    with pytest.raises(RuntimeError, match="closed"):
+        pool.normalize_names(["Li Wei"])
