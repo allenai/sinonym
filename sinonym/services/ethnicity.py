@@ -8,6 +8,8 @@ linguistic patterns and cultural markers.
 
 from __future__ import annotations
 
+import logging
+
 from sinonym.chinese_names_data import (
     COMPOUND_VARIANTS,
     JAPANESE_SURNAMES,
@@ -23,15 +25,16 @@ from sinonym.chinese_names_data import (
     WESTERN_NAMES,
 )
 from sinonym.coretypes import ParseResult
+from sinonym.services.name_lookup import SurnameResolver
 from sinonym.utils.string_manipulation import StringManipulationUtils
 from sinonym.utils.thread_cache import ThreadLocalCache
 
 MIN_COMPOUND_SURNAME_TOKEN_COUNT = 3
+JAPANESE_CLASSIFIER_REJECTION = "japanese"
+JAPANESE_CLASSIFIER_RUNTIME_ERROR = "ML Japanese classifier failed"
 
 # Optional ML Japanese classifier imports - consolidated from separate service
 try:
-    import logging
-
     # Ensure custom model components are importable when deserializing
     import sinonym.ml_model_components  # noqa: F401
     ML_AVAILABLE = True
@@ -54,18 +57,19 @@ class _MLJapaneseClassifier:
         if ML_AVAILABLE:
             try:
                 # Prefer skops artifact; fall back to legacy joblib if needed
-                from sinonym.resources import load_joblib, load_skops
+                from sinonym.resources import load_joblib, load_skops  # noqa: PLC0415
 
                 try:
                     self._model = load_skops("chinese_japanese_classifier.skops")
-                except Exception as skops_err:
-                    logging.info(
-                        f"SKOPS model not available or failed to load ({skops_err}); "
+                except Exception as skops_err:  # noqa: BLE001 - skops may raise several deserialization errors.
+                    LOGGER.info(
+                        "SKOPS model not available or failed to load (%s); "
                         "falling back to legacy joblib artifact.",
+                        skops_err,
                     )
                     self._model = load_joblib("chinese_japanese_classifier.joblib")
-            except Exception as e:
-                logging.warning(f"Failed to load ML Japanese classifier: {e}")
+            except Exception as e:  # noqa: BLE001 - optional classifier load failure disables the ML path.
+                LOGGER.warning("Failed to load ML Japanese classifier: %s", e)
                 self._available = False
 
     def is_available(self) -> bool:
@@ -77,27 +81,30 @@ class _MLJapaneseClassifier:
         if not self.is_available():
             return ParseResult.success_with_name("")  # Default to allowing through
 
-        # Use unified cache with compute function
-        def compute_classification():
-            try:
-                # Get prediction and confidence (same as original)
-                prediction = self._model.predict([name])[0]  # 'cn' or 'jp'
-                probabilities = self._model.predict_proba([name])[0]
-                confidence = max(probabilities)
+        cached = self._cache.get(name)
+        if cached is not None:
+            return cached
 
-                # Only reject as Japanese if we're very confident
-                if prediction == "jp" and confidence >= self._confidence_threshold:
-                    return ParseResult.failure("japanese")
-                return ParseResult.success_with_name("")
+        try:
+            # Get prediction and confidence (same as original)
+            prediction = self._model.predict([name])[0]  # 'cn' or 'jp'
+            probabilities = self._model.predict_proba([name])[0]
+            confidence = max(probabilities)
 
-            except Exception as e:
-                logging.warning(f"ML Japanese classifier error: {e}")
-                return ParseResult.success_with_name("")  # Default to allowing through
-
-        return self._cache.get_or_compute(name, compute_classification)
+            # Only reject as Japanese if we're very confident
+            if prediction == "jp" and confidence >= self._confidence_threshold:
+                result = ParseResult.failure(JAPANESE_CLASSIFIER_REJECTION)
+            else:
+                result = ParseResult.success_with_name("")
+        except Exception as e:  # noqa: BLE001 - model-backed classifiers may raise arbitrary runtime errors.
+            LOGGER.warning("ML Japanese classifier error for %r: %s", name, e, exc_info=True)
+            return ParseResult.failure(JAPANESE_CLASSIFIER_RUNTIME_ERROR)
+        else:
+            self._cache.set(name, result)
+            return result
 
     def japanese_probability(self, name: str) -> float:
-        """Return the Japanese-class probability, logging model failures and degrading to 0.0."""
+        """Return the Japanese-class probability, raising on model runtime failures."""
         if not self.is_available():
             return 0.0
 
@@ -110,8 +117,10 @@ class _MLJapaneseClassifier:
             prediction = self._model.predict([name])[0]
             if prediction == "jp":
                 return float(max(probabilities))
-        except Exception as e:  # noqa: BLE001 - model-backed classifiers may raise arbitrary runtime errors.
+        except Exception as e:
             LOGGER.warning("ML Japanese classifier probability error for %r: %s", name, e, exc_info=True)
+            message = "ML Japanese classifier probability failed"
+            raise RuntimeError(message) from e
         return 0.0
 
 
@@ -130,14 +139,15 @@ class EthnicityClassificationService:
             self._config = context_or_config
             self._normalizer = normalizer
             self._data = data
+        self._surname_resolver = SurnameResolver(self._data, self._normalizer)
         # Initialize consolidated ML Japanese classifier
         self._ml_classifier = _MLJapaneseClassifier(confidence_threshold=0.8)
 
     def japanese_probability(self, compact_chinese_text: str) -> float:
         """Return the Japanese-class probability for compact all-CJK text.
 
-        Classifier probability failures are logged by the model wrapper and
-        intentionally degrade to 0.0 so serving can continue.
+        Missing classifiers are treated as unavailable; loaded classifiers that
+        fail at prediction time raise after logging context.
         """
         if not compact_chinese_text:
             return 0.0
@@ -190,12 +200,11 @@ class EthnicityClassificationService:
             ml_result = self._ml_classifier.classify_all_chinese_name(compact_chinese_text)
 
             # If ML classifier confidently identifies it as Japanese, reject it
-            if (
-                ml_result.success is False
-                and "japanese" in ml_result.error_message
-                and not self._starts_with_chinese_compound_surname(tokens, normalized_cache)
-            ):
-                return ParseResult.failure("Japanese name detected by ML classifier")
+            if ml_result.success is False:
+                if ml_result.error_message != JAPANESE_CLASSIFIER_REJECTION:
+                    return ml_result
+                if not self._starts_with_chinese_compound_surname(tokens, normalized_cache):
+                    return ParseResult.failure("Japanese name detected by ML classifier")
 
         # Prepare expanded keys for pattern matching
         expanded_tokens = []
@@ -382,6 +391,12 @@ class EthnicityClassificationService:
             and StringManipulationUtils.remove_spaces(tokens[-1]).lower() in OVERLAPPING_KOREAN_SURNAMES,
         )
 
+    def _first_token_has_dominant_chinese_surname(self, tokens: tuple[str, ...]) -> bool:
+        """Return whether the first token has dominant as-written Chinese surname evidence."""
+        if not tokens:
+            return False
+        return self._surname_resolver.evidence_is_dominant_surname(tokens[0])
+
     def _calculate_non_chinese_patterns_unified(
         self,
         tokens: tuple[str, ...],
@@ -412,12 +427,11 @@ class EthnicityClassificationService:
         normalized_cache: dict[str, str] | None = None,
     ) -> float:
         """Calculate Korean score from pre-computed analysis."""
-        # Early returns for definitive cases. Strong Korean given-pair evidence
-        # with a trailing overlapping Korean surname must still be scored.
-        if analysis["surname_type"] == "chinese_only" and not (
-            self._has_trailing_overlapping_korean_surname(tokens) and analysis["korean_given_pairs"]
-        ):
-            return 0.0  # Block Korean scoring for non-overlapping Chinese surnames
+        # Early returns for definitive cases.
+        if analysis["surname_type"] == "chinese_only":
+            trailing_korean_pair = self._has_trailing_overlapping_korean_surname(tokens) and analysis["korean_given_pairs"]
+            if not trailing_korean_pair or self._first_token_has_dominant_chinese_surname(tokens):
+                return 0.0  # Block Korean scoring for non-overlapping Chinese surnames
         if analysis["surname_type"] == "korean_only":
             return 10.0  # Definitive Korean evidence
 
@@ -431,10 +445,7 @@ class EthnicityClassificationService:
 
         # Helper functions (reused from original)
         def is_chinese_given_strict(tok: str) -> bool:
-            if normalized_cache and tok in normalized_cache:
-                normalized = normalized_cache[tok]
-            else:
-                normalized = self._normalizer.norm(tok)
+            normalized = normalized_cache[tok] if normalized_cache and tok in normalized_cache else self._normalizer.norm(tok)
             return (
                 normalized in self._data.given_names_normalized or tok.lower() in self._data.given_names_normalized
             )
@@ -511,148 +522,9 @@ class EthnicityClassificationService:
 
         return score
 
-    def _calculate_korean_structural_patterns_legacy(
-        self,
-        tokens: tuple[str, ...],
-        expanded_keys: list[str],
-        normalized_cache: dict[str, str] | None = None,
-    ) -> float:
-        """Calculate Korean structural pattern score using simplified pattern analysis."""
-        analysis = self._analyze_tokens_for_patterns(tokens)
-
-        # Early returns for definitive cases
-        if analysis["surname_type"] == "chinese_only":
-            return 0.0  # Block Korean scoring for non-overlapping Chinese surnames
-        if analysis["surname_type"] == "korean_only":
-            return 10.0  # Definitive Korean evidence
-
-        score = 0.0
-
-        # Overlapping Korean surname anywhere in the name (given-first or surname-first)
-        overlapping_any = any(
-            StringManipulationUtils.remove_spaces(t).lower() in OVERLAPPING_KOREAN_SURNAMES
-            for t in tokens
-        )
-
-        # 1. Hyphenated Korean patterns (strong signal) — Hyphen Gate
-        for first, second in analysis["hyphenated_tokens"]:
-            # Existing curated-list rule (definitive)
-            if first in KOREAN_GIVEN_PATTERNS and second in KOREAN_GIVEN_PATTERNS:
-                score += 3.0
-                continue
-
-            # Strict Chinese DB membership (no split-to-plausible fallback)
-            def is_chinese_given_strict(tok: str) -> bool:
-                if normalized_cache and tok in normalized_cache:
-                    normalized = normalized_cache[tok]
-                else:
-                    normalized = self._normalizer.norm(tok)
-                return (
-                    normalized in self._data.given_names_normalized or tok.lower() in self._data.given_names_normalized
-                )
-
-            # Korean signature based on curated token sets only (no RR heuristics)
-            def has_korean_signature(tok: str) -> bool:
-                t = tok.lower()
-                return t in KOREAN_GIVEN_PATTERNS or t in KOREAN_SPECIFIC_PATTERNS
-
-            first_cn = is_chinese_given_strict(first)
-            second_cn = is_chinese_given_strict(second)
-            if overlapping_any:
-                # With overlapping Korean surnames present, treat hyphenated given name
-                # as Korean if EITHER half matches curated Korean tokens.
-                if has_korean_signature(first) or has_korean_signature(second):
-                    score += 3.0
-            # General case (no overlapping surname): require that not both halves are
-            # Chinese given tokens to avoid false positives on Chinese names.
-            elif (not (first_cn and second_cn)) and (has_korean_signature(first) or has_korean_signature(second)):
-                score += 3.0
-
-        # 2. Known Korean name pairs (strong signal)
-        score += len(analysis["korean_given_pairs"]) * 3.0
-
-        # 3. Korean-specific patterns
-        korean_specific_count = len(analysis["korean_specific_tokens"])
-        if korean_specific_count >= 2:
-            score += 2.0
-        elif korean_specific_count == 1:
-            score += 1.0
-
-        # 3b. Overlapping-surname + space-separated Korean given token that fails Chinese validation
-        # This captures cases like "Ha Young Lee" where:
-        # - Surname is overlapping (e.g., Ha/Lee/Cho)
-        # - One given token is a Korean-specific romanization (e.g., "young")
-        # - That token is NOT a valid Chinese given token under our normalization
-        # 4. Space-separated Korean signature with overlapping Korean surname anywhere
-        #    Example: "Ha Young Lee" (overlapping surname 'Lee', token 'Young' is Korean-specific)
-        overlapping_any = any(
-            StringManipulationUtils.remove_spaces(t).lower() in OVERLAPPING_KOREAN_SURNAMES
-            for t in tokens
-        )
-        if overlapping_any:
-            def is_chinese_given_strict(tok: str) -> bool:
-                if normalized_cache and tok in normalized_cache:
-                    normalized = normalized_cache[tok]
-                else:
-                    normalized = self._normalizer.norm(tok)
-                return (
-                    normalized in self._data.given_names_normalized or tok.lower() in self._data.given_names_normalized
-                )
-
-            for tok in tokens:
-                tok_clean = StringManipulationUtils.remove_spaces(tok).lower()
-                if tok_clean in OVERLAPPING_KOREAN_SURNAMES:
-                    continue
-                t_lower = tok.lower()
-                if (t_lower in KOREAN_GIVEN_PATTERNS or t_lower in KOREAN_SPECIFIC_PATTERNS) and not is_chinese_given_strict(tok):
-                    score += 3.0
-                    break
-
-        # 5. Ambiguous patterns (only with Korean overlapping surname in first position)
-        if analysis["surname_type"] == "korean_overlapping":
-            korean_ambiguous_count = len(analysis["korean_ambiguous_tokens"])
-            if korean_ambiguous_count >= 2:
-                score += 1.0
-
-        return score
-
-    def _calculate_vietnamese_structural_patterns(self, tokens: tuple[str, ...], expanded_keys: list[str]) -> float:
-        """Calculate Vietnamese structural pattern score using simplified analysis."""
-        analysis = self._analyze_tokens_for_patterns(tokens)
-        score = 0.0
-
-        # 1. Vietnamese "Thi" pattern (very strong indicator)
-        if analysis["has_thi_pattern"]:
-            score += 3.0
-
-        # 2. Vietnamese surname + given name patterns (but only if no Chinese surname)
-        vietnamese_surname_count = 1 if analysis["surname_type"] == "vietnamese_overlapping" else 0
-        vietnamese_given_count = len(analysis["vietnamese_tokens"])
-
-        if vietnamese_surname_count >= 1 and vietnamese_given_count >= 1:
-            # Check if any token is a Chinese surname (not just overlapping)
-            has_chinese_surname = any(
-                StringManipulationUtils.remove_spaces(key) in self._data.surnames for key in expanded_keys
-            )
-
-            if not has_chinese_surname:
-                score += 2.0  # Strong Vietnamese pattern
-
-        # 3. Multiple Vietnamese given names
-        if vietnamese_given_count >= 2:
-            score += 1.5  # Medium Vietnamese pattern
-
-        return score
-
     def _calculate_chinese_surname_strength(self, expanded_keys: list[str], normalized_cache: dict[str, str]) -> float:
         """Calculate Chinese surname strength (simplified from original)."""
         chinese_surname_strength = 0.0
-
-        # Create key-to-normalized mapping
-        key_to_normalized = {}
-        for key in expanded_keys:
-            # Handle both original and normalized forms
-            key_to_normalized[key] = normalized_cache.get(key, key)
 
         # Local memoization for repeated split/component checks
         split_result_cache: dict[str, list[str] | None] = {}
@@ -664,12 +536,11 @@ class EthnicityClassificationService:
             clean_key_lower = clean_key.lower()
 
             # Check if this is a Chinese surname
-            normalized_key = StringManipulationUtils.remove_spaces(key_to_normalized.get(key, key))
-            is_chinese_surname = self._data.is_surname(clean_key, normalized_key) or clean_key_lower in self._data.surnames
+            is_chinese_surname = self._surname_resolver.evidence_is_surname(clean_key)
 
             if is_chinese_surname:
                 # Get frequency
-                surname_freq = self._data.get_surname_freq(clean_key_lower) or self._data.get_surname_freq(normalized_key)
+                surname_freq = self._surname_resolver.evidence_frequency(clean_key)
 
                 if surname_freq > 0:
                     if surname_freq >= 10000:

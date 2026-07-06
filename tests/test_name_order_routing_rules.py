@@ -8,15 +8,23 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from sinonym.coretypes import ParsedName, ParseResult
 from sinonym.pipeline.name_order_routing import (
     PP_ABSTAIN_REQUIRED_COLUMNS,
+    PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT,
     PP_VYS_ABSTAIN_REQUIRED_COLUMNS,
+    ROUTING_TOKEN_RE,
     build_pp_abstain_rows,
     build_pp_vys_abstain_rows,
+    input_order_parsed,
+    pp_abstain_parsed,
     route_pp_abstain_rows,
     route_pp_vys_abstain_batches,
     route_pp_vys_abstain_rows,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+ROUTING_SCRIPT_PATH = REPO_ROOT / "scripts" / "name_order_routing_rules.py"
 
 JSONL_SCALAR_COUNT = 3
 JSONL_SCALAR_SCORE = 0.25
@@ -43,6 +51,7 @@ def _base_pp_vys_row():
         "vys_selected_surname_frequency": 10.0,
         "vys_batch_dominant_format": "surname_first",
         "vys_batch_threshold_met": False,
+        "vys_batch_total_count": 3,
         "vys_batch_confidence": 0.0,
         "vys_batch_vote_margin": 0.0,
     }
@@ -102,6 +111,7 @@ def _apply_pp_vys_vys_fixture(row, reason):
                 "pp_batch_threshold_met": False,
                 "vys_batch_dominant_format": row["vys_selected_format"],
                 "vys_batch_threshold_met": True,
+                "vys_batch_total_count": 3,
                 "vys_batch_confidence": 0.85,
             },
         )
@@ -157,16 +167,16 @@ def _pp_vys_row(**overrides):
 
 def _pp_abstain_row(**overrides):
     row = {
+        "pp_success": True,
         "pp_result_token_count": 2,
         "selected_format": "surname_first",
+        "selected_surname_position": "first",
+        "selected_surname_token_count": 1,
         "batch_total_count": 3,
         "selected_surname_frequency": 10_000,
-        "selected_over_alternate_ratio": 100,
         "has_cjk": False,
         "has_latin": True,
         "cjk_has_space": False,
-        "compact_cjk": "",
-        "jp_probability": 0,
         "raw_tokens": 2,
     }
     row.update(overrides)
@@ -207,9 +217,13 @@ def _routing_batch(names, results, evidence, pattern):
 
 
 def test_name_order_routing_script_is_in_sdist_include():
-    pyproject_text = Path("pyproject.toml").read_text(encoding="utf-8")
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    sdist_section = pyproject.split("[tool.hatch.build.targets.sdist]", maxsplit=1)[1]
+    sdist_section = sdist_section.split("\n[", maxsplit=1)[0]
 
-    assert '"scripts/name_order_routing_rules.py"' in pyproject_text
+    assert '"scripts/name_order_routing_rules.py"' in sdist_section
+    assert '"scripts/verify_multiprocess.py"' in sdist_section
+    assert '"scripts/README.md"' in sdist_section
 
 
 def test_name_order_routing_script_preserves_empty_csv_schema(tmp_path, monkeypatch):
@@ -230,7 +244,7 @@ def test_name_order_routing_script_preserves_empty_csv_schema(tmp_path, monkeypa
             str(output_path),
         ],
     )
-    runpy.run_path("scripts/name_order_routing_rules.py", run_name="__main__")
+    runpy.run_path(str(ROUTING_SCRIPT_PATH), run_name="__main__")
 
     with output_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -256,7 +270,7 @@ def test_name_order_routing_script_preserves_empty_pp_vys_csv_schema(tmp_path, m
             str(output_path),
         ],
     )
-    runpy.run_path("scripts/name_order_routing_rules.py", run_name="__main__")
+    runpy.run_path(str(ROUTING_SCRIPT_PATH), run_name="__main__")
 
     with output_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -275,7 +289,7 @@ def test_name_order_routing_script_preserves_empty_pp_vys_csv_schema(tmp_path, m
 
 def test_name_order_routing_script_writes_numpy_scalars_to_jsonl(tmp_path):
     output_path = tmp_path / "rows.jsonl"
-    script_module = runpy.run_path("scripts/name_order_routing_rules.py")
+    script_module = runpy.run_path(str(ROUTING_SCRIPT_PATH))
 
     script_module["_write_rows"](
         [
@@ -314,7 +328,7 @@ def test_name_order_routing_script_rejects_empty_csv_with_missing_schema(tmp_pat
     )
 
     with pytest.raises(ValueError, match="missing required columns"):
-        runpy.run_path("scripts/name_order_routing_rules.py", run_name="__main__")
+        runpy.run_path(str(ROUTING_SCRIPT_PATH), run_name="__main__")
 
 
 def test_name_order_routing_script_rejects_headerless_empty_csv(tmp_path, monkeypatch):
@@ -336,7 +350,7 @@ def test_name_order_routing_script_rejects_headerless_empty_csv(tmp_path, monkey
     )
 
     with pytest.raises(ValueError, match="missing required columns"):
-        runpy.run_path("scripts/name_order_routing_rules.py", run_name="__main__")
+        runpy.run_path(str(ROUTING_SCRIPT_PATH), run_name="__main__")
 
 
 def test_pp_abstain_builder_converts_batch_evidence_to_router_rows(detector):
@@ -353,6 +367,31 @@ def test_pp_abstain_builder_converts_batch_evidence_to_router_rows(detector):
     assert all("router_prediction" in row for row in routed)
 
 
+def test_pp_abstain_builder_counts_result_text_tokens_for_hyphenated_given_names(detector):
+    batch = detector.analyze_name_batch(["Zhang Chang-Qing"])
+
+    rows = build_pp_abstain_rows(batch, detector)
+
+    assert batch.results[0].result == "Chang-Qing Zhang"
+    assert rows[0]["pp_result_token_count"] == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
+
+
+def test_routing_token_re_counts_multi_hyphen_given_name_as_one_token():
+    def count(text):
+        return len(ROUTING_TOKEN_RE.findall(text))
+
+    # A hyphenated given name is one token regardless of how many syllables it
+    # joins, so a 3-syllable Cantonese given name plus a surname is two tokens.
+    assert count("Ka-Wai-Man Wong") == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
+    assert count("Chang-Qing Zhang") == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
+    assert count("Wei Zhang") == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
+    # Apostrophes continue a token the same way hyphens do, and the two mix.
+    assert count("D'Angelo-Marie O'Brien") == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
+    assert count("Zhang") == 1
+    # Repeated continuations stay within a single token (no spurious splits).
+    assert ROUTING_TOKEN_RE.findall("Ka-Wai-Man Wong") == ["Ka-Wai-Man", "Wong"]
+
+
 def test_pp_abstain_builder_derives_cjk_context_fields(detector):
     batch = detector.analyze_name_batch(["\u9ec4 \u5609\u5e73"])
 
@@ -361,8 +400,6 @@ def test_pp_abstain_builder_derives_cjk_context_fields(detector):
     assert row["has_cjk"] is True
     assert row["has_latin"] is False
     assert row["cjk_has_space"] is True
-    assert row["compact_cjk"] == "\u9ec4\u5609\u5e73"
-    assert isinstance(row["jp_probability"], float)
 
 
 def test_pp_vys_builder_converts_aligned_batch_results_to_router_rows(detector):
@@ -471,6 +508,34 @@ def test_pp_vys_abstain_rule_allows_strong_pp_override_before_abstain_guard():
     ]
 
 
+def test_pp_vys_abstain_rule_treats_missing_ratio_as_explicit_policy_input():
+    routed = route_pp_vys_abstain_rows(
+        [
+            _pp_vys_row(
+                old_prediction="vys",
+                new_prediction="pp",
+                new_reason="strong_pp_paper_context",
+                pp_selected_surname_frequency_ratio=None,
+            ),
+            _pp_vys_row(
+                old_prediction="vys",
+                new_prediction="vys",
+                new_reason="strong_vys_batch_context",
+                pp_selected_format="surname_first",
+                vys_selected_format="given_first",
+                pp_batch_total_count=2,
+                pp_selected_surname_frequency_ratio=None,
+            ),
+        ],
+    )
+
+    assert [row["router_prediction"] for row in routed] == ["pp", "abstain"]
+    assert [row["router_reason"] for row in routed] == [
+        "strong_pp_allowed_ratio",
+        "reliable_input_order_abstain",
+    ]
+
+
 def test_pp_vys_abstain_rule_routes_reliable_input_order_to_abstain():
     routed = route_pp_vys_abstain_rows(
         [
@@ -542,26 +607,26 @@ def test_pp_abstain_rule_accepts_numpy_bool_scalars():
 def test_pp_abstain_rule_defaults_to_input_order_for_weak_or_ambiguous_zero_batch():
     routed = route_pp_abstain_rows(
         [
-            _pp_abstain_row(batch_total_count=0, selected_surname_frequency=499),
+            _pp_abstain_row(selected_format="given_first", batch_total_count=0, selected_surname_frequency=499),
             _pp_abstain_row(batch_total_count=0, has_cjk=True, has_latin=True, raw_tokens=3),
-            _pp_abstain_row(
-                batch_total_count=0,
-                has_cjk=False,
-                has_latin=True,
-                selected_over_alternate_ratio=10,
-            ),
         ],
     )
 
-    assert [row["router_prediction"] for row in routed] == ["abstain", "abstain", "abstain"]
+    assert [row["router_prediction"] for row in routed] == ["abstain", "abstain"]
     assert [row["router_reason"] for row in routed] == [
         "weak_zero_batch",
         "zero_batch_mixed_long",
-        "zero_batch_latin_ambiguous_endpoint",
     ]
 
 
-def test_pp_abstain_rule_applies_spaced_cjk_and_jp_likelihood_guards():
+def test_pp_abstain_rule_accepts_surname_first_despite_weak_zero_batch():
+    routed = route_pp_abstain_rows([_pp_abstain_row(batch_total_count=0, selected_surname_frequency=499)])
+
+    assert routed[0]["router_prediction"] == "pp"
+    assert routed[0]["router_reason"] == "surname_first_two_token"
+
+
+def test_pp_abstain_rule_applies_spaced_cjk_guard():
     routed = route_pp_abstain_rows(
         [
             _pp_abstain_row(
@@ -571,18 +636,28 @@ def test_pp_abstain_rule_applies_spaced_cjk_and_jp_likelihood_guards():
                 has_latin=False,
                 cjk_has_space=True,
             ),
+        ],
+    )
+
+    assert routed[0]["router_prediction"] == "abstain"
+    assert routed[0]["router_reason"] == "spaced_cjk_zero_batch_surname_first"
+
+
+def test_pp_abstain_rule_marks_failed_builder_rows_not_person():
+    routed = route_pp_abstain_rows(
+        [
             _pp_abstain_row(
-                compact_cjk="原田泰夫",
-                jp_probability=0.60,
+                pp_success=False,
+                pp_result_token_count=1,
+                selected_format="mixed",
+                batch_total_count=0,
+                selected_surname_frequency=0,
             ),
         ],
     )
 
-    assert [row["router_prediction"] for row in routed] == ["abstain", "abstain"]
-    assert [row["router_reason"] for row in routed] == [
-        "spaced_cjk_zero_batch_surname_first",
-        "jp_likelihood_060",
-    ]
+    assert routed[0]["router_prediction"] == "not_person"
+    assert routed[0]["router_reason"] == "not_person"
 
 
 def test_pp_abstain_rule_rejects_malformed_feature_values():
@@ -609,10 +684,40 @@ def test_pp_vys_abstain_rule_rejects_unknown_enums():
         )
 
     with pytest.raises(ValueError, match="pp_selected_format"):
-        route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_format="mixed")])
+        route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_format="sideways", pp_batch_dominant_format="surname_first")])
 
     with pytest.raises(ValueError, match="pp_selected_surname_frequency_ratio"):
         route_pp_vys_abstain_rows([_pp_vys_row(pp_selected_surname_frequency_ratio="not-a-number")])
+
+
+def test_pp_vys_abstain_rule_accepts_internal_surname_position():
+    def route_with_pp_position(pp_position):
+        row = _base_pp_vys_row()
+        row.update(
+            {
+                "pp_result": "Jiang Xi",
+                "vys_result": "Xi Jiang",
+                "pp_selected_format": "surname_first",
+                "vys_selected_format": "given_first",
+                "pp_selected_surname_position": pp_position,
+                "vys_selected_surname_position": "last",
+                "pp_selected_surname_frequency": 1.0,
+                "vys_selected_surname_frequency": 100.0,
+                "pp_batch_total_count": 10,
+                "pp_batch_vote_margin": 0.9,
+                "vys_batch_vote_margin": 0.8,
+            },
+        )
+        return route_pp_vys_abstain_rows([row])[0]
+
+    # BatchAnalysisService can emit an "internal" surname position (timo enum
+    # SurnamePositionValue.INTERNAL); the router must accept it, not raise. It is
+    # non-order-preserving like "unknown", so it cannot trigger the endpoint
+    # disagreement backoff that a genuine first/last split does.
+    assert route_with_pp_position("first")["old_prediction"] == "vys"
+    internal = route_with_pp_position("internal")
+    assert internal["old_prediction"] == "pp"
+    assert internal["router_prediction"] in {"pp", "vys", "abstain"}
 
 
 def test_pp_vys_abstain_rule_keeps_not_person_terminal():
@@ -664,8 +769,8 @@ def test_pp_vys_abstain_rule_allows_empty_ratio_sentinel():
         ],
     )
 
-    assert routed[0]["router_prediction"] == "vys"
-    assert routed[0]["router_reason"] == "old_new_vys"
+    assert routed[0]["router_prediction"] == "abstain"
+    assert routed[0]["router_reason"] == "reliable_input_order_abstain"
 
 
 def test_pp_vys_builder_preserves_missing_ratio_evidence():
@@ -699,8 +804,8 @@ def test_pp_vys_builder_preserves_missing_ratio_evidence():
     assert "new_prediction" not in rows[0]
     assert routed[0]["new_prediction"] == "abstain"
     assert routed[0]["new_reason"] == "weak_or_conflicting_evidence"
-    assert routed[0]["router_prediction"] == "pp"
-    assert routed[0]["router_reason"] == "default_pp"
+    assert routed[0]["router_prediction"] == "abstain"
+    assert routed[0]["router_reason"] == "reliable_input_order_abstain"
 
 
 def test_pp_vys_builder_accepts_mixed_format_for_not_person(detector):
@@ -720,24 +825,6 @@ def test_pp_vys_builder_accepts_mixed_format_for_not_person(detector):
     assert routed[0]["router_prediction"] == "not_person"
 
 
-def test_pp_vys_abstain_rule_applies_effective_plus_vys_override():
-    routed = route_pp_vys_abstain_rows(
-        [
-            _pp_vys_row(
-                old_prediction="pp",
-                new_prediction="abstain",
-                pp_selected_format="surname_first",
-                vys_selected_format="given_first",
-                pp_batch_total_count=2,
-                pp_selected_surname_frequency_ratio=0.5,
-            ),
-        ],
-    )
-
-    assert routed[0]["router_prediction"] == "vys"
-    assert routed[0]["router_reason"] == "pp_abstain_two_vote_small_ratio_vys"
-
-
 def test_pp_vys_abstain_rule_applies_effective_plus_pp_overrides():
     routed = route_pp_vys_abstain_rows(
         [
@@ -754,38 +841,13 @@ def test_pp_vys_abstain_rule_applies_effective_plus_pp_overrides():
                 new_reason="strong_vys_batch_context",
                 pp_batch_total_count=6,
             ),
-            _pp_vys_row(
-                old_prediction="vys",
-                new_prediction="vys",
-                new_reason="strong_vys_batch_context",
-                pp_batch_total_count=7,
-                pp_selected_surname_frequency_ratio=3,
-            ),
-            _pp_vys_row(
-                old_prediction="vys",
-                new_prediction="vys",
-                new_reason="strong_vys_batch_context",
-                pp_batch_total_count=3,
-                pp_selected_surname_frequency_ratio=8,
-            ),
-            _pp_vys_row(
-                old_prediction="vys",
-                new_prediction="pp",
-                new_reason="endpoint_frequency_strongly_favors_pp",
-                pp_batch_total_count=1,
-                pp_batch_confidence=0.5,
-                pp_selected_surname_frequency_ratio=101,
-            ),
         ],
     )
 
-    assert [row["router_prediction"] for row in routed] == ["pp", "pp", "pp", "pp", "pp"]
+    assert [row["router_prediction"] for row in routed] == ["pp", "pp"]
     assert [row["router_reason"] for row in routed] == [
         "endpoint_pp_high_conf_two_vote",
         "larger_pp_paper_overrides_vys_batch",
-        "strong_vys_large_pp_count_ratio_looks_pp",
-        "strong_vys_three_vote_mid_ratio_pp",
-        "endpoint_pp_low_count_low_conf_very_high_ratio",
     ]
 
 
@@ -801,15 +863,12 @@ def test_pp_vys_abstain_rule_applies_promoted_name_priors():
                 vys_selected_format="given_first",
             ),
             _pp_vys_row(
-                name="Ouyang Yu",
-                old_prediction="vys",
-                new_prediction="vys",
-                new_reason="weak_or_conflicting_evidence",
+                name="Woo Jin Chung",
                 pp_selected_format="surname_first",
                 vys_selected_format="given_first",
             ),
             _pp_vys_row(
-                name="Woo Jin Chung",
+                name="Woo Jin Chúng",
                 pp_selected_format="surname_first",
                 vys_selected_format="given_first",
             ),
@@ -821,10 +880,10 @@ def test_pp_vys_abstain_rule_applies_promoted_name_priors():
         ],
     )
 
-    assert [row["router_prediction"] for row in routed] == ["pp", "pp", "vys", "vys"]
+    assert [row["router_prediction"] for row in routed] == ["pp", "vys", "vys", "vys"]
     assert [row["router_reason"] for row in routed] == [
         "name_prior_repeated_tail_given_surname_first",
-        "name_prior_ouyang_surname_first",
+        "name_prior_korean_given_first_three_token",
         "name_prior_korean_given_first_three_token",
         "name_prior_cantonese_given_first",
     ]
@@ -877,3 +936,171 @@ def test_pp_vys_abstain_rule_does_not_apply_rejected_broad_name_priors():
 
     assert [row["router_prediction"] for row in routed] == ["vys", "vys"]
     assert [row["router_reason"] for row in routed] == ["old_new_vys", "old_new_vys"]
+
+
+def _parse_result(surname, given_tokens, order, middle_tokens=()):
+    parsed_original = ParsedName(
+        surname=surname,
+        given_name="-".join(given_tokens),
+        surname_tokens=[surname],
+        given_tokens=list(given_tokens),
+        middle_name=" ".join(middle_tokens),
+        middle_tokens=list(middle_tokens),
+        order=order,
+    )
+    return ParseResult.success_with_name(
+        formatted_name=f"{'-'.join(given_tokens)} {surname}",
+        parsed=parsed_original,
+        parsed_original_order=parsed_original,
+    )
+
+
+def test_input_order_parsed_flips_surname_first_reading():
+    result = _parse_result("Wang", ["Wei"], ["surname", "given"])
+    as_typed = input_order_parsed(result)
+    assert (as_typed.given_name, as_typed.surname) == ("Wang", "Wei")
+    assert as_typed.order == ["given", "surname"]
+
+
+def test_input_order_parsed_keeps_surname_last_reading():
+    result = _parse_result("Zhang", ["Wei"], ["given", "surname"], middle_tokens=["Y", "Z"])
+    assert input_order_parsed(result) is result.parsed
+
+
+def test_input_order_parsed_hyphenates_multi_token_given():
+    result = _parse_result("Huang", ["Yu", "Qiang"], ["surname", "given"])
+    as_typed = input_order_parsed(result)
+    assert (as_typed.given_name, as_typed.surname) == ("Huang-Yu", "Qiang")
+    assert as_typed.given_tokens == ["Huang", "Yu"]
+
+
+def test_pp_abstain_parsed_keeps_spaced_han_pp_parse():
+    result = _parse_result("Liu", ["Wen", "Rong"], ["surname", "given"])
+
+    parsed = pp_abstain_parsed(result, {"router_reason": "spaced_cjk_zero_batch_surname_first"})
+
+    assert parsed is result.parsed
+    assert (parsed.given_name, parsed.surname) == ("Wen-Rong", "Liu")
+
+
+def test_pp_abstain_parsed_uses_input_order_for_regular_abstain():
+    result = _parse_result("Wang", ["Wei"], ["surname", "given"])
+
+    parsed = pp_abstain_parsed(result, {"router_reason": "default_abstain"})
+
+    assert (parsed.given_name, parsed.surname) == ("Wang", "Wei")
+
+
+def test_pp_abstain_parsed_fails_instead_of_pp_fallback_when_input_order_unavailable():
+    # The original-order parse ends in a middle initial, so the as-typed reading
+    # cannot be materialized. A regular abstain must surface None (explicit
+    # failure), never fall back to the reordered PP parse it declined to trust.
+    result = _parse_result("Zhang", ["Wei"], ["surname", "given", "middle"], middle_tokens=["K"])
+
+    assert input_order_parsed(result) is None
+    assert pp_abstain_parsed(result, {"router_reason": "default_abstain"}) is None
+    assert pp_abstain_parsed(result, {"router_reason": "weak_zero_batch"}) is None
+
+
+def test_pp_abstain_parsed_spaced_cjk_exception_keeps_pp_parse_when_input_order_unavailable():
+    # The spaced-Han exception emits the PP parse even when the as-typed reading
+    # cannot be materialized: the source space already marks the surname boundary.
+    result = _parse_result("Zhang", ["Wei"], ["surname", "given", "middle"], middle_tokens=["K"])
+
+    parsed = pp_abstain_parsed(result, {"router_reason": "spaced_cjk_zero_batch_surname_first"})
+
+    assert parsed is result.parsed
+
+
+def test_pp_abstain_route_with_failed_input_order_materialization_emits_no_parse(detector):
+    # End-to-end: "Zhang Wei K." parses with original order ['surname', 'given',
+    # 'middle'], routes to abstain, and the trailing middle initial blocks the
+    # as-typed reading — the materialized abstain parse must be None, not the
+    # PP reordered parse ("Wei K Zhang").
+    batch = detector.analyze_name_batch(["Zhang Wei K."])
+    result = batch.results[0]
+    assert result.success
+    assert result.parsed_original_order.order[-1] == "middle"
+
+    (routed,) = route_pp_abstain_rows(build_pp_abstain_rows(batch, detector))
+    assert routed["router_prediction"] == "abstain"
+    assert routed["router_reason"] != "spaced_cjk_zero_batch_surname_first"
+
+    assert pp_abstain_parsed(result, routed) is None
+
+
+def test_input_order_parsed_rejects_trailing_middle_initial():
+    result = _parse_result("Wang", ["Wei"], ["surname", "given", "middle"], middle_tokens=["A"])
+    assert input_order_parsed(result) is None
+
+
+def test_input_order_parsed_rejects_failed_and_single_token_parses():
+    failed = ParseResult(success=False, result="", error_message="no parse")
+    assert input_order_parsed(failed) is None
+    single = _parse_result("Wang", [], ["surname", "given"])
+    assert input_order_parsed(single) is None
+
+
+def test_input_order_parsed_handles_duplicate_middle_labels_surname_last():
+    # normalize_name("J. Ming K. Zhang") yields original order ['middle','given',
+    # 'middle','surname'] with two middle tokens; the surname is already last, so
+    # the normalized parse is the input-order parse and the duplicated 'middle'
+    # labels must not duplicate the ['J','K'] tokens.
+    normalized = ParsedName(
+        surname="Zhang",
+        given_name="Ming",
+        surname_tokens=["Zhang"],
+        given_tokens=["Ming"],
+        middle_name="J K",
+        middle_tokens=["J", "K"],
+        order=["given", "middle", "surname"],
+    )
+    original = ParsedName(
+        surname="Zhang",
+        given_name="Ming",
+        surname_tokens=["Zhang"],
+        given_tokens=["Ming"],
+        middle_name="J K",
+        middle_tokens=["J", "K"],
+        order=["middle", "given", "middle", "surname"],
+    )
+    result = ParseResult.success_with_name("Ming J K Zhang", parsed=normalized, parsed_original_order=original)
+    assert input_order_parsed(result) is result.parsed
+
+
+def test_input_order_parsed_rejects_duplicate_middle_trailing_initial():
+    # normalize_name("Zhang A-Ming K.") yields original order ['surname','middle',
+    # 'given','middle']; the trailing 'middle' initial is not a valid input-order
+    # surname endpoint, so no as-typed parse is materialized.
+    original = ParsedName(
+        surname="Zhang",
+        given_name="Ming",
+        surname_tokens=["Zhang"],
+        given_tokens=["Ming"],
+        middle_name="A K",
+        middle_tokens=["A", "K"],
+        order=["surname", "middle", "given", "middle"],
+    )
+    result = ParseResult.success_with_name("Ming A K Zhang", parsed=original, parsed_original_order=original)
+    assert input_order_parsed(result) is None
+
+
+def test_input_order_parsed_consumes_repeated_roles_positionally():
+    # A surname-first shape whose middles and given tokens interleave forces the
+    # flip/reconstruct branch. Expanding every role occurrence to all its tokens
+    # (the bug) would duplicate the middle tokens and mangle the given name;
+    # positional consumption keeps each token exactly once.
+    original = ParsedName(
+        surname="Zhang",
+        given_name="Wei-Ming",
+        surname_tokens=["Zhang"],
+        given_tokens=["Wei", "Ming"],
+        middle_name="A B",
+        middle_tokens=["A", "B"],
+        order=["surname", "middle", "given", "middle", "given"],
+    )
+    result = ParseResult.success_with_name("Zhang-Wei Ming", parsed=original, parsed_original_order=original)
+    as_typed = input_order_parsed(result)
+    assert as_typed.surname == "Ming"
+    assert as_typed.given_tokens == ["Zhang", "Wei"]
+    assert as_typed.middle_tokens == ["A", "B"]

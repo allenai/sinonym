@@ -163,7 +163,9 @@ data structures and the detector can be safely used from multiple threads.
 """
 
 import logging
+import platform
 import string
+from typing import Literal
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.coretypes import (
@@ -191,17 +193,61 @@ from sinonym.services import (
     ParseResult,
     PinyinCacheService,
     ServiceContext,
+    SurnameResolver,
 )
 from sinonym.services.order_metadata import original_component_order
-from sinonym.services.process_pool import PersistentMultiprocessNormalizer, validate_multiprocess_options
+from sinonym.services.process_pool import PersistentMultiprocessNormalizer
 
+LOGGER = logging.getLogger(__name__)
+
+ParallelMode = Literal["auto", "never", "always"]
+AUTO_MULTIPROCESS_MIN_NAMES = 25000
+AUTO_MULTIPROCESS_MIN_BATCHES = 4000
+LINUX_AUTO_MULTIPROCESS_MIN_NAMES = 10000
+LINUX_AUTO_MULTIPROCESS_MIN_BATCHES = 2000
 BILINGUAL_SURNAME_STRENGTH_RATIO_MIN = 5.0
 BILINGUAL_ROMAN_HAN_SOURCE_ORDER_RATIO_MAX = 12.0
 BILINGUAL_ENDPOINT_PAIR_COUNT = 2
+SPACED_ALL_CHINESE_GROUP_COUNT = 2
+THREE_CHARACTER_ALL_CHINESE_TOKEN_COUNT = 3
 SPACED_HAN_PREFIX_SURNAME_RATIO_MIN = 5.0
 CAMEL_CASE_LAST_SURNAME_RATIO_MIN = 5.0
 CURATED_COMPOUND_SURNAME_FORMS = frozenset((*COMPOUND_VARIANTS.keys(), *COMPOUND_VARIANTS.values()))
 CompactHanRomanCandidate = tuple[list[str], list[str], list[str], float, bool]
+
+
+def _should_use_multiprocessing(
+    *,
+    item_count: int,
+    parallel: ParallelMode,
+    auto_threshold: int | None,
+    default_auto_threshold: int,
+    linux_auto_threshold: int,
+    max_workers: int | None,
+) -> bool:
+    """Return whether a high-level wrapper should use a process pool."""
+    if parallel not in ("auto", "never", "always"):
+        message = "parallel must be 'auto', 'never', or 'always'"
+        raise ValueError(message)
+    if item_count == 0 or parallel == "never":
+        return False
+    if parallel == "always":
+        return True
+    resolved_threshold = auto_threshold
+    if resolved_threshold is None:
+        resolved_threshold = linux_auto_threshold if platform.system() == "Linux" else default_auto_threshold
+    if resolved_threshold < 1:
+        message = "auto multiprocessing threshold must be >= 1"
+        raise ValueError(message)
+    return max_workers != 1 and item_count >= resolved_threshold
+
+
+def _auto_start_method(mp_start_method: str) -> str:
+    """Resolve the high-level auto start method."""
+    if mp_start_method != "auto":
+        return mp_start_method
+    return "spawn"
+
 
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CHINESE NAME DETECTOR CLASS
@@ -217,6 +263,7 @@ class ChineseNameDetector:
         self._normalizer = NormalizationService(self._config, self._cache_service)
         self._data_service = DataInitializationService(self._config, self._cache_service, self._normalizer)
         self._data: NameDataStructures | None = None
+        self._surname_resolver: SurnameResolver | None = None
         self._weights = weights  # Store weights to pass to parsing service
 
         # Service instances (initialized after data loading)
@@ -237,14 +284,15 @@ class ChineseNameDetector:
             self._normalizer.set_data_context(self._data)
             # Initialize services
             self._initialize_services()
-        except Exception as e:
-            logging.warning(f"Failed to initialize at construction: {e}. Will initialize lazily.")
+        except Exception as e:  # noqa: BLE001 - construction keeps lazy initialization fallback semantics.
+            LOGGER.warning("Failed to initialize at construction: %s. Will initialize lazily.", e)
 
     def _initialize_services(self) -> None:
         """Initialize service instances with data context."""
         if self._data is not None:
             # Create shared context to reduce dependency injection complexity
             context = ServiceContext(self._config, self._normalizer, self._data)
+            self._surname_resolver = SurnameResolver(self._data, self._normalizer)
 
             self._ethnicity_service = EthnicityClassificationService(context)
             self._parsing_service = NameParsingService(context, weights=self._weights)
@@ -257,6 +305,7 @@ class ChineseNameDetector:
                     min_tokens_required=self._config.min_tokens_required,
                     individual_parser=self.normalize_name,
                     input_failure=self._initial_input_failure,
+                    surname_resolver=self._surname_resolver,
                 ),
             )
 
@@ -269,12 +318,17 @@ class ChineseNameDetector:
             # Initialize services
             self._initialize_services()
 
+    def _require_surname_resolver(self) -> SurnameResolver:
+        """Return the initialized surname resolver."""
+        if self._surname_resolver is not None:
+            return self._surname_resolver
+        message = "surname resolver is not initialized"
+        raise RuntimeError(message)
+
     def _is_surname_group(self, tokens: list[str], normalized_cache: dict[str, str]) -> bool:
         """Return whether a romanized Han token group is a surname component."""
         if len(tokens) == 1:
-            token = tokens[0]
-            normalized = self._normalizer.get_normalized(token, normalized_cache)
-            return self._data.is_surname(token, normalized)
+            return self._require_surname_resolver().parser_is_surname(tokens)
 
         normalized_tokens = [self._normalizer.get_normalized(token, normalized_cache) for token in tokens]
         spaced = " ".join(normalized_tokens)
@@ -301,18 +355,19 @@ class ChineseNameDetector:
         return spaced in CURATED_COMPOUND_SURNAME_FORMS or compact in CURATED_COMPOUND_SURNAME_FORMS
 
     def _surname_group_strength(self, pinyin_tokens: list[str] | tuple[str, ...], han_group: str = "") -> float:
-        """Return the strongest surname-frequency signal for a Han/pinyin group."""
+        """Return the strongest surname-frequency signal for a Han-backed pinyin group."""
         if not pinyin_tokens:
             return 0.0
+        if not han_group:
+            message = "_surname_group_strength requires Han provenance for pinyin tokens"
+            raise ValueError(message)
 
-        data = self._data
-        assert data is not None
-        keys = [han_group] if han_group else []
-        if len(pinyin_tokens) == 1 and not han_group:
-            keys.append(pinyin_tokens[0])
-        elif len(pinyin_tokens) > 1:
-            keys.extend((" ".join(pinyin_tokens), "".join(pinyin_tokens)))
-        return max((data.get_surname_freq(key) for key in keys if key), default=0.0)
+        surname_resolver = self._require_surname_resolver()
+        frequencies = [surname_resolver.parser_frequency((han_group,))]
+        if len(pinyin_tokens) > 1:
+            frequencies.append(surname_resolver.parser_frequency(pinyin_tokens))
+            frequencies.append(surname_resolver.parser_frequency(("".join(pinyin_tokens),)))
+        return max(frequencies, default=0.0)
 
     def _has_only_cjk_token_groups(self, normalized_input: NormalizedInput) -> bool:
         """Return whether separator-delimited input tokens are all CJK characters."""
@@ -367,28 +422,28 @@ class ChineseNameDetector:
 
     def _allows_surname_like_given_split(self, normalized_input: NormalizedInput) -> bool:
         """Return whether surname-like fused given tokens may be gold-split."""
-        return not any(
-            self._config.cjk_pattern.search(char) for token in normalized_input.tokens for char in token
-        )
+        return not any(self._config.cjk_pattern.search(char) for token in normalized_input.tokens for char in token)
 
     def _normalize_camel_case_pair(self, normalized_input: NormalizedInput) -> ParseResult | None:
         """Parse a whole-input camelCase pair using surname-first provenance."""
         tokens = list(normalized_input.roman_tokens)
-        if len(tokens) != 2 or self._is_compound_surname_group(tokens, normalized_input.norm_map):
+        if len(tokens) != BILINGUAL_ENDPOINT_PAIR_COUNT or self._is_compound_surname_group(tokens, normalized_input.norm_map):
             return None
 
         first, last = tokens
-        first_key = self._normalizer.norm_light(first)
-        last_key = self._normalizer.norm_light(last)
-        first_is_surname = self._data.is_surname(first, first_key)
-        last_is_surname = self._data.is_surname(last, last_key)
+        surname_resolver = self._require_surname_resolver()
+        first_is_surname = surname_resolver.evidence_is_surname(first)
+        last_is_surname = surname_resolver.evidence_is_surname(last)
         if not first_is_surname and not last_is_surname:
             return None
 
-        first_freq = self._data.get_surname_freq(first_key)
-        last_freq = self._data.get_surname_freq(last_key)
+        first_freq = surname_resolver.evidence_frequency(first)
+        last_freq = surname_resolver.evidence_frequency(last)
         last_wins = last_is_surname and (
-            not first_is_surname or last.isupper() or last_freq >= CAMEL_CASE_LAST_SURNAME_RATIO_MIN * first_freq
+            not first_is_surname
+            or last.isupper()
+            or (first_freq == 0 and last_freq > 0)
+            or (first_freq > 0 and last_freq >= CAMEL_CASE_LAST_SURNAME_RATIO_MIN * first_freq)
         )
         if last_wins:
             surname_tokens, given_tokens = [last], [first]
@@ -494,16 +549,15 @@ class ChineseNameDetector:
 
     def _bilingual_pair_surname_strength(self, pair) -> float:
         """Return surname strength from the Han side of an aligned bilingual pair."""
-        han_freq = self._data.get_surname_freq(pair.han_token)
+        surname_resolver = self._require_surname_resolver()
+        han_freq = surname_resolver.parser_frequency((pair.han_token,))
         if len(pair.han_pinyin) == 1:
             return han_freq
 
-        pinyin_key = " ".join(pair.han_pinyin)
-        compact_key = "".join(pair.han_pinyin)
         return max(
             han_freq,
-            self._data.get_surname_freq(pinyin_key),
-            self._data.get_surname_freq(compact_key),
+            surname_resolver.parser_frequency(pair.han_pinyin),
+            surname_resolver.parser_frequency(("".join(pair.han_pinyin),)),
         )
 
     def _normalize_compact_han_roman_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
@@ -631,11 +685,14 @@ class ChineseNameDetector:
         if len(han_pinyin) >= self._config.min_tokens_required:
             first_two_pinyin = list(han_pinyin[:2])
             first_two_han = han_group[:2]
-            if self._data.get_surname_freq(first_two_han) > 0 or self._is_compound_surname_group(first_two_pinyin, {}):
+            if self._require_surname_resolver().parser_frequency((first_two_han,)) > 0 or self._is_compound_surname_group(
+                first_two_pinyin,
+                {},
+            ):
                 return 2
 
         first_han = han_group[0]
-        if self._data.get_surname_freq(first_han) > 0:
+        if self._require_surname_resolver().parser_frequency((first_han,)) > 0:
             return 1
         return 0
 
@@ -644,11 +701,14 @@ class ChineseNameDetector:
         if len(han_pinyin) >= self._config.min_tokens_required:
             last_two_pinyin = list(han_pinyin[-2:])
             last_two_han = han_group[-2:]
-            if self._data.get_surname_freq(last_two_han) > 0 or self._is_compound_surname_group(last_two_pinyin, {}):
+            if self._require_surname_resolver().parser_frequency((last_two_han,)) > 0 or self._is_compound_surname_group(
+                last_two_pinyin,
+                {},
+            ):
                 return 2
 
         last_han = han_group[-1]
-        if self._data.get_surname_freq(last_han) > 0:
+        if self._require_surname_resolver().parser_frequency((last_han,)) > 0:
             return 1
         return 0
 
@@ -689,8 +749,8 @@ class ChineseNameDetector:
     def _normalize_spaced_all_chinese_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
         """Parse all-Han names whose whitespace already separates name components."""
         if (
-            len(normalized_input.tokens) != self._config.min_tokens_required
-            or len(normalized_input.roman_tokens) <= self._config.min_tokens_required
+            len(normalized_input.tokens) != SPACED_ALL_CHINESE_GROUP_COUNT
+            or len(normalized_input.roman_tokens) <= SPACED_ALL_CHINESE_GROUP_COUNT
         ):
             return None
 
@@ -709,17 +769,17 @@ class ChineseNameDetector:
             first_is_surname = self._is_surname_group(first_group, normalized_input.norm_map)
             last_is_surname = self._is_surname_group(last_group, normalized_input.norm_map)
             last_is_compound_surname = self._is_compound_surname_group(last_group, normalized_input.norm_map)
+            first_strength = self._surname_group_strength(
+                first_group,
+                normalized_input.tokens[0],
+            )
+            last_strength = self._surname_group_strength(
+                last_group,
+                normalized_input.tokens[1],
+            )
             last_compound_surname_wins = last_is_compound_surname and (
                 self._is_curated_compound_surname_group(last_group, normalized_input.norm_map)
-                or self._surname_group_strength(
-                    last_group,
-                    normalized_input.tokens[1],
-                )
-                >= self._surname_group_strength(
-                    first_group,
-                    normalized_input.tokens[0],
-                )
-                * BILINGUAL_SURNAME_STRENGTH_RATIO_MIN
+                or (last_strength > 0 and last_strength >= first_strength * BILINGUAL_SURNAME_STRENGTH_RATIO_MIN)
             )
 
             if (
@@ -751,8 +811,9 @@ class ChineseNameDetector:
         if not first_group or not last_group:
             return False
 
-        first_freq = self._data.get_surname_freq(first_group[0])
-        last_freq = self._data.get_surname_freq(last_group[0])
+        surname_resolver = self._require_surname_resolver()
+        first_freq = surname_resolver.parser_frequency((first_group[0],))
+        last_freq = surname_resolver.parser_frequency((last_group[0],))
         if last_freq <= 0:
             return first_freq > 0
         return first_freq / last_freq >= SPACED_HAN_PREFIX_SURNAME_RATIO_MIN
@@ -836,20 +897,16 @@ class ChineseNameDetector:
             token1, token2 = tokens[0], tokens[1]
 
             # Check if first token can be a surname
-            token1_norm = normalized_input.norm_map.get(token1, self._normalizer.norm(token1))
-            token1_is_surname = self._data.is_surname(token1, token1_norm)
+            surname_resolver = self._require_surname_resolver()
+            token1_is_surname = surname_resolver.parser_is_surname((token1,))
 
             # For 2-character all-Chinese names, use surname-first if token1 is a valid surname
             if token1_is_surname:
                 best_result = ([token1], [token2])
             else:
                 # Fallback: if token1 is not a surname, try token2 as surname (less common but possible)
-                token2_norm = normalized_input.norm_map.get(token2, self._normalizer.norm(token2))
-                token2_is_surname = self._data.is_surname(token2, token2_norm)
-                if token2_is_surname:
-                    best_result = ([token2], [token1])
-                else:
-                    best_result = None
+                token2_is_surname = surname_resolver.parser_is_surname((token2,))
+                best_result = ([token2], [token1]) if token2_is_surname else None
 
             if best_result:
                 surname_tokens, given_tokens = best_result
@@ -904,7 +961,7 @@ class ChineseNameDetector:
                     )
                 except ValueError as e:
                     return ParseResult.failure(str(e))
-        elif is_all_chinese and len(normalized_input.roman_tokens) == 3:
+        elif is_all_chinese and len(normalized_input.roman_tokens) == THREE_CHARACTER_ALL_CHINESE_TOKEN_COUNT:
             # For 3-character all-Chinese names: check compound surname vs single surname
             tokens = list(normalized_input.roman_tokens)
 
@@ -916,7 +973,11 @@ class ChineseNameDetector:
                 normalized_input.compound_metadata,
             )
 
-            if compound_parse is not None and len(compound_parse[0]) == 2 and len(compound_parse[1]) == 1:
+            if (
+                compound_parse is not None
+                and len(compound_parse[0]) == BILINGUAL_ENDPOINT_PAIR_COUNT
+                and len(compound_parse[1]) == 1
+            ):
                 # Parsing service recognized first two as compound surname
                 best_result = (compound_parse[0], compound_parse[1])
             else:
@@ -1117,7 +1178,6 @@ class ChineseNameDetector:
         return self._batch_analysis_service.analyze_name_batch(
             names,
             self._normalizer,
-            self._data,
             self._formatting_service,
             BatchAnalysisOptions(
                 minimum_batch_size=minimum_batch_size,
@@ -1153,8 +1213,6 @@ class ChineseNameDetector:
 
         if self._batch_analysis_service is None:
             # Return a fallback pattern indicating mixed format
-            from sinonym.coretypes import NameFormat
-
             return BatchFormatPattern(
                 dominant_format=NameFormat.MIXED,
                 confidence=0.0,
@@ -1167,7 +1225,6 @@ class ChineseNameDetector:
         return self._batch_analysis_service.detect_batch_format(
             names,
             self._normalizer,
-            self._data,
             format_threshold=format_threshold,
         )
 
@@ -1202,6 +1259,119 @@ class ChineseNameDetector:
         batch_result = self.analyze_name_batch(names, format_threshold, minimum_batch_size)
         return batch_result.results
 
+    def normalize_names(
+        self,
+        names: list[str],
+        *,
+        parallel: ParallelMode = "auto",
+        min_parallel_names: int | None = None,
+        max_workers: int | None = None,
+        chunk_size: int = 64,
+        mp_start_method: str = "auto",
+    ) -> list[ParseResult]:
+        """
+        Normalize independent names with automatic multiprocessing selection.
+
+        This wrapper has per-name `normalize_name()` semantics. With
+        `parallel="auto"`, it uses the local detector for small inputs and a
+        persistent process pool for larger inputs. Use `parallel="always"` to
+        force the process-pool path or `parallel="never"` for deterministic
+        single-process execution.
+        """
+        self._ensure_initialized()
+        if _should_use_multiprocessing(
+            item_count=len(names),
+            parallel=parallel,
+            auto_threshold=min_parallel_names,
+            default_auto_threshold=AUTO_MULTIPROCESS_MIN_NAMES,
+            linux_auto_threshold=LINUX_AUTO_MULTIPROCESS_MIN_NAMES,
+            max_workers=max_workers,
+        ):
+            with self.create_persistent_multiprocess_pool(
+                max_workers=max_workers,
+                chunk_size=chunk_size,
+                mp_start_method=_auto_start_method(mp_start_method),
+            ) as pool:
+                return pool.normalize_names(names)
+        return [self.normalize_name(name) for name in names]
+
+    def analyze_name_batches(
+        self,
+        batches: list[list[str]],
+        *,
+        parallel: ParallelMode = "auto",
+        min_parallel_batches: int | None = None,
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+        max_workers: int | None = None,
+        chunk_size: int = 64,
+        mp_start_method: str = "auto",
+    ) -> list[BatchParseResult]:
+        """
+        Analyze independent name batches with automatic multiprocessing selection.
+
+        Each inner list is one batch-context boundary. With `parallel="auto"`,
+        small batch lists run in-process and large batch lists use a persistent
+        process pool. Output order matches the submitted batch order.
+        """
+        self._ensure_initialized()
+        if _should_use_multiprocessing(
+            item_count=len(batches),
+            parallel=parallel,
+            auto_threshold=min_parallel_batches,
+            default_auto_threshold=AUTO_MULTIPROCESS_MIN_BATCHES,
+            linux_auto_threshold=LINUX_AUTO_MULTIPROCESS_MIN_BATCHES,
+            max_workers=max_workers,
+        ):
+            with self.create_persistent_multiprocess_pool(
+                max_workers=max_workers,
+                chunk_size=chunk_size,
+                mp_start_method=_auto_start_method(mp_start_method),
+            ) as pool:
+                return pool.analyze_name_batches(
+                    batches,
+                    format_threshold=format_threshold,
+                    minimum_batch_size=minimum_batch_size,
+                )
+        return [
+            self.analyze_name_batch(
+                batch,
+                format_threshold=format_threshold,
+                minimum_batch_size=minimum_batch_size,
+            )
+            for batch in batches
+        ]
+
+    def process_name_batches(
+        self,
+        batches: list[list[str]],
+        *,
+        parallel: ParallelMode = "auto",
+        min_parallel_batches: int | None = None,
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+        max_workers: int | None = None,
+        chunk_size: int = 64,
+        mp_start_method: str = "auto",
+    ) -> list[list[ParseResult]]:
+        """
+        Process independent name batches with automatic multiprocessing selection.
+
+        This is the high-level API for workloads such as many paper author
+        lists. Each inner list gets normal `process_name_batch()` semantics.
+        """
+        batch_results = self.analyze_name_batches(
+            batches,
+            parallel=parallel,
+            min_parallel_batches=min_parallel_batches,
+            format_threshold=format_threshold,
+            minimum_batch_size=minimum_batch_size,
+            max_workers=max_workers,
+            chunk_size=chunk_size,
+            mp_start_method=mp_start_method,
+        )
+        return [batch_result.results for batch_result in batch_results]
+
     def create_persistent_multiprocess_pool(
         self,
         *,
@@ -1210,10 +1380,13 @@ class ChineseNameDetector:
         mp_start_method: str = "spawn",
     ) -> PersistentMultiprocessNormalizer:
         """
-        Create a persistent multi-process pool for repeated normalization calls.
+        Create a persistent multi-process pool for repeated processing calls.
 
         Notes:
         - Uses one detector instance per worker process.
+        - Use `normalize_names()` for independent per-name parsing.
+        - Use `process_name_batches()` for many independent author lists that
+          each need batch-format correction.
         - For Windows/macOS scripts, call this behind an
           `if __name__ == "__main__":` guard.
         """
@@ -1235,18 +1408,22 @@ class ChineseNameDetector:
         mp_start_method: str = "spawn",
     ) -> list[ParseResult]:
         """
-        Process one batch and preserve the same batch-context semantics as process_name_batch().
+        Process one author list in a temporary process pool.
 
-        The multiprocessing knobs are accepted for source compatibility. For
-        true per-name parallel normalization, use create_persistent_multiprocess_pool().
+        This method has `process_name_batch()` semantics, including batch-format
+        correction. Use `normalize_names()` for independent per-name parsing, or
+        `create_persistent_multiprocess_pool()` to reuse workers across repeated
+        calls.
         """
         self._ensure_initialized()
-        validate_multiprocess_options(
+        return self.process_name_batches(
+            [names],
+            parallel="always",
+            min_parallel_batches=1,
             max_workers=max_workers,
             chunk_size=chunk_size,
             mp_start_method=mp_start_method,
-        )
-        return self.process_name_batch(names)
+        )[0]
 
     def _create_fallback_batch_result(
         self,
@@ -1265,16 +1442,15 @@ class ChineseNameDetector:
         )
 
         # Create dummy individual analyses
-        individual_analyses = []
-        for name in names:
-            individual_analyses.append(
-                IndividualAnalysis(
-                    raw_name=name,
-                    candidates=[],
-                    best_candidate=None,
-                    confidence=0.0,
-                ),
+        individual_analyses = [
+            IndividualAnalysis(
+                raw_name=name,
+                candidates=[],
+                best_candidate=None,
+                confidence=0.0,
             )
+            for name in names
+        ]
         name_order_evidence = [NameOrderEvidence(raw_name=name) for name in names]
 
         return BatchParseResult(

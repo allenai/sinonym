@@ -77,7 +77,7 @@ jobs:
         if: steps.decide.outputs.should_publish == 'true'
         run: uv sync --group dev
 
-      - name: Check test status against baseline (44 failures expected)
+      - name: Check test status against baseline
         if: steps.decide.outputs.should_publish == 'true'
         run: uv run python scripts/check_test_status.py
 

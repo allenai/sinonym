@@ -26,6 +26,7 @@ import requests
 
 # Import existing components
 from sinonym.detector import ChineseNameDetector
+from sinonym.services.name_lookup import SurnameResolver
 from sinonym.services.parsing import NameParsingService
 
 # Data sources (reuse from train_ml_classifier.py)
@@ -121,8 +122,8 @@ def generate_parse_candidates(
 def extract_basic_features(
     surname_tokens: list[str],
     given_tokens: list[str],
-    tokens: list[str],
     parsing_service: NameParsingService,
+    surname_resolver: SurnameResolver,
     normalized_cache: dict[str, str],
 ) -> dict[str, float]:
     """
@@ -133,11 +134,7 @@ def extract_basic_features(
 
     # Feature 1: surname_log_prob (Gain: 51.9)
     if surname_tokens:
-        surname_key = parsing_service._surname_key(surname_tokens, normalized_cache)
-        surname_logp = parsing_service._data.surname_log_probabilities.get(
-            surname_key,
-            parsing_service._config.default_surname_logp,
-        )
+        surname_logp = surname_resolver.parser_logp(surname_tokens, parsing_service._config.default_surname_logp)
         features["surname_log_prob"] = surname_logp / 10.0  # Scale down large negative values
     else:
         features["surname_log_prob"] = parsing_service._config.default_surname_logp / 10.0
@@ -153,7 +150,12 @@ def extract_basic_features(
 
     # Feature 3: surname_log_prob_median (Gain: 14.0)
     if surname_tokens:
-        surname_median_logp = _get_precomputed_surname_median(surname_tokens, parsing_service, normalized_cache)
+        surname_median_logp = _get_precomputed_surname_median(
+            surname_tokens,
+            parsing_service,
+            surname_resolver,
+            normalized_cache,
+        )
         features["surname_log_prob_median"] = surname_median_logp / 10.0
     else:
         features["surname_log_prob_median"] = parsing_service._config.default_surname_logp / 10.0
@@ -174,7 +176,7 @@ def extract_basic_features(
     # Feature 5: surname_given_rank_ratio - Key discriminator for Ao vs Xiang cases
     # if surname_tokens:
     #     features["surname_given_rank_ratio"] = _surname_given_rank_ratio(
-    #         surname_tokens, parsing_service, normalized_cache
+    #         surname_tokens, parsing_service, surname_resolver, normalized_cache
     #     )
     # else:
     #     features["surname_given_rank_ratio"] = 1.0
@@ -182,7 +184,7 @@ def extract_basic_features(
     # Feature 6: surname_logp_ratio - Ratio of surname to given log probabilities
     # if surname_tokens:
     #     features["surname_logp_ratio"] = _surname_logp_ratio(
-    #         surname_tokens, parsing_service, normalized_cache
+    #         surname_tokens, parsing_service, surname_resolver, normalized_cache
     #     )
     # else:
     #     features["surname_logp_ratio"] = 1.0
@@ -190,7 +192,7 @@ def extract_basic_features(
     # Feature 7: median_ratio_feature - Ratio using median probabilities
     # if surname_tokens:
     #     features["median_ratio_feature"] = _median_ratio_feature(
-    #         surname_tokens, parsing_service, normalized_cache
+    #         surname_tokens, parsing_service, surname_resolver, normalized_cache
     #     )
     # else:
     #     features["median_ratio_feature"] = 1.0
@@ -199,7 +201,10 @@ def extract_basic_features(
 
 
 def _get_precomputed_surname_median(
-    surname_tokens: list[str], parsing_service: NameParsingService, normalized_cache: dict[str, str],
+    surname_tokens: list[str],
+    parsing_service: NameParsingService,
+    surname_resolver: SurnameResolver,
+    normalized_cache: dict[str, str],
 ) -> float:
     """Get pre-computed median-based surname log probability."""
     if len(surname_tokens) == 1:
@@ -212,10 +217,7 @@ def _get_precomputed_surname_median(
             normalized, parsing_service._config.default_surname_logp,
         )
     # Compound surname - return the max-based value (no median for compounds)
-    surname_key = parsing_service._surname_key(surname_tokens, normalized_cache)
-    return parsing_service._data.surname_log_probabilities.get(
-        surname_key, parsing_service._config.default_surname_logp,
-    )
+    return surname_resolver.parser_logp(surname_tokens, parsing_service._config.default_surname_logp)
 
 
 def _get_precomputed_given_median(
@@ -229,15 +231,11 @@ def _get_precomputed_given_median(
 
 
 def _get_precomputed_surname_rank(
-    surname_tokens: list[str], parsing_service: NameParsingService, normalized_cache: dict[str, str],
+    surname_tokens: list[str],
+    surname_resolver: SurnameResolver,
 ) -> float:
     """Get pre-computed percentile rank of this surname in the frequency database (0-1 scale)."""
-    surname_key = parsing_service._surname_key(surname_tokens, normalized_cache)
-
-    # Look up pre-computed percentile rank
-    return parsing_service._data.surname_percentile_ranks.get(
-        surname_key, 1.0,
-    )  # Bottom percentile for unknown surnames
+    return surname_resolver.parser_rank(surname_tokens, 1.0)
 
 
 def _get_precomputed_given_rank(
@@ -253,6 +251,7 @@ def _get_precomputed_given_rank(
 def _surname_given_rank_ratio(
     surname_tokens: list[str],
     parsing_service: NameParsingService,
+    surname_resolver: SurnameResolver,
     normalized_cache: dict[str, str],
 ) -> float:
     """
@@ -264,7 +263,7 @@ def _surname_given_rank_ratio(
     eps = 1e-6
     ratios = []
     for token in surname_tokens:
-        s_rank = _get_precomputed_surname_rank([token], parsing_service, normalized_cache)
+        s_rank = _get_precomputed_surname_rank([token], surname_resolver)
         g_rank = _get_precomputed_given_rank(token, parsing_service, normalized_cache)
         # Convert ranks to probabilities: lower rank = higher probability
         surname_prob = 1.0 - s_rank + eps
@@ -276,6 +275,7 @@ def _surname_given_rank_ratio(
 def _surname_logp_ratio(
     surname_tokens: list[str],
     parsing_service: NameParsingService,
+    surname_resolver: SurnameResolver,
     normalized_cache: dict[str, str],
 ) -> float:
     """
@@ -285,13 +285,9 @@ def _surname_logp_ratio(
     eps = 1e-6
     ratios = []
     for token in surname_tokens:
-        surname_key = parsing_service._surname_key([token], normalized_cache)
         given_key = parsing_service._given_name_key(token, normalized_cache)
 
-        surname_logp = parsing_service._data.surname_log_probabilities.get(
-            surname_key,
-            parsing_service._config.default_surname_logp,
-        )
+        surname_logp = surname_resolver.parser_logp([token], parsing_service._config.default_surname_logp)
         given_logp = parsing_service._data.given_log_probabilities.get(
             given_key,
             parsing_service._config.default_given_logp,
@@ -308,6 +304,7 @@ def _surname_logp_ratio(
 def _median_ratio_feature(
     surname_tokens: list[str],
     parsing_service: NameParsingService,
+    surname_resolver: SurnameResolver,
     normalized_cache: dict[str, str],
 ) -> float:
     """
@@ -317,7 +314,12 @@ def _median_ratio_feature(
     eps = 1e-6
     ratios = []
     for token in surname_tokens:
-        surname_median = _get_precomputed_surname_median([token], parsing_service, normalized_cache)
+        surname_median = _get_precomputed_surname_median(
+            [token],
+            parsing_service,
+            surname_resolver,
+            normalized_cache,
+        )
         given_median = _get_precomputed_given_median(token, parsing_service, normalized_cache)
 
         # Convert log probabilities to probabilities, then ratio
@@ -425,6 +427,7 @@ def process_names_batch(
     """Process a batch of Chinese names and generate training examples."""
     training_examples = []
     parsing_service = detector._parsing_service
+    surname_resolver = SurnameResolver(parsing_service._data, detector._normalizer)
     rejected_examples = []
 
     print(f"Processing {len(chinese_names)} names...")
@@ -504,8 +507,8 @@ def process_names_batch(
                 features = extract_basic_features(
                     surname_tokens,
                     given_tokens,
-                    tokens,
                     parsing_service,
+                    surname_resolver,
                     normalized_cache,
                 )
 

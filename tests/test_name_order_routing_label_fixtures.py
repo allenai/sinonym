@@ -4,11 +4,12 @@ from pathlib import Path
 
 from sinonym.pipeline.name_order_routing import route_pp_abstain_rows, route_pp_vys_abstain_rows
 
-DATA_DIR = Path("sinonym/data/name_order_routing")
+DATA_DIR = Path(__file__).resolve().parents[1] / "sinonym" / "data" / "name_order_routing"
 PP_VYS_FIXTURE_ROWS = 1000
-PP_VYS_DECISIVE_ROWS = 969
+PP_VYS_DECISIVE_ROWS = 791
+PP_VYS_EITHER_ROWS = 164
 PP_ABSTAIN_FIXTURE_ROWS = 750
-PP_ABSTAIN_DECISIVE_ROWS = 550
+PP_ABSTAIN_DECISIVE_ROWS = 608
 
 
 def _load_jsonl(path: Path) -> list[dict[str, object]]:
@@ -20,35 +21,90 @@ def _confusion(rows: list[dict[str, object]], labels: set[str], pred_key: str) -
     return Counter((str(row["decision"]), str(row[pred_key])) for row in rows if row["decision"] in labels)
 
 
+def _labeled_string(row: dict[str, object]) -> str:
+    return str(row["pp_result"] if row["decision"] == "pp" else row["vys_result"])
+
+
+def _emitted_string(row: dict[str, object]) -> str | None:
+    """Return the string the pipeline emits for this routed row, or None if indeterminate.
+
+    Router `abstain` emits the preprocessed input-order parse; its string is the
+    PP/VYS result on whichever side `input_order_candidate` says preserves input
+    order. With candidate `unknown` (or terminal `not_person`) no emitted string
+    can be derived from the fixture, so the row can never score as correct.
+    """
+    route = row["router_prediction"]
+    if route == "abstain":
+        route = row["input_order_candidate"]
+    if route == "pp":
+        return str(row["pp_result"])
+    if route == "vys":
+        return str(row["vys_result"])
+    return None
+
+
 def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
+    """Score the pp-vys router at the emitted-string (output) level.
+
+    A decisive (label `pp`/`vys`) row counts correct iff the string the pipeline
+    would emit under the router's route equals the labeled route's string
+    (`pp_result` for label `pp`, `vys_result` for label `vys`).
+
+    Rows labeled `either` are the ones whose PP and VYS parses emit the
+    identical string under the current parser: the route choice is cosmetic, so
+    the row scores correct for any person route (pp, vys, or abstain resolving
+    to either side). The invariant `pp_result == vys_result` is asserted per
+    row — if a parser change makes an `either` row's strings diverge again, the
+    fixture is stale and the row must go back for relabeling (see the fixture
+    README), so this test fails loudly rather than trusting the label.
+    """
     rows = _load_jsonl(DATA_DIR / "pp_vys_abstain_labels.jsonl")
     routed = route_pp_vys_abstain_rows(rows)
-    for row in routed:
-        row["effective_router_prediction"] = (
-            row["input_order_candidate"] if row["router_prediction"] == "abstain" else row["router_prediction"]
-        )
+
+    either = [row for row in routed if row["decision"] == "either"]
+    stale_either = [
+        str(row["item_id"])
+        for row in either
+        if not (row["pp_success"] and row["vys_success"] and row["pp_result"] == row["vys_result"])
+    ]
+    assert stale_either == [], f"either-labeled rows whose PP/VYS strings diverged (relabel them): {stale_either}"
+    either_scored = Counter(
+        "match" if _emitted_string(row) == str(row["pp_result"]) else "mismatch" for row in either
+    )
 
     decisive = [row for row in routed if row["decision"] in {"pp", "vys"}]
-    confusion = _confusion(decisive, {"pp", "vys"}, "effective_router_prediction")
+    confusion = Counter(
+        (str(row["decision"]), "match" if _emitted_string(row) == _labeled_string(row) else "mismatch") for row in decisive
+    )
     reason_counts = Counter(row["router_reason"] for row in decisive)
 
     assert len(rows) == PP_VYS_FIXTURE_ROWS
     assert len(decisive) == PP_VYS_DECISIVE_ROWS
+    assert len(either) == PP_VYS_EITHER_ROWS
+    assert either_scored == {"match": PP_VYS_EITHER_ROWS}
     assert confusion == {
-        ("pp", "pp"): 405,
-        ("pp", "vys"): 69,
-        ("vys", "pp"): 24,
-        ("vys", "vys"): 471,
+        ("pp", "match"): 388,
+        ("pp", "mismatch"): 57,
+        ("vys", "match"): 331,
+        ("vys", "mismatch"): 15,
     }
     assert {reason: count for reason, count in reason_counts.items() if reason.startswith("name_prior_")} == {
         "name_prior_cantonese_given_first": 6,
-        "name_prior_korean_given_first_three_token": 34,
-        "name_prior_ouyang_surname_first": 1,
-        "name_prior_repeated_tail_given_surname_first": 5,
+        "name_prior_korean_given_first_three_token": 29,
+        "name_prior_repeated_tail_given_surname_first": 4,
     }
 
 
 def test_pp_abstain_label_fixture_reproduces_current_validation_metrics():
+    """Score the pp-abstain router at the route level against production behavior.
+
+    Failed PP parses route to the terminal `not_person` decision (the builder emits
+    `pp_success=False` for them; the fixture backfills it from the failed-parse
+    encoding `pp_result_token_count == 1`). The 312 failed-parse rows here (311
+    labeled `abstain`, 1 labeled `pp`) therefore appear as `not_person` cells in
+    the confusion matrix, exercising the real production path rather than the
+    abstain path the fixture used to validate.
+    """
     rows = _load_jsonl(DATA_DIR / "pp_abstain_labels.jsonl")
     routed = route_pp_abstain_rows(rows)
 
@@ -59,16 +115,19 @@ def test_pp_abstain_label_fixture_reproduces_current_validation_metrics():
     assert len(rows) == PP_ABSTAIN_FIXTURE_ROWS
     assert len(decisive) == PP_ABSTAIN_DECISIVE_ROWS
     assert confusion == {
-        ("abstain", "abstain"): 435,
-        ("abstain", "pp"): 3,
-        ("pp", "abstain"): 7,
-        ("pp", "pp"): 105,
+        ("abstain", "abstain"): 127,
+        ("abstain", "not_person"): 311,
+        ("abstain", "pp"): 6,
+        ("pp", "abstain"): 14,
+        ("pp", "not_person"): 1,
+        ("pp", "pp"): 149,
     }
     assert reason_counts == {
-        "default_abstain": 153,
-        "spaced_cjk_zero_batch_surname_first": 5,
-        "weak_zero_batch": 206,
+        "clean_bilingual_given_first": 34,
+        "default_abstain": 17,
+        "not_person": 312,
+        "spaced_cjk_zero_batch_surname_first": 7,
+        "surname_first_two_token": 121,
+        "weak_zero_batch": 41,
         "zero_batch_mixed_long": 76,
-        "surname_first_two_token": 108,
-        "zero_batch_latin_ambiguous_endpoint": 2,
     }

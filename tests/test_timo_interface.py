@@ -1,6 +1,13 @@
 import pytest
 from pydantic import ValidationError
 
+from sinonym.coretypes import BatchParseResult
+from sinonym.detector import ChineseNameDetector
+from sinonym.pipeline.name_order_routing import (
+    build_pp_vys_abstain_rows,
+    route_pp_vys_abstain_rows,
+)
+from sinonym.services.non_person import NON_PERSON_FAILURE_REASON
 from sinonym.timo.interface import (
     FormatPattern,
     Instance,
@@ -10,6 +17,7 @@ from sinonym.timo.interface import (
     Predictor,
     PredictorConfig,
     RoutedPaperPrediction,
+    RoutedPrediction,
     RoutingInstance,
     RoutingPredictor,
     ScriptRepresentationValue,
@@ -22,6 +30,11 @@ LEGACY_SURNAME_FIRST_COUNT = 3
 LEGACY_GIVEN_FIRST_COUNT = 1
 LEGACY_TOTAL_COUNT = 4
 LEGACY_VOTE_MARGIN_COUNT = 2
+TIMO_TEST_MAX_WORKERS = 3
+TIMO_TEST_CHUNK_SIZE = 11
+TIMO_TEST_MIN_PARALLEL_BATCHES = 7
+TIMO_TEST_FORMAT_THRESHOLD = 0.7
+TIMO_TEST_MINIMUM_BATCH_SIZE = 3
 
 
 @pytest.fixture(scope="module")
@@ -37,6 +50,7 @@ def test_single_chinese_name(predictor: Predictor):
     assert result.surname == "Li"
     assert result.given_name == "Wei"
     assert result.confidence is not None
+    assert result.format_pattern is not None
     assert result.error_message is None
 
 
@@ -133,6 +147,24 @@ def test_prediction_models_keep_mutable_backwards_compatible_shapes_and_enum_typ
     second_pattern = results[1].format_pattern
     assert first_pattern is not None
     assert second_pattern is not None
+    assert first_pattern is not second_pattern
+    second_threshold = second_pattern.threshold_met
+    first_pattern.threshold_met = not first_pattern.threshold_met
+    assert second_pattern.threshold_met is second_threshold
+
+    first_pattern = FormatPattern(
+        dominant_format="surname_first",
+        confidence=1.0,
+        decision_confidence=1.0,
+        surname_first_count=2,
+        given_first_count=0,
+        total_count=2,
+        voting_count=2,
+        vote_margin_count=2,
+        vote_margin=1.0,
+        threshold_met=True,
+    )
+    second_pattern = first_pattern.copy(deep=True)
 
     second_threshold = second_pattern.threshold_met
     first_threshold = not second_threshold
@@ -176,7 +208,21 @@ def test_format_pattern_accepts_legacy_payload_and_dict_serializes_enum_values()
 
 
 def test_prediction_dict_serializes_nested_format_pattern_enum_values(predictor: Predictor):
-    result = predictor.predict_batch([Instance(name="Li Wei")])[0]
+    result = Prediction(
+        success=True,
+        format_pattern=FormatPattern(
+            dominant_format="surname_first",
+            confidence=1.0,
+            decision_confidence=1.0,
+            surname_first_count=1,
+            given_first_count=0,
+            total_count=1,
+            voting_count=1,
+            vote_margin_count=1,
+            vote_margin=1.0,
+            threshold_met=True,
+        ),
+    )
 
     assert result.dict()["format_pattern"]["dominant_format"] == "surname_first"
 
@@ -213,6 +259,80 @@ def test_empty_batch(predictor: Predictor):
     assert len(results) == 0
 
 
+def test_process_name_batch_multiprocess_preserves_batch_context(predictor: Predictor):
+    names = ["Wang An", "Yan Li", "Wu Gang", "Li Bao"]
+
+    expected = predictor.process_name_batch(names)
+    actual = predictor.process_name_batch_multiprocess(names, max_workers=2, chunk_size=1)
+
+    assert [(result.given_name, result.surname) for result in actual] == [
+        (result.given_name, result.surname) for result in expected
+    ]
+
+
+def test_process_name_batch_multiprocess_uses_config_defaults(monkeypatch):
+    predictor = Predictor(
+        PredictorConfig(
+            mp_max_workers=TIMO_TEST_MAX_WORKERS,
+            mp_chunk_size=TIMO_TEST_CHUNK_SIZE,
+            mp_start_method="spawn",
+        ),
+        ".",
+    )
+    captured = {}
+    detector = object.__getattribute__(predictor, "_detector")
+    parse_result = detector.normalize_name("Li Wei")
+
+    def fake_process_name_batches(batches, **kwargs):
+        captured["batches"] = batches
+        captured.update(kwargs)
+        return [[parse_result]]
+
+    monkeypatch.setattr(detector, "process_name_batches", fake_process_name_batches)
+
+    actual = predictor.process_name_batch_multiprocess(["Li Wei"])
+
+    assert captured["batches"] == [["Li Wei"]]
+    assert captured["parallel"] == "always"
+    assert captured["min_parallel_batches"] == 1
+    assert captured["max_workers"] == TIMO_TEST_MAX_WORKERS
+    assert captured["chunk_size"] == TIMO_TEST_CHUNK_SIZE
+    assert captured["mp_start_method"] == "spawn"
+    assert actual[0].surname == "Li"
+
+
+def test_process_name_batches_forwards_auto_parallel_options(predictor: Predictor, monkeypatch):
+    captured = {}
+    detector = object.__getattribute__(predictor, "_detector")
+    parse_result = detector.normalize_name("Li Wei")
+
+    def fake_process_name_batches(batches, **kwargs):
+        captured["batches"] = batches
+        captured.update(kwargs)
+        return [[parse_result]]
+
+    monkeypatch.setattr(detector, "process_name_batches", fake_process_name_batches)
+
+    actual = predictor.process_name_batches(
+        [["Li Wei"]],
+        parallel="never",
+        max_workers=TIMO_TEST_MAX_WORKERS,
+        chunk_size=TIMO_TEST_CHUNK_SIZE,
+        min_parallel_batches=TIMO_TEST_MIN_PARALLEL_BATCHES,
+        format_threshold=TIMO_TEST_FORMAT_THRESHOLD,
+        minimum_batch_size=TIMO_TEST_MINIMUM_BATCH_SIZE,
+    )
+
+    assert captured["batches"] == [["Li Wei"]]
+    assert captured["parallel"] == "never"
+    assert captured["max_workers"] == TIMO_TEST_MAX_WORKERS
+    assert captured["chunk_size"] == TIMO_TEST_CHUNK_SIZE
+    assert captured["min_parallel_batches"] == TIMO_TEST_MIN_PARALLEL_BATCHES
+    assert captured["format_threshold"] == TIMO_TEST_FORMAT_THRESHOLD
+    assert captured["minimum_batch_size"] == TIMO_TEST_MINIMUM_BATCH_SIZE
+    assert actual[0][0].surname == "Li"
+
+
 def test_analyze_name_batch_handles_detector_fallback_evidence(predictor: Predictor):
     detector = object.__getattribute__(predictor, "_detector")
     original_service = object.__getattribute__(detector, "_batch_analysis_service")
@@ -242,13 +362,6 @@ def test_route_pp_vys_matches_manual_pp_then_vys_then_router(predictor: Predicto
     `route_pp_vys` is a thin wrapper over exactly these steps; this test rebuilds them by hand
     and asserts the routed answers match.
     """
-    from sinonym.coretypes import BatchParseResult
-    from sinonym.detector import ChineseNameDetector
-    from sinonym.pipeline.name_order_routing import (
-        build_pp_vys_abstain_rows,
-        route_pp_vys_abstain_rows,
-    )
-
     pp_names = ["Yue Lin", "Wei Wang", "Chuang Yang"]
     # paper authors first, then the other venue authors
     vys_pool = ["Yue Lin", "Wei Wang", "Chuang Yang", "Jun Zhao", "Hui Li", "Tao Sun", "Min Guo"]
@@ -286,12 +399,10 @@ def test_route_pp_vys_matches_manual_pp_then_vys_then_router(predictor: Predicto
     # the wrapper endpoint reproduces the manual PP->VYS->router result
     endpoint = predictor.route_pp_vys(pp_names, vys_pool)
     assert [manual_surname(i) for i in range(len(pp_names))] == [r.surname for r in endpoint]
-    assert [routed_rows[i]["router_prediction"] for i in range(len(pp_names))] == [
-        r.router_prediction for r in endpoint
-    ]
+    assert [routed_rows[i]["router_prediction"] for i in range(len(pp_names))] == [r.router_prediction for r in endpoint]
 
 
-# Fixed-scenario regression: exact routed values for v0.2.9 (batch-composition dependent).
+# Fixed-scenario regression: exact routed values (batch-composition dependent).
 ROUTE_SCENARIO_PP = ["Yue Lin", "Wei Wang", "Chuang Yang"]
 ROUTE_SCENARIO_POOL = ["Yue Lin", "Wei Wang", "Chuang Yang", "Jun Zhao", "Hui Li", "Tao Sun", "Min Guo"]
 
@@ -305,7 +416,7 @@ def test_route_pp_vys_exact_values(predictor: Predictor):
         ("vys", "Chuang", "Yang"),
     ]
     # candidate parses carried through exactly
-    assert (out[1].pp.given_name, out[1].pp.surname) == ("Wang", "Wei")   # PP (paper-batch) reading
+    assert (out[1].pp.given_name, out[1].pp.surname) == ("Wang", "Wei")  # PP (paper-batch) reading
     assert (out[1].vys.given_name, out[1].vys.surname) == ("Wei", "Wang")  # VYS (venue-pool) reading
 
 
@@ -322,33 +433,60 @@ def test_route_pp_exact_values(predictor: Predictor):
     assert predictor.route_pp([]) == []
 
 
+def test_routed_candidate_format_patterns_are_independent(predictor: Predictor):
+    pp_only = predictor.route_pp(["Yue Lin", "Wei Wang"])
+    before = pp_only[1].pp.format_pattern.threshold_met
+    pp_only[0].pp.format_pattern.threshold_met = not before
+    assert pp_only[1].pp.format_pattern.threshold_met is before
+
+    pp_names = ["Yue Lin", "Wei Wang"]
+    pool = ["Yue Lin", "Wei Wang", "Jun Zhao", "Hui Li"]
+    routed = predictor.route_pp_vys(pp_names, pool)
+    pp_before = routed[1].pp.format_pattern.threshold_met
+    vys_before = routed[1].vys.format_pattern.threshold_met
+    routed[0].pp.format_pattern.threshold_met = not pp_before
+    routed[0].vys.format_pattern.threshold_met = not vys_before
+    assert routed[1].pp.format_pattern.threshold_met is pp_before
+    assert routed[1].vys.format_pattern.threshold_met is vys_before
+
+
 # --- abstain coverage -------------------------------------------------------
 # The exact-value fixtures above only route to pp/vys. These lock the abstain
 # branches, which the routers do exercise on real batches.
 
-def test_route_pp_abstain_emits_input_order_parse(predictor: Predictor):
-    """PP-only abstain = "keep the input-order parse": emit the name's normalized standalone
-    reading, NOT the (possibly reordered) PP-batch reading."""
-    pp = ["Lin Yue", "Wang Wei", "Yang Chuang", "Zhao Jun", "Li Hui"]
-    out = predictor.route_pp(pp)
 
-    assert [r.router_prediction.value for r in out] == ["abstain"] * len(pp)
-    assert all(r.success for r in out)
-    # each abstain row is the name's input-order (standalone) reading; assert every component
-    expected = {
-        "Lin Yue": ("Lin", None, "Yue"),
-        "Wang Wei": ("Wei", None, "Wang"),      # input order kept (batch would flip to Wang/Wei)
-        "Yang Chuang": ("Yang", None, "Chuang"),
-        "Zhao Jun": ("Jun", None, "Zhao"),      # input order kept (batch would flip to Zhao/Jun)
-        "Li Hui": ("Li", None, "Hui"),
-    }
-    for name, r in zip(pp, out):
-        assert (r.given_name, r.middle_name, r.surname) == expected[name]
-    # the batch reordered "Wang Wei"/"Zhao Jun"; abstain reverts to input order, so the routed
-    # answer differs from the PP candidate there (proving abstain is not a no-op)
-    for name in ("Wang Wei", "Zhao Jun"):
-        r = next(r for n, r in zip(pp, out) if n == name)
-        assert (r.given_name, r.surname) != (r.pp.given_name, r.pp.surname)
+def test_route_pp_abstain_is_script_aware(predictor: Predictor):
+    """Latin abstain keeps trailing-token surname; spaced Han abstain keeps its source boundary."""
+    # Spaced-Han zero-batch input: the source space marks surname-first order,
+    # so abstain preserves the PP parse instead of flipping to trailing surname.
+    (reordered,) = predictor.route_pp(["\u738b \u4f1f"])
+    assert reordered.router_prediction.value == "abstain"
+    assert reordered.success
+    assert (reordered.pp.given_name, reordered.pp.surname) == ("Wei", "Wang")
+    assert (reordered.given_name, reordered.middle_name, reordered.surname) == ("Wei", None, "Wang")
+    assert (reordered.given_name, reordered.surname) == (reordered.pp.given_name, reordered.pp.surname)
+
+    liu, zheng = predictor.route_pp(["\u5289 \u6587\u69ae", "\u912d \u4fe1\u529b"])
+    assert (liu.router_prediction.value, liu.given_name, liu.surname) == ("abstain", "Wen-Rong", "Liu")
+    assert (zheng.router_prediction.value, zheng.given_name, zheng.surname) == ("abstain", "Xin-Li", "Zheng")
+
+    # Latin pair: the given-first read abstains and keeps its (input-order) reading;
+    # the surname-first read is accepted as pp and keeps the batch reorder.
+    lin, wang = predictor.route_pp(["Lin Yue", "Wang Wei"])
+    assert lin.router_prediction.value == "abstain"
+    assert (lin.given_name, lin.middle_name, lin.surname) == ("Lin", None, "Yue")
+    assert (lin.given_name, lin.surname) == (lin.pp.given_name, lin.pp.surname)
+    assert wang.router_prediction.value == "pp"
+    assert (wang.given_name, wang.middle_name, wang.surname) == ("Wei", None, "Wang")
+
+
+def test_route_pp_rejects_mixed_initial_cjk_transliterations(predictor: Predictor):
+    for raw_name in ("G.\u970d\u5f17", "H\u00b7\u7eb3\u683c\u5c14\u65af"):
+        (routed,) = predictor.route_pp([raw_name])
+
+        assert not routed.success
+        assert routed.router_prediction.value == "not_person"
+        assert routed.pp.error_message == NON_PERSON_FAILURE_REASON
 
 
 def test_route_pp_vys_abstain_picks_input_order_candidate(predictor: Predictor):
@@ -376,16 +514,17 @@ def test_route_pp_vys_abstain_picks_input_order_candidate(predictor: Predictor):
     sima = out2[1]
     assert sima.router_prediction.value == "abstain"
     assert sima.input_order_candidate.value == "vys"
-    assert (sima.pp.given_name, sima.pp.middle_name, sima.pp.surname) != (sima.vys.given_name, sima.vys.middle_name, sima.vys.surname)
+    assert (sima.pp.given_name, sima.pp.middle_name, sima.pp.surname) != (
+        sima.vys.given_name,
+        sima.vys.middle_name,
+        sima.vys.surname,
+    )
     # routed answer equals the chosen (vys) candidate, component by component
     assert (sima.given_name, sima.middle_name, sima.surname) == (sima.vys.given_name, sima.vys.middle_name, sima.vys.surname)
     assert (sima.given_name, sima.middle_name, sima.surname) == ("Sima", None, "Qian")
 
 
-
 def test_route_unified_falls_back_to_pp_when_no_pool(predictor: Predictor):
-    from sinonym.timo.interface import RoutedPrediction
-
     pp_names = ["Yue Lin", "Wei Wang", "Chuang Yang"]
     pool = ["Yue Lin", "Wei Wang", "Chuang Yang", "Jun Zhao", "Hui Li", "Tao Sun", "Min Guo"]
 
@@ -400,21 +539,20 @@ def test_route_unified_falls_back_to_pp_when_no_pool(predictor: Predictor):
 
     # with pool -> delegates to route_pp_vys (vys candidate present)
     out = predictor.route(pp_names, pool)
-    assert [(r.given_name, r.surname) for r in out] == [
-        (r.given_name, r.surname) for r in predictor.route_pp_vys(pp_names, pool)
-    ]
+    assert [(r.given_name, r.surname) for r in out] == [(r.given_name, r.surname) for r in predictor.route_pp_vys(pp_names, pool)]
     assert all(r.vys is not None for r in out)
     assert isinstance(out[0].dict(), dict)
 
 
 # --- RoutingPredictor: timo 1:1 instance->prediction contract ----------------
 
+
 def test_routing_predictor_one_prediction_per_instance():
     rp = RoutingPredictor(config=PredictorConfig(), artifacts_dir=".")
     instances = [
         RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Yue Lin", "Wei Wang", "Jun Zhao"]),
         RoutingInstance(pp_names=["Zhang San"]),  # PP-only
-        RoutingInstance(pp_names=[]),              # empty paper must still emit one prediction
+        RoutingInstance(pp_names=[]),  # empty paper must still emit one prediction
     ]
     results = rp.predict_batch(instances)
 
@@ -426,3 +564,72 @@ def test_routing_predictor_one_prediction_per_instance():
     # timo reconstructs each prediction via prediction_class(**raw_pred); round-trip must hold
     rebuilt = [RoutedPaperPrediction(**p.dict()) for p in results]
     assert rebuilt == results
+
+
+def test_routing_predictor_batches_instance_analysis_through_auto_wrapper(monkeypatch):
+    rp = RoutingPredictor(
+        config=PredictorConfig(
+            parallel="never",
+            mp_max_workers=TIMO_TEST_MAX_WORKERS,
+            mp_chunk_size=TIMO_TEST_CHUNK_SIZE,
+            mp_min_parallel_batches=TIMO_TEST_MIN_PARALLEL_BATCHES,
+        ),
+        artifacts_dir=".",
+    )
+    detector = object.__getattribute__(rp, "_detector")
+    original_analyze_name_batches = detector.analyze_name_batches
+    captured = {}
+
+    def wrapped_analyze_name_batches(batches, **kwargs):
+        captured["batches"] = batches
+        captured.update(kwargs)
+        return original_analyze_name_batches(batches, **kwargs)
+
+    monkeypatch.setattr(detector, "analyze_name_batches", wrapped_analyze_name_batches)
+
+    good_vys = RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Yue Lin", "Wei Wang", "Jun Zhao"])
+    pp_only = RoutingInstance(pp_names=["Zhang San"])
+    empty = RoutingInstance(pp_names=[])
+    instances = [good_vys, pp_only, empty]
+
+    results = rp.predict_batch(instances)
+
+    assert len(results) == len(instances)
+    assert [len(result.authors) for result in results] == [2, 1, 0]
+    assert captured["batches"] == [
+        good_vys.pp_names,
+        good_vys.vys_pool_names,
+        pp_only.pp_names,
+    ]
+    assert captured["parallel"] == "never"
+    assert captured["max_workers"] == TIMO_TEST_MAX_WORKERS
+    assert captured["chunk_size"] == TIMO_TEST_CHUNK_SIZE
+    assert captured["min_parallel_batches"] == TIMO_TEST_MIN_PARALLEL_BATCHES
+
+
+def test_routing_predictor_rejects_malformed_instance_in_batch():
+    """A malformed pool in one co-batched instance should fail loudly."""
+    rp = RoutingPredictor(config=PredictorConfig(), artifacts_dir=".")
+    good_a = RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Yue Lin", "Wei Wang", "Jun Zhao"])
+    # middle: paper authors are NOT the leading slice of the pool -> pool precondition violated
+    malformed = RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Wei Wang", "Yue Lin", "Tao Sun"])
+    good_b = RoutingInstance(pp_names=["Chuang Yang"], vys_pool_names=["Chuang Yang", "Hui Li", "Tao Sun"])
+
+    with pytest.raises(ValueError, match="must start with the paper"):
+        rp.predict_batch([good_a, malformed, good_b])
+
+    assert len(rp.predict_batch([good_a])[0].authors) == len(good_a.pp_names)
+    assert len(rp.predict_batch([good_b])[0].authors) == len(good_b.pp_names)
+
+
+def test_routing_predictor_all_malformed_instances_raise():
+    """Malformed pools should not be serialized as valid empty-paper predictions."""
+    rp = RoutingPredictor(config=PredictorConfig(), artifacts_dir=".")
+    instances = [
+        RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Wei Wang", "Yue Lin", "Tao Sun"]),
+        # pool smaller than the paper -> also a pool precondition violation
+        RoutingInstance(pp_names=["Chuang Yang", "Hui Li"], vys_pool_names=["Chuang Yang"]),
+    ]
+
+    with pytest.raises(ValueError, match="must start with the paper"):
+        rp.predict_batch(instances)

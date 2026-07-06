@@ -9,18 +9,28 @@ instance and reuses it for all subsequent chunks.
 from __future__ import annotations
 
 import pickle
+from collections.abc import Callable  # noqa: TC003 - required for runtime get_type_hints().
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from multiprocessing import get_all_start_methods, get_context
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
-from sinonym.coretypes import ChineseNameConfig, ParseResult
+from sinonym.coretypes import (  # noqa: TC001 - required for runtime get_type_hints().
+    BatchParseResult,
+    ChineseNameConfig,
+    ParseResult,
+)
 
 if TYPE_CHECKING:
     from sinonym.detector import ChineseNameDetector
 
 
+_T = TypeVar("_T")
+_R = TypeVar("_R")
+_BatchRequest = tuple[list[str], float, int]
 _WORKER_DETECTOR: ChineseNameDetector | None = None
+POOL_CLOSED_MESSAGE = "process pool is closed"
+WORKER_NOT_INITIALIZED_MESSAGE = "process pool worker is not initialized"
 
 
 def validate_multiprocess_options(
@@ -47,23 +57,67 @@ def validate_multiprocess_options(
 
 def _init_worker(config: ChineseNameConfig | None, weights: tuple[float, ...] | None) -> None:
     """Initialize one detector per worker process."""
-    from sinonym.detector import ChineseNameDetector
+    from sinonym.detector import ChineseNameDetector  # noqa: PLC0415
 
-    global _WORKER_DETECTOR
+    global _WORKER_DETECTOR  # noqa: PLW0603
     worker_weights = list(weights) if weights is not None else None
-    _WORKER_DETECTOR = ChineseNameDetector(config=config, weights=worker_weights)
+    try:
+        detector = ChineseNameDetector(config=config, weights=worker_weights)
+        detector._ensure_initialized()  # noqa: SLF001 - worker startup must force detector readiness.
+    except Exception as exc:
+        message = "failed to initialize multiprocessing worker detector"
+        raise RuntimeError(message) from exc
+    _WORKER_DETECTOR = detector
 
 
 def _normalize_chunk(names: list[str]) -> list[ParseResult]:
     """Normalize one chunk inside a worker process."""
     if _WORKER_DETECTOR is None:
-        raise RuntimeError("process pool worker is not initialized")
+        raise RuntimeError(WORKER_NOT_INITIALIZED_MESSAGE)
     return [_WORKER_DETECTOR.normalize_name(name) for name in names]
 
 
-def _chunk_names(names: list[str], chunk_size: int) -> list[list[str]]:
-    """Split a name list into contiguous chunks."""
-    return [names[index : index + chunk_size] for index in range(0, len(names), chunk_size)]
+def _process_name_batch_chunk(batch_requests: list[_BatchRequest]) -> list[list[ParseResult]]:
+    """Process one chunk of independent name batches inside a worker process."""
+    if _WORKER_DETECTOR is None:
+        raise RuntimeError(WORKER_NOT_INITIALIZED_MESSAGE)
+    return [
+        _WORKER_DETECTOR.process_name_batch(
+            names,
+            format_threshold=format_threshold,
+            minimum_batch_size=minimum_batch_size,
+        )
+        for names, format_threshold, minimum_batch_size in batch_requests
+    ]
+
+
+def _analyze_name_batch_chunk(batch_requests: list[_BatchRequest]) -> list[BatchParseResult]:
+    """Analyze one chunk of independent name batches inside a worker process."""
+    if _WORKER_DETECTOR is None:
+        raise RuntimeError(WORKER_NOT_INITIALIZED_MESSAGE)
+    return [
+        _WORKER_DETECTOR.analyze_name_batch(
+            names,
+            format_threshold=format_threshold,
+            minimum_batch_size=minimum_batch_size,
+        )
+        for names, format_threshold, minimum_batch_size in batch_requests
+    ]
+
+
+def _chunk_items(items: list[_T], chunk_size: int) -> list[list[_T]]:
+    """Split a list into contiguous chunks."""
+    return [items[index : index + chunk_size] for index in range(0, len(items), chunk_size)]
+
+
+def _batch_requests(
+    batches: list[list[str]],
+    *,
+    format_threshold: float,
+    minimum_batch_size: int,
+) -> list[_BatchRequest]:
+    """Attach shared batch options to each submitted batch."""
+    return [(batch, format_threshold, minimum_batch_size) for batch in batches]
 
 
 class PersistentMultiprocessNormalizer:
@@ -111,9 +165,8 @@ class PersistentMultiprocessNormalizer:
         try:
             pickle.dumps((self._config, self._weights))
         except (pickle.PicklingError, AttributeError, TypeError) as exc:
-            raise ValueError(
-                "detector config/weights are not picklable; cannot initialize multiprocessing workers",
-            ) from exc
+            message = "detector config/weights are not picklable; cannot initialize multiprocessing workers"
+            raise ValueError(message) from exc
 
     @property
     def chunk_size(self) -> int:
@@ -125,29 +178,87 @@ class PersistentMultiprocessNormalizer:
         """Whether the underlying executor has been shut down."""
         return self._closed
 
+    def _map_chunks(self, items: list[_T], worker: Callable[[list[_T]], list[_R]]) -> list[_R]:
+        """Map chunked work through the executor and preserve item order."""
+        if self._closed:
+            raise RuntimeError(POOL_CLOSED_MESSAGE)
+        if not items:
+            return []
+
+        chunks = _chunk_items(items, self._chunk_size)
+        results: list[_R] = []
+        try:
+            for chunk_result in self._executor.map(worker, chunks, chunksize=1):
+                results.extend(chunk_result)
+        except BrokenProcessPool as exc:
+            self._executor.shutdown(wait=False, cancel_futures=True)
+            self._closed = True
+            message = (
+                "the multiprocessing worker pool broke. Either the workers failed to "
+                "initialize (on Windows/macOS, call this API from a module guarded by "
+                "`if __name__ == '__main__':`) or a worker died mid-batch (for example, "
+                "out-of-memory or a native crash)."
+            )
+            raise RuntimeError(message) from exc
+        except Exception as exc:
+            self._executor.shutdown(wait=False, cancel_futures=True)
+            self._closed = True
+            message = (
+                "multiprocessing worker task failed while processing "
+                f"{len(items)} item(s) in {len(chunks)} chunk(s) of up to {self._chunk_size}"
+            )
+            raise RuntimeError(message) from exc
+        return results
+
     def normalize_names(self, names: list[str]) -> list[ParseResult]:
         """
         Normalize names in parallel using persistent worker processes.
 
         The output list preserves the exact input order.
         """
-        if self._closed:
-            raise RuntimeError("process pool is closed")
-        if not names:
-            return []
+        return self._map_chunks(names, _normalize_chunk)
 
-        chunks = _chunk_names(names, self._chunk_size)
-        results: list[ParseResult] = []
-        try:
-            for chunk_result in self._executor.map(_normalize_chunk, chunks, chunksize=1):
-                results.extend(chunk_result)
-        except BrokenProcessPool as exc:
-            message = (
-                "failed to initialize process workers. On Windows/macOS, call this API "
-                "from a module guarded by `if __name__ == '__main__':`."
-            )
-            raise RuntimeError(message) from exc
-        return results
+    def process_name_batches(
+        self,
+        batches: list[list[str]],
+        *,
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+    ) -> list[list[ParseResult]]:
+        """
+        Process independent name batches in parallel using persistent workers.
+
+        Each inner list is processed with `ChineseNameDetector.process_name_batch()`,
+        so batch-format correction is isolated to that list. The outer and inner
+        output order both preserve the input order. For this method, `chunk_size`
+        controls how many submitted batches are sent to each worker task.
+        """
+        requests = _batch_requests(
+            batches,
+            format_threshold=format_threshold,
+            minimum_batch_size=minimum_batch_size,
+        )
+        return self._map_chunks(requests, _process_name_batch_chunk)
+
+    def analyze_name_batches(
+        self,
+        batches: list[list[str]],
+        *,
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+    ) -> list[BatchParseResult]:
+        """
+        Analyze independent name batches in parallel using persistent workers.
+
+        Each inner list is processed with `ChineseNameDetector.analyze_name_batch()`,
+        so batch-format correction and evidence are isolated to that list.
+        """
+        requests = _batch_requests(
+            batches,
+            format_threshold=format_threshold,
+            minimum_batch_size=minimum_batch_size,
+        )
+        return self._map_chunks(requests, _analyze_name_batch_chunk)
 
     def close(self) -> None:
         """Shutdown worker processes and release resources."""
@@ -156,14 +267,14 @@ class PersistentMultiprocessNormalizer:
         self._executor.shutdown(wait=True, cancel_futures=False)
         self._closed = True
 
-    def __enter__(self) -> PersistentMultiprocessNormalizer:
+    def __enter__(self) -> PersistentMultiprocessNormalizer:  # noqa: PYI034
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
         self.close()
 
 
-def normalize_names_multiprocess(
+def normalize_names_multiprocess(  # noqa: PLR0913
     names: list[str],
     *,
     max_workers: int | None = None,

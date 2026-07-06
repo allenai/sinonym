@@ -19,8 +19,15 @@ class ParsedName:
     parts appear when combined. For normalized output this is typically
     ["given", "middle", "surname"], while for original input order it may
     be ["surname", "given", "middle"], etc.
-    Component labels remain stable: `surname`/`given_name` always identify
-    those components regardless of `order`.
+
+    `order` is a positional label sequence, not a set: a role may legitimately
+    repeat. For example `parsed_original_order` for "J. Ming K. Zhang" is
+    ["middle", "given", "middle", "surname"] with middle_tokens ["J", "K"] — the
+    two "middle" entries flank the given name. Consumers rebuilding the token
+    stream must walk `order` in sequence and draw from each role's token list
+    (surname_tokens/given_tokens/middle_tokens) in order, never assuming a role
+    appears at most once. Component labels remain stable: `surname`/`given_name`
+    always identify those components regardless of `order`.
     """
 
     surname: str
@@ -30,7 +37,8 @@ class ParsedName:
     # Optional middle name components (e.g., single-letter initials)
     middle_name: str = ""
     middle_tokens: list[str] = field(default_factory=list)
-    # Component order helper (values drawn from {"given","middle","surname"})
+    # Positional component-order labels (each entry one of "given"/"middle"/"surname";
+    # a label may repeat, e.g. ["middle", "given", "middle", "surname"]).
     order: list[str] = field(default_factory=lambda: ["given", "middle", "surname"])
 
 
@@ -112,7 +120,7 @@ class ParseResult:
                     self.parsed,
                     self.parsed_original_order,
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - user-provided callbacks may raise arbitrary exceptions.
                 return ParseResult.failure(str(e))
         return self
 
@@ -121,6 +129,9 @@ class ParseResult:
         if self.success:
             try:
                 result = f(self.result)
+            except Exception as e:  # noqa: BLE001 - user-provided callbacks may raise arbitrary exceptions.
+                return ParseResult.failure(str(e))
+            else:
                 # Preserve the original compound surname if the result doesn't already have one
                 if result.success and result.original_compound_surname is None:
                     return ParseResult(
@@ -132,8 +143,6 @@ class ParseResult:
                         result.parsed_original_order,
                     )
                 return result
-            except Exception as e:
-                return ParseResult.failure(str(e))
         return self
 
 
@@ -196,6 +205,7 @@ class NameOrderEvidence:
     individual_format: NameFormat = NameFormat.MIXED
     selected_format: NameFormat = NameFormat.MIXED
     selected_surname_position: str = "unknown"
+    selected_surname_token_count: int = 0
     first_token_surname_frequency: float | None = None
     last_token_surname_frequency: float | None = None
     selected_surname_frequency: float | None = None

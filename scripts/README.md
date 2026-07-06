@@ -5,7 +5,7 @@ Utility scripts for benchmarking, profiling, testing, and model training.
 ## Active Scripts
 
 ### `check_test_status.py`
-Runs the full test suite and reports individual test case failures with detailed diagnostics. Runs performance tests separately, then exits 0/1 based on whether the failure count and failure signatures match the expected baseline configured in `scripts/check_test_status.py`. Improvements (fewer failures) also pass when the remaining failures are all from the known baseline; regressions or unexpected failure signatures fail.
+Runs the full test suite and reports individual test case failures with detailed diagnostics. Runs performance tests separately, then exits 0/1 based on whether the failure count and failure signatures exactly match the expected baseline configured in `scripts/check_test_status.py`. Regressions, unexpected failure signatures, or missing expected baseline signatures fail until the configured baseline is intentionally updated.
 
 ```bash
 uv run python scripts/check_test_status.py
@@ -45,6 +45,16 @@ Persistent multi-process throughput and parity check. Compares single-process th
 
 ```bash
 uv run python scripts/profile_multiprocess.py --names 12000 --warmup 3000 --runs 3 --workers 6 --chunk-size 64
+```
+
+### `verify_multiprocess.py`
+Cross-platform multiprocessing verifier. Checks correctness parity for local,
+one-shot, auto-wrapper, and persistent-pool paths, then reports throughput for
+flat independent names and independent author-list batches.
+
+```bash
+uv run python scripts/verify_multiprocess.py --json-output scratch/mp_verify_windows.json
+UV_PROJECT_ENVIRONMENT=/tmp/sinonym-wsl-venv uv run python scripts/verify_multiprocess.py --json-output scratch/mp_verify_wsl.json
 ```
 
 ### `train_ml_classifier_for_chinese_vs_japanese.py`

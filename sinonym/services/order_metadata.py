@@ -26,7 +26,8 @@ def _given_middle_order(given_tokens: list[str], middle_tokens: list[str]) -> li
     if "middle" not in labels:
         compact_labels = _compact_given_middle_labels(given_tokens, middle_tokens)
         labels = compact_labels or [*labels, "middle"]
-    return _compact_component_labels(labels)
+        return _compact_component_labels(labels)
+    return labels or ["given"]
 
 
 def _given_middle_labels(given_tokens: list[str]) -> list[str]:

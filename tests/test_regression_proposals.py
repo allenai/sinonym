@@ -1,4 +1,4 @@
-# ruff: noqa: PLR2004, SLF001
+# ruff: noqa: SIM117, SLF001
 """Regression tests that implement the proposals tracked in TEST_PROPOSAL.md."""
 
 from __future__ import annotations
@@ -11,14 +11,12 @@ import unicodedata
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.coretypes import NameFormat, ParseCandidate
-from sinonym.pipeline import name_order_routing
 from sinonym.resources import open_csv_reader, resource_path
 from sinonym.services import ethnicity
 from sinonym.services.batch_analysis import LATIN_ONLY_REPRESENTATION, BatchAnalysisService, BatchCandidateEntry
@@ -376,19 +374,19 @@ def test_total_given_frequency_denominator_matches_finalized_map(detector):
 
 def test_compound_surname_log_probabilities_use_compound_inclusive_total(detector):
     data_service = detector._data_service
-    surnames_raw, surname_frequencies = data_service._build_surname_data()
+    surname_romanizations = data_service._load_surname_romanizations()
+    surnames_raw, surname_frequencies, _surname_aliases = data_service._build_surname_data(surname_romanizations)
     base_total = sum(surname_frequencies.values())
 
     compound_surnames = _build_compound_surnames(surnames_raw)
-    compound_hyphen_map = data_service._build_compound_hyphen_map(compound_surnames)
     surname_log_probabilities = data_service._build_surname_log_probabilities(
         surname_frequencies,
         compound_surnames,
-        compound_hyphen_map,
+        surname_romanizations,
     )
 
     # Replay compound updates to derive the expected denominator.
-    _, replay_frequencies = data_service._build_surname_data()
+    _, replay_frequencies, _surname_aliases = data_service._build_surname_data(surname_romanizations)
     compound_delta = 0.0
     for compound_surname in compound_surnames:
         parts = compound_surname.split()
@@ -576,9 +574,9 @@ def test_strong_given_first_batch_still_overrides_ambiguous_name(detector):
     ("names", "expected_results"),
     [
         (["Li Yang Hsu", "Hanwei Cao"], ["Li-Yang Hsu", "Han-Wei Cao"]),
-        (["Yunbo Hu", "Chu Zhang"], ["Yun-Bo Hu", "Chu Zhang"]),
+        (["Yunbo Hu", "Fei Yu"], ["Yun-Bo Hu", "Fei Yu"]),
         (["J. Liu", "Jing Wan"], ["J Liu", "Jing Wan"]),
-        (["Qinggong Ping", "Su Wang"], ["Qing-Gong Ping", "Su Wang"]),
+        (["Qinggong Ping", "Hao Fei"], ["Qing-Gong Ping", "Hao Fei"]),
     ],
 )
 def test_batch_format_uses_weighted_tie_break_with_weak_participants(detector, names, expected_results):
@@ -874,33 +872,16 @@ class BrokenJapaneseProbabilityModel:
         return ["jp"]
 
 
-def test_japanese_probability_degrades_when_loaded_model_errors(caplog):
+def test_japanese_probability_raises_when_loaded_model_errors(caplog):
     classifier = ethnicity._MLJapaneseClassifier(confidence_threshold=0.8)
     classifier._available = True
     classifier._model = BrokenJapaneseProbabilityModel()
 
     with caplog.at_level(logging.WARNING, logger=ethnicity.__name__):
-        assert classifier.japanese_probability("\u5c71\u7530") == 0.0
+        with pytest.raises(RuntimeError, match="probability failed"):
+            classifier.japanese_probability("\u5c71\u7530")
 
     assert "ML Japanese classifier probability error" in caplog.text
-    assert any(record.exc_info for record in caplog.records)
-
-
-def test_japanese_probability_routing_degrades_when_service_errors(caplog):
-    def raise_probability_error(_name):
-        message = "boom"
-        raise RuntimeError(message)
-
-    context = SimpleNamespace(
-        _ethnicity_service=SimpleNamespace(
-            japanese_probability=raise_probability_error,
-        ),
-    )
-
-    with caplog.at_level(logging.WARNING, logger=name_order_routing.__name__):
-        assert name_order_routing._japanese_probability_for_routing(context, "\u5c71\u7530") == 0.0
-
-    assert "Japanese probability routing failed" in caplog.text
     assert any(record.exc_info for record in caplog.records)
 
 
@@ -908,6 +889,10 @@ def test_non_person_inputs_are_rejected_before_parsing(detector):
     cases = [
         "\u5ef6\u5b89\u5927\u5b66 \u7269\u7406\u4e0e\u7535\u5b50\u4fe1\u606f\u5b66\u9662",
         "Tian Qiang Zhou Hui Zhu Rui",
+        "G.\u970d\u5f17",
+        "H\u00b7\u7eb3\u683c\u5c14\u65af",
+        "J\u00b7G\u00b7\u9a6c\u5c14\u94a6\u51ef\u7ef4\u5947",
+        "\u7f57\u4f2f\u7279\u00b7M\u00b7\u5a01\u6069\u65af\u5766",
     ]
 
     for raw_name in cases:
@@ -953,6 +938,83 @@ def test_short_cjk_non_person_marker_gate_preserves_person_names(detector, raw_n
 
     assert result.success, f"{raw_name!r}: expected accepted name, got {result.error_message!r}"
     assert result.result == expected
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("Kai \u51ef Xi \u4e60", "Kai Xi"),
+        ("Hongqing \u7ea2\u5e86 Dai \u4ee3", "Hong-Qing Dai"),
+        ("Zhang \u5f20 Wei \u4f1f A \u963f", "Wei A Zhang"),
+        # Genuine Chinese names carrying a trailing Latin middle initial: the initial
+        # is space-separated from the Han tokens (no dot bridges the two scripts), so
+        # the mixed-initial transliteration gate must not reject them.
+        ("\u674e \u5c0f\u660e G.", "Xiao-Ming G Li"),
+        ("\u674e \u5c0f\u660e H. K.", "Xiao-Ming H K Li"),
+    ],
+)
+def test_mixed_initial_transliteration_gate_preserves_bilingual_names(detector, raw_name, expected):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success, f"{raw_name!r}: expected accepted name, got {result.error_message!r}"
+    assert result.result == expected
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # The bridge requires DIRECT adjacency between the Latin initial and the Han
+        # run. Whitespace between the initial and the Han tokens breaks the bridge, so
+        # the mixed-initial transliteration gate must not reject these genuine Chinese
+        # names that merely carry a Latin initial across a space.
+        "王 M. 小明",  # 王 M. 小明 (dot's Han-side neighbour is a space)
+        "M.D. 王小明",  # M.D. 王小明 (trailing dot's Han-side neighbour is a space)
+        "G. 李小明",  # G. 李小明 (leading initial, space before Han)
+        "李 小明 . G",  # 李 小明 . G (dot flanked by spaces)
+        "李 小明 · G",  # 李 小明 · G (interpunct flanked by spaces)
+        "李 小明 G.",  # 李 小明 G. (trailing initial, already accepted)
+    ],
+)
+def test_mixed_initial_gate_ignores_whitespace_separated_initials(detector, raw_name):
+    """A separator only bridges when it is directly adjacent to both scripts.
+
+    Whitespace between the Latin initial and the Han run must break the bridge, so
+    the non-person gate must not fire for these inputs (they should parse, or fail
+    for some reason other than the non-person rejection).
+    """
+    result = detector.normalize_name(raw_name)
+
+    assert result.success or result.error_message != NON_PERSON_FAILURE_REASON, f"{raw_name!r}: wrongly rejected as non-person"
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "G.霍弗",  # G.霍弗 (ASCII full stop)
+        "G·霍弗",  # G·霍弗 (U+00B7 middle dot, legacy set)
+        "G‧霍弗",  # G‧霍弗 (U+2027 hyphenation point, sep_pattern-only)
+        "G∙霍弗",  # G∙霍弗 (U+2219 bullet operator, sep_pattern-only)
+        "G⋅霍弗",  # G⋅霍弗 (U+22C5 dot operator, sep_pattern-only)
+        "J·G·马尔钦凯维奇",  # J·G·马尔钦凯维奇 (chained initials)
+        "罗伯特·M·威恩斯坦",  # 罗伯特·M·威恩斯坦 (Han-flanked initial)
+        # Multi-character separator RUNS between the Latin initial and the Han run
+        # must bridge too: sep_pattern matches whole runs, so a run scan sees the
+        # Latin/CJK characters flanking the run even though the interior separators
+        # only neighbour other separators.
+        "G..霍弗",  # G..霍弗 (doubled ASCII full stop)
+        "G.·霍弗",  # G.·霍弗 (mixed full stop + interpunct)
+        "G··霍弗",  # G··霍弗 (doubled interpunct)
+        "H··纳格尔斯",  # H··纳格尔斯 (doubled interpunct, longer Han run)
+    ],
+)
+def test_mixed_initial_gate_rejects_separator_variant_transliterations(detector, raw_name):
+    """Every separator that ``config.sep_pattern`` recognises must bridge a Latin
+    initial to its Han transliteration, not just the four legacy dot characters,
+    and multi-character separator runs must bridge as well."""
+    result = detector.normalize_name(raw_name)
+
+    assert not result.success
+    assert result.error_message == NON_PERSON_FAILURE_REASON
 
 
 def test_cjk_non_person_markers_do_not_match_internal_substrings(detector):
@@ -1069,7 +1131,6 @@ def test_batch_tie_break_heuristics_use_normalized_tokenization(detector):
     dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(
         name_candidates,
         detector._normalizer,
-        detector._data,
     )
     assert dominant == NameFormat.GIVEN_FIRST
 

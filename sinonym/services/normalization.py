@@ -132,6 +132,10 @@ class NormalizationService:
         """
         return self._text_normalizer.normalize_token_light(token)
 
+    def contains_cjk(self, text: str) -> bool:
+        """Return whether text contains any configured CJK character."""
+        return bool(self._config.cjk_pattern.search(text))
+
     def get_normalized(self, token: str, norm_cache: dict[str, str]) -> str:
         """
         Get normalized form of token using cache, with fallback to normalization.

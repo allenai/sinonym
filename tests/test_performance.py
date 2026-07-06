@@ -47,8 +47,8 @@ class TestChineseNameDetectorPerformance:
         random.seed(42)
 
         # Use surnames from our data structures
-        chinese_surnames = list(detector._data.surnames)[:200]  # Top 200 surnames
-        chinese_givens = list(detector._data.given_names)[:500]  # Top 500 given names
+        chinese_surnames = sorted(detector._data.surnames)[:200]  # Stable surname sample
+        chinese_givens = sorted(detector._data.given_names)[:500]  # Stable given-name sample
 
         # Common non-Chinese patterns
         western_first = [

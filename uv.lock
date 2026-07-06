@@ -690,7 +690,7 @@ wheels = [
 
 [[package]]
 name = "sinonym"
-version = "0.2.9"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "joblib" },
@@ -734,7 +734,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.0.0" },
     { name = "requests", specifier = ">=2.31" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-    { name = "scikit-learn", specifier = ">=1.2,<2" },
+    { name = "scikit-learn", specifier = "==1.7.1" },
     { name = "scipy", specifier = ">=1.10" },
     { name = "skops", specifier = ">=0.9" },
 ]
