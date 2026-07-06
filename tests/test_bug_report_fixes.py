@@ -419,7 +419,6 @@ def test_name_order_evidence_uses_cached_raw_tokens(detector):
         [entry],
         [result],
         NoApplyNormalizer(detector._normalizer),
-        detector._data,
         BatchFormatPattern(NameFormat.SURNAME_FIRST, 1.0, 1, 0, 1, False, 1.0),
     )
 

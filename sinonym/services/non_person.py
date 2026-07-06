@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from sinonym.services.name_lookup import SurnameResolver
+
 if TYPE_CHECKING:
     from sinonym.coretypes import ChineseNameConfig
     from sinonym.services.initialization import NameDataStructures
@@ -16,7 +18,6 @@ MIN_CJK_NON_PERSON_PREFIX_CHARS = 2
 MIN_AUTHOR_LIST_LATIN_TOKENS = 6
 MIN_AUTHOR_LIST_SURNAME_TOKENS = 3
 MIN_TRANSLITERATED_CJK_CHARS = 2
-DOMINANT_CHINESE_SURNAME_FREQ_MIN = 10_000.0
 
 LATIN_WORD_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)?")
 ASCII_WORD_RE = re.compile(r"[A-Za-z]+")
@@ -54,6 +55,7 @@ class NonPersonInputDetectionService:
         self._config = config
         self._normalizer = normalizer
         self._data = data
+        self._surname_resolver = SurnameResolver(self._data, self._normalizer)
 
     def failure_reason(self, raw_name: str) -> str | None:
         """Return a failure reason when the input is clearly not one personal name."""
@@ -116,8 +118,7 @@ class NonPersonInputDetectionService:
             return False
 
         normalized_tokens = [self._normalizer.norm(token) for token in tokens]
-        first_key = normalized_tokens[0]
-        if self._data.get_surname_freq(first_key) >= DOMINANT_CHINESE_SURNAME_FREQ_MIN:
+        if self._surname_resolver.evidence_is_dominant_surname(tokens[0]):
             return True
 
         first_two = " ".join(normalized_tokens[:2])
@@ -223,6 +224,8 @@ class NonPersonInputDetectionService:
         normalized = " ".join(self._normalizer.norm(part) for part in parts)
         compact = normalized.replace(" ", "")
 
+        # Author-list detection combines split-token membership with compound
+        # shape maps; keep this local until the resolver owns compound answers.
         return bool(
             self._data.is_surname(token, normalized)
             or self._data.is_surname(token, compact)

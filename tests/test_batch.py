@@ -14,9 +14,17 @@ from sinonym.coretypes import (
     BatchParseResult,
     NameFormat,
     NameOrderEvidence,
+    ParseCandidate,
     ParseResult,
 )
-from sinonym.services.batch_analysis import BatchAnalysisDependencies, BatchAnalysisOptions, BatchAnalysisService
+from sinonym.services.batch_analysis import (
+    LATIN_ONLY_REPRESENTATION,
+    BatchAnalysisDependencies,
+    BatchAnalysisOptions,
+    BatchAnalysisService,
+    BatchCandidateEntry,
+    SurnameEndpointSpan,
+)
 
 # ===================================================================
 # BATCH FORMAT DETECTION TESTS
@@ -264,6 +272,67 @@ def test_name_order_evidence_uses_compound_alias_surname_span_frequency(detector
     assert evidence.selected_surname_frequency > 0
 
 
+def test_selected_endpoint_frequency_evidence_uses_resolved_span_keys():
+    """Selected-span frequencies must not re-derive already-resolved lookup keys."""
+
+    class ResolvedKeyOnlyResolver:
+        def evidence_frequency_for_key(self, key: str) -> float:
+            return {"resolved-selected": 10.0, "resolved-alternate": 2.0}[key]
+
+        def evidence_frequency(self, token: str) -> float:
+            message = f"unexpected token-frequency lookup for resolved key {token!r}"
+            raise AssertionError(message)
+
+    service = BatchAnalysisService.__new__(BatchAnalysisService)
+    selected_span = SurnameEndpointSpan(
+        position="last",
+        start=1,
+        end=2,
+        lookup_key="resolved-selected",
+    )
+
+    selected_freq, alternate_freq, ratio = service._selected_endpoint_frequency_evidence(  # noqa: SLF001
+        selected_span,
+        ["raw-first", "raw-last"],
+        ["resolved-alternate", "resolved-selected"],
+        {},
+        ResolvedKeyOnlyResolver(),
+    )
+
+    assert selected_freq == 10.0
+    assert alternate_freq == 2.0
+    assert ratio == 5.0
+
+
+def test_batch_tie_break_uses_parser_policy_surname_frequency(detector):
+    """Fallback batch decisions use parser scoring policy, not as-written evidence."""
+    dummy_candidate = ParseCandidate(
+        surname_tokens=["Chong"],
+        given_tokens=["Chien"],
+        score=0.0,
+        format=NameFormat.SURNAME_FIRST,
+    )
+    name_candidates = [
+        BatchCandidateEntry(
+            "Chong Chien",
+            [dummy_candidate],
+            dummy_candidate,
+            {},
+            LATIN_ONLY_REPRESENTATION,
+        ),
+    ]
+
+    dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(  # noqa: SLF001
+        name_candidates,
+        detector._normalizer,  # noqa: SLF001
+    )
+
+    assert dominant == NameFormat.SURNAME_FIRST
+    assert detector._surname_resolver.evidence_frequency("Chong") < detector._surname_resolver.evidence_frequency(  # noqa: SLF001
+        "Chien",
+    )
+
+
 def test_name_order_evidence_exposes_all_caps_cue(detector):
     """All-caps source tokens are exposed without changing the parse decision."""
     names = ["Ren Qing FENG", "Li Ying DU", "Zhen Quan GUO"]
@@ -297,7 +366,6 @@ def test_name_order_evidence_does_not_normalize_rejected_input():
     result = service.analyze_name_batch(
         [rejected_name],
         NormalizerThatMustNotRun(),
-        data=None,
         formatting_service=None,
         options=BatchAnalysisOptions(minimum_batch_size=1),
     )

@@ -193,6 +193,7 @@ from sinonym.services import (
     ParseResult,
     PinyinCacheService,
     ServiceContext,
+    SurnameResolver,
 )
 from sinonym.services.order_metadata import original_component_order
 from sinonym.services.process_pool import PersistentMultiprocessNormalizer
@@ -262,6 +263,7 @@ class ChineseNameDetector:
         self._normalizer = NormalizationService(self._config, self._cache_service)
         self._data_service = DataInitializationService(self._config, self._cache_service, self._normalizer)
         self._data: NameDataStructures | None = None
+        self._surname_resolver: SurnameResolver | None = None
         self._weights = weights  # Store weights to pass to parsing service
 
         # Service instances (initialized after data loading)
@@ -290,6 +292,7 @@ class ChineseNameDetector:
         if self._data is not None:
             # Create shared context to reduce dependency injection complexity
             context = ServiceContext(self._config, self._normalizer, self._data)
+            self._surname_resolver = SurnameResolver(self._data, self._normalizer)
 
             self._ethnicity_service = EthnicityClassificationService(context)
             self._parsing_service = NameParsingService(context, weights=self._weights)
@@ -302,6 +305,7 @@ class ChineseNameDetector:
                     min_tokens_required=self._config.min_tokens_required,
                     individual_parser=self.normalize_name,
                     input_failure=self._initial_input_failure,
+                    surname_resolver=self._surname_resolver,
                 ),
             )
 
@@ -314,12 +318,17 @@ class ChineseNameDetector:
             # Initialize services
             self._initialize_services()
 
+    def _require_surname_resolver(self) -> SurnameResolver:
+        """Return the initialized surname resolver."""
+        if self._surname_resolver is not None:
+            return self._surname_resolver
+        message = "surname resolver is not initialized"
+        raise RuntimeError(message)
+
     def _is_surname_group(self, tokens: list[str], normalized_cache: dict[str, str]) -> bool:
         """Return whether a romanized Han token group is a surname component."""
         if len(tokens) == 1:
-            token = tokens[0]
-            normalized = self._normalizer.get_normalized(token, normalized_cache)
-            return self._data.is_surname(token, normalized)
+            return self._require_surname_resolver().parser_is_surname(tokens)
 
         normalized_tokens = [self._normalizer.get_normalized(token, normalized_cache) for token in tokens]
         spaced = " ".join(normalized_tokens)
@@ -346,18 +355,19 @@ class ChineseNameDetector:
         return spaced in CURATED_COMPOUND_SURNAME_FORMS or compact in CURATED_COMPOUND_SURNAME_FORMS
 
     def _surname_group_strength(self, pinyin_tokens: list[str] | tuple[str, ...], han_group: str = "") -> float:
-        """Return the strongest surname-frequency signal for a Han/pinyin group."""
+        """Return the strongest surname-frequency signal for a Han-backed pinyin group."""
         if not pinyin_tokens:
             return 0.0
+        if not han_group:
+            message = "_surname_group_strength requires Han provenance for pinyin tokens"
+            raise ValueError(message)
 
-        data = self._data
-        assert data is not None
-        keys = [han_group] if han_group else []
-        if len(pinyin_tokens) == 1 and not han_group:
-            keys.append(pinyin_tokens[0])
-        elif len(pinyin_tokens) > 1:
-            keys.extend((" ".join(pinyin_tokens), "".join(pinyin_tokens)))
-        return max((data.get_surname_freq(key) for key in keys if key), default=0.0)
+        surname_resolver = self._require_surname_resolver()
+        frequencies = [surname_resolver.parser_frequency((han_group,))]
+        if len(pinyin_tokens) > 1:
+            frequencies.append(surname_resolver.parser_frequency(pinyin_tokens))
+            frequencies.append(surname_resolver.parser_frequency(("".join(pinyin_tokens),)))
+        return max(frequencies, default=0.0)
 
     def _has_only_cjk_token_groups(self, normalized_input: NormalizedInput) -> bool:
         """Return whether separator-delimited input tokens are all CJK characters."""
@@ -412,9 +422,7 @@ class ChineseNameDetector:
 
     def _allows_surname_like_given_split(self, normalized_input: NormalizedInput) -> bool:
         """Return whether surname-like fused given tokens may be gold-split."""
-        return not any(
-            self._config.cjk_pattern.search(char) for token in normalized_input.tokens for char in token
-        )
+        return not any(self._config.cjk_pattern.search(char) for token in normalized_input.tokens for char in token)
 
     def _normalize_camel_case_pair(self, normalized_input: NormalizedInput) -> ParseResult | None:
         """Parse a whole-input camelCase pair using surname-first provenance."""
@@ -423,15 +431,14 @@ class ChineseNameDetector:
             return None
 
         first, last = tokens
-        first_key = self._normalizer.norm_light(first)
-        last_key = self._normalizer.norm_light(last)
-        first_is_surname = self._data.is_surname(first, first_key)
-        last_is_surname = self._data.is_surname(last, last_key)
+        surname_resolver = self._require_surname_resolver()
+        first_is_surname = surname_resolver.evidence_is_surname(first)
+        last_is_surname = surname_resolver.evidence_is_surname(last)
         if not first_is_surname and not last_is_surname:
             return None
 
-        first_freq = self._data.get_surname_freq_as_written(first_key)
-        last_freq = self._data.get_surname_freq_as_written(last_key)
+        first_freq = surname_resolver.evidence_frequency(first)
+        last_freq = surname_resolver.evidence_frequency(last)
         last_wins = last_is_surname and (
             not first_is_surname
             or last.isupper()
@@ -541,16 +548,15 @@ class ChineseNameDetector:
 
     def _bilingual_pair_surname_strength(self, pair) -> float:
         """Return surname strength from the Han side of an aligned bilingual pair."""
-        han_freq = self._data.get_surname_freq(pair.han_token)
+        surname_resolver = self._require_surname_resolver()
+        han_freq = surname_resolver.parser_frequency((pair.han_token,))
         if len(pair.han_pinyin) == 1:
             return han_freq
 
-        pinyin_key = " ".join(pair.han_pinyin)
-        compact_key = "".join(pair.han_pinyin)
         return max(
             han_freq,
-            self._data.get_surname_freq(pinyin_key),
-            self._data.get_surname_freq(compact_key),
+            surname_resolver.parser_frequency(pair.han_pinyin),
+            surname_resolver.parser_frequency(("".join(pair.han_pinyin),)),
         )
 
     def _normalize_compact_han_roman_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
@@ -678,11 +684,14 @@ class ChineseNameDetector:
         if len(han_pinyin) >= self._config.min_tokens_required:
             first_two_pinyin = list(han_pinyin[:2])
             first_two_han = han_group[:2]
-            if self._data.get_surname_freq(first_two_han) > 0 or self._is_compound_surname_group(first_two_pinyin, {}):
+            if self._require_surname_resolver().parser_frequency((first_two_han,)) > 0 or self._is_compound_surname_group(
+                first_two_pinyin,
+                {},
+            ):
                 return 2
 
         first_han = han_group[0]
-        if self._data.get_surname_freq(first_han) > 0:
+        if self._require_surname_resolver().parser_frequency((first_han,)) > 0:
             return 1
         return 0
 
@@ -691,11 +700,14 @@ class ChineseNameDetector:
         if len(han_pinyin) >= self._config.min_tokens_required:
             last_two_pinyin = list(han_pinyin[-2:])
             last_two_han = han_group[-2:]
-            if self._data.get_surname_freq(last_two_han) > 0 or self._is_compound_surname_group(last_two_pinyin, {}):
+            if self._require_surname_resolver().parser_frequency((last_two_han,)) > 0 or self._is_compound_surname_group(
+                last_two_pinyin,
+                {},
+            ):
                 return 2
 
         last_han = han_group[-1]
-        if self._data.get_surname_freq(last_han) > 0:
+        if self._require_surname_resolver().parser_frequency((last_han,)) > 0:
             return 1
         return 0
 
@@ -798,8 +810,9 @@ class ChineseNameDetector:
         if not first_group or not last_group:
             return False
 
-        first_freq = self._data.get_surname_freq(first_group[0])
-        last_freq = self._data.get_surname_freq(last_group[0])
+        surname_resolver = self._require_surname_resolver()
+        first_freq = surname_resolver.parser_frequency((first_group[0],))
+        last_freq = surname_resolver.parser_frequency((last_group[0],))
         if last_freq <= 0:
             return first_freq > 0
         return first_freq / last_freq >= SPACED_HAN_PREFIX_SURNAME_RATIO_MIN
@@ -883,16 +896,15 @@ class ChineseNameDetector:
             token1, token2 = tokens[0], tokens[1]
 
             # Check if first token can be a surname
-            token1_norm = normalized_input.norm_map.get(token1, self._normalizer.norm(token1))
-            token1_is_surname = self._data.is_surname(token1, token1_norm)
+            surname_resolver = self._require_surname_resolver()
+            token1_is_surname = surname_resolver.parser_is_surname((token1,))
 
             # For 2-character all-Chinese names, use surname-first if token1 is a valid surname
             if token1_is_surname:
                 best_result = ([token1], [token2])
             else:
                 # Fallback: if token1 is not a surname, try token2 as surname (less common but possible)
-                token2_norm = normalized_input.norm_map.get(token2, self._normalizer.norm(token2))
-                token2_is_surname = self._data.is_surname(token2, token2_norm)
+                token2_is_surname = surname_resolver.parser_is_surname((token2,))
                 best_result = ([token2], [token1]) if token2_is_surname else None
 
             if best_result:
@@ -1165,7 +1177,6 @@ class ChineseNameDetector:
         return self._batch_analysis_service.analyze_name_batch(
             names,
             self._normalizer,
-            self._data,
             self._formatting_service,
             BatchAnalysisOptions(
                 minimum_batch_size=minimum_batch_size,
@@ -1213,7 +1224,6 @@ class ChineseNameDetector:
         return self._batch_analysis_service.detect_batch_format(
             names,
             self._normalizer,
-            self._data,
             format_threshold=format_threshold,
         )
 

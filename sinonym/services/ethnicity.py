@@ -25,11 +25,11 @@ from sinonym.chinese_names_data import (
     WESTERN_NAMES,
 )
 from sinonym.coretypes import ParseResult
+from sinonym.services.name_lookup import SurnameResolver
 from sinonym.utils.string_manipulation import StringManipulationUtils
 from sinonym.utils.thread_cache import ThreadLocalCache
 
 MIN_COMPOUND_SURNAME_TOKEN_COUNT = 3
-DOMINANT_CHINESE_SURNAME_FREQ_MIN = 10_000.0
 JAPANESE_CLASSIFIER_REJECTION = "japanese"
 JAPANESE_CLASSIFIER_RUNTIME_ERROR = "ML Japanese classifier failed"
 
@@ -136,6 +136,7 @@ class EthnicityClassificationService:
             self._config = context_or_config
             self._normalizer = normalizer
             self._data = data
+        self._surname_resolver = SurnameResolver(self._data, self._normalizer)
         # Initialize consolidated ML Japanese classifier
         self._ml_classifier = _MLJapaneseClassifier(confidence_threshold=0.8)
 
@@ -387,12 +388,11 @@ class EthnicityClassificationService:
             and StringManipulationUtils.remove_spaces(tokens[-1]).lower() in OVERLAPPING_KOREAN_SURNAMES,
         )
 
-    def _first_token_surname_frequency(self, tokens: tuple[str, ...]) -> float:
-        """Return the Chinese surname frequency for the first token."""
+    def _first_token_has_dominant_chinese_surname(self, tokens: tuple[str, ...]) -> bool:
+        """Return whether the first token has dominant as-written Chinese surname evidence."""
         if not tokens:
-            return 0.0
-        key = StringManipulationUtils.remove_spaces(tokens[0]).lower()
-        return self._data.get_surname_freq(key)
+            return False
+        return self._surname_resolver.evidence_is_dominant_surname(tokens[0])
 
     def _calculate_non_chinese_patterns_unified(
         self,
@@ -427,7 +427,7 @@ class EthnicityClassificationService:
         # Early returns for definitive cases.
         if analysis["surname_type"] == "chinese_only":
             trailing_korean_pair = self._has_trailing_overlapping_korean_surname(tokens) and analysis["korean_given_pairs"]
-            if not trailing_korean_pair or self._first_token_surname_frequency(tokens) >= DOMINANT_CHINESE_SURNAME_FREQ_MIN:
+            if not trailing_korean_pair or self._first_token_has_dominant_chinese_surname(tokens):
                 return 0.0  # Block Korean scoring for non-overlapping Chinese surnames
         if analysis["surname_type"] == "korean_only":
             return 10.0  # Definitive Korean evidence
@@ -523,12 +523,6 @@ class EthnicityClassificationService:
         """Calculate Chinese surname strength (simplified from original)."""
         chinese_surname_strength = 0.0
 
-        # Create key-to-normalized mapping
-        key_to_normalized = {}
-        for key in expanded_keys:
-            # Handle both original and normalized forms
-            key_to_normalized[key] = normalized_cache.get(key, key)
-
         # Local memoization for repeated split/component checks
         split_result_cache: dict[str, list[str] | None] = {}
         split_component_validity_cache: dict[tuple[str, ...], bool] = {}
@@ -539,12 +533,11 @@ class EthnicityClassificationService:
             clean_key_lower = clean_key.lower()
 
             # Check if this is a Chinese surname
-            normalized_key = StringManipulationUtils.remove_spaces(key_to_normalized.get(key, key))
-            is_chinese_surname = self._data.is_surname(clean_key, normalized_key) or clean_key_lower in self._data.surnames
+            is_chinese_surname = self._surname_resolver.evidence_is_surname(clean_key)
 
             if is_chinese_surname:
                 # Get frequency
-                surname_freq = self._data.get_surname_freq(clean_key_lower) or self._data.get_surname_freq(normalized_key)
+                surname_freq = self._surname_resolver.evidence_frequency(clean_key)
 
                 if surname_freq > 0:
                     if surname_freq >= 10000:

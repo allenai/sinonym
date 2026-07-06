@@ -55,8 +55,8 @@ import pypinyin
 from sinonym import ChineseNameDetector
 from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.resources import open_csv_reader
+from sinonym.services.name_lookup import SurnameResolver
 from sinonym.services.parsing import CURATED_COMPOUND_TARGETS
-from sinonym.utils.string_manipulation import StringManipulationUtils
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "sinonym" / "data"
 
@@ -150,10 +150,11 @@ def mine_byline(parquet_path: Path, detector: ChineseNameDetector) -> PositionSt
 
     data = detector._data
     normalizer = detector._normalizer
+    surname_resolver = SurnameResolver(data, normalizer)
     syllables = data.plausible_components
 
     def is_surname(token: str) -> bool:
-        return data.is_surname(token, StringManipulationUtils.remove_spaces(normalizer.norm(token)))
+        return surname_resolver.parser_is_surname((token,))
 
     def is_curated_compound(token_lower: str) -> bool:
         if token_lower in COMPOUND_VARIANTS:

@@ -984,9 +984,7 @@ def test_mixed_initial_gate_ignores_whitespace_separated_initials(detector, raw_
     """
     result = detector.normalize_name(raw_name)
 
-    assert result.success or result.error_message != NON_PERSON_FAILURE_REASON, (
-        f"{raw_name!r}: wrongly rejected as non-person"
-    )
+    assert result.success or result.error_message != NON_PERSON_FAILURE_REASON, f"{raw_name!r}: wrongly rejected as non-person"
 
 
 @pytest.mark.parametrize(
@@ -1133,7 +1131,6 @@ def test_batch_tie_break_heuristics_use_normalized_tokenization(detector):
     dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(
         name_candidates,
         detector._normalizer,
-        detector._data,
     )
     assert dominant == NameFormat.GIVEN_FIRST
 

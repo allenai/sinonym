@@ -16,8 +16,8 @@ import pytest
 
 from sinonym.chinese_names_data import CANTONESE_SURNAMES
 from sinonym.resources import open_csv_reader
-from sinonym.services.batch_analysis import BatchAnalysisService
 from sinonym.services.initialization import DataInitializationService
+from sinonym.services.name_lookup import DOMINANT_CHINESE_SURNAME_FREQ_MIN, SurnameResolver
 from tests._case_assertions import assert_normalized_name
 
 
@@ -135,13 +135,12 @@ def test_full_share_rows_resolve_to_runtime_surname_mass(detector):
     """
     rows = list(open_csv_reader("surname_romanizations.csv"))
     full_share_rows = [row for row in rows if float(row["target_share"]) == 1.0]
+    resolver = SurnameResolver(detector._data, detector._normalizer)
 
     assert full_share_rows
     for row in full_share_rows:
         spelling = row["spelling"]
-        key = detector._parsing_service._surname_key([spelling.title()], {})
-        assert key == spelling, spelling
-        assert detector._data.get_surname_freq(key) >= float(row["surname_ppm_as_written"]), spelling
+        assert resolver.parser_frequency((spelling.title(),)) >= float(row["surname_ppm_as_written"]), spelling
 
 
 def test_surname_lookup_key_resolves_as_written_vs_remapped(detector):
@@ -174,15 +173,81 @@ def test_evidence_frequencies_use_as_written_resolution(detector):
     """
     data = detector._data
     normalizer = detector._normalizer
+    resolver = SurnameResolver(data, normalizer)
 
     def evidence_freq(token: str) -> float:
-        key = BatchAnalysisService._surname_lookup_key_for_token(token, normalizer, data)
-        return data.get_surname_freq_as_written(key)
+        return resolver.evidence_frequency(token)
 
     assert evidence_freq("fai") == pytest.approx(245.344)
     assert evidence_freq("chien") == pytest.approx(1864.9567)
     # spellings outside the table keep their attested as-written mass
     assert evidence_freq("cha") == pytest.approx(255.4735, abs=1e-3)
+
+
+def test_surname_resolver_parser_answers_match_current_parser_policy(detector):
+    """Resolver parser answers match the current parser-strict key policy."""
+    data = detector._data
+    normalizer = detector._normalizer
+    resolver = SurnameResolver(data, normalizer)
+    cases = [
+        (("Fai",), "hui"),
+        (("Chien",), "chien"),
+        (("Cha",), "zha"),
+        (("Kuang",), "kuang"),
+        (("Ou", "Yang"), "ou yang"),
+        (("zzqq",), "zzqq"),
+    ]
+
+    for tokens, expected_key in cases:
+        assert resolver.parser_frequency(tokens) == data.get_surname_freq(expected_key)
+        assert resolver.parser_logp(tokens, -123.0) == data.get_surname_logp(expected_key, -123.0)
+        assert resolver.parser_rank(tokens, -1.0) == data.get_surname_rank(expected_key, -1.0)
+
+    for tokens, expected_key in cases:
+        if len(tokens) == 1:
+            assert resolver.parser_is_surname(tokens) is data.is_surname(tokens[0], expected_key)
+
+    assert resolver.parser_is_wade_giles_initial_remapped_surname("Kuang")
+    assert not resolver.parser_is_wade_giles_initial_remapped_surname("Chien")
+
+
+def test_surname_resolver_evidence_answers_match_current_evidence_policy(detector):
+    """Resolver evidence answers match as-written batch/routing evidence semantics."""
+    data = detector._data
+    normalizer = detector._normalizer
+    resolver = SurnameResolver(data, normalizer)
+
+    for token in ["fai", "chien", "cha", "zzqq"]:
+        light_key = normalizer.norm_light(token)
+        expected_key = data.surname_lookup_key(normalizer.norm_light(token), normalizer.norm(token))
+        assert resolver.evidence_span_key(token) == expected_key
+        assert resolver.evidence_frequency(token) == data.get_surname_freq_as_written(expected_key)
+        assert resolver.evidence_frequency_for_key(expected_key) == data.get_surname_freq_as_written(expected_key)
+        assert resolver.evidence_is_surname(token) is data.is_surname(token, expected_key)
+        assert resolver.spelling(token) == data.resolve_surname_spelling(light_key)
+        assert resolver.spelling_for_light_key(light_key) == data.resolve_surname_spelling(light_key)
+
+    assert resolver.evidence_frequency("fai") == pytest.approx(245.344)
+    assert resolver.evidence_frequency("chien") == pytest.approx(1864.9567)
+    assert resolver.evidence_frequency("cha") == pytest.approx(255.4735, abs=1e-3)
+    assert not hasattr(resolver, "parser_key")
+    assert not hasattr(resolver, "evidence_key")
+
+
+def test_dominant_surname_detection_uses_as_written_evidence(detector):
+    """Dominant-surname detection must not inherit parser remap target mass."""
+    resolver = SurnameResolver(detector._data, detector._normalizer)
+
+    assert resolver.parser_frequency(("fai",)) >= DOMINANT_CHINESE_SURNAME_FREQ_MIN
+    assert resolver.evidence_frequency("fai") < DOMINANT_CHINESE_SURNAME_FREQ_MIN
+    assert not resolver.evidence_is_dominant_surname("fai")
+    assert resolver.evidence_is_dominant_surname("zhang")
+
+
+def test_surname_group_strength_requires_han_provenance(detector):
+    """Standalone pinyin must not be silently routed through Han-backed strength scoring."""
+    with pytest.raises(ValueError, match="Han provenance"):
+        detector._surname_group_strength(("che",))
 
 
 def test_remap_only_surname_candidates_lose_to_attested_parses(detector):
