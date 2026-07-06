@@ -456,13 +456,13 @@ def test_single_name_batch(detector):
     assert result.results[0].result == "Xin Liu"
 
 
-def test_non_latin_locked_batch_rows_keep_format_but_no_candidate_confidence(detector):
+def test_non_latin_locked_batch_rows_keep_individual_confidence_and_format(detector):
     names = ["\u5de9\u4fd0"]
 
     result = detector.analyze_name_batch(names)
 
     assert result.results[0].success
-    assert result.individual_analyses[0].confidence == 0.0
+    assert result.individual_analyses[0].confidence == 1.0
     assert result.name_order_evidence[0].batch_participant is False
     assert result.name_order_evidence[0].individual_format == result.name_order_evidence[0].selected_format
     assert result.name_order_evidence[0].individual_format != NameFormat.MIXED

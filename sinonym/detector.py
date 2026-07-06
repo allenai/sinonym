@@ -442,6 +442,7 @@ class ChineseNameDetector:
         last_wins = last_is_surname and (
             not first_is_surname
             or last.isupper()
+            or (first_freq == 0 and last_freq > 0)
             or (first_freq > 0 and last_freq >= CAMEL_CASE_LAST_SURNAME_RATIO_MIN * first_freq)
         )
         if last_wins:

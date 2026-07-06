@@ -515,12 +515,13 @@ def _has_repeated_tail_chinese_surname(tokens: tuple[str, ...]) -> bool:
 
 def _korean_given_first_three_token_route(features: PPVysFeatures) -> Route | None:
     tokens = features.name_tokens
+    given_syllables = _name_prior_syllables(tokens[:-1])
     if _has_repeated_tail_chinese_surname(tokens):
         return None
     if (
-        len(tokens) >= MIN_THREE_TOKEN_NAME_PRIOR_TOKENS
+        len(given_syllables) + 1 >= MIN_THREE_TOKEN_NAME_PRIOR_TOKENS
         and tokens[-1] in NAME_PRIOR_KOREAN_SURNAMES
-        and all(len(token) == 1 or token in NAME_PRIOR_KOREAN_GIVEN_SYLLABLES for token in tokens[:-1])
+        and all(len(token) == 1 or token in NAME_PRIOR_KOREAN_GIVEN_SYLLABLES for token in given_syllables)
     ):
         return _desired_format_route(features, "given_first")
     return None
@@ -528,15 +529,21 @@ def _korean_given_first_three_token_route(features: PPVysFeatures) -> Route | No
 
 def _cantonese_given_first_route(features: PPVysFeatures) -> Route | None:
     tokens = features.name_tokens
+    given_syllables = _name_prior_syllables(tokens[:-1])
     if _has_repeated_tail_chinese_surname(tokens):
         return None
     if (
-        len(tokens) >= MIN_THREE_TOKEN_NAME_PRIOR_TOKENS
+        len(given_syllables) + 1 >= MIN_THREE_TOKEN_NAME_PRIOR_TOKENS
         and tokens[-1] in NAME_PRIOR_CANTONESE_SOUTHEAST_ASIAN_SURNAMES
-        and all(token in NAME_PRIOR_CANTONESE_GIVEN_SYLLABLES for token in tokens[:-1])
+        and all(token in NAME_PRIOR_CANTONESE_GIVEN_SYLLABLES for token in given_syllables)
     ):
         return _desired_format_route(features, "given_first")
     return None
+
+
+def _name_prior_syllables(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    """Split hyphen/apostrophe-joined given-name syllables for name-prior membership checks."""
+    return tuple(part for token in tokens for part in re.split(r"[-']", token) if part)
 
 
 def _desired_format_route(features: PPVysFeatures, desired_format: str) -> Route | None:

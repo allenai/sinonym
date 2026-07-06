@@ -439,9 +439,6 @@ class NameParsingService:
             return []
 
         parses = []
-        first_is_hyphenated_compound = self._is_hyphenated_compound_metadata(compound_metadata.get(tokens[0]))
-        last_is_hyphenated_compound = self._is_hyphenated_compound_metadata(compound_metadata.get(tokens[-1]))
-
         # 1. Check compound surnames using centralized metadata
         if len(tokens) >= 3:
             # Check first two tokens for compound
@@ -486,7 +483,7 @@ class NameParsingService:
             compound_parts = StringManipulationUtils.split_compound_token(first_token, first_meta)
             original_format = self._get_compound_original_format(first_meta, [first_token])
             parses.append((compound_parts, tokens[1:], original_format))
-        elif len(first_token) > 1 and "-" not in first_token and not last_is_hyphenated_compound:
+        elif len(first_token) > 1 and "-" not in first_token:
             # Check for regular single surnames
             is_regular_surname = self._surname_resolver.parser_is_surname([first_token])
             if is_regular_surname:
@@ -504,7 +501,7 @@ class NameParsingService:
                 compound_parts = StringManipulationUtils.split_compound_token(last_token, last_meta)
                 original_format = self._get_compound_original_format(last_meta, [last_token])
                 parses.append((compound_parts, tokens[:-1], original_format))
-            elif len(last_token) > 1 and "-" not in last_token and not first_is_hyphenated_compound:
+            elif len(last_token) > 1 and "-" not in last_token:
                 # Check for regular single surnames
                 is_regular_surname = self._surname_resolver.parser_is_surname([last_token])
                 if is_regular_surname:
@@ -531,16 +528,6 @@ class NameParsingService:
                     parses.append((compound_parts, tokens[:-1], original_format))
 
         return parses
-
-    @staticmethod
-    def _is_hyphenated_compound_metadata(compound_meta: CompoundMetadata | None) -> bool:
-        """Return whether metadata identifies a token as a hyphenated compound surname."""
-        return bool(
-            compound_meta
-            and compound_meta.is_compound
-            and compound_meta.format_type == "hyphenated"
-            and compound_meta.compound_target
-        )
 
     def _get_compound_original_format(self, compound_meta: CompoundMetadata, tokens: list[str]) -> str | None:
         """Get the original format for a compound surname from centralized metadata."""

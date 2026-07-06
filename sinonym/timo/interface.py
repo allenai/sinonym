@@ -115,7 +115,10 @@ class Prediction(TimoModel):
     given_name: str | None = Field(default=None)
     surname: str | None = Field(default=None)
     middle_name: str | None = Field(default=None)
-    confidence: float | None = Field(default=None, description="per-name confidence (softmax over candidate scores)")
+    confidence: float | None = Field(
+        default=None,
+        description="per-name confidence; candidate softmax when candidates exist, 1.0 for successful structural parses",
+    )
     format_pattern: FormatPattern | None = Field(default=None, description="shared batch order pattern (same on every row)")
 
 
@@ -133,7 +136,7 @@ class IndividualAnalysis(TimoModel):
     raw_name: str
     candidates: list[Candidate]
     best_candidate: Candidate | None = None
-    confidence: float = Field(description="softmax over candidate scores for best candidate")
+    confidence: float = Field(description="candidate softmax for best candidate, or structural parse confidence")
 
 
 class NameOrderEvidence(TimoModel):

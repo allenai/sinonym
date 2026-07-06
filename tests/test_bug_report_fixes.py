@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from sinonym import chinese_names_data
-from sinonym.coretypes import BatchFormatPattern, NameFormat, ParseResult
+from sinonym.coretypes import BatchFormatPattern, NameFormat, ParseCandidate, ParseResult
 from sinonym.pipeline import name_order_routing
 from sinonym.pipeline.name_order_routing import (
     _input_order_display,
@@ -79,18 +79,34 @@ def test_chinese_first_surname_blocks_korean_pair_rejection(detector):
 @pytest.mark.parametrize(
     ("raw_name", "expected", "surname"),
     [
-        ("Duan-Gan Mu", "Mu Duan-Gan", "Duan-Gan"),
-        ("Zhong-Shan Li", "Li Zhong-Shan", "Zhong-Shan"),
-        ("Zong-Zheng Li", "Li Zong-Zheng", "Zong-Zheng"),
         ("Nan-Gong Li", "Li Nan-Gong", "Nan-Gong"),
+        ("Duan-Mu Li", "Li Duan-Mu", "Duan-Mu"),
+        ("Si-Tu Chen", "Chen Si-Tu", "Si-Tu"),
     ],
 )
-def test_csv_backed_hyphenated_compound_surnames_win(detector, raw_name, expected, surname):
+def test_curated_hyphenated_compound_surnames_win(detector, raw_name, expected, surname):
     result = detector.normalize_name(raw_name)
 
     assert result.success
     assert result.result == expected
     assert result.parsed.surname == surname
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected", "surname", "given"),
+    [
+        ("Sun Zhong-Shan", "Zhong-Shan Sun", "Sun", "Zhong-Shan"),
+        ("Zhong-Shan Li", "Zhong-Shan Li", "Li", "Zhong-Shan"),
+        ("Duan-Gan Mu", "Duan-Gan Mu", "Mu", "Duan-Gan"),
+    ],
+)
+def test_non_curated_hyphenated_given_names_keep_endpoint_surname(detector, raw_name, expected, surname, given):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+    assert result.parsed.surname == surname
+    assert result.parsed.given_name == given
 
 
 def test_attested_remapped_wade_giles_surname_preserves_source_order(detector):
@@ -260,11 +276,13 @@ def test_internal_compound_surname_span_reports_real_width(detector):
 @pytest.mark.parametrize(
     ("raw_name", "expected_result", "expected_surname", "expected_given"),
     [
-        ("AuyeongWei", "Wei Auyeong", "Auyeong", "Wei"),
-        ("ZhaWei", "Wei Zha", "Zha", "Wei"),
+        ("AuyeongWei", "Auyeong Wei", "Wei", "Auyeong"),
+        ("ZhaWei", "Zha Wei", "Wei", "Zha"),
+        ("ZhaWang", "Zha Wang", "Wang", "Zha"),
+        ("BuLi", "Bu Li", "Li", "Bu"),
     ],
 )
-def test_camel_case_pair_does_not_let_zero_frequency_first_surname_auto_lose(
+def test_camel_case_pair_lets_zero_frequency_first_surname_lose_to_attested_last_surname(
     detector,
     raw_name,
     expected_result,
@@ -370,6 +388,99 @@ def test_ml_classifier_runtime_failure_surfaces_in_detector():
 
     assert not result.success
     assert result.error_message == "ML Japanese classifier failed"
+
+
+class FlakyJapaneseClassifierModel:
+    classes_ = ["cn", "jp"]
+
+    def __init__(self):
+        self.predict_calls = 0
+
+    def predict(self, _names):
+        self.predict_calls += 1
+        if self.predict_calls == 1:
+            raise RuntimeError("transient model error")
+        return ["cn"]
+
+    def predict_proba(self, _names):
+        return [[0.99, 0.01]]
+
+
+def test_ml_classifier_runtime_failure_is_not_cached():
+    from sinonym.services import ethnicity
+
+    classifier = ethnicity._MLJapaneseClassifier(confidence_threshold=0.8)
+    model = FlakyJapaneseClassifierModel()
+    classifier._available = True
+    classifier._model = model
+
+    first = classifier.classify_all_chinese_name("\u738b\u4f1f")
+    second = classifier.classify_all_chinese_name("\u738b\u4f1f")
+
+    assert not first.success
+    assert first.error_message == "ML Japanese classifier failed"
+    assert second.success
+    assert model.predict_calls == 2
+
+
+def test_batch_format_requires_real_voter_share():
+    predictor = Predictor(PredictorConfig(parallel="never"), "")
+    service = predictor._detector._batch_analysis_service
+    surname_first = ParseCandidate(["Li"], ["Wei"], 1.0, NameFormat.SURNAME_FIRST)
+    mixed = ParseCandidate(["Unknown"], ["Name"], 1.0, NameFormat.MIXED)
+    entries = [
+        *[
+            BatchCandidateEntry(f"sf-{index}", [surname_first], surname_first, {}, LATIN_ONLY_REPRESENTATION)
+            for index in range(2)
+        ],
+        *[BatchCandidateEntry(f"mixed-{index}", [mixed], mixed, {}, LATIN_ONLY_REPRESENTATION) for index in range(8)],
+    ]
+
+    pattern = service._detect_format_pattern(entries, predictor._detector._normalizer, 0.55)
+
+    assert pattern.surname_first_count == 2
+    assert pattern.voting_count == 2
+    assert pattern.total_count == 10
+    assert pattern.decision_confidence == 1.0
+    assert not pattern.threshold_met
+
+
+def test_timo_han_only_success_reports_full_structural_confidence():
+    predictor = Predictor(PredictorConfig(parallel="never"), "")
+
+    result = predictor.predict_batch([Instance(name="\u5de9\u4fd0")])[0]
+
+    assert result.success
+    assert result.surname == "Gong"
+    assert result.given_name == "Li"
+    assert result.confidence == 1.0
+
+
+def test_hyphenated_korean_given_name_uses_name_prior():
+    routed = route_pp_vys_abstain_rows(
+        [
+            _pp_vys_row(
+                name="Hyun-Woo Kim",
+                pp_result="Kim Hyun-Woo",
+                pp_selected_format="surname_first",
+                pp_selected_surname_position="first",
+                pp_batch_threshold_met=False,
+                pp_batch_total_count=1,
+                pp_batch_confidence=0.6,
+                pp_batch_vote_margin=0.0,
+                vys_result="Hyun-Woo Kim",
+                vys_selected_format="given_first",
+                vys_selected_surname_position="last",
+                vys_batch_threshold_met=False,
+                vys_batch_total_count=1,
+                vys_batch_confidence=0.6,
+                vys_batch_vote_margin=0.0,
+            ),
+        ],
+    )[0]
+
+    assert routed["router_prediction"] == "vys"
+    assert routed["router_reason"] == "name_prior_korean_given_first_three_token"
 
 
 def test_route_pp_and_pp_vys_delegate_to_single_materialization_helpers(monkeypatch):

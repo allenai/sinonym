@@ -34,6 +34,7 @@ LONG_GIVEN_NAME_TOKEN_MIN_LENGTH = 6
 TWO_TOKEN_NAME_LENGTH = 2
 MIN_CANDIDATES_FOR_CONFIDENCE_GAP = 2
 BATCH_PARTICIPANT_MIN = 2
+BATCH_FORMAT_MIN_VOTER_SHARE = 0.5
 BATCH_FORMAT_DIRECTION_MIN_CONFIDENCE = 0.5
 HIGH_SURNAME_FREQUENCY_MIN = 1000
 MEDIUM_SURNAME_FREQUENCY_MIN = 100
@@ -114,6 +115,13 @@ class BatchVoteStats:
     def total_preferences(self) -> int:
         """Return total format votes."""
         return self.surname_first_preferences + self.given_first_preferences
+
+    @property
+    def voter_share(self) -> float:
+        """Return the share of candidate participants that cast a format vote."""
+        if self.names_with_candidates <= 0:
+            return 0.0
+        return self.total_preferences / self.names_with_candidates
 
 
 if TYPE_CHECKING:
@@ -728,7 +736,13 @@ class BatchAnalysisService:
             has_decisive_vote or has_unopposed_dominant_vote
         )
         has_enough_voters = stats.total_preferences >= BATCH_PARTICIPANT_MIN
-        threshold_met = decision_confidence >= format_threshold and has_confident_direction and has_enough_voters
+        has_enough_voter_share = stats.voter_share >= BATCH_FORMAT_MIN_VOTER_SHARE
+        threshold_met = (
+            decision_confidence >= format_threshold
+            and has_confident_direction
+            and has_enough_voters
+            and has_enough_voter_share
+        )
 
         return BatchFormatPattern(
             dominant_format=dominant_format,
@@ -1416,19 +1430,19 @@ class BatchAnalysisService:
         """Build IndividualAnalysis entries with a simple confidence per name.
 
         Confidence is computed via a softmax over candidate scores.
-        - No candidates: confidence = 0.0
+        - No candidates: confidence = 1.0 for successful structural parses, else 0.0
         - One candidate: confidence = 1.0
         - Multiple: exp(score_i - max)/sum(exp(score_j - max)) for best candidate
         """
         analyses: list[IndividualAnalysis] = []
-        for entry, _result in zip(name_candidates, results, strict=True):
+        for entry, result in zip(name_candidates, results, strict=True):
             if not entry.candidates or entry.best_candidate is None:
                 analyses.append(
                     IndividualAnalysis(
                         raw_name=entry.name,
                         candidates=[],
                         best_candidate=None,
-                        confidence=0.0,
+                        confidence=1.0 if result.success else 0.0,
                     ),
                 )
                 continue

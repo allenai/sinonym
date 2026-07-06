@@ -81,24 +81,27 @@ class _MLJapaneseClassifier:
         if not self.is_available():
             return ParseResult.success_with_name("")  # Default to allowing through
 
-        # Use unified cache with compute function
-        def compute_classification():
-            try:
-                # Get prediction and confidence (same as original)
-                prediction = self._model.predict([name])[0]  # 'cn' or 'jp'
-                probabilities = self._model.predict_proba([name])[0]
-                confidence = max(probabilities)
+        cached = self._cache.get(name)
+        if cached is not None:
+            return cached
 
-                # Only reject as Japanese if we're very confident
-                if prediction == "jp" and confidence >= self._confidence_threshold:
-                    return ParseResult.failure(JAPANESE_CLASSIFIER_REJECTION)
-                return ParseResult.success_with_name("")
+        try:
+            # Get prediction and confidence (same as original)
+            prediction = self._model.predict([name])[0]  # 'cn' or 'jp'
+            probabilities = self._model.predict_proba([name])[0]
+            confidence = max(probabilities)
 
-            except Exception as e:  # noqa: BLE001 - model-backed classifiers may raise arbitrary runtime errors.
-                LOGGER.warning("ML Japanese classifier error for %r: %s", name, e, exc_info=True)
-                return ParseResult.failure(JAPANESE_CLASSIFIER_RUNTIME_ERROR)
-
-        return self._cache.get_or_compute(name, compute_classification)
+            # Only reject as Japanese if we're very confident
+            if prediction == "jp" and confidence >= self._confidence_threshold:
+                result = ParseResult.failure(JAPANESE_CLASSIFIER_REJECTION)
+            else:
+                result = ParseResult.success_with_name("")
+        except Exception as e:  # noqa: BLE001 - model-backed classifiers may raise arbitrary runtime errors.
+            LOGGER.warning("ML Japanese classifier error for %r: %s", name, e, exc_info=True)
+            return ParseResult.failure(JAPANESE_CLASSIFIER_RUNTIME_ERROR)
+        else:
+            self._cache.set(name, result)
+            return result
 
     def japanese_probability(self, name: str) -> float:
         """Return the Japanese-class probability, raising on model runtime failures."""
