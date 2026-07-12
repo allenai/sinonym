@@ -3,12 +3,16 @@ import unittest
 from sinonym.timo.interface import (
     Instance,
     Prediction,
+    PredictionV2,
     Predictor,
     PredictorConfig,
+    PredictorV2,
     RoutedPaperPrediction,
+    RoutedPaperPredictionV2,
     RoutedPrediction,
     RoutingInstance,
     RoutingPredictor,
+    RoutingPredictorV2,
 )
 
 
@@ -42,6 +46,8 @@ class TestIntegration(unittest.TestCase):
             self.assertIsNotNone(r.confidence)
             self.assertIsNotNone(r.format_pattern)
         # shared batch pattern replicated onto each row
+        assert results[0].format_pattern is not None
+        assert results[1].format_pattern is not None
         self.assertEqual(
             results[0].format_pattern.dominant_format,
             results[1].format_pattern.dominant_format,
@@ -122,3 +128,38 @@ class TestRoutingIntegration(unittest.TestCase):
 
     def test_predict_batch_empty(self):
         self.assertEqual(self.predictor.predict_batch([]), [])
+
+
+class TestIntegrationV2(TestIntegration):
+    """Integration contract for the flat TIMO v2 variant."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.predictor = PredictorV2(config=PredictorConfig(), artifacts_dir=".")
+
+    def test_non_chinese_canonical_name(self):
+        (result,) = self.predictor.predict_batch([Instance(name="Dr. Steve Marsh PhD")])
+
+        self.assertIsInstance(result, PredictionV2)
+        self.assertFalse(result.success)
+        self.assertIsNotNone(result.canonical_name)
+        assert result.canonical_name is not None
+        self.assertEqual(result.canonical_name.text, "Steve Marsh")
+
+
+class TestRoutingIntegrationV2(TestRoutingIntegration):
+    """Integration contract for the routed TIMO v2 variant."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.predictor = RoutingPredictorV2(config=PredictorConfig(), artifacts_dir=".")
+
+    def test_non_chinese_canonical_name(self):
+        (paper,) = self.predictor.predict_batch([RoutingInstance(pp_names=["Steve Blando IV"])])
+
+        self.assertIsInstance(paper, RoutedPaperPredictionV2)
+        canonical_name = paper.authors[0].canonical_name
+        self.assertIsNotNone(canonical_name)
+        assert canonical_name is not None
+        self.assertEqual(canonical_name.text, "Steve Blando IV")
+        self.assertEqual(canonical_name.normalized.suffix, "IV")

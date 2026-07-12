@@ -2,11 +2,26 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 DOMINANT_CHINESE_SURNAME_FREQ_MIN = 10_000.0
+_WADE_GILES_APOSTROPHE_SURNAME_RE = re.compile(r"(?:ch|ts|tz|k|p|t)'[a-z]+", re.IGNORECASE)
+_APOSTROPHE_TRANSLATION = str.maketrans(
+    {
+        "\u02b9": "'",
+        "\u02bb": "'",
+        "\u02bc": "'",
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u2032": "'",
+        "\uff07": "'",
+        "`": "'",
+        "\u00b4": "'",
+    },
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -62,6 +77,13 @@ class SurnameResolver:
     def evidence_is_dominant_surname(self, token: str) -> bool:
         """Return whether ``token`` carries dominant as-written Chinese surname evidence."""
         return self.evidence_frequency(token) >= DOMINANT_CHINESE_SURNAME_FREQ_MIN
+
+    def evidence_is_wade_giles_apostrophe_surname(self, token: str) -> bool:
+        """Return exact-token Wade-Giles spelling backed by existing surname data."""
+        normalized_apostrophe = token.translate(_APOSTROPHE_TRANSLATION)
+        return bool(
+            _WADE_GILES_APOSTROPHE_SURNAME_RE.fullmatch(normalized_apostrophe) and self.evidence_is_surname(token),
+        )
 
     def evidence_span_key(self, token: str) -> str:
         """Return the evidence key for batch span assembly only."""

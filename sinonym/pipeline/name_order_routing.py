@@ -17,9 +17,9 @@ Materializing `abstain`:
   abstain + "unknown" as a contract violation and raise.
 - PP-only regime: there is no second run to pick from; emit the as-typed reading
   via `input_order_parsed(result)` (trailing token is the surname, everything
-  else keeps its position), except spaced Han surname-first rows, where source
-  spacing already marks the surname boundary and the PP parse is the input-order
-  reading. If the as-typed reading cannot be materialized (e.g. the
+  else keeps its position), except spaced Han surname-first rows and internal
+  compound-surname spans, where the PP parse preserves the established surname
+  boundary. If the as-typed reading cannot be materialized (e.g. the
   original-order parse ends in a middle initial), the abstain surfaces as an
   explicit failure (no parsed person) — never fall back to the reordered PP
   parse the abstain declined to trust. Do NOT re-parse the name standalone: the
@@ -847,8 +847,9 @@ def pp_abstain_parsed(result: ParseResult, route_row: Row) -> ParsedName | None:
     """Return the final parsed person components for a PP-only abstain row.
 
     Latin-only abstain keeps the as-typed given-first reading. Spaced Han rows
-    guarded by `spaced_cjk_zero_batch_surname_first` already have a source
-    surname boundary, so the PP parse is the stable input-order reading.
+    guarded by `spaced_cjk_zero_batch_surname_first` and corrected internal
+    compound-surname spans already have a stable surname boundary, so the PP
+    parse is the stable component reading.
     Returns None when the as-typed reading cannot be materialized (e.g. the
     original-order parse ends in a middle initial): an abstain must surface as
     an explicit failure, never fall back to the reordered PP parse it declined
@@ -964,7 +965,13 @@ def _pp_abstain_failed_parse(row: Row) -> bool:
 
 
 def _pp_abstain_uses_pp_parse_for_abstain(row: Row) -> bool:
-    return row.get("router_reason") == "spaced_cjk_zero_batch_surname_first"
+    if row.get("router_reason") == "spaced_cjk_zero_batch_surname_first":
+        return True
+    return (
+        row.get("selected_surname_position") == "internal"
+        and "selected_surname_token_count" in row
+        and _required_float(row, "selected_surname_token_count") > 1
+    )
 
 
 def _pp_abstain_predicates(row: Row) -> dict[str, bool]:

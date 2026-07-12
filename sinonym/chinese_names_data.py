@@ -573,6 +573,10 @@ CANTONESE_SURNAMES = {
     "teo": ("zhang", "张"),  # 张 - Teochew/Hokkien Teo = Mandarin Zhang
     "goh": ("wu", "吴"),  # 吴 - Teochew/Hokkien Goh = Mandarin Wu
     "khoo": ("qiu", "邱"),  # 邱 - Teochew/Hokkien Khoo = Mandarin Qiu
+    # Reviewed Taiwanese/Wade-Giles surname spellings. Conservative
+    # as-written frequency shares already live in surname_romanizations.csv.
+    "horng": ("hong", "洪"),
+    "hsien": ("xian", "冼/先"),
     "soo": ("su", "苏"),  # 苏 - Korean Soo = Mandarin Su
     # Korean surnames with Chinese equivalents
     "jang": ("zhang", "张"),  # 张 - Korean Jang = Mandarin Zhang
@@ -582,6 +586,8 @@ CANTONESE_SURNAMES = {
     "son": ("sun", "孙"),  # 孙 - Korean Son = Mandarin Sun
     "kyeong": ("jing", "京"),  # 京 - Korean Kyeong = Mandarin Jing
 }
+
+ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES = frozenset({"horng", "hsien"})
 
 
 # Sanity check: Ensure no inconsistencies between SYLLABLE_RULES and CANTONESE_SURNAMES
@@ -1058,6 +1064,8 @@ KOREAN_AMBIGUOUS_PATTERNS = frozenset(
 # Korean name pairs: Common Korean given name combinations
 KOREAN_GIVEN_PAIRS = frozenset(
     {
+        ("in", "sun"),
+        ("jin", "uk"),
         ("soo", "jin"),  # 수진 - very common Korean name
         ("min", "soo"),  # 민수 - very common Korean name
         ("min", "jung"),  # 민정 - very common Korean name
@@ -1085,6 +1093,11 @@ KOREAN_GIVEN_PAIRS = frozenset(
         ("eun", "ji"),  # 은지 - Korean name pattern
     },
 )
+
+# Directional evidence only. ``Ok`` also occurs in Korean given names, so it
+# must never be added to the anywhere-in-name Korean surname sets.
+KOREAN_DIRECTIONAL_FAMILY_FIRST_SURNAMES = frozenset({"ok"})
+KOREAN_DIRECTIONAL_SINGLE_GIVEN_NAMES = frozenset({"jeung"})
 
 
 # Overlapping Korean surnames (exist in both Korean and Chinese)
@@ -1255,7 +1268,6 @@ VIETNAMESE_GIVEN_PATTERNS = frozenset(
         "vuong",  # 王 - king, Vietnamese given name
     },
 )
-
 
 NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES = frozenset(
     {

@@ -664,6 +664,24 @@ def test_aligned_bilingual_pairs_use_han_identity(detector):
     assert roman_first_given_first.parsed_original_order.order == ["given", "surname"]
 
 
+def test_aligned_bilingual_polyphonic_surname_precedes_roman_ethnicity_rejection(detector):
+    raw_name = "Zhexu \u54f2\u65ed Shan \u5355"
+    normalized = detector._normalizer.apply(raw_name)
+    pairs = detector._normalizer.aligned_bilingual_pairs(normalized)
+
+    assert pairs is not None
+    assert [pair.han_pinyin for pair in pairs] == [("zhe", "xu"), ("shan",)]
+    assert detector._normalizer.classify_script_representation(normalized) == "bilingual_aligned"
+
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == "Zhe-Xu Shan"
+    assert result.parsed.surname == "Shan"
+    assert result.parsed.given_name == "Zhe-Xu"
+    assert result.parsed_original_order.order == ["given", "surname"]
+
+
 @pytest.mark.parametrize("lu_token", ["Lu", "L\u00fc"])
 def test_aligned_bilingual_lu_alias_matches_lv_pinyin(detector, lu_token):
     result = detector.normalize_name(f"{lu_token} \u5415 Wei \u4f1f")

@@ -468,7 +468,7 @@ class NameParsingService:
                 ):
                     # This is a multi-token compound in the middle
                     original_format = self._get_compound_original_format(second_meta, tokens[1:3])
-                    parses.append((tokens[1:3], tokens[0:1], original_format))
+                    parses.append((tokens[1:3], [tokens[0], *tokens[3:]], original_format))
 
         # 2. Single-token surnames - only at beginning or end (contiguous sequences only)
         # Surname-first pattern: surname + given_names

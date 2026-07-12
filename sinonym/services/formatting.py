@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from sinonym.chinese_names_data import ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES
+from sinonym.services.name_lookup import DOMINANT_CHINESE_SURNAME_FREQ_MIN, SurnameResolver
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
@@ -38,6 +40,7 @@ class NameFormattingService:
             self._config = context_or_config
             self._normalizer = normalizer
             self._data = data
+        self._surname_resolver = SurnameResolver(self._data, self._normalizer)
 
     def format_name_output(
         self,
@@ -58,7 +61,15 @@ class NameFormattingService:
         - NO structural/pattern-based splitting (that belongs in TextPreprocessor)
         """
         # First validate that given tokens could plausibly be Chinese
-        if not self._normalizer.validate_given_tokens(given_tokens, normalized_cache):
+        compact_initial = self._accepts_compact_initial(surname_tokens, given_tokens)
+        alias_given_parts = self._reviewed_alias_compact_given_parts(surname_tokens, given_tokens)
+        wade_giles_single_given = self._accepts_wade_giles_single_given(surname_tokens, given_tokens)
+        if (
+            not self._normalizer.validate_given_tokens(given_tokens, normalized_cache)
+            and not compact_initial
+            and not alias_given_parts
+            and not wade_giles_single_given
+        ):
             msg = "given name tokens are not plausibly Chinese"
             raise ValueError(msg)
 
@@ -72,6 +83,18 @@ class NameFormattingService:
                 normalized_token = self._normalizer.norm(token)
 
             if self._data.is_given_name(normalized_token):
+                parts.append(token)
+                continue
+
+            if compact_initial and len(given_tokens) == 1 and token == given_tokens[0]:
+                parts.append(token)
+                continue
+
+            if alias_given_parts and len(given_tokens) == 1 and token == given_tokens[0]:
+                parts.extend(alias_given_parts)
+                continue
+
+            if wade_giles_single_given and len(given_tokens) == 1 and token == given_tokens[0]:
                 parts.append(token)
                 continue
 
@@ -128,9 +151,7 @@ class NameFormattingService:
         # Determine separator based on part lengths
         # Use spaces when we have mixed-length parts (some single chars, some multi-char)
         if len(formatted_parts) > 1:
-            part_lengths = [
-                len(part.replace("-", "")) for part in formatted_parts
-            ]  # Count chars, ignoring internal hyphens
+            part_lengths = [len(part.replace("-", "")) for part in formatted_parts]  # Count chars, ignoring internal hyphens
             has_single_char = any(length == 1 for length in part_lengths)
             has_multi_char = any(length > 1 for length in part_lengths)
 
@@ -208,7 +229,15 @@ class NameFormattingService:
         - surname_str / given_str: component strings as used in full_formatted_name
         """
         # Validate given name tokens first
-        if not self._normalizer.validate_given_tokens(given_tokens, normalized_cache):
+        compact_initial = self._accepts_compact_initial(surname_tokens, given_tokens)
+        alias_given_parts = self._reviewed_alias_compact_given_parts(surname_tokens, given_tokens)
+        wade_giles_single_given = self._accepts_wade_giles_single_given(surname_tokens, given_tokens)
+        if (
+            not self._normalizer.validate_given_tokens(given_tokens, normalized_cache)
+            and not compact_initial
+            and not alias_given_parts
+            and not wade_giles_single_given
+        ):
             msg = "given name tokens are not plausibly Chinese"
             raise ValueError(msg)
 
@@ -221,6 +250,18 @@ class NameFormattingService:
                 normalized_token = self._normalizer.norm(token)
 
             if self._data.is_given_name(normalized_token):
+                parts.append(token)
+                continue
+
+            if compact_initial and len(given_tokens) == 1 and token == given_tokens[0]:
+                parts.append(token)
+                continue
+
+            if alias_given_parts and len(given_tokens) == 1 and token == given_tokens[0]:
+                parts.extend(alias_given_parts)
+                continue
+
+            if wade_giles_single_given and len(given_tokens) == 1 and token == given_tokens[0]:
                 parts.append(token)
                 continue
 
@@ -356,6 +397,53 @@ class NameFormattingService:
 
         return full_formatted, given_tokens_final, surname_tokens_final, surname_str, given_str, middle_tokens_final
 
+    def _accepts_compact_initial(self, surname_tokens: list[str], given_tokens: list[str]) -> bool:
+        """Return dominant surname plus a single vowelless 2-3 letter bundle."""
+        if len(surname_tokens) != 1 or len(given_tokens) != 1:
+            return False
+        abbreviation = given_tokens[0]
+        surname_key = self._normalizer.norm_light(surname_tokens[0])
+        return bool(
+            self._data.get_surname_freq_as_written(surname_key) >= DOMINANT_CHINESE_SURNAME_FREQ_MIN
+            and abbreviation.isalpha()
+            and 2 <= len(abbreviation) <= 3  # noqa: PLR2004
+            and not any(character.lower() in "aeiou" for character in abbreviation),
+        )
+
+    def _accepts_wade_giles_single_given(
+        self,
+        surname_tokens: list[str],
+        given_tokens: list[str],
+    ) -> bool:
+        """Allow one alphabetic given token behind exact Wade-Giles surname evidence."""
+        return bool(
+            len(surname_tokens) == 1
+            and len(given_tokens) == 1
+            and given_tokens[0].isalpha()
+            and self._surname_resolver.evidence_is_wade_giles_apostrophe_surname(surname_tokens[0]),
+        )
+
+    def _reviewed_alias_compact_given_parts(
+        self,
+        surname_tokens: list[str],
+        given_tokens: list[str],
+    ) -> list[str]:
+        """Split one compact given token only under reviewed surname-alias evidence."""
+        if (
+            len(surname_tokens) != 1
+            or len(given_tokens) != 1
+            or surname_tokens[0].lower() not in ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES
+        ):
+            return []
+        token = given_tokens[0]
+        candidates = [
+            [token[:index], token[index:]]
+            for index in range(1, len(token))
+            if self._normalizer.is_valid_chinese_phonetics(token[:index])
+            and self._normalizer.is_valid_chinese_phonetics(token[index:])
+        ]
+        return candidates[0] if len(candidates) == 1 else []
+
     def capitalize_name_part(self, part: str) -> str:
         """Properly capitalize a name part - delegated to centralized utility."""
         return StringManipulationUtils.capitalize_name_part(part)
@@ -374,6 +462,7 @@ class NameFormattingService:
         Returns:
             Formatted surname string using metadata-driven formatting
         """
+
         def _get_meta_for_token(token: str) -> CompoundMetadata | None:
             meta = compound_metadata.get(token)
             if meta is not None:

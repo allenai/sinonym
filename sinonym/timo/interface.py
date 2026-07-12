@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import cast
 
 from pydantic import BaseModel, BaseSettings, Field, root_validator
 
@@ -122,6 +123,38 @@ class Prediction(TimoModel):
     format_pattern: FormatPattern | None = Field(default=None, description="shared batch order pattern (same on every row)")
 
 
+class CanonicalNameComponents(TimoModel):
+    """Semantic name components plus their token and display-order lineage."""
+
+    given_name: str = ""
+    middle_name: str = ""
+    surname: str = ""
+    suffix: str = ""
+    given_tokens: list[str] = Field(default_factory=list)
+    middle_tokens: list[str] = Field(default_factory=list)
+    surname_tokens: list[str] = Field(default_factory=list)
+    suffix_tokens: list[str] = Field(default_factory=list)
+    order: list[str] = Field(default_factory=list)
+
+
+class CanonicalNameValue(TimoModel):
+    """TIMO representation of an all-person canonical name."""
+
+    source_text: str
+    text: str
+    source: CanonicalNameComponents
+    normalized: CanonicalNameComponents
+
+
+class PredictionV2(Prediction):
+    """Versioned prediction that adds canonical data without changing v1."""
+
+    canonical_name: CanonicalNameValue | None = Field(
+        default=None,
+        description="canonical representation for person names, including non-Chinese names",
+    )
+
+
 class Candidate(TimoModel):
     surname_tokens: list[str]
     given_tokens: list[str]
@@ -180,6 +213,18 @@ class BatchSummary(TimoModel):
     results: list[Prediction]
     format_pattern: FormatPattern
     confidences: list[float] = Field(description="per-name confidence from individual_analyses, aligned with results")
+
+
+class BatchPredictionV2(BatchPrediction):
+    """Full batch result with v2 per-name predictions."""
+
+    results: list[PredictionV2]
+
+
+class BatchSummaryV2(BatchSummary):
+    """Trimmed batch result with v2 per-name predictions."""
+
+    results: list[PredictionV2]
 
 
 class RoutingDecisionValue(str, Enum):
@@ -268,6 +313,27 @@ class RoutedPaperPrediction(TimoModel):
         default_factory=list,
         description="per-author routed results, aligned to the instance's pp_names",
     )
+
+
+class RoutedPredictionV2(RoutedPrediction):
+    """Versioned routed result with canonical data on the answer and candidates."""
+
+    pp: PredictionV2
+    vys: PredictionV2 | None = None
+    canonical_name: CanonicalNameValue | None = None
+
+
+class PPRoutedPredictionV2(PPRoutedPrediction):
+    """Versioned PP-only routed result with canonical data."""
+
+    pp: PredictionV2
+    canonical_name: CanonicalNameValue | None = None
+
+
+class RoutedPaperPredictionV2(RoutedPaperPrediction):
+    """One paper's routed v2 results."""
+
+    authors: list[RoutedPredictionV2] = Field(default_factory=list)
 
 
 class PredictorConfig(BaseSettings):
@@ -619,7 +685,7 @@ class Predictor:
                     success=bool(chosen is not None and chosen.success),
                     **self._routed_name_fields(parsed),
                     router_prediction=pred,
-                    router_reason=row.get("router_reason", ""),
+                    router_reason=cast("str", row.get("router_reason", "")),
                     input_order_candidate=ioc,
                     pp=self._to_prediction(pp_res, format_pattern=pp_fp.copy(deep=True)),
                     vys=self._to_prediction(vys_res, format_pattern=vys_fp.copy(deep=True)),
@@ -650,7 +716,7 @@ class Predictor:
                     success=bool(parsed is not None),
                     **self._routed_name_fields(parsed),
                     router_prediction=pred,
-                    router_reason=row.get("router_reason", ""),
+                    router_reason=cast("str", row.get("router_reason", "")),
                     pp=self._to_prediction(res, format_pattern=pp_fp.copy(deep=True)),
                 ),
             )
@@ -704,7 +770,10 @@ class RoutingPredictor(Predictor):
     papers. Genuine routing errors also propagate.
     """
 
-    def predict_batch(self, instances: list[RoutingInstance]) -> list[RoutedPaperPrediction]:  # type: ignore[override]
+    def predict_batch(  # ty: ignore[invalid-method-override]
+        self,
+        instances: list[RoutingInstance],
+    ) -> list[RoutedPaperPrediction]:
         predictions: list[RoutedPaperPrediction | None] = [None] * len(instances)
         batch_inputs: list[list[str]] = []
         plans: list[tuple[int, str, int, int | None, int]] = []
@@ -749,6 +818,370 @@ class RoutingPredictor(Predictor):
                 pp_only = self._route_pp_batch(batch_results[pp_batch_index])
                 authors = [RoutedPrediction(**r.dict(), input_order_candidate=None, vys=None) for r in pp_only]
             predictions[instance_index] = RoutedPaperPrediction(authors=authors)
+
+        if any(prediction is None for prediction in predictions):
+            message = "routing prediction plan did not fill every instance slot"
+            raise RuntimeError(message)
+        return [prediction for prediction in predictions if prediction is not None]
+
+
+class PredictorV2(Predictor):
+    """TIMO v2 predictor surfacing all-person canonical name metadata.
+
+    Chinese recognition fields and every routing decision continue to come from
+    the same detector and routing functions as v1. Only response conversion is
+    versioned, so v1 payloads and schemas remain unchanged.
+    """
+
+    def predict_batch(self, instances: list[Instance]) -> list[PredictionV2]:  # ty: ignore[invalid-method-override]
+        """Analyze one flat TIMO batch and return v2 rows."""
+        return cast("list[PredictionV2]", super().predict_batch(instances))
+
+    def analyze_name_batch(
+        self,
+        names: list[str],
+        format_threshold: float | None = None,
+        minimum_batch_size: int | None = None,
+    ) -> BatchPredictionV2:
+        """Return full batch analysis with v2 rows."""
+        return cast(
+            "BatchPredictionV2",
+            super().analyze_name_batch(names, format_threshold, minimum_batch_size),
+        )
+
+    def process_name_batch(
+        self,
+        names: list[str],
+        format_threshold: float | None = None,
+        minimum_batch_size: int | None = None,
+    ) -> list[PredictionV2]:  # ty: ignore[invalid-method-override]
+        """Process one batch and return v2 rows."""
+        return cast(
+            "list[PredictionV2]",
+            super().process_name_batch(names, format_threshold, minimum_batch_size),
+        )
+
+    def process_name_batch_multiprocess(
+        self,
+        names: list[str],
+        max_workers: int | None = None,
+        chunk_size: int | None = None,
+    ) -> list[PredictionV2]:  # ty: ignore[invalid-method-override]
+        """Process one batch through the multiprocess helper and return v2 rows."""
+        return cast(
+            "list[PredictionV2]",
+            super().process_name_batch_multiprocess(names, max_workers, chunk_size),
+        )
+
+    def process_name_batches(  # noqa: PLR0913
+        self,
+        batches: list[list[str]],
+        *,
+        parallel: ParallelMode | None = None,
+        max_workers: int | None = None,
+        chunk_size: int | None = None,
+        min_parallel_batches: int | None = None,
+        format_threshold: float | None = None,
+        minimum_batch_size: int | None = None,
+    ) -> list[list[PredictionV2]]:  # ty: ignore[invalid-method-override]
+        """Process multiple batches and return v2 rows."""
+        return cast(
+            "list[list[PredictionV2]]",
+            super().process_name_batches(
+                batches,
+                parallel=parallel,
+                max_workers=max_workers,
+                chunk_size=chunk_size,
+                min_parallel_batches=min_parallel_batches,
+                format_threshold=format_threshold,
+                minimum_batch_size=minimum_batch_size,
+            ),
+        )
+
+    def score_name_batch(
+        self,
+        names: list[str],
+        format_threshold: float | None = None,
+        minimum_batch_size: int | None = None,
+    ) -> BatchSummaryV2:
+        """Return trimmed batch analysis with v2 rows."""
+        return cast(
+            "BatchSummaryV2",
+            super().score_name_batch(names, format_threshold, minimum_batch_size),
+        )
+
+    def route_pp_vys(
+        self,
+        pp_names: list[str],
+        vys_pool_names: list[str],
+    ) -> list[RoutedPredictionV2]:  # ty: ignore[invalid-method-override]
+        """Route one paper with venue context and return v2 rows."""
+        return cast("list[RoutedPredictionV2]", super().route_pp_vys(pp_names, vys_pool_names))
+
+    def route_pp(self, names: list[str]) -> list[PPRoutedPredictionV2]:  # ty: ignore[invalid-method-override]
+        """Route one PP-only batch and return v2 rows."""
+        return cast("list[PPRoutedPredictionV2]", super().route_pp(names))
+
+    @staticmethod
+    def _to_canonical_components(components) -> CanonicalNameComponents:
+        return CanonicalNameComponents(
+            given_name=components.given_name,
+            middle_name=components.middle_name,
+            surname=components.surname,
+            suffix=components.suffix,
+            given_tokens=list(components.given_tokens),
+            middle_tokens=list(components.middle_tokens),
+            surname_tokens=list(components.surname_tokens),
+            suffix_tokens=list(components.suffix_tokens),
+            order=list(components.order),
+        )
+
+    def _to_canonical_name(self, canonical_name) -> CanonicalNameValue | None:
+        if canonical_name is None:
+            return None
+        return CanonicalNameValue(
+            source_text=canonical_name.source_text,
+            text=canonical_name.text,
+            source=self._to_canonical_components(canonical_name.source),
+            normalized=self._to_canonical_components(canonical_name.normalized),
+        )
+
+    @staticmethod
+    def _canonical_components_from_parsed(parsed, suffix: str = "") -> CanonicalNameComponents:
+        counts = {
+            "given": len(parsed.given_tokens),
+            "middle": len(parsed.middle_tokens),
+            "surname": len(parsed.surname_tokens),
+        }
+        occurrences = {role: parsed.order.count(role) for role in counts}
+        expanded_order: list[str] = []
+        for role in parsed.order:
+            count = counts.get(role, 0)
+            if occurrences.get(role) == 1:
+                expanded_order.extend([role] * count)
+            elif count:
+                expanded_order.append(role)
+        if suffix:
+            expanded_order.append("suffix")
+        return CanonicalNameComponents(
+            given_name=parsed.given_name,
+            middle_name=parsed.middle_name,
+            surname=parsed.surname,
+            suffix=suffix,
+            given_tokens=list(parsed.given_tokens),
+            middle_tokens=list(parsed.middle_tokens),
+            surname_tokens=list(parsed.surname_tokens),
+            suffix_tokens=[suffix] if suffix else [],
+            order=expanded_order,
+        )
+
+    def _to_routed_canonical_name(self, parse_result, parsed) -> CanonicalNameValue | None:
+        """Convert canonical data, matching a PP-abstain input-order parse when needed."""
+        canonical = self._to_canonical_name(parse_result.canonical_name)
+        if canonical is None or parsed is None or parsed is parse_result.parsed:
+            return canonical
+
+        suffix = canonical.normalized.suffix
+        normalized = self._canonical_components_from_parsed(parsed, suffix=suffix)
+        text = " ".join(
+            component
+            for component in (normalized.given_name, normalized.middle_name, normalized.surname, normalized.suffix)
+            if component
+        )
+        return CanonicalNameValue(
+            source_text=canonical.source_text,
+            text=text,
+            source=canonical.source,
+            normalized=normalized,
+        )
+
+    def _to_prediction(
+        self,
+        parse_result,
+        *,
+        confidence: float | None = None,
+        format_pattern: FormatPattern | None = None,
+    ) -> PredictionV2:
+        return PredictionV2(
+            success=parse_result.success,
+            error_message=parse_result.error_message,
+            given_name=parse_result.parsed.given_name if parse_result.parsed else None,
+            surname=parse_result.parsed.surname if parse_result.parsed else None,
+            middle_name=(parse_result.parsed.middle_name if parse_result.parsed and parse_result.parsed.middle_name else None),
+            confidence=confidence,
+            format_pattern=format_pattern,
+            canonical_name=self._to_canonical_name(parse_result.canonical_name),
+        )
+
+    def _to_batch_prediction(self, batch_result) -> BatchPredictionV2:
+        return BatchPredictionV2(
+            names=list(batch_result.names),
+            results=[self._to_prediction(result) for result in batch_result.results],
+            format_pattern=self._to_format_pattern(batch_result.format_pattern),
+            individual_analyses=[self._to_individual_analysis(analysis) for analysis in batch_result.individual_analyses],
+            improvements=list(batch_result.improvements),
+            name_order_evidence=[self._to_name_order_evidence(evidence) for evidence in batch_result.name_order_evidence],
+        )
+
+    def _to_batch_summary(self, batch_result) -> BatchSummaryV2:
+        return BatchSummaryV2(
+            names=list(batch_result.names),
+            results=[self._to_prediction(result) for result in batch_result.results],
+            format_pattern=self._to_format_pattern(batch_result.format_pattern),
+            confidences=[analysis.confidence for analysis in batch_result.individual_analyses],
+        )
+
+    def _route_pp_vys_batches(  # ty: ignore[invalid-method-override]
+        self,
+        pp_batch: BatchParseResult,
+        pool: BatchParseResult,
+        n: int,
+    ) -> list[RoutedPredictionV2]:
+        """Route analyzed PP/VYS batches and convert their unchanged decisions to v2."""
+        vys_batch = BatchParseResult(
+            names=list(pool.names[:n]),
+            results=list(pool.results[:n]),
+            format_pattern=pool.format_pattern,
+            individual_analyses=list(pool.individual_analyses[:n]),
+            improvements=[index for index in pool.improvements if index < n],
+            name_order_evidence=list(pool.name_order_evidence[:n]),
+        )
+        rows = route_pp_vys_abstain_batches(pp_batch, vys_batch)
+
+        pp_format = self._to_format_pattern(pp_batch.format_pattern)
+        vys_format = self._to_format_pattern(vys_batch.format_pattern)
+        output: list[RoutedPredictionV2] = []
+        for index, row in enumerate(rows):
+            decision = row["router_prediction"]
+            input_order_candidate = row.get("input_order_candidate", "unknown")
+            pp_result = pp_batch.results[index]
+            vys_result = vys_batch.results[index]
+            if decision == "pp":
+                chosen = pp_result
+            elif decision == "vys":
+                chosen = vys_result
+            elif decision == "abstain":
+                chosen = {"pp": pp_result, "vys": vys_result}.get(input_order_candidate)
+                if chosen is None:
+                    message = f"abstain with unexpected input_order_candidate={input_order_candidate!r} (expected 'pp'/'vys')"
+                    raise ValueError(message)
+            elif decision == "not_person":
+                chosen = None
+            else:
+                message = f"pp-vys router returned unexpected router_prediction={decision!r}"
+                raise ValueError(message)
+
+            parsed = chosen.parsed if (chosen is not None and chosen.success) else None
+            canonical_result = chosen or pp_result
+            output.append(
+                RoutedPredictionV2(
+                    success=bool(chosen is not None and chosen.success),
+                    **self._routed_name_fields(parsed),
+                    router_prediction=decision,
+                    router_reason=cast("str", row.get("router_reason", "")),
+                    input_order_candidate=input_order_candidate,
+                    pp=self._to_prediction(pp_result, format_pattern=pp_format.copy(deep=True)),
+                    vys=self._to_prediction(vys_result, format_pattern=vys_format.copy(deep=True)),
+                    canonical_name=self._to_routed_canonical_name(canonical_result, parsed),
+                ),
+            )
+        return output
+
+    def _route_pp_batch(  # ty: ignore[invalid-method-override]
+        self,
+        pp_batch: BatchParseResult,
+    ) -> list[PPRoutedPredictionV2]:
+        """Route an analyzed PP-only batch and convert its unchanged decisions to v2."""
+        rows = route_pp_abstain_rows(build_pp_abstain_rows(pp_batch, self._detector))
+        pp_format = self._to_format_pattern(pp_batch.format_pattern)
+
+        output: list[PPRoutedPredictionV2] = []
+        for index, row in enumerate(rows):
+            decision = row["router_prediction"]
+            result = pp_batch.results[index]
+            if decision == "pp":
+                parsed = result.parsed if result.success else None
+            elif decision == "abstain":
+                parsed = pp_abstain_parsed(result, row)
+            elif decision == "not_person":
+                parsed = None
+            else:
+                message = f"pp-abstain router returned unexpected router_prediction={decision!r}"
+                raise ValueError(message)
+            output.append(
+                PPRoutedPredictionV2(
+                    success=bool(parsed is not None),
+                    **self._routed_name_fields(parsed),
+                    router_prediction=decision,
+                    router_reason=cast("str", row.get("router_reason", "")),
+                    pp=self._to_prediction(result, format_pattern=pp_format.copy(deep=True)),
+                    canonical_name=self._to_routed_canonical_name(result, parsed),
+                ),
+            )
+        return output
+
+    def route(  # ty: ignore[invalid-method-override]
+        self,
+        pp_names: list[str],
+        vys_pool_names: list[str] | None = None,
+    ) -> list[RoutedPredictionV2]:
+        """Run the unchanged unified router and retain v2 canonical fields."""
+        if vys_pool_names:
+            return self.route_pp_vys(pp_names, vys_pool_names)
+        return [RoutedPredictionV2(**result.dict(), input_order_candidate=None, vys=None) for result in self.route_pp(pp_names)]
+
+
+class RoutingPredictorV2(PredictorV2):
+    """TIMO-served v2 routing variant with one prediction per paper."""
+
+    def predict_batch(  # ty: ignore[invalid-method-override]
+        self,
+        instances: list[RoutingInstance],
+    ) -> list[RoutedPaperPredictionV2]:
+        predictions: list[RoutedPaperPredictionV2 | None] = [None] * len(instances)
+        batch_inputs: list[list[str]] = []
+        plans: list[tuple[int, str, int, int | None, int]] = []
+
+        for instance_index, instance in enumerate(instances):
+            if not instance.pp_names:
+                predictions[instance_index] = RoutedPaperPredictionV2(authors=[])
+                continue
+
+            if instance.vys_pool_names:
+                self._validate_vys_pool_names(instance.pp_names, instance.vys_pool_names)
+                pp_batch_index = len(batch_inputs)
+                batch_inputs.append(instance.pp_names)
+                vys_batch_index = len(batch_inputs)
+                batch_inputs.append(instance.vys_pool_names)
+                plans.append((instance_index, "pp_vys", pp_batch_index, vys_batch_index, len(instance.pp_names)))
+            else:
+                pp_batch_index = len(batch_inputs)
+                batch_inputs.append(instance.pp_names)
+                plans.append((instance_index, "pp_only", pp_batch_index, None, 0))
+
+        batch_results = self._detector.analyze_name_batches(
+            batch_inputs,
+            parallel=self._config.parallel,
+            min_parallel_batches=self._config.mp_min_parallel_batches,
+            max_workers=self._config.mp_max_workers,
+            chunk_size=self._config.mp_chunk_size,
+            mp_start_method=self._config.mp_start_method,
+        )
+
+        for instance_index, mode, pp_batch_index, vys_batch_index, pp_count in plans:
+            if mode == "pp_vys":
+                if vys_batch_index is None:
+                    message = "pp_vys routing plan missing VYS batch index"
+                    raise RuntimeError(message)
+                authors = self._route_pp_vys_batches(
+                    batch_results[pp_batch_index],
+                    batch_results[vys_batch_index],
+                    pp_count,
+                )
+            else:
+                pp_only = self._route_pp_batch(batch_results[pp_batch_index])
+                authors = [RoutedPredictionV2(**result.dict(), input_order_candidate=None, vys=None) for result in pp_only]
+            predictions[instance_index] = RoutedPaperPredictionV2(authors=authors)
 
         if any(prediction is None for prediction in predictions):
             message = "routing prediction plan did not fill every instance slot"

@@ -323,14 +323,30 @@ class NormalizationService:
             else:
                 return None
 
-            han_pinyin = tuple(self._cache_service.han_to_pinyin_fast(han_token))
-            if not roman_token or not han_pinyin or not self._roman_matches_han_token(roman_token, han_pinyin):
+            han_pinyin = self._matching_aligned_han_pinyin(roman_token, han_token)
+            if not roman_token or han_pinyin is None:
                 return None
 
             pairs.append(BilingualTokenPair(roman_token=roman_token, han_token=han_token, han_pinyin=han_pinyin))
             index += 2
 
         return tuple(pairs) if len(pairs) >= MIN_BILINGUAL_ALIGNMENT_PAIRS else None
+
+    def _matching_aligned_han_pinyin(self, roman_token: str, han_token: str) -> tuple[str, ...] | None:
+        """Match one explicit pair, allowing heteronyms only for recognized Han surnames."""
+        primary = tuple(self._cache_service.han_to_pinyin_fast(han_token))
+        if primary and self._roman_matches_han_token(roman_token, primary):
+            return primary
+        if self._data is None or self._data.surname_frequencies.get(han_token, 0.0) <= 0:
+            return None
+        return next(
+            (
+                alternative
+                for alternative in self._cache_service.han_to_pinyin_alternatives_fast(han_token)
+                if self._roman_matches_han_token(roman_token, alternative)
+            ),
+            None,
+        )
 
     def _is_han_token(self, token: str) -> bool:
         """Return whether the whole token is CJK characters."""

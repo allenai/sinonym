@@ -12,12 +12,16 @@ import logging
 
 from sinonym.chinese_names_data import (
     COMPOUND_VARIANTS,
+    ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES,
     JAPANESE_SURNAMES,
     KOREAN_AMBIGUOUS_PATTERNS,
+    KOREAN_DIRECTIONAL_FAMILY_FIRST_SURNAMES,
+    KOREAN_DIRECTIONAL_SINGLE_GIVEN_NAMES,
     KOREAN_GIVEN_PAIRS,
     KOREAN_GIVEN_PATTERNS,
     KOREAN_ONLY_SURNAMES,
     KOREAN_SPECIFIC_PATTERNS,
+    NAME_ORDER_ROUTING_KOREAN_SURNAMES,
     OVERLAPPING_KOREAN_SURNAMES,
     OVERLAPPING_VIETNAMESE_SURNAMES,
     VIETNAMESE_GIVEN_PATTERNS,
@@ -32,11 +36,22 @@ from sinonym.utils.thread_cache import ThreadLocalCache
 MIN_COMPOUND_SURNAME_TOKEN_COUNT = 3
 JAPANESE_CLASSIFIER_REJECTION = "japanese"
 JAPANESE_CLASSIFIER_RUNTIME_ERROR = "ML Japanese classifier failed"
+MIN_DIRECTIONAL_KOREAN_TOKENS = 2
+MAX_DIRECTIONAL_KOREAN_TOKENS = 3
+MIN_CONTEXTUAL_TAIWAN_SURNAME_FREQUENCY = 100.0
+CONTEXTUAL_TAIWAN_GIVEN_PARTS = {
+    "jungting": ("jung", "ting"),
+    "tsung-jr": ("tsung", "jr"),
+}
+KOREAN_DIRECTIONAL_SURNAMES = frozenset(
+    NAME_ORDER_ROUTING_KOREAN_SURNAMES | KOREAN_ONLY_SURNAMES | OVERLAPPING_KOREAN_SURNAMES,
+)
 
 # Optional ML Japanese classifier imports - consolidated from separate service
 try:
     # Ensure custom model components are importable when deserializing
     import sinonym.ml_model_components  # noqa: F401
+
     ML_AVAILABLE = True
 except ImportError:
     ML_AVAILABLE = False
@@ -63,8 +78,7 @@ class _MLJapaneseClassifier:
                     self._model = load_skops("chinese_japanese_classifier.skops")
                 except Exception as skops_err:  # noqa: BLE001 - skops may raise several deserialization errors.
                     LOGGER.info(
-                        "SKOPS model not available or failed to load (%s); "
-                        "falling back to legacy joblib artifact.",
+                        "SKOPS model not available or failed to load (%s); falling back to legacy joblib artifact.",
                         skops_err,
                     )
                     self._model = load_joblib("chinese_japanese_classifier.joblib")
@@ -195,7 +209,6 @@ class EthnicityClassificationService:
         # Check if this is an all-Chinese character input that could be Japanese
         compact_chinese_text = self._normalizer._text_preprocessor.compact_all_chinese_input(original_text)
         if compact_chinese_text and self._ml_classifier.is_available():
-
             # Use ML classifier to check for Japanese names in Chinese characters
             ml_result = self._ml_classifier.classify_all_chinese_name(compact_chinese_text)
 
@@ -224,9 +237,21 @@ class EthnicityClassificationService:
         original_keys_normalized = [get_normalized(t) for t in expanded_tokens]
         expanded_keys = list(set(original_keys_raw + original_keys_normalized))
 
+        # Directional Korean structure must be evaluated before every
+        # affirmative Chinese shortcut. Surname/given roles are essential:
+        # many individual syllables and surnames overlap with Chinese.
+        if self._has_directional_korean_structure(tokens):
+            return ParseResult.failure("Korean structural patterns detected")
+
+        if self.contextual_taiwan_given_parts(tokens) is not None:
+            return ParseResult.success_with_name("")
+
         # =================================================================
         # TIER 1: DEFINITIVE EVIDENCE (High Confidence)
         # =================================================================
+
+        if self._has_wade_giles_apostrophe_surname(tokens):
+            return ParseResult.success_with_name("")
 
         # Single loop for all definitive evidence checks (short-circuit optimization)
         for key in expanded_keys:
@@ -249,6 +274,11 @@ class EthnicityClassificationService:
             if clean_key in VIETNAMESE_ONLY_SURNAMES:
                 return ParseResult.failure("appears to be Vietnamese name")
 
+        if self._has_reviewed_chinese_surname_alias(tokens):
+            return ParseResult.success_with_name("")
+        if self._has_dominant_surname_compact_initial(tokens):
+            return ParseResult.success_with_name("")
+
         # =================================================================
         # TIER 2: CULTURAL CONTEXT (Medium Confidence)
         # =================================================================
@@ -256,11 +286,8 @@ class EthnicityClassificationService:
         # Optimized validation chain: calculate overlapping surname evidence once with reduced string ops
         def check_overlapping_surname(token):
             clean_token_lower = StringManipulationUtils.remove_spaces(token).lower()
-            return (
-                clean_token_lower in self._data.surnames and (
-                    clean_token_lower in OVERLAPPING_KOREAN_SURNAMES or
-                    clean_token_lower in OVERLAPPING_VIETNAMESE_SURNAMES
-                )
+            return clean_token_lower in self._data.surnames and (
+                clean_token_lower in OVERLAPPING_KOREAN_SURNAMES or clean_token_lower in OVERLAPPING_VIETNAMESE_SURNAMES
             )
 
         has_overlapping_chinese_surname = any(check_overlapping_surname(token) for token in tokens)
@@ -286,6 +313,78 @@ class EthnicityClassificationService:
 
         # No Chinese evidence found
         return ParseResult.failure("no Chinese evidence found")
+
+    @staticmethod
+    def _has_reviewed_chinese_surname_alias(tokens: tuple[str, ...]) -> bool:
+        """Return whether a name edge is a reviewed Chinese surname spelling."""
+        return bool(tokens) and (
+            tokens[0].lower() in ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES
+            or tokens[-1].lower() in ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES
+        )
+
+    def _has_wade_giles_apostrophe_surname(self, tokens: tuple[str, ...]) -> bool:
+        """Return whether an exact name edge has backed Wade-Giles surname evidence."""
+        return bool(tokens) and (
+            self._surname_resolver.evidence_is_wade_giles_apostrophe_surname(tokens[0])
+            or self._surname_resolver.evidence_is_wade_giles_apostrophe_surname(tokens[-1])
+        )
+
+    def _has_dominant_surname_compact_initial(self, tokens: tuple[str, ...]) -> bool:
+        """Return dominant family-first surname plus a vowelless initial bundle."""
+        if len(tokens) != 2:
+            return False
+        abbreviation = tokens[1]
+        return bool(
+            self._surname_resolver.evidence_is_dominant_surname(tokens[0])
+            and abbreviation.isalpha()
+            and 2 <= len(abbreviation) <= 3
+            and not any(character.lower() in "aeiou" for character in abbreviation),
+        )
+
+    @staticmethod
+    def _split_roman_components(tokens: tuple[str, ...]) -> list[str]:
+        """Return lowercase Roman components from spaced or hyphenated tokens."""
+        return [part.lower() for token in tokens for part in token.split("-") if part and part.isalpha()]
+
+    @classmethod
+    def _has_directional_korean_structure(cls, tokens: tuple[str, ...]) -> bool:
+        """Return whether surname and given evidence align as a Korean name."""
+        if not MIN_DIRECTIONAL_KOREAN_TOKENS <= len(tokens) <= MAX_DIRECTIONAL_KOREAN_TOKENS:
+            return False
+
+        lowered = tuple(StringManipulationUtils.remove_spaces(token).lower() for token in tokens)
+        given_first_parts = cls._split_roman_components(lowered[:-1])
+        family_first_parts = cls._split_roman_components(lowered[1:])
+
+        given_first = lowered[-1] in KOREAN_DIRECTIONAL_SURNAMES and tuple(given_first_parts) in KOREAN_GIVEN_PAIRS
+        if given_first:
+            return True
+
+        directional_single = (
+            lowered[0] in KOREAN_DIRECTIONAL_FAMILY_FIRST_SURNAMES
+            and len(family_first_parts) == 1
+            and family_first_parts[0] in KOREAN_DIRECTIONAL_SINGLE_GIVEN_NAMES
+        )
+        if directional_single:
+            return True
+
+        return bool(
+            lowered[0] in KOREAN_DIRECTIONAL_SURNAMES
+            and lowered[-1] not in KOREAN_DIRECTIONAL_SURNAMES
+            and tuple(family_first_parts) in KOREAN_GIVEN_PAIRS,
+        )
+
+    def contextual_taiwan_given_parts(self, tokens: tuple[str, ...]) -> tuple[str, str] | None:
+        """Return an exact contextual Taiwan given-name segmentation."""
+        if len(tokens) != 2 or self._has_directional_korean_structure(tokens):
+            return None
+        given_key = StringManipulationUtils.remove_spaces(tokens[0]).lower()
+        parts = CONTEXTUAL_TAIWAN_GIVEN_PARTS.get(given_key)
+        if parts is None:
+            return None
+        if self._surname_resolver.evidence_frequency(tokens[-1]) < MIN_CONTEXTUAL_TAIWAN_SURNAME_FREQUENCY:
+            return None
+        return parts
 
     def _classify_first_token_surname(self, tokens: tuple[str, ...]) -> str:
         """Classify the first token's surname type for ethnicity detection."""
@@ -367,6 +466,7 @@ class EthnicityClassificationService:
     @staticmethod
     def _candidate_korean_given_sequences(tokens: tuple[str, ...], surname_type: str) -> list[list[str]]:
         """Return plausible given-token spans for Korean pair detection."""
+
         def split_given_tokens(given_tokens: tuple[str, ...]) -> list[str]:
             split_tokens: list[str] = []
             for token in given_tokens:
@@ -387,8 +487,7 @@ class EthnicityClassificationService:
     def _has_trailing_overlapping_korean_surname(tokens: tuple[str, ...]) -> bool:
         """Return whether a final token can be a Korean surname."""
         return bool(
-            tokens
-            and StringManipulationUtils.remove_spaces(tokens[-1]).lower() in OVERLAPPING_KOREAN_SURNAMES,
+            tokens and StringManipulationUtils.remove_spaces(tokens[-1]).lower() in OVERLAPPING_KOREAN_SURNAMES,
         )
 
     def _first_token_has_dominant_chinese_surname(self, tokens: tuple[str, ...]) -> bool:
@@ -409,12 +508,17 @@ class EthnicityClassificationService:
 
         # Calculate Korean score
         korean_score = self._calculate_korean_score_from_analysis(
-            analysis, tokens, expanded_keys, normalized_cache,
+            analysis,
+            tokens,
+            expanded_keys,
+            normalized_cache,
         )
 
         # Calculate Vietnamese score
         vietnamese_score = self._calculate_vietnamese_score_from_analysis(
-            analysis, tokens, expanded_keys,
+            analysis,
+            tokens,
+            expanded_keys,
         )
 
         return korean_score, vietnamese_score
@@ -438,17 +542,12 @@ class EthnicityClassificationService:
         score = 0.0
 
         # Overlapping Korean surname anywhere in the name
-        overlapping_any = any(
-            StringManipulationUtils.remove_spaces(t).lower() in OVERLAPPING_KOREAN_SURNAMES
-            for t in tokens
-        )
+        overlapping_any = any(StringManipulationUtils.remove_spaces(t).lower() in OVERLAPPING_KOREAN_SURNAMES for t in tokens)
 
         # Helper functions (reused from original)
         def is_chinese_given_strict(tok: str) -> bool:
             normalized = normalized_cache[tok] if normalized_cache and tok in normalized_cache else self._normalizer.norm(tok)
-            return (
-                normalized in self._data.given_names_normalized or tok.lower() in self._data.given_names_normalized
-            )
+            return normalized in self._data.given_names_normalized or tok.lower() in self._data.given_names_normalized
 
         def has_korean_signature(tok: str) -> bool:
             t = tok.lower()
@@ -464,10 +563,7 @@ class EthnicityClassificationService:
             first_cn = is_chinese_given_strict(first)
             second_cn = is_chinese_given_strict(second)
             if overlapping_any:
-                if (
-                    (has_korean_signature(first) or has_korean_signature(second))
-                    and not (first_cn and second_cn)
-                ):
+                if (has_korean_signature(first) or has_korean_signature(second)) and not (first_cn and second_cn):
                     score += 3.0
             elif (not (first_cn and second_cn)) and (has_korean_signature(first) or has_korean_signature(second)):
                 score += 3.0
@@ -509,9 +605,7 @@ class EthnicityClassificationService:
 
         if vietnamese_surname_count >= 1 and vietnamese_given_count >= 1:
             # Check if any token is a Chinese surname
-            has_chinese_surname = any(
-                StringManipulationUtils.remove_spaces(key) in self._data.surnames for key in expanded_keys
-            )
+            has_chinese_surname = any(StringManipulationUtils.remove_spaces(key) in self._data.surnames for key in expanded_keys)
 
             if not has_chinese_surname:
                 score += 2.0  # Strong Vietnamese pattern
