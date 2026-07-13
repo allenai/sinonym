@@ -220,6 +220,7 @@ LINUX_AUTO_MULTIPROCESS_MIN_BATCHES = 2000
 BILINGUAL_SURNAME_STRENGTH_RATIO_MIN = 5.0
 BILINGUAL_ROMAN_HAN_SOURCE_ORDER_RATIO_MAX = 12.0
 BILINGUAL_ENDPOINT_PAIR_COUNT = 2
+TWO_TOKEN_NAME_COUNT = 2
 SPACED_ALL_CHINESE_GROUP_COUNT = 2
 THREE_CHARACTER_ALL_CHINESE_TOKEN_COUNT = 3
 SPACED_HAN_PREFIX_SURNAME_RATIO_MIN = 5.0
@@ -880,7 +881,7 @@ class ChineseNameDetector:
             return ParseResult.failure(f"needs at least {self._config.min_tokens_required} Roman tokens")
 
         # Check if this is an all-Chinese input first
-        is_all_chinese = self._normalizer._text_preprocessor.is_all_chinese_input(raw_name)
+        is_all_chinese = not raw_name.isascii() and self._normalizer._text_preprocessor.is_all_chinese_input(raw_name)
 
         # Exact alternating Roman/Han alignment is stronger evidence than the
         # Roman-only ethnicity gate, especially for polyphonic Han surnames.
@@ -1057,46 +1058,66 @@ class ChineseNameDetector:
             original_tokens = list(normalized_input.roman_tokens)
             best_candidate = None
 
-            for order in (normalized_input.roman_tokens, normalized_input.roman_tokens[::-1]):
-                order_tokens = list(order)
-                parse_result = self._parsing_service.parse_name_order_tokens(
-                    order_tokens,
+            # For two tokens the parser already evaluates both endpoint surname
+            # candidates. Reversing repeats the same candidate set; uncertain
+            # fallback parses and parenthetical-order hints retain the full path.
+            if len(original_tokens) == TWO_TOKEN_NAME_COUNT and not normalized_input.surname_first_parenthetical_hint:
+                direct_parse = self._parsing_service._best_parse_tokens(
+                    original_tokens,
                     normalized_input.norm_map,
                     normalized_input.compound_metadata,
                 )
-                if parse_result is None:
-                    continue
+                if direct_parse is not None:
+                    surname_tokens, given_tokens, _original_compound_surname = direct_parse
+                    best_candidate = {
+                        "surname_tokens": surname_tokens,
+                        "given_tokens": given_tokens,
+                        "score": 0.0,
+                        "order_tokens": original_tokens,
+                        "used_original": True,
+                    }
 
-                surname_tokens, given_tokens, original_compound_surname = parse_result
-                score = self._parsing_service.calculate_parse_score(
-                    surname_tokens,
-                    given_tokens,
-                    original_tokens,
-                    normalized_input.norm_map,
-                    is_all_chinese=False,
-                    original_compound_format=original_compound_surname,
-                    surname_first_parenthetical_hint=normalized_input.surname_first_parenthetical_hint,
-                )
-                used_original = order_tokens == original_tokens
-
-                candidate = {
-                    "surname_tokens": surname_tokens,
-                    "given_tokens": given_tokens,
-                    "score": score,
-                    "order_tokens": order_tokens,
-                    "used_original": used_original,
-                }
-
-                if (
-                    best_candidate is None
-                    or candidate["score"] > best_candidate["score"]
-                    or (
-                        candidate["score"] == best_candidate["score"]
-                        and candidate["used_original"]
-                        and not best_candidate["used_original"]
+            if best_candidate is None:
+                for order in (normalized_input.roman_tokens, normalized_input.roman_tokens[::-1]):
+                    order_tokens = list(order)
+                    parse_result = self._parsing_service.parse_name_order_tokens(
+                        order_tokens,
+                        normalized_input.norm_map,
+                        normalized_input.compound_metadata,
                     )
-                ):
-                    best_candidate = candidate
+                    if parse_result is None:
+                        continue
+
+                    surname_tokens, given_tokens, original_compound_surname = parse_result
+                    score = self._parsing_service.calculate_parse_score(
+                        surname_tokens,
+                        given_tokens,
+                        original_tokens,
+                        normalized_input.norm_map,
+                        is_all_chinese=False,
+                        original_compound_format=original_compound_surname,
+                        surname_first_parenthetical_hint=normalized_input.surname_first_parenthetical_hint,
+                    )
+                    used_original = order_tokens == original_tokens
+
+                    candidate = {
+                        "surname_tokens": surname_tokens,
+                        "given_tokens": given_tokens,
+                        "score": score,
+                        "order_tokens": order_tokens,
+                        "used_original": used_original,
+                    }
+
+                    if (
+                        best_candidate is None
+                        or candidate["score"] > best_candidate["score"]
+                        or (
+                            candidate["score"] == best_candidate["score"]
+                            and candidate["used_original"]
+                            and not best_candidate["used_original"]
+                        )
+                    ):
+                        best_candidate = candidate
 
             if best_candidate is not None:
                 surname_tokens = best_candidate["surname_tokens"]
@@ -1203,19 +1224,27 @@ class ChineseNameDetector:
     @staticmethod
     def _canonical_components_from_parsed(parsed: ParsedName) -> NameComponents:
         """Convert legacy parsed components to immutable canonical components."""
-        counts = {
-            "given": len(parsed.given_tokens),
-            "middle": len(parsed.middle_tokens),
-            "surname": len(parsed.surname_tokens),
-        }
-        occurrences = {role: parsed.order.count(role) for role in counts}
-        expanded_order: list[str] = []
-        for role in parsed.order:
-            count = counts.get(role, 0)
-            if occurrences.get(role) == 1:
-                expanded_order.extend([role] * count)
-            elif count:
-                expanded_order.append(role)
+        if parsed.order == ["given", "middle", "surname"]:
+            expanded_order = (
+                ("given",) * len(parsed.given_tokens)
+                + ("middle",) * len(parsed.middle_tokens)
+                + ("surname",) * len(parsed.surname_tokens)
+            )
+        else:
+            counts = {
+                "given": len(parsed.given_tokens),
+                "middle": len(parsed.middle_tokens),
+                "surname": len(parsed.surname_tokens),
+            }
+            occurrences = {role: parsed.order.count(role) for role in counts}
+            expanded: list[str] = []
+            for role in parsed.order:
+                count = counts.get(role, 0)
+                if occurrences.get(role) == 1:
+                    expanded.extend([role] * count)
+                elif count:
+                    expanded.append(role)
+            expanded_order = tuple(expanded)
         return NameComponents(
             given_name=parsed.given_name,
             middle_name=parsed.middle_name,
@@ -1223,7 +1252,7 @@ class ChineseNameDetector:
             given_tokens=tuple(parsed.given_tokens),
             middle_tokens=tuple(parsed.middle_tokens),
             surname_tokens=tuple(parsed.surname_tokens),
-            order=tuple(expanded_order),
+            order=expanded_order,
         )
 
     def _canonical_name_from_chinese_result(self, raw_name: str, result: ParseResult) -> CanonicalName | None:
@@ -1243,6 +1272,8 @@ class ChineseNameDetector:
     @staticmethod
     def _component_token_key(token: str) -> str:
         """Return a comparison key for source-to-normalized token lineage."""
+        if token.isalnum():
+            return token.casefold()
         return "".join(character.casefold() for character in token if character.isalnum())
 
     @staticmethod
@@ -1263,12 +1294,45 @@ class ChineseNameDetector:
         normalized: NameComponents,
     ) -> NameComponents:
         """Preserve raw Latin token boundaries while retaining parsed roles."""
+        simple_tokens = self._simple_source_tokens(raw_name)
+        if simple_tokens is not None:
+            simple_source = self._source_components_from_tokens(
+                simple_tokens,
+                parsed_original,
+                normalized,
+                require_unique_roles=True,
+            )
+            if simple_source is not None:
+                return simple_source
+
         source_result = self._person_name_normalizer.normalize_text(raw_name)
         if source_result.canonical_name is None:
             return self._canonical_components_from_parsed(parsed_original)
 
         generic_source = source_result.canonical_name.source
         ordered_tokens = self._ordered_component_tokens(generic_source)
+        source = self._source_components_from_tokens(
+            ordered_tokens,
+            parsed_original,
+            normalized,
+            require_unique_roles=False,
+        )
+        assert source is not None
+        return source
+
+    def _simple_source_tokens(self, raw_name: str) -> tuple[str, ...] | None:
+        """Return already-clean ASCII source tokens, or abstain."""
+        return self._normalizer.simple_latin_tokens(raw_name)
+
+    def _source_components_from_tokens(
+        self,
+        ordered_tokens: list[str] | tuple[str, ...],
+        parsed_original: ParsedName,
+        normalized: NameComponents,
+        *,
+        require_unique_roles: bool,
+    ) -> NameComponents | None:
+        """Assign source tokens to normalized roles without changing token text."""
         normalized_by_role = {
             "given": normalized.given_tokens,
             "middle": normalized.middle_tokens,
@@ -1288,6 +1352,8 @@ class ChineseNameDetector:
         for index, token in enumerate(ordered_tokens):
             key = self._component_token_key(token)
             candidates = [role for role, keys in role_keys.items() if key and key in keys]
+            if require_unique_roles and len(candidates) != 1:
+                return None
             fallback = fallback_roles[index] if index < len(fallback_roles) else "given"
             role = candidates[0] if len(candidates) == 1 else fallback
             assigned.append((role, token))

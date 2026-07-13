@@ -9,6 +9,7 @@ linguistic patterns and cultural markers.
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 
 from sinonym.chinese_names_data import (
     COMPOUND_VARIANTS,
@@ -39,6 +40,7 @@ JAPANESE_CLASSIFIER_RUNTIME_ERROR = "ML Japanese classifier failed"
 MIN_DIRECTIONAL_KOREAN_TOKENS = 2
 MAX_DIRECTIONAL_KOREAN_TOKENS = 3
 MIN_CONTEXTUAL_TAIWAN_SURNAME_FREQUENCY = 100.0
+MIN_CHINESE_SURNAME_STRENGTH = 0.5
 CONTEXTUAL_TAIWAN_GIVEN_PARTS = {
     "jungting": ("jung", "ting"),
     "tsung-jr": ("tsung", "jr"),
@@ -305,10 +307,8 @@ class EthnicityClassificationService:
         # TIER 3: CHINESE DEFAULT (Low Confidence)
         # =================================================================
 
-        chinese_surname_strength = self._calculate_chinese_surname_strength(expanded_keys, normalized_cache)
-
         # Chinese default: Accept if we have any reasonable Chinese surname evidence
-        if chinese_surname_strength >= 0.5:
+        if self._has_sufficient_chinese_surname_strength(expanded_keys, normalized_cache):
             return ParseResult.success_with_name("")
 
         # No Chinese evidence found
@@ -347,6 +347,7 @@ class EthnicityClassificationService:
         return [part.lower() for token in tokens for part in token.split("-") if part and part.isalpha()]
 
     @classmethod
+    @lru_cache(maxsize=4096)
     def _has_directional_korean_structure(cls, tokens: tuple[str, ...]) -> bool:
         """Return whether surname and given evidence align as a Korean name."""
         if not MIN_DIRECTIONAL_KOREAN_TOKENS <= len(tokens) <= MAX_DIRECTIONAL_KOREAN_TOKENS:
@@ -616,8 +617,12 @@ class EthnicityClassificationService:
 
         return score
 
-    def _calculate_chinese_surname_strength(self, expanded_keys: list[str], normalized_cache: dict[str, str]) -> float:
-        """Calculate Chinese surname strength (simplified from original)."""
+    def _has_sufficient_chinese_surname_strength(
+        self,
+        expanded_keys: list[str],
+        normalized_cache: dict[str, str],
+    ) -> bool:
+        """Return whether nonnegative surname evidence reaches the Chinese threshold."""
         chinese_surname_strength = 0.0
 
         # Local memoization for repeated split/component checks
@@ -649,6 +654,8 @@ class EthnicityClassificationService:
                     base_strength = 0.2
 
                 chinese_surname_strength += base_strength
+                if chinese_surname_strength >= MIN_CHINESE_SURNAME_STRENGTH:
+                    return True
             # Check for compact compound surnames in COMPOUND_VARIANTS
             elif clean_key_lower in COMPOUND_VARIANTS:
                 # This is a compact compound surname - give it good strength
@@ -660,7 +667,7 @@ class EthnicityClassificationService:
                     part1, part2 = compound_parts
                     if part1 in self._data.surnames_normalized and part2 in self._data.surnames_normalized:
                         # Both parts are valid Chinese surnames, give high confidence
-                        chinese_surname_strength += 1.0
+                        return True
             else:
                 # NEW: Check if this could be a compound Chinese given name
                 if clean_key_lower in split_result_cache:
@@ -698,5 +705,7 @@ class EthnicityClassificationService:
                     if all_chinese_components:
                         # Add modest boost for compound given names (helps cases like "Beining")
                         chinese_surname_strength += 0.3
+                        if chinese_surname_strength >= MIN_CHINESE_SURNAME_STRENGTH:
+                            return True
 
-        return chinese_surname_strength
+        return False

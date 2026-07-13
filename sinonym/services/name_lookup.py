@@ -112,8 +112,10 @@ class SurnameResolver:
         """Derive the parser-strict surname key used by parse scoring."""
         self._require_tokens(surname_tokens)
         cache_key = tuple(surname_tokens)
-        if cache_key in self._parser_key_cache:
+        try:
             return self._parser_key_cache[cache_key]
+        except KeyError:
+            pass
 
         if len(cache_key) == 1:
             parser_key = self._single_parser_key(cache_key[0])
@@ -146,12 +148,15 @@ class SurnameResolver:
 
     def _evidence_key(self, token: str) -> str:
         """Derive the as-written surname evidence key."""
-        if token not in self._evidence_key_cache:
-            self._evidence_key_cache[token] = self._data.surname_lookup_key(
+        try:
+            return self._evidence_key_cache[token]
+        except KeyError:
+            evidence_key = self._data.surname_lookup_key(
                 self._normalizer.norm_light(token),
                 self._normalizer.norm(token),
             )
-        return self._evidence_key_cache[token]
+            self._evidence_key_cache[token] = evidence_key
+            return evidence_key
 
     def _is_wade_giles_initial_remapped_surname_token(self, token: str) -> bool:
         """Return whether a direct surname was remapped by a Wade-Giles initial rule."""

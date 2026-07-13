@@ -39,6 +39,28 @@ def test_canonical_name_moves_true_suffix_to_suffix_component(detector):
     assert result.canonical_name.normalized.order == ("given", "surname", "suffix")
 
 
+def test_two_token_suffixes_and_credentials_use_full_canonical_pipeline(detector):
+    cases = (
+        ("John Jr", "John Jr.", "Jr."),
+        ("John Senior", "John Sr.", "Sr."),
+        ("John Phd", "John", ""),
+        ("Phd Smith", "Smith", ""),
+        ("PD Dr", None, None),
+    )
+
+    for raw_name, expected_text, expected_suffix in cases:
+        public = detector.normalize_name(raw_name).canonical_name
+        generic = detector.normalize_person_name(raw_name)
+
+        assert public == generic
+        if expected_text is None:
+            assert public is None
+            continue
+        assert public is not None
+        assert public.text == expected_text
+        assert public.normalized.suffix == expected_suffix
+
+
 def test_structured_component_normalization_repairs_roles_after_drops(detector):
     canonical = detector.normalize_person_name_components(
         first_name="dr steve",

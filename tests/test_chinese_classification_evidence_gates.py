@@ -86,6 +86,17 @@ def test_directional_korean_gate_preserves_reviewed_chinese_controls(
     assert detector.normalize_name(raw_name).success
 
 
+@pytest.mark.parametrize("raw_name", ["Zhang Thi", "Wang Thi", "Thi Zhang", "Thi Wang"])
+def test_vietnamese_thi_veto_precedes_chinese_surname_evidence(
+    detector: ChineseNameDetector,
+    raw_name: str,
+) -> None:
+    result = detector.normalize_name(raw_name)
+
+    assert not result.success
+    assert result.error_message == "appears to be Vietnamese name"
+
+
 @pytest.mark.parametrize(
     ("raw_name", "expected"),
     [

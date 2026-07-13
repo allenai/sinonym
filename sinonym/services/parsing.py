@@ -345,9 +345,13 @@ class NameParsingService:
             normalized_cache,
             compound_metadata,
         )
-        parses = [(surname, given) for surname, given, _ in parses_with_format]
-        if not parses:
+        if not parses_with_format:
             return None
+        if len(parses_with_format) == 1:
+            surname_tokens, given_tokens, original_compound_format = parses_with_format[0]
+            needs_initial_guard = any(len(token) == 1 for token in given_tokens) and any(len(token) > 3 for token in tokens)
+            if not needs_initial_guard:
+                return surname_tokens, given_tokens, original_compound_format
 
         scored_parses = []
         has_multi_syllable_tokens = any(len(token) > 3 for token in tokens)

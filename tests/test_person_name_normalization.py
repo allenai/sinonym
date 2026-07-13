@@ -95,6 +95,35 @@ def test_ascii_surface_fast_path_skips_unicode_scans(monkeypatch: pytest.MonkeyP
     )
 
 
+@pytest.mark.parametrize("raw_name", ["John Smith", "JOHN SMITH", "jOhN mCdonald", "A Li", "CS Smith", "Ben Sherwood"])
+def test_simple_two_token_fast_path_matches_full_pipeline(
+    normalizer: PersonNameNormalizationService,
+    monkeypatch: pytest.MonkeyPatch,
+    raw_name: str,
+) -> None:
+    fast_result = normalizer._normalize_simple_two_token_text(raw_name)  # noqa: SLF001
+    assert fast_result is not None
+
+    monkeypatch.setattr(
+        PersonNameNormalizationService,
+        "_normalize_simple_two_token_text",
+        lambda _self, _raw_name: None,
+    )
+
+    assert normalizer.normalize_text(raw_name) == fast_result
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    ["John Jr", "John Phd", "Phd Smith", "PD Dr", "John University", "John AND", "John II"],
+)
+def test_simple_two_token_fast_path_abstains_on_policy_tokens(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    assert normalizer._normalize_simple_two_token_text(raw_name) is None  # noqa: SLF001
+
+
 def test_normalize_text_strips_stacked_title_and_credentials_at_boundaries(
     normalizer: PersonNameNormalizationService,
 ) -> None:

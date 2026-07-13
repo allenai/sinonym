@@ -148,10 +148,20 @@ def _contains(values: tuple[str, ...], key: str) -> bool:
 
 
 def _fold(value: str) -> str:
+    if value.isascii():
+        return value.casefold()
     translated = value.translate(str.maketrans({"\u0110": "D", "\u0111": "d"}))
     return "".join(
         character for character in unicodedata.normalize("NFD", translated).casefold() if not unicodedata.combining(character)
     )
+
+
+KOREAN_ROUTING_GIVEN_PARTS = frozenset(
+    _fold(value)
+    for value in (
+        NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES | KOREAN_GIVEN_PATTERNS | KOREAN_SPECIFIC_PATTERNS | KOREAN_AMBIGUOUS_PATTERNS
+    )
+)
 
 
 def _japanese_roman_keys(value: str) -> tuple[str, ...]:
@@ -298,18 +308,9 @@ class EastAsianNameOrderService:
             return None
         if _contains(lexicons.korean_surnames, _fold(tokens[-1])):
             return None
-        known_given = {
-            _fold(value)
-            for value in (
-                NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES
-                | KOREAN_GIVEN_PATTERNS
-                | KOREAN_SPECIFIC_PATTERNS
-                | KOREAN_AMBIGUOUS_PATTERNS
-            )
-        }
         given_parts = [_fold(part) for token in tokens[1:] for part in token.split("-") if part]
         has_hyphen = any("-" in token for token in tokens[1:])
-        all_known = bool(given_parts) and all(part in known_given for part in given_parts)
+        all_known = bool(given_parts) and all(part in KOREAN_ROUTING_GIVEN_PARTS for part in given_parts)
         if not (has_hyphen or (len(tokens) == MAX_KOREAN_ROMANIZED_TOKENS and all_known)):
             return None
         given_tokens = tuple(tokens[1:])

@@ -248,6 +248,15 @@ _STANDARD_SUFFIXES = {
 _RAW_ROMAN_SUFFIXES = frozenset({"II", "III", "IV", "VI", "VII", "VIII", "IX", "X"})
 _EXPLICIT_ROMAN_SUFFIXES = _RAW_ROMAN_SUFFIXES | {"I", "V", "X"}
 _CASE_INSENSITIVE_ROMAN_SUFFIXES = _RAW_ROMAN_SUFFIXES - {"II"}
+_SIMPLE_TWO_TOKEN_POLICY_KEYS = frozenset(
+    _TITLE_KEYS
+    | _TITLE_QUALIFIER_KEYS
+    | _CREDENTIAL_KEYS
+    | _ORGANIZATION_WORDS
+    | _STANDARD_SUFFIXES.keys()
+    | {suffix.casefold() for suffix in _RAW_ROMAN_SUFFIXES}
+    | {"and"},
+)
 _TWO_COMPONENTS = 2
 _THREE_COMPONENTS = 3
 _FOUR_COMPONENTS = 4
@@ -264,6 +273,10 @@ class PersonNameNormalizationService:
         """Normalize one raw name string into semantic canonical components."""
         if not isinstance(raw_name, str):
             return self._invalid("name must be a string")
+
+        simple_result = self._normalize_simple_two_token_text(raw_name)
+        if simple_result is not None:
+            return simple_result
 
         source_text = raw_name
         normalized_input, leading_markers = self._strip_leading_superscript_affiliation(raw_name)
@@ -330,6 +343,25 @@ class PersonNameNormalizationService:
                 dropped,
             )
         return self._normalize_regular_name(source_text, segments[0], suffix, suffix_token, dropped)
+
+    def _normalize_simple_two_token_text(self, raw_name: str) -> PersonNameNormalizationResult | None:
+        """Normalize policy-neutral two-token ASCII names without preprocessing."""
+        if not raw_name.isascii() or raw_name != raw_name.strip():
+            return None
+        raw_tokens = raw_name.split(" ")
+        if len(raw_tokens) != _TWO_COMPONENTS or any(not token.isalpha() for token in raw_tokens):
+            return None
+        if any(token.casefold() in _SIMPLE_TWO_TOKEN_POLICY_KEYS for token in raw_tokens):
+            return None
+
+        source_tokens = [
+            _Token(raw_tokens[0], "", 0),
+            _Token(raw_tokens[1], "", len(raw_tokens[0]) + 1),
+        ]
+        given = [replace(source_tokens[0], source_role="given")]
+        surname = [replace(source_tokens[1], source_role="surname")]
+        source = self._components(given, [], surname, [])
+        return self._person(raw_name, source, given, [], surname, "", [])
 
     def normalize_components(  # noqa: C901, PLR0911
         self,
@@ -682,6 +714,8 @@ class PersonNameNormalizationService:
 
     @staticmethod
     def _compact_key(token: str) -> str:
+        if token.isalnum():
+            return token.casefold()
         return "".join(character.casefold() for character in token if character.isalnum())
 
     def _strip_leading_titles(
