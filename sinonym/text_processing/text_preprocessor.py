@@ -140,6 +140,8 @@ class TextPreprocessor:
         """Return compact CJK text when the input contains only CJK plus separators."""
         if not text or not text.strip():
             return ""
+        if text.isascii():
+            return ""
 
         cleaned = self._config.sep_pattern.sub("", text.strip())
         cleaned = self._config.whitespace_pattern.sub("", cleaned)
@@ -201,6 +203,8 @@ class TextPreprocessor:
         Returns True if non-Chinese scripts are detected.
         """
         if not text:
+            return False
+        if text.isascii():
             return False
 
         # Vietnamese-specific characters (conservative list to avoid Pinyin overlap)

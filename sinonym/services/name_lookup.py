@@ -2,11 +2,26 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 DOMINANT_CHINESE_SURNAME_FREQ_MIN = 10_000.0
+_WADE_GILES_APOSTROPHE_SURNAME_RE = re.compile(r"(?:ch|ts|tz|k|p|t)'[a-z]+", re.IGNORECASE)
+_APOSTROPHE_TRANSLATION = str.maketrans(
+    {
+        "\u02b9": "'",
+        "\u02bb": "'",
+        "\u02bc": "'",
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u2032": "'",
+        "\uff07": "'",
+        "`": "'",
+        "\u00b4": "'",
+    },
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -63,6 +78,13 @@ class SurnameResolver:
         """Return whether ``token`` carries dominant as-written Chinese surname evidence."""
         return self.evidence_frequency(token) >= DOMINANT_CHINESE_SURNAME_FREQ_MIN
 
+    def evidence_is_wade_giles_apostrophe_surname(self, token: str) -> bool:
+        """Return exact-token Wade-Giles spelling backed by existing surname data."""
+        normalized_apostrophe = token.translate(_APOSTROPHE_TRANSLATION)
+        return bool(
+            _WADE_GILES_APOSTROPHE_SURNAME_RE.fullmatch(normalized_apostrophe) and self.evidence_is_surname(token),
+        )
+
     def evidence_span_key(self, token: str) -> str:
         """Return the evidence key for batch span assembly only."""
         return self._evidence_key(token)
@@ -90,8 +112,10 @@ class SurnameResolver:
         """Derive the parser-strict surname key used by parse scoring."""
         self._require_tokens(surname_tokens)
         cache_key = tuple(surname_tokens)
-        if cache_key in self._parser_key_cache:
+        try:
             return self._parser_key_cache[cache_key]
+        except KeyError:
+            pass
 
         if len(cache_key) == 1:
             parser_key = self._single_parser_key(cache_key[0])
@@ -124,12 +148,15 @@ class SurnameResolver:
 
     def _evidence_key(self, token: str) -> str:
         """Derive the as-written surname evidence key."""
-        if token not in self._evidence_key_cache:
-            self._evidence_key_cache[token] = self._data.surname_lookup_key(
+        try:
+            return self._evidence_key_cache[token]
+        except KeyError:
+            evidence_key = self._data.surname_lookup_key(
                 self._normalizer.norm_light(token),
                 self._normalizer.norm(token),
             )
-        return self._evidence_key_cache[token]
+            self._evidence_key_cache[token] = evidence_key
+            return evidence_key
 
     def _is_wade_giles_initial_remapped_surname_token(self, token: str) -> bool:
         """Return whether a direct surname was remapped by a Wade-Giles initial rule."""

@@ -14,7 +14,7 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_vys_abstain_rows,
 )
 from sinonym.services.batch_analysis import LATIN_ONLY_REPRESENTATION, BatchCandidateEntry
-from sinonym.timo.interface import Instance, Predictor, PredictorConfig
+from sinonym.timo.interface import Instance, Predictor, PredictorConfig, PredictorV2
 
 
 def _pp_abstain_row(**overrides):
@@ -266,11 +266,44 @@ def test_route_pp_preserves_latin_compound_surname_first_parse():
 
 def test_internal_compound_surname_span_reports_real_width(detector):
     batch = detector.analyze_name_batch(["Wei Zhu Ge Ming"])
+    result = batch.results[0]
     evidence = batch.name_order_evidence[0]
 
-    assert batch.results[0].success
+    assert result.success
+    assert result.result == "Wei-Ming Zhu Ge"
+    assert result.parsed is not None
+    assert result.parsed.surname_tokens == ["Zhu", "Ge"]
+    assert result.parsed.given_tokens == ["Wei", "Ming"]
     assert evidence.selected_surname_position == "internal"
     assert evidence.selected_surname_token_count == 2
+
+
+def test_internal_compound_surname_fix_propagates_through_pp_only_routing():
+    predictor = Predictor(PredictorConfig(parallel="never"), "")
+
+    routed = predictor.route_pp(["Wei Zhu Ge Ming"])[0]
+
+    assert routed.router_prediction.value == "abstain"
+    assert routed.router_reason == "weak_zero_batch"
+    assert (routed.given_name, routed.middle_name, routed.surname) == ("Wei-Ming", None, "Zhu Ge")
+    assert (routed.pp.given_name, routed.pp.middle_name, routed.pp.surname) == ("Wei-Ming", None, "Zhu Ge")
+
+
+def test_internal_compound_surname_fix_propagates_to_v2_canonical_name():
+    predictor = PredictorV2(PredictorConfig(parallel="never"), "")
+
+    routed = predictor.route_pp(["Wei Zhu Ge Ming"])[0]
+
+    assert routed.router_prediction.value == "abstain"
+    assert routed.router_reason == "weak_zero_batch"
+    assert (routed.given_name, routed.middle_name, routed.surname) == ("Wei-Ming", None, "Zhu Ge")
+    assert routed.canonical_name is not None
+    assert routed.canonical_name.text == "Wei-Ming Zhu Ge"
+    assert (
+        routed.canonical_name.normalized.given_name,
+        routed.canonical_name.normalized.middle_name,
+        routed.canonical_name.normalized.surname,
+    ) == ("Wei-Ming", "", "Zhu Ge")
 
 
 @pytest.mark.parametrize(

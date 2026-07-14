@@ -4,6 +4,19 @@ This directory contains the data files and trained models used by the Sinonym li
 
 ## Data Files
 
+### Conservative East Asian name-order lexicons
+
+- **`east_asian_roman_lexicons.json.gz`**: sorted Romanized Japanese surname
+  and given-name keys plus Korean and Vietnamese surname keys.
+- **`japanese_native_lexicons.json.gz`**: sorted Japanese native-script surname
+  and given-name forms used to score compact-name boundaries.
+
+These assets contain component names rather than complete people. They are
+generated deterministically by `scripts/build_east_asian_name_lexicons.py`
+from hash-pinned MIT and CC0 sources. Full attribution, source commits, and the
+reason the broader research-only JMnedict data is not bundled are recorded in
+`EAST_ASIAN_NAME_LEXICONS.md`.
+
 ### Name Frequency Data
 - **`familyname_orcid.csv`**: Chinese surnames with frequency data (parts per million) derived from ORCID records. Contains the most common Chinese surnames like 王, 李, 张, etc., with their frequency statistics.
 - **`givenname_orcid.csv`**: Chinese given name characters with usage statistics from ORCID records. Includes character, pinyin romanization, and frequency (ppm).

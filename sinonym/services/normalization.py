@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import string
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import TYPE_CHECKING, Literal
 
 from sinonym.chinese_names_data import VALID_CHINESE_RIMES
@@ -142,7 +143,9 @@ class NormalizationService:
 
         Consolidates the common pattern: normalized_cache.get(token, self.norm(token))
         """
-        return norm_cache.get(token, self.norm(token))
+        if token in norm_cache:
+            return norm_cache[token]
+        return self.norm(token)
 
     def apply(self, raw_name: str) -> NormalizedInput:
         """
@@ -151,6 +154,19 @@ class NormalizationService:
         """
         if not raw_name or not raw_name.strip():
             return NormalizedInput.empty(raw_name)
+
+        simple_tokens = self.simple_latin_tokens(raw_name)
+        if simple_tokens is not None:
+            norm_map = {token: self._text_normalizer.normalize_token(token) for token in simple_tokens}
+            compound_metadata = self._compound_detector.generate_compound_metadata(simple_tokens, self._data)
+            return NormalizedInput(
+                raw=raw_name,
+                cleaned=raw_name,
+                tokens=simple_tokens,
+                roman_tokens=simple_tokens,
+                norm_map=norm_map,
+                compound_metadata=compound_metadata,
+            )
 
         # Phase 1: Clean input (single regex pass)
         cleaned, from_camel_case_pair, surname_first_parenthetical_hint = self._text_preprocessor.preprocess_input(
@@ -196,6 +212,21 @@ class NormalizationService:
             from_camel_case_pair=from_camel_case_pair,
             surname_first_parenthetical_hint=surname_first_parenthetical_hint,
         )
+
+    @staticmethod
+    @lru_cache(maxsize=4096)
+    def simple_latin_tokens(raw_name: str) -> tuple[str, ...] | None:
+        """Return clean space-delimited ASCII name tokens, or abstain."""
+        if not raw_name.isascii() or raw_name != raw_name.strip():
+            return None
+        tokens = tuple(raw_name.split(" "))
+        if len(tokens) < 2 or any(not token for token in tokens):
+            return None
+        for token in tokens:
+            parts = token.replace("'", "-").split("-")
+            if any(not part.isalpha() for part in parts):
+                return None
+        return tokens
 
     def _process_mixed_tokens(self, tokens: list[str], is_all_chinese: bool = False) -> list[str]:
         """Extract existing mixed token processing logic with enhanced all-Chinese support."""
@@ -323,14 +354,30 @@ class NormalizationService:
             else:
                 return None
 
-            han_pinyin = tuple(self._cache_service.han_to_pinyin_fast(han_token))
-            if not roman_token or not han_pinyin or not self._roman_matches_han_token(roman_token, han_pinyin):
+            han_pinyin = self._matching_aligned_han_pinyin(roman_token, han_token)
+            if not roman_token or han_pinyin is None:
                 return None
 
             pairs.append(BilingualTokenPair(roman_token=roman_token, han_token=han_token, han_pinyin=han_pinyin))
             index += 2
 
         return tuple(pairs) if len(pairs) >= MIN_BILINGUAL_ALIGNMENT_PAIRS else None
+
+    def _matching_aligned_han_pinyin(self, roman_token: str, han_token: str) -> tuple[str, ...] | None:
+        """Match one explicit pair, allowing heteronyms only for recognized Han surnames."""
+        primary = tuple(self._cache_service.han_to_pinyin_fast(han_token))
+        if primary and self._roman_matches_han_token(roman_token, primary):
+            return primary
+        if self._data is None or self._data.surname_frequencies.get(han_token, 0.0) <= 0:
+            return None
+        return next(
+            (
+                alternative
+                for alternative in self._cache_service.han_to_pinyin_alternatives_fast(han_token)
+                if self._roman_matches_han_token(roman_token, alternative)
+            ),
+            None,
+        )
 
     def _is_han_token(self, token: str) -> bool:
         """Return whether the whole token is CJK characters."""

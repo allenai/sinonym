@@ -12,6 +12,44 @@ from enum import Enum
 
 
 @dataclass(frozen=True)
+class NameComponents:
+    """Assigned components and token lineage for a person's name.
+
+    Component strings provide the convenient public representation while the
+    token tuples preserve the corresponding token boundaries. ``order`` records
+    component roles in display order; roles may repeat when tokens from the same
+    component are non-contiguous.
+    """
+
+    given_name: str = ""
+    middle_name: str = ""
+    surname: str = ""
+    suffix: str = ""
+    given_tokens: tuple[str, ...] = ()
+    middle_tokens: tuple[str, ...] = ()
+    surname_tokens: tuple[str, ...] = ()
+    suffix_tokens: tuple[str, ...] = ()
+    order: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CanonicalName:
+    """Canonical representation of a person's name and its source components.
+
+    ``source`` records the component assignment before normalization, while
+    ``normalized`` records the final component assignment used to render
+    ``text``. For structured input, surviving source roles remain authoritative;
+    normalization repairs roles only when mechanical cleanup empties a required
+    boundary. Both use immutable tuples so the complete value is immutable.
+    """
+
+    source_text: str
+    text: str
+    source: NameComponents
+    normalized: NameComponents
+
+
+@dataclass(frozen=True)
 class ParsedName:
     """Parsed name with surname and given name components.
 
@@ -55,6 +93,8 @@ class ParseResult:
     parsed: ParsedName | None = None
     # Structured parsed components in the original input order
     parsed_original_order: ParsedName | None = None
+    # Canonical representation for person names, including non-Chinese names
+    canonical_name: CanonicalName | None = None
 
     @classmethod
     def success_with_name(
@@ -63,6 +103,7 @@ class ParseResult:
         original_compound_surname: str | None = None,
         parsed: ParsedName | None = None,
         parsed_original_order: ParsedName | None = None,
+        canonical_name: CanonicalName | None = None,
     ) -> ParseResult:
         """Create a successful result with final formatted name.
 
@@ -76,6 +117,7 @@ class ParseResult:
             original_compound_surname=original_compound_surname,
             parsed=parsed,
             parsed_original_order=parsed_original_order,
+            canonical_name=canonical_name,
         )
 
     @classmethod
@@ -84,6 +126,7 @@ class ParseResult:
         surname_tokens: list[str],
         given_tokens: list[str],
         original_compound_surname: str | None = None,
+        canonical_name: CanonicalName | None = None,
     ) -> ParseResult:
         """Create a successful intermediate parse with raw tokens.
 
@@ -104,11 +147,19 @@ class ParseResult:
             original_compound_surname=original_compound_surname,
             parsed=parsed,
             parsed_original_order=None,
+            canonical_name=canonical_name,
         )
 
     @classmethod
-    def failure(cls, error_message: str) -> ParseResult:
-        return cls(success=False, result="", error_message=error_message, original_compound_surname=None)
+    def failure(cls, error_message: str, canonical_name: CanonicalName | None = None) -> ParseResult:
+        """Create a failed Chinese-name parse with optional person metadata."""
+        return cls(
+            success=False,
+            result="",
+            error_message=error_message,
+            original_compound_surname=None,
+            canonical_name=canonical_name,
+        )
 
     def map(self, f) -> ParseResult:
         """Functor map operation - Scala-like transformation"""
@@ -119,9 +170,10 @@ class ParseResult:
                     self.original_compound_surname,
                     self.parsed,
                     self.parsed_original_order,
+                    self.canonical_name,
                 )
             except Exception as e:  # noqa: BLE001 - user-provided callbacks may raise arbitrary exceptions.
-                return ParseResult.failure(str(e))
+                return ParseResult.failure(str(e), canonical_name=self.canonical_name)
         return self
 
     def flat_map(self, f) -> ParseResult:
@@ -130,17 +182,21 @@ class ParseResult:
             try:
                 result = f(self.result)
             except Exception as e:  # noqa: BLE001 - user-provided callbacks may raise arbitrary exceptions.
-                return ParseResult.failure(str(e))
+                return ParseResult.failure(str(e), canonical_name=self.canonical_name)
             else:
-                # Preserve the original compound surname if the result doesn't already have one
-                if result.success and result.original_compound_surname is None:
+                preserve_original_compound = result.success and result.original_compound_surname is None
+                preserve_canonical_name = result.canonical_name is None and self.canonical_name is not None
+                if preserve_original_compound or preserve_canonical_name:
                     return ParseResult(
-                        result.success,
-                        result.result,
-                        result.error_message,
-                        self.original_compound_surname,
-                        result.parsed,
-                        result.parsed_original_order,
+                        success=result.success,
+                        result=result.result,
+                        error_message=result.error_message,
+                        original_compound_surname=(
+                            self.original_compound_surname if preserve_original_compound else result.original_compound_surname
+                        ),
+                        parsed=result.parsed,
+                        parsed_original_order=result.parsed_original_order,
+                        canonical_name=self.canonical_name if preserve_canonical_name else result.canonical_name,
                     )
                 return result
         return self

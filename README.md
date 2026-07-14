@@ -195,7 +195,9 @@ if result.success:
 result = detector.normalize_name("John Smith")
 if not result.success:
     print(f"Error: {result.error_message}")
+    print(f"Canonical person name: {result.canonical_name.text}")
     # Expected Output: Error: name not recognised as Chinese
+    # Canonical person name: John Smith
 
 # --- Example 5: Japanese name in Chinese characters (ML-enhanced detection) ---
 result = detector.normalize_name("山田太郎")
@@ -251,6 +253,76 @@ When you call `normalize_name`, you get a `ParseResult` with helpful structured 
 - `parsed_original_order`: A `ParsedName` with the same semantic `surname` and
   `given_name` labels as `parsed`, plus an `order` list that records how those
   components appeared in the input.
+- `canonical_name`: an all-person canonical representation. This is populated
+  for Chinese and non-Chinese people, while the legacy `success`, `result`, and
+  `parsed` fields remain Chinese-recognition fields.
+
+### Canonical names for all people
+
+`canonical_name.text` is the fully normalized display form. Its `normalized`
+components expose `given_name`, `middle_name`, `surname`, and `suffix`, plus
+immutable token tuples and their display order. Name dashes and apostrophes are
+standardized to ASCII `-` and `'`; obvious titles and credentials are removed;
+and true generational suffixes are kept in the suffix field.
+
+Periods are treated by role and shape rather than removed globally. Known
+leading titles and trailing credentials are consumed; generational suffixes are
+canonicalized; pure dotted initial clusters are uppercased while preserving the
+source dot positions; transliteration abbreviations such as ``M.Yu.`` retain
+their mixed casing; and a terminal full stop on an ordinary word is removed as
+sentence punctuation.
+
+```python
+western = detector.normalize_name("Dr. Ana–Maria O’Neill PhD")
+assert not western.success  # unchanged: not recognized as Chinese
+assert western.parsed is None
+assert western.canonical_name.text == "Ana-Maria O'Neill"
+assert western.canonical_name.normalized.given_name == "Ana-Maria"
+assert western.canonical_name.normalized.surname == "O'Neill"
+
+suffixed = detector.normalize_person_name("Steve Blando IV")
+assert suffixed.text == "Steve Blando IV"
+assert suffixed.normalized.suffix == "IV"
+
+repaired = detector.normalize_person_name_components(
+    first_name="dr steve",
+    middle_name="marsh",
+    last_name="phd",
+)
+assert repaired.text == "Steve Marsh"
+assert repaired.normalized.given_name == "Steve"
+assert repaired.normalized.middle_name == ""
+assert repaired.normalized.surname == "Marsh"
+```
+
+For an undelimited raw name, token order alone cannot always distinguish middle
+names from multi-token family names. Passing structured components makes the
+caller's first/middle/last assignment the default normalized contract. Cultural
+convention alone does not move a source middle token into the given or family
+field. The same conservative East Asian router used for raw names may reinterpret
+a structured source sequence when its directional evidence is decisive; the
+structured ``canonical_name.source`` still retains the caller's original roles,
+order, and token lineage. Otherwise, roles are re-inferred only when mechanical
+cleanup, such as removing a title or credential, empties a required boundary.
+
+Raw parsing preserves visible order by default. A separate conservative router
+assigns semantic family-first components only for evidence combinations that
+held the existing non-Chinese benchmark constant: three-syllable compact
+Hangul; Japanese native text supported by the Chinese/Japanese classifier and
+component dictionaries; strict Korean romanized shapes; diacritic-bearing
+Vietnamese with a supported initial surname; and two-token Japanese
+romanizations whose surname/given dictionaries support only the family-first
+direction. Ambiguous or unsupported names retain the generic input-order
+normalization.
+
+The East Asian component assets contain no complete-person exceptions. Their
+sources, hashes, licenses, and regeneration command are documented in
+`sinonym/data/EAST_ASIAN_NAME_LEXICONS.md` and
+`scripts/build_east_asian_name_lexicons.py`.
+
+TIMO clients can opt into `sinonym_v2` or `sinonym_routing_v2` to receive the
+same nested canonical payload. The existing `sinonym_v1` and
+`sinonym_routing_v1` response schemas remain unchanged.
 
 Notes:
 - The tokens in `parsed` and `parsed_original_order` are the same normalized tokens; only the conceptual ordering differs via the `order` list.

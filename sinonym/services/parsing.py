@@ -345,9 +345,13 @@ class NameParsingService:
             normalized_cache,
             compound_metadata,
         )
-        parses = [(surname, given) for surname, given, _ in parses_with_format]
-        if not parses:
+        if not parses_with_format:
             return None
+        if len(parses_with_format) == 1:
+            surname_tokens, given_tokens, original_compound_format = parses_with_format[0]
+            needs_initial_guard = any(len(token) == 1 for token in given_tokens) and any(len(token) > 3 for token in tokens)
+            if not needs_initial_guard:
+                return surname_tokens, given_tokens, original_compound_format
 
         scored_parses = []
         has_multi_syllable_tokens = any(len(token) > 3 for token in tokens)
@@ -468,7 +472,7 @@ class NameParsingService:
                 ):
                     # This is a multi-token compound in the middle
                     original_format = self._get_compound_original_format(second_meta, tokens[1:3])
-                    parses.append((tokens[1:3], tokens[0:1], original_format))
+                    parses.append((tokens[1:3], [tokens[0], *tokens[3:]], original_format))
 
         # 2. Single-token surnames - only at beginning or end (contiguous sequences only)
         # Surname-first pattern: surname + given_names

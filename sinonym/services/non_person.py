@@ -59,6 +59,8 @@ class NonPersonInputDetectionService:
 
     def failure_reason(self, raw_name: str) -> str | None:
         """Return a failure reason when the input is clearly not one personal name."""
+        if raw_name.isascii():
+            return NON_PERSON_FAILURE_REASON if self._has_latin_author_list_shape(raw_name) else None
         if (
             self._has_cjk_non_person_marker(raw_name)
             or self._has_latin_author_list_shape(raw_name)
@@ -177,6 +179,8 @@ class NonPersonInputDetectionService:
 
     def _cjk_chunks(self, raw_name: str) -> list[str]:
         """Return contiguous CJK runs split by non-CJK separators."""
+        if raw_name.isascii():
+            return []
         chunks: list[str] = []
         current: list[str] = []
 
@@ -196,7 +200,7 @@ class NonPersonInputDetectionService:
 
     def _has_latin_author_list_shape(self, raw_name: str) -> bool:
         """Return whether a Latin string looks like several Chinese author names collapsed together."""
-        if self._config.cjk_pattern.search(raw_name):
+        if not raw_name.isascii() and self._config.cjk_pattern.search(raw_name):
             return False
 
         tokens = LATIN_WORD_RE.findall(raw_name)
