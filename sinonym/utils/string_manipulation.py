@@ -590,6 +590,11 @@ class StringManipulationUtils:
         # Normalize Unicode and remove diacritical marks
         normalized = unicodedata.normalize("NFD", part)
         without_diacritics = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+        if not without_diacritics:
+            # Token was made up entirely of combining marks / variation selectors (all
+            # category Mn), so stripping them leaves nothing to capitalize. Return the
+            # empty result rather than indexing [0] into an empty string (IndexError).
+            return without_diacritics
         return without_diacritics[0].upper() + without_diacritics[1:].lower()
 
     @staticmethod
