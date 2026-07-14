@@ -539,3 +539,23 @@ def test_name_order_evidence_uses_cached_raw_tokens(detector):
 def test_name_order_routing_priors_are_imported_from_canonical_data():
     assert name_order_routing.NAME_PRIOR_COMMON_CHINESE_SURNAMES is chinese_names_data.NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES
     assert name_order_routing.NAME_PRIOR_KOREAN_SURNAMES is chinese_names_data.NAME_ORDER_ROUTING_KOREAN_SURNAMES
+
+
+def test_capitalize_name_part_all_combining_marks_does_not_crash():
+    """Regression: a name part consisting solely of combining marks / variation selectors
+    (all Unicode category Mn) strips to '' after NFD + Mn removal. capitalize_name_part then
+    indexed [0] into the empty string and raised IndexError. It must now return '' instead."""
+    from sinonym.utils.string_manipulation import StringManipulationUtils
+
+    assert StringManipulationUtils.capitalize_name_part("́") == ""           # lone combining acute
+    assert StringManipulationUtils.capitalize_name_part("\U000E0100") == ""       # ideographic variation selector
+    # real names are unaffected (still stripped + capitalized)
+    assert StringManipulationUtils.capitalize_name_part("josé") == "Jose"
+    assert StringManipulationUtils.capitalize_name_part("ou-yang") == "Ou-Yang"
+
+
+def test_normalize_name_with_embedded_variation_selector_does_not_crash(detector):
+    """Integration regression: a corpus name with an embedded ideographic variation selector
+    (U+E0100, seen on paper_id 274957019) crashed normalize_name via the capitalize step."""
+    result = detector.normalize_name("彬人 樽\U000E0100井")  # 彬人 樽󠄀井
+    assert result is not None  # no exception raised; the classification value is out of scope here
