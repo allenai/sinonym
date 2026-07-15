@@ -1996,6 +1996,89 @@ def test_real_corpus_organization_strings_rejected(
 @pytest.mark.parametrize(
     "raw_name",
     [
+        # Non-English org-only nouns (FR/ES/IT/PT/NL/DE). The English-centric org
+        # lexicon let these through as "persons"; all are real corpus strings (occ in
+        # comments) previously ACCEPTED, now rejected. Sized at ~30k names / 103k occ.
+        "Ministerio de Educación",                    # 419  ES
+        "ministère du Travail",                       # 330  FR
+        "Sächsische Akademie der Wissenschaften zu Leipzig",  # 13  DE
+        "Société des Auxiliaires des Missions",       # 12  FR
+        "Gesellschaft der Musikfreunde in Wien",      # 10  DE
+        "Sociedade Brasileira de Comportamento Motor",  # 5  PT
+        "Universidad Autonoma Metropolitana",         # 1  ES
+        "Istituto di Cosmogeofisica",                 # 1  IT
+        "Freudenthal Instituut",                      # 3  NL
+        "Stichting Nedeco",                           # 1  NL
+        "Federación Internacional Farmacéutica",      # 1  ES
+        "Ministerie van Onderwijs",                   # 1  NL
+        "Associazione Euratom-Enea",                  # 1  IT
+    ],
+)
+def test_non_english_org_strings_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # The prepositions "für" (DE) / "voor" (NL) mark an org ONLY when a token follows
+        # them (leading/mid position). All real corpus org strings, previously accepted.
+        "Bundesministerium für Bildung und Forschung",  # compound noun caught only via "für"
+        "Zentrum für Orthopädie",
+        "Institut für Physik",
+        "Voor Numismatiek",                             # NL, leading "voor"
+        "Vereniging voor Natuurwetenschappen",
+    ],
+)
+def test_org_preposition_nonfinal_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Real people whose surname IS the preposition token but as the FINAL token —
+        # "Für" (Hungarian) / "Voor" (Estonian/Dutch) are genuine surnames and must be kept.
+        # The positional rule (org only when NOT final) preserves these; a bare-token
+        # reject would have lost ~72 "Voor" + ~104 "Für" real people from the corpus.
+        "Gabriella Für",         # Hungarian surname Für
+        "Csilla Sepsey Für",
+        "Michael J. Voor",       # highest-occ real "Voor" author
+        "Tiia Voor",
+        "Ivo Voor",
+        # Contamination guards: "para"/"pour"/"und" are deliberately NOT org markers —
+        # they collide with real givens and noble compound surnames.
+        "Per Andersson",         # "Per" is a Scandinavian given name, not "per"
+        "Para Chandrasoma",      # leading "Para" is a real given name
+        "O. von Bohlen und Halbach",   # noble compound surname with "und"
+        "Marco von Strauss und Torney",
+    ],
+)
+def test_org_preposition_final_and_guards_kept(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
         # Real people from the corpus whose compound surname ends in an org-ish word —
         # these are exactly why company/hospital/bureau/press/center are NOT hyphen-split.
         "Marc Huertas-Company",       # astronomer

@@ -272,8 +272,60 @@ _ORGANIZATION_WORDS = frozenset(
         "society",
         "team",
         "university",
+        # Non-English org-only nouns (FR/ES/IT/PT/NL/DE), whole-token matched and
+        # empirically org-only (never real person names). The English-centric list
+        # above let non-English orgs through as "persons" (e.g. "Deutsche Gesellschaft
+        # für Kardiologie", "Società Italiana di …", "Ministère de la Santé"). Sized via
+        # a multilingual org sweep on post-fix output: ~29,972 names / 102,859 occ
+        # (0.0176% of non-Chinese occ). Both accented and diacritic-free forms are listed
+        # because _compact_key preserves diacritics.
+        "societe", "société",           # FR
+        "sociedad",                     # ES
+        "societa", "società",           # IT
+        "sociedade",                    # PT
+        "ministere", "ministère",       # FR
+        "ministerio",                   # ES / PT (ministério compacts to ministerio too)
+        "ministério",
+        "ministero",                    # IT
+        "ministerium",                  # DE
+        "ministerie",                   # NL
+        "universidad",                  # ES
+        "universita", "università",     # IT
+        "universidade",                 # PT
+        "universiteit",                 # NL
+        "federation", "fédération",     # FR
+        "federacion", "federación",     # ES
+        "federazione",                  # IT
+        "federacao", "federação",       # PT
+        "asociacion", "asociación",     # ES
+        "associazione",                 # IT
+        "associacao", "associação",     # PT
+        "instituto",                    # ES / PT
+        "istituto",                     # IT
+        "instituut",                    # NL
+        "gesellschaft",                 # DE
+        "gewerkschaft",                 # DE
+        "genootschap",                  # NL
+        "syndicat",                     # FR
+        "stiftung",                     # DE
+        "stichting",                    # NL
+        "akademie",                     # DE
+        "academie", "académie",         # FR
+        "accademia",                    # IT
+        "dipartimento",                 # IT
+        "gmbh",                         # DE company suffix
+        # NOTE: the prepositions "für" (DE) / "voor" (NL) are strong org signals for
+        # compound-noun orgs ("Bundesministerium für …", "Voor Numismatiek") but collide
+        # with the real surnames "Für" (Hungarian) / "Voor" (Estonian/Dutch). They are
+        # handled positionally in _non_person_reason (org only when NOT the final token),
+        # not listed here, so a trailing surname is preserved. "para"/"pour"/"und" are
+        # excluded entirely (real givens "Para"/"Pour"; noble "von X und Y").
     },
 )
+# Prepositions that signal an org ONLY when a token follows them (mid/leading position):
+# "Institut für Physik" / "Voor Numismatiek" are orgs, but "Gabriella Für" / "Michael J.
+# Voor" are people whose surname is the final token. Whole-token matched via _compact_key.
+_ORG_PREPOSITION_WORDS = frozenset({"für", "voor"})
 # Whole-name strings made only of these connectives are not persons ("of", "the ...").
 _FUNCTION_WORDS = frozenset({"of", "the", "for", "und", "der", "des"})
 # Org words that are ~never part of a real hyphenated surname, so a hyphenated token
@@ -289,6 +341,14 @@ _HYPHEN_ORG_WORDS = frozenset(
         "universität",
         "universite",
         "université",
+        "universidad",
+        "universita",
+        "università",
+        "universidade",
+        "universiteit",
+        "instituto",
+        "istituto",
+        "instituut",
         "journal",
         "journals",
         "proceedings",
@@ -431,6 +491,10 @@ class PersonNameNormalizationService:
         if len(raw_tokens) != _TWO_COMPONENTS or any(not token.isalpha() for token in raw_tokens):
             return None
         if any(token.casefold() in _SIMPLE_TWO_TOKEN_POLICY_KEYS for token in raw_tokens):
+            return None
+        # A leading org preposition ("Voor Numismatiek") is an org, not "Voor" the surname
+        # ("Michael Voor" is handled by the final-token rule); defer to the full path.
+        if raw_tokens[0].casefold() in _ORG_PREPOSITION_WORDS:
             return None
 
         source_tokens = [
@@ -1502,7 +1566,13 @@ class PersonNameNormalizationService:
             return False
         return not any(self._is_initial(token.text) for token in [*left, *right])
 
-    def _non_person_reason(self, surface: str) -> str | None:
+    @classmethod
+    def _has_nonfinal_org_preposition(cls, raw_tokens: list[str]) -> bool:
+        # Org prepositions ("für"/"voor") mark an org only when a token follows them — a
+        # trailing occurrence is a real surname ("Gabriella Für", "Michael J. Voor").
+        return any(cls._compact_key(token) in _ORG_PREPOSITION_WORDS for token in raw_tokens[:-1])
+
+    def _non_person_reason(self, surface: str) -> str | None:  # noqa: PLR0911
         lowered = surface.casefold()
         if "@" in surface or "://" in surface:
             return "contact or URL input"
@@ -1513,7 +1583,7 @@ class PersonNameNormalizationService:
             return "author-list connector"
         raw_tokens = _TOKEN_RE.findall(lowered)
         words = {self._compact_key(token) for token in raw_tokens}
-        if words & _ORGANIZATION_WORDS:
+        if words & _ORGANIZATION_WORDS or self._has_nonfinal_org_preposition(raw_tokens):
             return "organization input"
         # An org word fused into a hyphenated token ("Koch-Institut", "Ruhr-Universität",
         # "Courier-Journal") — only for words that are never part of a real surname.
