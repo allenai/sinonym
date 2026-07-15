@@ -250,6 +250,23 @@ _ORGANIZATION_WORDS = frozenset(
         "initiative",
         "faculty",
         "ministry",
+        # further curated org/section nouns (empirically org-only; real-surname
+        # collisions like staff/editor/press/board/bureau are deliberately excluded)
+        "office",
+        "division",
+        "services",
+        "editors",
+        "network",
+        "bulletin",
+        "directorate",
+        "secretariat",
+        "academy",
+        "program",
+        "programme",
+        "publishers",
+        "institution",
+        "organization",
+        "organisation",
         "laboratory",
         "ltd",
         "society",
@@ -259,6 +276,27 @@ _ORGANIZATION_WORDS = frozenset(
 )
 # Whole-name strings made only of these connectives are not persons ("of", "the ...").
 _FUNCTION_WORDS = frozenset({"of", "the", "for", "und", "der", "des"})
+# Org words that are ~never part of a real hyphenated surname, so a hyphenated token
+# containing one is an org ("Robert Koch-Institut", "Ruhr-Universität", "Courier-Journal").
+# Deliberately EXCLUDES company/hospital/center/bureau/press (real hyphenated surnames:
+# "Torres-Company", "Gómez-Hospital", "Plu-Bureau", "Beebe-Center").
+_HYPHEN_ORG_WORDS = frozenset(
+    {
+        "institut",
+        "institute",
+        "university",
+        "universitat",
+        "universität",
+        "universite",
+        "université",
+        "journal",
+        "journals",
+        "proceedings",
+        "laboratory",
+        "centre",
+        "team",
+    },
+)
 _STANDARD_SUFFIXES = {
     "jr": "Jr.",
     "junior": "Jr.",
@@ -1473,9 +1511,15 @@ class PersonNameNormalizationService:
         and_match = _WORD_AND_RE.search(surface)
         if and_match is not None and and_match.start() > 0:
             return "author-list connector"
-        words = {self._compact_key(token) for token in _TOKEN_RE.findall(lowered)}
+        raw_tokens = _TOKEN_RE.findall(lowered)
+        words = {self._compact_key(token) for token in raw_tokens}
         if words & _ORGANIZATION_WORDS:
             return "organization input"
+        # An org word fused into a hyphenated token ("Koch-Institut", "Ruhr-Universität",
+        # "Courier-Journal") — only for words that are never part of a real surname.
+        for token in raw_tokens:
+            if "-" in token and any(self._compact_key(part) in _HYPHEN_ORG_WORDS for part in token.split("-")):
+                return "organization input"
         # Reject the literal placeholder "null"/"null null" only when the WHOLE name is
         # "null" tokens — "Null" is a real surname ("Linda M. Null"), so a mixed name keeps it.
         if words and words <= {"null"}:

@@ -1797,10 +1797,21 @@ def test_organization_hard_and_ambiguous_cases_characterization(
     ):
         assert normalizer.normalize_text(org_glued).outcome is PersonNameOutcome.NON_PERSON
 
-    # (B) KNOWN MISS: an org word fused into a hyphenated token is not split, so this org
-    # slips through as a person. Accepted trade — splitting hyphens would false-reject the
-    # real hyphenated surnames above (Huertas-Company, Beebe-Center).
-    assert normalizer.normalize_text("Robert Koch-Institut").outcome is PersonNameOutcome.PERSON
+    # (B) An org word fused into a hyphenated token is now caught, but ONLY for words that
+    # are never part of a real surname (institut/university/journal/centre/team). So the org
+    # "Robert Koch-Institut" is rejected while the real surname "Beebe-Center" is kept.
+    #
+    # center/company/hospital/bureau/press are deliberately EXCLUDED from the hyphen split
+    # because each is a genuine (usually Catalan/French) compound-surname element with real
+    # people in the corpus, so splitting on them would false-reject:
+    #   company  -> Torres-Company, Huertas-Company, Company-Quiroga   (Catalan "Company")
+    #   hospital -> Gómez-Hospital, Hospital-Benito, Tirado-Hospital   (Catalan "Hospital")
+    #   bureau   -> Plu-Bureau, Bureau-Point, Bureau-Franz             (French "Bureau")
+    #   press    -> Broniarz-Press                                      ("Press" surname)
+    #   center   -> Beebe-Center                                        ("Center" surname)
+    # Per the 1M/full-corpus data these lose more real people than they gain orgs.
+    assert normalizer.normalize_text("Robert Koch-Institut").outcome is PersonNameOutcome.NON_PERSON
+    assert normalizer.normalize_text("J. G. Beebe-Center").outcome is PersonNameOutcome.PERSON
 
 
 @pytest.mark.parametrize(
@@ -1859,3 +1870,151 @@ def test_particle_surname_controls_unchanged(
     assert result.canonical_name is not None
     assert result.canonical_name.normalized.surname_tokens == surname
     assert result.canonical_name.text == raw_name
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # An org word FUSED into a hyphenated token is now detected (only for words that
+        # are never part of a real surname: institut/university/journal/laboratory/centre/team).
+        "Robert Koch-Institut",
+        "Ruhr-Universität Bochum",
+        "Louisville Courier-Journal",
+        "MGIMO-University",
+        "Goethe-Institut Glasgow",
+        "ASDEX-Team",
+    ],
+)
+def test_hyphenated_org_word_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Real hyphenated compound surnames whose second element is an org-ish word are
+        # KEPT — those words (company/hospital/bureau/press/center/board) are deliberately
+        # NOT in the hyphen-split set because they are genuine surnames.
+        "Victor Torres-Company",     # Catalan "Company"
+        "Marc Huertas-Company",
+        "Joan Antoni Gómez-Hospital",
+        "Geneviève Plu-Bureau",      # French "Bureau"
+        "Lubomira Broniarz-Press",
+        "J. G. Beebe-Center",
+    ],
+)
+def test_hyphenated_surname_with_org_element_kept(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Curated org/section nouns (empirically org-only) — rejected as non-person.
+        "Gene Therapy Program",
+        "Aaron Blake Publishers",
+        "Marketplace Services",
+        "Intelligence Division",
+        "World Health Organization",
+        "World Health Organisation",
+        "National Academy of Sciences",
+        "Meteorological Office",
+        "Climate Network",
+        "European Bulletin",
+    ],
+)
+def test_additional_org_section_nouns_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Words deliberately EXCLUDED from the org lexicon because they are real
+        # surnames — the people must be kept (verified against the corpus).
+        "Anne Cathrine Staff",   # "Staff" is a real surname
+        "Jeremy Staff",
+        "Ilene Staff",
+    ],
+)
+def test_excluded_org_words_that_are_real_surnames_kept(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Real high-occurrence organization strings from the corpus (occ in comments) —
+        # every one was previously ACCEPTED as a person; all now rejected.
+        "Proceedings of SPIE",                          # 2645
+        "Proteomics Initiative",                        # 1747
+        "journals Iosr",                                # 1353
+        "Journal of Healthcare Engineering",            # 973
+        "Faculty Senate",                               # 955
+        "Editorial Board",                              # 721
+        "Institut Agama",                               # 650
+        "Editors Archiv für katholisches Kirchenrech",  # 3843
+        "Ludwig-Maximilians-Universität München",       # 505
+        "Kapteyn Astronomical Institute",               # 239
+        "Robert Koch-Institut",                         # 1693
+    ],
+)
+def test_real_corpus_organization_strings_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Real people from the corpus whose compound surname ends in an org-ish word —
+        # these are exactly why company/hospital/bureau/press/center are NOT hyphen-split.
+        "Marc Huertas-Company",       # astronomer
+        "Victor Torres-Company",
+        "Jaime Company-Quiroga",
+        "Joan Antoni Gómez-Hospital",
+        "Daniel Hospital-Benito",
+        "Juan Luis Tirado-Hospital",
+        "Geneviève Plu-Bureau",
+        "Eve Bureau-Point",
+        "Lubomira Broniarz-Press",
+        "J. G. Beebe-Center",
+    ],
+)
+def test_real_corpus_hyphenated_compound_surnames_kept(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
