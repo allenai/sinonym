@@ -1447,3 +1447,80 @@ def test_titlecase_medial_van_is_compound_surname(
     assert result.canonical_name is not None
     assert result.canonical_name.text == raw_name
     assert result.canonical_name.normalized.surname_tokens == expected_surname
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text"),
+    [
+        # HTML entities were previously left as literal tokens, so every one of these
+        # real people was REJECTED (canonical_name=None). Decoding recovers them.
+        ("Martin G&#x00F6;tz", "Martin Götz"),          # hex numeric char ref -> ö
+        ("Benjamin I&#x00F1;iguez", "Benjamin Iñiguez"),
+        ("G. Kope&#263;", "G. Kopeć"),                    # decimal numeric char ref -> ć
+        ("A. Doboszy&#324;ska", "A. Doboszyńska"),
+        ("Mitch D&#39;Arcy", "Mitch D'Arcy"),            # named-ish decimal ref -> apostrophe
+        ("Fr&#x00E9;d&#x00E9;ric Sirois", "Frédéric Sirois"),  # multiple entities in one name
+        ("Jos&#x00E9; Rodr&#x00ED;guez", "José Rodríguez"),
+        ("Jos&eacute; Silva", "José Silva"),             # named entity -> é
+        ("Andr&eacute; M&uuml;ller", "André Müller"),    # two named entities
+    ],
+)
+def test_html_entities_decoded_and_name_recovered(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert "&" not in result.canonical_name.text  # no entity remnants
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # "&amp;" decodes to "&", which is a name separator: an org or a two-person
+        # string must still be rejected, never accepted as a single person.
+        "Texas A &amp; M",
+        "John &amp; Jane Smith",
+        "Smith &amp; Wesson",
+    ],
+)
+def test_amp_entity_decodes_to_separator_and_rejects(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+def test_html_entity_decoded_in_long_multi_token_string(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # A long author-list blob with an embedded entity: decoding must still apply
+    # (no "&#..." remnant, "Agnès" recovered). Whether such a blob is ultimately a
+    # person is a separate over-acceptance concern, orthogonal to entity decoding.
+    raw = (
+        "Gilles Julien Diego Anne Agn&#xe8;s Jacques Anne Florent  "
+        "Blancho Branchereau Cantarovich Cesbron Chapelet D"
+    )
+    result = normalizer.normalize_text(raw)
+
+    assert result.canonical_name is not None
+    assert "&#" not in result.canonical_name.text
+    assert "Agnès" in result.canonical_name.text
+
+
+def test_name_without_entity_is_unaffected_by_decode(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # Regression guard: names with no "&" skip the decode path entirely.
+    result = normalizer.normalize_text("John Smith")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "John Smith"

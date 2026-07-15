@@ -8,6 +8,7 @@ decisions have been made.
 
 from __future__ import annotations
 
+import html
 import re
 import unicodedata
 from dataclasses import dataclass, replace
@@ -659,6 +660,11 @@ class PersonNameNormalizationService:
 
     @staticmethod
     def _normalize_surface(value: str) -> str:
+        if "&" in value:
+            # Decode HTML entities so encoded diacritics/apostrophes are recovered
+            # ("Martin G&#x00F6;tz" -> "Martin Götz", "D&#39;Arcy" -> "D'Arcy") and a
+            # literal "&amp;" collapses to "&" for the downstream separator logic.
+            value = html.unescape(value)
         if value.isascii():
             normalized = value.translate(_ASCII_JOINER_TRANSLATION)
         else:
