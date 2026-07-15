@@ -1353,3 +1353,97 @@ def test_mid_and_connector_between_names_is_non_person(
 
     assert result.outcome is PersonNameOutcome.NON_PERSON
     assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text", "expected_surname"),
+    [
+        # Dutch "ten", Urdu "ur"/"ud" are family particles: kept lowercase and grouped
+        # into the surname (previously "ten"/"ur" were Title-cased and mis-split).
+        ("Henk ten Have", "Henk ten Have", ("ten", "Have")),
+        ("Peter ten Dijke", "Peter ten Dijke", ("ten", "Dijke")),
+        ("Zia ur Rehman", "Zia ur Rehman", ("ur", "Rehman")),
+        ("Ali ud Din", "Ali ud Din", ("ud", "Din")),
+        # Control: an established particle name is unchanged.
+        ("Jan van der Berg", "Jan van der Berg", ("van", "der", "Berg")),
+    ],
+)
+def test_dutch_urdu_particles_lowercased_and_grouped(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+    expected_surname: tuple[str, ...],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert result.canonical_name.normalized.surname_tokens == expected_surname
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    ["K. Dem'yankov", "Ol'ga V. Dem'yanova", "Yu. K. Dem'yanovich"],
+)
+def test_apostrophe_surname_not_lowercased_as_particle(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    # Regression guard: a surname starting "Dem'" must NOT be treated as the
+    # German particle "dem" (which is why "dem" is intentionally NOT in the set).
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert "dem" not in result.canonical_name.text.split()
+    assert result.canonical_name.text[0] == raw_name[0]  # leading capital preserved
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_given", "expected_surname"),
+    [
+        # "Van"/"Ten" are common real given names (Van Morrison, Van Jones). Adding
+        # "ten" to the particle set must NOT swallow a Title-cased LEADING one:
+        # casing + position disambiguate — Title-case leading token = given name.
+        ("Van Jones", "Van", ("Jones",)),
+        ("Van Morrison", "Van", ("Morrison",)),
+        ("Van A. Smith", "Van", ("Smith",)),
+        ("Ten Berge", "Ten", ("Berge",)),
+    ],
+)
+def test_titlecase_leading_van_ten_is_given_not_particle(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_given: str,
+    expected_surname: tuple[str, ...],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == raw_name
+    assert result.canonical_name.normalized.given_name == expected_given
+    assert result.canonical_name.normalized.surname_tokens == expected_surname
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_surname"),
+    [
+        # A Title-cased "Van" in the MIDDLE is a real Dutch-American compound surname
+        # (Van Dyke, Van Winkle) — grouped whole into the surname, casing preserved.
+        ("John Van Dyke", ("Van", "Dyke")),
+        ("Rob Van Winkle", ("Van", "Winkle")),
+    ],
+)
+def test_titlecase_medial_van_is_compound_surname(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_surname: tuple[str, ...],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == raw_name
+    assert result.canonical_name.normalized.surname_tokens == expected_surname
