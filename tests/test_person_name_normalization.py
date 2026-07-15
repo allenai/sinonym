@@ -1801,3 +1801,61 @@ def test_organization_hard_and_ambiguous_cases_characterization(
     # slips through as a person. Accepted trade — splitting hyphens would false-reject the
     # real hyphenated surnames above (Huertas-Company, Beebe-Center).
     assert normalizer.normalize_text("Robert Koch-Institut").outcome is PersonNameOutcome.PERSON
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "given", "middle", "surname"),
+    [
+        # A leading initial before a STRONG particle span was copied into the surname
+        # and duplicated ("M. van der Klis" -> "M. M. van der Klis"). Now the initial
+        # stays the given and the surname starts at the particle.
+        ("M. van der Klis", "M.", "", ("van", "der", "Klis")),
+        ("A.F.B. van der Poel", "A.F.B.", "", ("van", "der", "Poel")),
+        ("J.M.F. dos Santos", "J.M.F.", "", ("dos", "Santos")),
+        ("G. van der Laan", "G.", "", ("van", "der", "Laan")),
+        ("S. de la Torre", "S.", "", ("de", "la", "Torre")),
+        ("H. von der Schmitt", "H.", "", ("von", "der", "Schmitt")),
+        # A middle initial before the particle is placed in the middle, not the surname.
+        ("M. F. van der Berg", "M.", "F.", ("van", "der", "Berg")),
+        ("Nelson L. S. da Fonseca", "Nelson", "L. S.", ("da", "Fonseca")),
+    ],
+)
+def test_leading_initial_not_duplicated_into_particle_surname(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    given: str,
+    middle: str,
+    surname: tuple[str, ...],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    n = result.canonical_name.normalized
+    assert n.given_name == given
+    assert n.middle_name == middle
+    assert n.surname_tokens == surname
+    assert result.canonical_name.text == raw_name  # no duplicated token
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "surname"),
+    [
+        # Controls: a real surname-head token before the particle IS kept in the surname,
+        # single-particle names were never affected, and full given names are unchanged.
+        ("M. Carvalho da Silva", ("Carvalho", "da", "Silva")),
+        ("M. de Boer", ("de", "Boer")),
+        ("J. van den Berg", ("van", "den", "Berg")),
+        ("Anna van der Berg", ("van", "der", "Berg")),
+    ],
+)
+def test_particle_surname_controls_unchanged(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    surname: tuple[str, ...],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.surname_tokens == surname
+    assert result.canonical_name.text == raw_name

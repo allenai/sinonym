@@ -1132,7 +1132,13 @@ class PersonNameNormalizationService:
         surname_start = len(tokens) - 1
         strong_particle = self._find_strong_particle_span(tokens)
         if strong_particle is not None and (strong_particle[0] > _TWO_COMPONENTS or self._is_initial(tokens[0].text)):
-            surname_start = strong_particle[0] - 1
+            anchor = strong_particle[0] - 1
+            # The token before the particle joins the surname only if it is a real
+            # surname head; a leading given initial must not be pulled in (and then
+            # duplicated as both given and surname): "M. van der Klis" -> given "M.".
+            if not self._is_full_name_token(tokens[anchor].text):
+                anchor = strong_particle[0]
+            surname_start = anchor
         elif particle_positions := [
             index for index, token in enumerate(tokens[1:-1], start=1) if self._particle_key(token.text) in _FAMILY_PARTICLES
         ]:
