@@ -234,7 +234,9 @@ class EastAsianNameOrderService:
                 source_order=("surname", "given"),
                 reason="korean_native_three_syllable",
             )
-        if not _is_compact_japanese(surface) or japanese_probability(surface) < JAPANESE_ML_THRESHOLD:
+        if not _is_compact_japanese(surface):
+            return self._infer_spaced_japanese_native(surface, japanese_probability)
+        if japanese_probability(surface) < JAPANESE_ML_THRESHOLD:
             return None
         boundary = self._japanese_native_boundary(surface)
         return EastAsianNameOrderDecision(
@@ -244,6 +246,45 @@ class EastAsianNameOrderService:
             surname_tokens=(surface[:boundary],),
             source_order=("surname", "given"),
             reason="japanese_native_dictionary",
+        )
+
+    @staticmethod
+    def _infer_spaced_japanese_native(
+        surface: str,
+        japanese_probability: Callable[[str], float],
+    ) -> EastAsianNameOrderDecision | None:
+        """Route a SPACED two-token kanji/kana name family-first when the native
+        dictionary unambiguously supports it ("佐藤 優" -> surname 佐藤, given 優).
+
+        Only the compact form was handled before, so spaced kanji fell through to the
+        generic given-first assumption and swapped the roles. Kept conservative like the
+        romanized case: route only when token0 is a surname and token1 a given, and the
+        reverse is NOT also plausible. ML-Japanese gated, so spaced Chinese is untouched.
+        """
+        tokens = surface.split(" ")
+        if len(tokens) != 2 or not all(_is_compact_japanese(token) for token in tokens):  # noqa: PLR2004
+            return None
+        if japanese_probability(surface) < JAPANESE_ML_THRESHOLD:
+            return None
+        lexicons = _native_lexicons()
+        first, last = tokens
+        surname_first = _contains(lexicons.japanese_surnames, first) and _contains(
+            lexicons.japanese_given_names,
+            last,
+        )
+        reverse_plausible = _contains(lexicons.japanese_given_names, first) and _contains(
+            lexicons.japanese_surnames,
+            last,
+        )
+        if not surname_first or reverse_plausible:
+            return None
+        return EastAsianNameOrderDecision(
+            surface=surface,
+            given_tokens=(last,),
+            middle_tokens=(),
+            surname_tokens=(first,),
+            source_order=("surname", "given"),
+            reason="japanese_native_spaced_dictionary",
         )
 
     @staticmethod

@@ -121,3 +121,51 @@ def test_comma_order_remains_authoritative(detector: ChineseNameDetector) -> Non
     assert canonical is not None
     assert canonical.text == "Min-jun Kim"
     assert canonical.source.order == ("surname", "given")
+
+
+def test_spaced_kanji_surname_first_is_routed_given_first(
+    detector: ChineseNameDetector,
+) -> None:
+    # Spaced native kanji was only handled in the compact form, so "佐藤 優" fell through
+    # to the generic given-first assumption and swapped the roles (given "佐藤"). It is now
+    # routed family-first like the compact "佐藤優", matching the given-first canonical.
+    for surface, expected_text, given, surname in (
+        ("佐藤 優", "優 佐藤", "優", "佐藤"),
+        ("高橋 洋一", "洋一 高橋", "洋一", "高橋"),
+        ("田中 太郎", "太郎 田中", "太郎", "田中"),
+        ("中村 修二", "修二 中村", "修二", "中村"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.text == expected_text
+        assert routed.normalized.given_name == given
+        assert routed.normalized.surname == surname
+        assert routed.source.order == ("surname", "given")
+        # matches the compact form's routing
+        compact = detector.normalize_person_name(surface.replace(" ", ""))
+        assert compact is not None
+        assert compact.text == expected_text
+
+
+def test_spaced_kanji_given_first_or_ambiguous_is_not_double_swapped(
+    detector: ChineseNameDetector,
+) -> None:
+    # A spaced kanji name that is already given-first (or where the reverse is also
+    # dictionary-plausible) must be left as-is, not swapped back.
+    for surface in ("優 佐藤", "太郎 田中"):
+        result = detector.normalize_person_name(surface)
+        assert result is not None
+        assert result.text == surface
+        assert result.source.order == ("given", "surname")
+
+
+def test_spaced_han_chinese_name_not_routed_as_japanese(
+    detector: ChineseNameDetector,
+) -> None:
+    # Chinese spaced-han names must not be swapped by the Japanese spaced-kanji handler
+    # (ML-Japanese gated + native-dictionary evidence). The Chinese pipeline handles them.
+    for surface in ("王 伟", "李 明", "陈 明"):
+        result = detector.normalize_person_name(surface)
+        assert result is not None
+        assert result.text == surface
+        assert result.source.order == ("given", "surname")
