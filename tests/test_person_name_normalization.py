@@ -779,14 +779,18 @@ def test_stacked_academic_titles_and_parenthetical_duplicate_are_removed(
     assert parenthetical.canonical_name.text == "Alan B. Cantor"
 
 
-def test_trailing_affiliation_is_removed_after_complete_person_name(
+def test_name_glued_to_affiliation_is_rejected_not_salvaged(
     normalizer: PersonNameNormalizationService,
 ) -> None:
+    # Previously this salvaged "Rachel Webster" by stripping the trailing affiliation.
+    # But the same salvage turned tens of thousands of pure organizations into garbage
+    # person-fragments ("Max Planck Institute ..." -> "Max Planck", "Niels Bohr
+    # Institute" -> "Niels Bohr"), so the whole contaminated string is now rejected.
+    # The real researcher is still captured via their clean (affiliation-free) entries.
     result = normalizer.normalize_text("Rachel Webster University of New South Wales")
 
-    assert result.outcome is PersonNameOutcome.PERSON
-    assert result.canonical_name is not None
-    assert result.canonical_name.text == "Rachel Webster"
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
 
 
 def test_two_token_particle_like_given_name_is_not_duplicated(
@@ -1700,3 +1704,100 @@ def test_suffix_senior_junior_hard_and_ambiguous_cases_characterization(
     # A single-initial given followed by "Senior": surname is still preserved.
     r = normalizer.normalize_text("A Senior")
     assert r.canonical_name.normalized.surname_tokens == ("Senior",)
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Pure organizations were accepted as persons (the old code even salvaged a
+        # garbage name-fragment from them). They are now rejected as a whole.
+        "Niels Bohr Institute",
+        "Jet Propulsion Laboratory",
+        "Max Planck Institute for Astronomy",
+        "Editorial Board",
+        "Editorial Office",
+        "Proceedings of SPIE",
+        "Journal of Healthcare Engineering",
+        "Institut Agama",                       # German/Indonesian "Institut" (no trailing e)
+        "Universitat Politecnica de Valencia",  # Catalan "Universitat"
+        "Faculty Senate",
+        "Proteomics Initiative",
+        "Ministry of Education",
+    ],
+)
+def test_organization_strings_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize("raw_name", ["null", "null null", "of the", "of", "the"])
+def test_null_literal_and_function_word_only_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Real people whose surname collides with an org word must NOT be rejected.
+        # These surnames are deliberately EXCLUDED from the org lexicon.
+        "Philip G. Board",       # Board (excluded: many real "* Board" people)
+        "Johnathan Board",
+        "Frank Press",           # Press (William H. Press, Frank Press the geophysicist)
+        "William H. Press",
+        "Christophe Bureau",     # Bureau (common French surname)
+        "Martin Bureau",
+        "Gary Null",             # Null is a real surname; "null" rejects only whole-name
+        "Cynthia H. Null",
+        "Linda M. Null",
+        # Org word only as a SUBSTRING of a real name (whole-token matching keeps these).
+        "John Boardman",
+        "F. Anulli",
+        "Luigi Canullo",
+        "Amanullah",
+        # Org word inside a hyphenated compound surname (not split into its own token).
+        "M. Huertas-Company",    # Marc Huertas-Company, astronomer
+        "J. G. Beebe-Center",
+    ],
+)
+def test_real_people_with_org_like_surnames_kept(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+
+
+def test_organization_hard_and_ambiguous_cases_characterization(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    """HARD / AMBIGUOUS org-vs-person cases — documented for review.
+
+    (A) Human name GLUED to an affiliation: we no longer salvage the name — the whole
+    contaminated string is rejected. The researcher is captured via their clean
+    (affiliation-free) entries elsewhere, so freq barely moves; meanwhile this avoids
+    turning tens of thousands of pure orgs into garbage name-fragments.
+    """
+    for org_glued in (
+        "Rachel Webster University of New South Wales",
+        "L. D. Landau Institute for Theoretical Physics",  # org named after a person
+        "C. W. Chu Department of Physics",                 # real researcher + affiliation
+    ):
+        assert normalizer.normalize_text(org_glued).outcome is PersonNameOutcome.NON_PERSON
+
+    # (B) KNOWN MISS: an org word fused into a hyphenated token is not split, so this org
+    # slips through as a person. Accepted trade — splitting hyphens would false-reject the
+    # real hyphenated surnames above (Huertas-Company, Beebe-Center).
+    assert normalizer.normalize_text("Robert Koch-Institut").outcome is PersonNameOutcome.PERSON

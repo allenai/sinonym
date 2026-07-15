@@ -234,6 +234,22 @@ _ORGANIZATION_WORDS = frozenset(
         "hospital",
         "inc",
         "institute",
+        # curated additions (org / publishing / section nouns with negligible use as a
+        # personal name; matched as whole tokens so substrings like "Institut"e in a
+        # surname are unaffected). Vetted empirically via person->reject flip judging.
+        "institut",  # German/Dutch "Institut" (no trailing e)
+        "universitat",
+        "universität",
+        "universite",
+        "université",
+        "editorial",
+        "editores",
+        "journal",
+        "journals",
+        "proceedings",
+        "initiative",
+        "faculty",
+        "ministry",
         "laboratory",
         "ltd",
         "society",
@@ -241,6 +257,8 @@ _ORGANIZATION_WORDS = frozenset(
         "university",
     },
 )
+# Whole-name strings made only of these connectives are not persons ("of", "the ...").
+_FUNCTION_WORDS = frozenset({"of", "the", "for", "und", "der", "des"})
 _STANDARD_SUFFIXES = {
     "jr": "Jr.",
     "junior": "Jr.",
@@ -263,9 +281,10 @@ _SIMPLE_TWO_TOKEN_POLICY_KEYS = frozenset(
     | _TITLE_QUALIFIER_KEYS
     | _CREDENTIAL_KEYS
     | _ORGANIZATION_WORDS
+    | _FUNCTION_WORDS
     | _STANDARD_SUFFIXES.keys()
     | {suffix.casefold() for suffix in _RAW_ROMAN_SUFFIXES}
-    | {"and"},
+    | {"and", "null"},
 )
 _TWO_COMPONENTS = 2
 _THREE_COMPONENTS = 3
@@ -296,15 +315,18 @@ class PersonNameNormalizationService:
         if not any(character.isalpha() for character in surface):
             return self._invalid("name has no letters")
 
-        dropped: list[_DroppedToken] = []
-        if leading_markers:
-            dropped.append(_DroppedToken(_Token(leading_markers, "", 0), DropReason.AFFILIATION))
-        surface, affiliation_dropped = self._strip_trailing_affiliation_surface(surface)
-        dropped.extend(affiliation_dropped)
-        surface = self._collapse_parenthetical_duplicate_surface(surface)
+        # Reject an organization / non-person string as a whole rather than salvaging a
+        # name from it: "Rachel Webster University of New South Wales" and "Niels Bohr
+        # Institute" are both non-persons — trying to extract a name from contaminated
+        # input is unreliable, so check BEFORE any trailing-affiliation strip.
         non_person_reason = self._non_person_reason(surface)
         if non_person_reason is not None:
             return self._non_person(non_person_reason)
+
+        dropped: list[_DroppedToken] = []
+        if leading_markers:
+            dropped.append(_DroppedToken(_Token(leading_markers, "", 0), DropReason.AFFILIATION))
+        surface = self._collapse_parenthetical_duplicate_surface(surface)
 
         segment_matches = list(re.finditer(r"[^,]+", surface))
         segments = [self._tokens(match.group(), "", match.start()) for match in segment_matches]
@@ -693,19 +715,6 @@ class PersonNameNormalizationService:
         if marker_end == 0 or marker_end >= len(value) or not value[marker_end].isalpha():
             return value, ""
         return value[marker_end:], value[:marker_end]
-
-    def _strip_trailing_affiliation_surface(
-        self,
-        surface: str,
-    ) -> tuple[str, list[_DroppedToken]]:
-        """Remove an organization phrase after at least two name tokens."""
-        tokens = self._tokens(surface, "suffix", 0)
-        for index, token in enumerate(tokens):
-            if index < _TWO_COMPONENTS or self._compact_key(token.text) not in _ORGANIZATION_WORDS:
-                continue
-            dropped = [_DroppedToken(item, DropReason.AFFILIATION) for item in tokens[index:]]
-            return surface[: token.position].rstrip(" ,"), dropped
-        return surface, []
 
     def _collapse_parenthetical_duplicate_surface(self, surface: str) -> str:
         """Collapse ``Alan (Alan B.) Cantor``-style duplicate given forms."""
@@ -1461,6 +1470,12 @@ class PersonNameNormalizationService:
         words = {self._compact_key(token) for token in _TOKEN_RE.findall(lowered)}
         if words & _ORGANIZATION_WORDS:
             return "organization input"
+        # Reject the literal placeholder "null"/"null null" only when the WHOLE name is
+        # "null" tokens — "Null" is a real surname ("Linda M. Null"), so a mixed name keeps it.
+        if words and words <= {"null"}:
+            return "null literal"
+        if words and words <= _FUNCTION_WORDS:
+            return "function words only"
         return None
 
     @staticmethod
