@@ -1305,3 +1305,51 @@ def test_particle_floor_does_not_override_weak_context_or_source_last(
     assert title_case_surname.canonical_name is not None
     assert title_case_surname.canonical_name.normalized.middle_name == "K."
     assert title_case_surname.canonical_name.normalized.surname == "Das Gupta"
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text"),
+    [
+        # A dangling author-list connector "and" (leading/trailing, from a truncated
+        # author list) is stripped, recovering the one real person's name. Real DB rows.
+        ("Alexander Campbell and", "Alexander Campbell"),
+        ("Benjamin R. Knoll and", "Benjamin R. Knoll"),
+        ("Sven Björkman and", "Sven Björkman"),
+        ("and Ariel Feldman", "Ariel Feldman"),
+        ("and Jürg Hutter", "Jürg Hutter"),
+        ("W. L. HAFLEY AND", "W. L. Hafley"),  # all-caps AND connector
+        ("Susana Patricia Cabrera Huerta, and", "Susana Patricia Cabrera Huerta"),  # comma + and
+        # A real surname "And" (title-case) or a hyphenated "-And" is NOT a connector.
+        ("Metin And", "Metin And"),
+        ("Lars And", "Lars And"),
+        ("K. Jon-And", "K. Jon-And"),
+    ],
+)
+def test_dangling_and_connector_stripped_but_real_and_surname_kept(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "Smith and Jones",  # two people joined by a mid connector
+        "Anna Smith and Bob Jones",
+        "Computational and Mathematical Methods in Medicine",  # journal with mid "and"
+    ],
+)
+def test_mid_and_connector_between_names_is_non_person(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None

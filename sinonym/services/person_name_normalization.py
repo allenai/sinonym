@@ -71,7 +71,10 @@ _WHITESPACE_RE = re.compile(r"\s+")
 _JOINER_SPACING_RE = re.compile(r"\s*([-'])\s*")
 _DUPLICATE_APOSTROPHE_RE = re.compile(r"'{2,}")
 _LEADING_STRAY_JOINER_RE = re.compile(r"^[-']\s+")
-_WORD_AND_RE = re.compile(r"\band\b", re.IGNORECASE)
+# Author-list connector "and" is whitespace-delimited ("First Last and First Last").
+# Must NOT match "and" inside a hyphenated surname token (e.g. "Jon-And", "Strand"),
+# so require real whitespace on both sides rather than a \b word boundary.
+_WORD_AND_RE = re.compile(r"(?<=\s)and(?=\s)", re.IGNORECASE)
 _TOKEN_RE = re.compile(r"\S+")
 _TRAILING_DIGITS_RE = re.compile(r"\d+$")
 _INITIAL_RE = re.compile(r"([^\W\d_])\.", re.UNICODE)
@@ -299,6 +302,15 @@ class PersonNameNormalizationService:
         segment_matches = list(re.finditer(r"[^,]+", surface))
         segments = [self._tokens(match.group(), "", match.start()) for match in segment_matches]
         segments = [segment for segment in segments if segment]
+        # Drop a comma segment that is only a dangling ``and`` connector
+        # ("Susana ... Huerta, and" -> one real name), recording its lineage.
+        kept_segments: list[list[_Token]] = []
+        for segment in segments:
+            if len(segment) == 1 and segment[0].text in {"and", "AND"}:
+                dropped.append(_DroppedToken(segment[0], DropReason.CONNECTOR))
+            else:
+                kept_segments.append(segment)
+        segments = kept_segments
         if not segments:
             return self._invalid("name has no usable tokens")
         if leading_markers:
@@ -478,6 +490,7 @@ class PersonNameNormalizationService:
         tokens = self._repair_leading_marker_initial(tokens, dropped)
         tokens = self._join_separated_compound_initials(tokens)
         tokens = self._strip_leading_titles(tokens, dropped)
+        tokens = self._strip_dangling_and(tokens, dropped)
         tokens = self._strip_standalone_periods(tokens, dropped)
         tokens = self._strip_boundary_markers(tokens, dropped)
         tokens, boundary_suffix, boundary_suffix_token = self._strip_trailing_boundaries(tokens, dropped)
@@ -555,6 +568,8 @@ class PersonNameNormalizationService:
         given_tokens = [replace(token, source_role="given") for token in given_tokens]
         family_tokens = self._strip_leading_titles(family_tokens, dropped, preserve_ambiguous_credentials=True)
         given_tokens = self._strip_leading_titles(given_tokens, dropped, preserve_ambiguous_credentials=True)
+        family_tokens = self._strip_dangling_and(family_tokens, dropped)
+        given_tokens = self._strip_dangling_and(given_tokens, dropped)
         family_tokens = self._strip_standalone_periods(family_tokens, dropped)
         given_tokens = self._strip_standalone_periods(given_tokens, dropped)
         family_tokens = self._strip_boundary_markers(family_tokens, dropped)
@@ -904,6 +919,28 @@ class PersonNameNormalizationService:
                 dropped.append(_DroppedToken(token, DropReason.CONNECTOR))
             else:
                 remaining.append(token)
+        return remaining
+
+    @staticmethod
+    def _strip_dangling_and(
+        tokens: list[_Token],
+        dropped: list[_DroppedToken],
+    ) -> list[_Token]:
+        """Drop a leading/trailing lowercase ``and`` connector from a truncated author list.
+
+        A dangling lowercase ``and`` (``Alexander Campbell and``, ``and Ariel Feldman``)
+        or all-caps ``AND`` (``W. L. HAFLEY AND``) is an author-list fragment; stripping
+        it recovers the one real name. Title-case ``And`` is KEPT (real surname, e.g.
+        ``Metin And``), and a hyphenated ``Jon-And`` is one token, never matched. A MID
+        ``and`` between two complete names is handled earlier by ``_non_person_reason``
+        (rejected as two people).
+        """
+        connectors = {"and", "AND"}
+        remaining = list(tokens)
+        while len(remaining) > 1 and remaining[0].text in connectors:
+            dropped.append(_DroppedToken(remaining.pop(0), DropReason.CONNECTOR))
+        while len(remaining) > 1 and remaining[-1].text in connectors:
+            dropped.append(_DroppedToken(remaining.pop(), DropReason.CONNECTOR))
         return remaining
 
     @staticmethod
