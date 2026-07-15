@@ -42,7 +42,10 @@ def test_canonical_name_moves_true_suffix_to_suffix_component(detector):
 def test_two_token_suffixes_and_credentials_use_full_canonical_pipeline(detector):
     cases = (
         ("John Jr", "John Jr.", "Jr."),
-        ("John Senior", "John Sr.", "Sr."),
+        # Spelled-out "Senior" is a real surname: with no other surname to fall back on
+        # it is kept as the surname (not demoted to "Sr."), avoiding an empty surname.
+        # The abbreviated "Jr."/"Sr." forms above still behave as suffixes.
+        ("John Senior", "John Senior", ""),
         ("John Phd", "John", ""),
         ("Phd Smith", "Smith", ""),
         ("PD Dr", None, None),

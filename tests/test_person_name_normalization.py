@@ -1630,3 +1630,73 @@ def test_credential_collision_hard_and_ambiguous_cases_characterization(
     r = normalizer.normalize_text("Ma. del Mar Delgado")
     assert r.canonical_name.text == "Ma. del Mar Delgado"
     assert r.canonical_name.normalized.given_name == "Ma."
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # "Senior" is the SURNAME here (English given + Senior). It was being eaten as
+        # the "Sr." suffix, leaving an EMPTY surname ("Roxy Senior" -> given Roxy, s='').
+        "Roxy Senior",
+        "Kathryn Senior",
+        "Jane Senior",
+        "Carl Senior",
+        "Peter A. Senior",  # 3 tokens but only one non-initial precedes -> still a surname
+    ],
+)
+def test_trailing_senior_kept_as_surname_when_no_other_surname(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.surname_tokens == ("Senior",)
+    assert result.canonical_name.normalized.suffix == ""
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_surname", "expected_suffix"),
+    [
+        # A real generational suffix: a surname survives the removal, so Senior/Junior
+        # is correctly demoted to Sr./Jr.
+        ("Geraldo Bezerra da Silva Junior", ("da", "Silva"), "Jr."),
+        ("John Smith Jr", ("Smith",), "Jr."),
+        ("John Smith Sr.", ("Smith",), "Sr."),
+        ("Robert Downey Jr.", ("Downey",), "Jr."),
+        ("Mary Ann Evans Senior", ("Evans",), "Sr."),
+        ("Henry Ford III", ("Ford",), "III"),  # roman-numeral suffix unaffected
+    ],
+)
+def test_senior_junior_still_suffix_when_surname_survives(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_surname: tuple[str, ...],
+    expected_suffix: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.surname_tokens == expected_surname
+    assert result.canonical_name.normalized.suffix == expected_suffix
+
+
+def test_suffix_senior_junior_hard_and_ambiguous_cases_characterization(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    """HARD / AMBIGUOUS Senior/Junior cases — documented for review.
+
+    Bare "Surname Junior" (no given) is genuinely ambiguous between the Brazilian
+    suffix (surname Silva, suffix Jr.) and a two-part name (given Silva, surname
+    Junior). We keep it as a surname so the surname is never emptied; this matches
+    the source DB's own first/last split and is not a regression (baseline produced
+    an empty surname with suffix Jr.).
+    """
+    r = normalizer.normalize_text("Silva Junior")
+    assert r.canonical_name.normalized.surname_tokens == ("Junior",)
+    assert r.canonical_name.normalized.suffix == ""
+
+    # A single-initial given followed by "Senior": surname is still preserved.
+    r = normalizer.normalize_text("A Senior")
+    assert r.canonical_name.normalized.surname_tokens == ("Senior",)

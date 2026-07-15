@@ -252,6 +252,9 @@ _STANDARD_SUFFIXES = {
     "5th": "5th",
     "6th": "6th",
 }
+# Spelled-out "Senior"/"Junior" are also common surnames ("Roxy Senior", "Peter A.
+# Senior"); demote them to a suffix only when a real surname survives the removal.
+_SURNAME_LIKE_SUFFIX_KEYS = frozenset({"senior", "junior"})
 _RAW_ROMAN_SUFFIXES = frozenset({"II", "III", "IV", "VI", "VII", "VIII", "IX", "X"})
 _EXPLICIT_ROMAN_SUFFIXES = _RAW_ROMAN_SUFFIXES | {"I", "V", "X"}
 _CASE_INSENSITIVE_ROMAN_SUFFIXES = _RAW_ROMAN_SUFFIXES - {"II"}
@@ -848,7 +851,20 @@ class PersonNameNormalizationService:
             candidate = self._canonical_suffix(token.text, explicit=False)
             has_complete_name = len(remaining) > _TWO_COMPONENTS or has_external_name_context
             is_roman = candidate in _RAW_ROMAN_SUFFIXES
-            if candidate and not suffix and (not is_roman or has_complete_name):
+            surname_like = self._compact_key(token.text) in _SURNAME_LIKE_SUFFIX_KEYS
+            # "Senior"/"Junior" is a suffix only if a surname survives its removal:
+            # at least two non-initial tokens must precede it (a given AND a surname),
+            # or an external name context already supplies the surname.
+            surname_like_ok = (
+                has_external_name_context
+                or sum(1 for other in remaining[:-1] if not self._is_initial(other.text)) >= _TWO_COMPONENTS
+            )
+            if (
+                candidate
+                and not suffix
+                and (not is_roman or has_complete_name)
+                and (not surname_like or surname_like_ok)
+            ):
                 suffix = candidate
                 suffix_token = replace(token, source_role="suffix")
                 remaining.pop()
