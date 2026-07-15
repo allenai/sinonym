@@ -174,6 +174,51 @@ def _contains_any(values: tuple[str, ...], keys: tuple[str, ...]) -> bool:
     return any(_contains(values, key) for key in keys)
 
 
+# Precomposed European letters with no base+combining-mark decomposition.
+_EUROPEAN_EXCLUSIVE_LETTERS = frozenset("øØæÆœŒßþÞðÐłŁ")
+# Combining marks that Vietnamese/East-Asian romanization never uses, so they are
+# unambiguous European evidence regardless of base: diaeresis (ä/ö/ü/ë/ï), ring (å),
+# cedilla (ç), ogonek (ą/ę), double acute (ő/ű).
+_EUROPEAN_EXCLUSIVE_MARKS = frozenset({"̈", "̊", "̧", "̨", "̋"})
+# Marks Vietnamese/McCune only ever place on a vowel; on a consonant they are European —
+# acute → ć/ń/ś/ź, tilde → ñ, caron → č/ž/š, breve → Turkish ğ. (On a vowel these are
+# routable: acute/tilde are Vietnamese tones, breve is McCune ŏ/ŭ, caron is only ever
+# mojibake Vietnamese.)
+_CONSONANT_EUROPEAN_MARKS = frozenset({"́", "̃", "̌", "̆"})
+_VIETNAMESE_VOWELS = frozenset("aeiouy")
+
+
+def _is_european_exclusive_diacritic(character: str) -> bool:
+    """True if a character is a European-exclusive accented Latin letter.
+
+    Only marks that cannot appear in Vietnamese/Korean/Japanese romanization count as
+    European evidence (Nordic ø/å, German ä/ö/ü, Spanish ñ, Polish ć/ł, Czech č/ž). The
+    Vietnamese repertoire (tone/quality marks on vowels, horn, đ), Hepburn/McCune macrons
+    (ā/ō/ū/ŏ/ŭ), and non-European noise (Turkish İ, Cyrillic homoglyphs, mojibake like ƣ)
+    are all left routable, so a genuine East-Asian name is never blocked by a stray glyph.
+    """
+    if character in _EUROPEAN_EXCLUSIVE_LETTERS:
+        return True
+    decomposed = unicodedata.normalize("NFD", character)
+    marks = decomposed[1:]
+    if not marks:
+        return False
+    if any(mark in _EUROPEAN_EXCLUSIVE_MARKS for mark in marks):
+        return True
+    base = decomposed[0].casefold()
+    return base not in _VIETNAMESE_VOWELS and any(mark in _CONSONANT_EUROPEAN_MARKS for mark in marks)
+
+
+def _has_east_asian_diacritic_evidence(surface: str) -> bool:
+    """True when the surface has non-ASCII letters and none is European-exclusive.
+
+    A single European-exclusive letter (ø/å/ö/ü/ñ/…) disqualifies the surface, so
+    "Kim Brøsen" is not mistaken for Vietnamese; mojibake/Turkish/Cyrillic glyphs on an
+    otherwise Vietnamese name (e.g. "Nguyễn Lan Hƣơng") stay routable.
+    """
+    return (not surface.isascii()) and not any(_is_european_exclusive_diacritic(character) for character in surface)
+
+
 def _is_han(character: str) -> bool:
     return "\u3400" <= character <= "\u4dbf" or "\u4e00" <= character <= "\u9fff" or "\uf900" <= character <= "\ufaff"
 
@@ -326,7 +371,7 @@ class EastAsianNameOrderService:
         surface: str,
         lexicons: _RomanLexicons,
     ) -> EastAsianNameOrderDecision | None:
-        if surface.isascii() or not _contains(lexicons.vietnamese_surnames, _fold(tokens[0])):
+        if not _has_east_asian_diacritic_evidence(surface) or not _contains(lexicons.vietnamese_surnames, _fold(tokens[0])):
             return None
         middle_tokens = tuple(tokens[1:-1])
         return EastAsianNameOrderDecision(
@@ -344,6 +389,11 @@ class EastAsianNameOrderService:
         lexicons: _RomanLexicons,
     ) -> EastAsianNameOrderDecision | None:
         if len(tokens) > MAX_KOREAN_ROMANIZED_TOKENS:
+            return None
+        # A European-exclusive diacritic (Nordic "Kim Hørslev-Petersen") is not romanized
+        # Korean. McCune-Reischauer breve vowels (ŏ/ŭ) stay allowed — they are inside the
+        # East-Asian-plausible repertoire, so only ø/å/ö/ü/ñ/… disqualify.
+        if any(_is_european_exclusive_diacritic(character) for token in tokens for character in token):
             return None
         if not _contains(lexicons.korean_surnames, _fold(tokens[0])):
             return None
