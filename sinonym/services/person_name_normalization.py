@@ -173,8 +173,8 @@ _CREDENTIAL_KEYS = frozenset(
         "rn",
     },
 )
-_AMBIGUOUS_CREDENTIAL_KEYS = frozenset({"ba", "bs", "do", "jd", "ma", "mba", "md", "meng", "mpa", "ms", "rn"})
-_MIXED_CASE_CREDENTIALS = {"meng": "MEng"}
+_AMBIGUOUS_CREDENTIAL_KEYS = frozenset({"ba", "bs", "do", "edd", "jd", "ma", "mba", "md", "meng", "mpa", "ms", "rn"})
+_MIXED_CASE_CREDENTIALS = {"meng": "MEng", "edd": "EdD"}
 _FAMILY_PARTICLES = frozenset(
     {
         "al",
@@ -772,8 +772,14 @@ class PersonNameNormalizationService:
             prefixed_academic_title = (
                 token.text == "PD" and len(remaining) > 1 and self._compact_key(remaining[1].text) in _TITLE_KEYS
             )
+            ambiguous_name_token = self._is_ambiguous_credential(token.text) and (
+                preserve_ambiguous_credentials or len(remaining) == _TWO_COMPONENTS
+            )
+            # An all-caps token that reads as initials ("MS", "M-S.") must not be dropped
+            # as the honorific "Ms": all-caps = initials, Title-case "Ms"/"Ms." = honorific.
+            title_is_really_initials = ambiguous_name_token and token.text.isupper()
             if (
-                (key in _TITLE_KEYS and not multi_initial)
+                (key in _TITLE_KEYS and not multi_initial and not title_is_really_initials)
                 or (stripped_title and key in _TITLE_QUALIFIER_KEYS)
                 or prefixed_academic_title
             ):
@@ -781,12 +787,9 @@ class PersonNameNormalizationService:
                 remaining.pop(0)
                 stripped_title = True
                 continue
-            ambiguous_name_token = self._is_ambiguous_credential(token.text) and (
-                preserve_ambiguous_credentials or len(remaining) == _TWO_COMPONENTS
-            )
             leading_name_abbreviation = (
                 key in _LEADING_NAME_ABBREVIATION_KEYS and token.text.endswith(".") and len(remaining) >= _TWO_COMPONENTS
-            ) or self._is_exact_ma_given_abbreviation(remaining)
+            ) or self._is_ma_given_abbreviation(remaining)
             if self._is_credential(token.text) and not ambiguous_name_token and not leading_name_abbreviation:
                 dropped.append(_DroppedToken(token, DropReason.CREDENTIAL))
                 remaining.pop(0)
@@ -1023,13 +1026,17 @@ class PersonNameNormalizationService:
         combined = replace(tokens[0], text=f"{tokens[0].text}-{trailing_initial.group(1)}.")
         return [combined, *tokens[2:]]
 
-    def _is_exact_ma_given_abbreviation(self, tokens: list[_Token]) -> bool:
-        """Recognize exact mixed-case ``Ma. Initial Surname`` given-name context."""
+    def _is_ma_given_abbreviation(self, tokens: list[_Token]) -> bool:
+        """Recognize a leading María abbreviation ``Ma.`` before a real given name.
+
+        Mixed-case dotted ``Ma.`` (not the all-caps ``MA`` degree) followed by any
+        full name token is the Filipino/Spanish given ``María`` ("Ma. Mercedes T.
+        Rodrigo", "Ma. Lucila Lapar"), so it must be kept, not dropped as a credential.
+        """
         return bool(
-            len(tokens) == _THREE_COMPONENTS
+            len(tokens) >= _TWO_COMPONENTS
             and tokens[0].text == "Ma."
-            and self._is_initial(tokens[1].text)
-            and self._is_full_name_token(tokens[2].text),
+            and any(self._is_full_name_token(token.text) for token in tokens[1:]),
         )
 
     def _is_full_name_token(self, token: str) -> bool:

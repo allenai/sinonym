@@ -1524,3 +1524,109 @@ def test_name_without_entity_is_unaffected_by_decode(
     assert result.outcome is PersonNameOutcome.PERSON
     assert result.canonical_name is not None
     assert result.canonical_name.text == "John Smith"
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_surname", "lead_kept"),
+    [
+        # Leading given/initials that collide with a credential/title acronym were
+        # dropped, collapsing the name (surname left EMPTY: "MS Islam" -> given "Islam").
+        # Now the leading token is kept and the surname is restored.
+        ("MS Islam", ("Islam",), "Ms"),          # all-caps initials, not the "Ms" honorific
+        ("MS Ali", ("Ali",), "Ms"),
+        ("M-S. Barisits", ("Barisits",), "M-S."),
+        ("M-S Barisits", ("Barisits",), "M-S"),
+        ("Edd Gent", ("Gent",), "Edd"),           # "Edd" given, not the "EdD" degree
+        ("Edd A. Blekkan", ("Blekkan",), "Edd"),
+        ("Ma. Lucila Lapar", ("Lapar",), "Ma."),  # "Ma." = María, not the "MA" degree
+        ("Ma. Mercedes T. Rodrigo", ("Rodrigo",), "Ma."),
+        ("Ma. Elena Medina-Mora", ("Medina-Mora",), "Ma."),
+    ],
+)
+def test_leading_name_token_not_dropped_as_credential(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_surname: tuple[str, ...],
+    lead_kept: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.surname_tokens == expected_surname
+    assert result.canonical_name.text.split()[0] == lead_kept  # leading token preserved
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text"),
+    [
+        # Genuine honorifics (Title-case, with or without a trailing dot) must STILL
+        # be dropped — casing is the signal: all-caps "MS" = initials, "Ms"/"Ms." = title.
+        ("Ms Smith", "Smith"),
+        ("Ms. Islam", "Islam"),
+        ("Mr Jones", "Jones"),
+        ("Dr Watson", "Watson"),
+    ],
+)
+def test_titlecase_honorific_still_dropped(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text", "dropped_token"),
+    [
+        # Trailing credentials (and the dotted "M.A." degree convention) still drop.
+        ("John Smith PhD", "John Smith", "PhD"),
+        ("Robert Jones MD", "Robert Jones", "MD"),
+        ("Jane Doe EdD", "Jane Doe", "EdD"),      # mixed-case degree dropped...
+        ("Jane Doe EDD", "Jane Doe", "EDD"),      # ...and its all-caps form
+        ("M.A. E. Zayas", "E. Zayas", "M.A."),    # dotted degree acronym (ambiguous; repo convention = drop)
+    ],
+)
+def test_trailing_and_dotted_credentials_still_dropped(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+    dropped_token: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert dropped_token not in result.canonical_name.text
+
+
+def test_credential_collision_hard_and_ambiguous_cases_characterization(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    """HARD / AMBIGUOUS cases for the leading-credential fix — documented for review.
+
+    These are NOT clean wins; they record current behavior so a reviewer can judge.
+    None is a regression vs the pre-fix baseline (which dropped the leading token
+    entirely and produced an empty surname or lost the María given).
+    """
+    # (1) "MS" is kept (surname restored) but re-cased to Title-case "Ms" downstream,
+    #     so the given reads like the honorific. Cosmetic; the surname is now correct.
+    r = normalizer.normalize_text("MS Islam")
+    assert r.canonical_name.text == "Ms Islam"
+    assert r.canonical_name.normalized.surname_tokens == ("Islam",)
+
+    # (2) "Ma. de los Ángeles Martínez Ortega": a Mexican compound. The strong particle
+    #     span "de los" pulls "Ma. de los Ángeles" into the surname role and makes
+    #     "Martínez" the given — mis-parsed, and rendered surname-first.
+    #     Baseline was also wrong (dropped "Ma." -> "de los Ángeles Martínez Ortega").
+    r = normalizer.normalize_text("Ma. de los Ángeles Martínez Ortega")
+    assert r.canonical_name.text == "Martínez Ortega Ma. de los Ángeles"
+
+    # (3) "Ma. del Mar Delgado": "Ma." kept as given; "del Mar" ends up in the surname
+    #     rather than the given "María del Mar". Imperfect but better than dropping María.
+    r = normalizer.normalize_text("Ma. del Mar Delgado")
+    assert r.canonical_name.text == "Ma. del Mar Delgado"
+    assert r.canonical_name.normalized.given_name == "Ma."
