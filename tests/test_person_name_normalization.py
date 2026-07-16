@@ -432,9 +432,9 @@ def test_uppercase_leading_credential_is_dropped(
     ("raw_name", "expected", "expected_given", "expected_surname"),
     [
         ("JOHN MA", "John Ma", "John", "Ma"),
-        ("MA SMITH", "Ma Smith", "Ma", "Smith"),
-        ("Smith, Ma", "Ma Smith", "Ma", "Smith"),
-        ("SMITH, MA", "Ma Smith", "Ma", "Smith"),
+        ("MA SMITH", "MA Smith", "MA", "Smith"),  # all-caps initials kept all-caps
+        ("Smith, Ma", "Ma Smith", "Ma", "Smith"),  # Title-case input stays Title-case
+        ("SMITH, MA", "MA Smith", "MA", "Smith"),
     ],
 )
 def test_ambiguous_uppercase_credential_token_is_preserved_when_required_as_name(
@@ -1537,8 +1537,8 @@ def test_name_without_entity_is_unaffected_by_decode(
         # Leading given/initials that collide with a credential/title acronym were
         # dropped, collapsing the name (surname left EMPTY: "MS Islam" -> given "Islam").
         # Now the leading token is kept and the surname is restored.
-        ("MS Islam", ("Islam",), "Ms"),          # all-caps initials, not the "Ms" honorific
-        ("MS Ali", ("Ali",), "Ms"),
+        ("MS Islam", ("Islam",), "MS"),          # all-caps initials, kept all-caps (not the "Ms" honorific)
+        ("MS Ali", ("Ali",), "MS"),
         ("M-S. Barisits", ("Barisits",), "M-S."),
         ("M-S Barisits", ("Barisits",), "M-S"),
         ("Edd Gent", ("Gent",), "Edd"),           # "Edd" given, not the "EdD" degree
@@ -1617,10 +1617,10 @@ def test_credential_collision_hard_and_ambiguous_cases_characterization(
     None is a regression vs the pre-fix baseline (which dropped the leading token
     entirely and produced an empty surname or lost the María given).
     """
-    # (1) "MS" is kept (surname restored) but re-cased to Title-case "Ms" downstream,
-    #     so the given reads like the honorific. Cosmetic; the surname is now correct.
+    # (1) "MS" is kept as all-caps initials (surname restored); it no longer re-cases to
+    #     the "Ms" honorific.
     r = normalizer.normalize_text("MS Islam")
-    assert r.canonical_name.text == "Ms Islam"
+    assert r.canonical_name.text == "MS Islam"
     assert r.canonical_name.normalized.surname_tokens == ("Islam",)
 
     # (2) "Ma. de los Ángeles Martínez Ortega": a Mexican compound. The strong particle

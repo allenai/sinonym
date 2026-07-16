@@ -1405,13 +1405,10 @@ class PersonNameNormalizationService:
             return cleaned[0].upper() + "."
         if _MULTI_INITIAL_RE.fullmatch(cleaned) or self._is_uppercase_dotted_abbreviation(cleaned):
             return "".join(character.upper() if character.isalpha() else character for character in cleaned)
-        if (
-            role != "surname"
-            and cleaned.isalpha()
-            and cleaned.isupper()
-            and len(cleaned) == _TWO_COMPONENTS
-            and not self._is_ambiguous_credential(cleaned)
-        ):
+        if role != "surname" and cleaned.isalpha() and cleaned.isupper() and len(cleaned) == _TWO_COMPONENTS:
+            # A two-letter all-caps given token is initials (e.g. "MS", "MA", "MD") — keep it
+            # all-caps rather than title-casing to "Ms"/"Ma", which reads as an honorific. A
+            # genuine Title-case honorific never reaches here (it's dropped upstream).
             return cleaned
 
         parts = re.split(r"([-'])", cleaned)
