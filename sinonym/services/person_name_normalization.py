@@ -328,6 +328,12 @@ _ORGANIZATION_WORDS = frozenset(
 _ORG_PREPOSITION_WORDS = frozenset({"für", "voor"})
 # Whole-name strings made only of these connectives are not persons ("of", "the ...").
 _FUNCTION_WORDS = frozenset({"of", "the", "for", "und", "der", "des"})
+# English "Center"/"Centre" is also a real surname (David M. Center, the immunologist), so
+# it must NOT reject a clean personal name whose surname IS "Center" ("David M. Center").
+# "Company" is deliberately NOT here: it is a Catalan surname too, but its person shape
+# ("Initial Surname Company") is indistinguishable from a firm ("A Boeing Company",
+# "M.T. Company"), so gating it admits ~as many orgs as people — kept as a hard org word.
+_SURNAME_COLLISION_ORG_WORDS = frozenset({"center", "centre"})
 # Org words that are ~never part of a real hyphenated surname, so a hyphenated token
 # containing one is an org ("Robert Koch-Institut", "Ruhr-Universität", "Courier-Journal").
 # Deliberately EXCLUDES company/hospital/center/bureau/press (real hyphenated surnames:
@@ -1572,6 +1578,27 @@ class PersonNameNormalizationService:
         # trailing occurrence is a real surname ("Gabriella Für", "Michael J. Voor").
         return any(cls._compact_key(token) in _ORG_PREPOSITION_WORDS for token in raw_tokens[:-1])
 
+    @classmethod
+    def _is_collision_surname_shape(cls, raw_tokens: list[str]) -> bool:
+        # A clean personal name whose SURNAME is a collision org word ("Company"/"Center"):
+        # 2-3 tokens, the collision word is the final (surname) token, at least one leading
+        # token is a single-letter initial (a strong person signal an org lacks), and no
+        # other org / function / preposition word appears. "David M. Center" -> person;
+        # "Cosmic Dawn Center" / "Media Center" / "ABC Trading Company" -> still org.
+        if not _TWO_COMPONENTS <= len(raw_tokens) < _FOUR_COMPONENTS:
+            return False
+        if cls._compact_key(raw_tokens[-1]) not in _SURNAME_COLLISION_ORG_WORDS:
+            return False
+        leading = raw_tokens[:-1]
+        if any(
+            cls._compact_key(token) in _ORGANIZATION_WORDS
+            or cls._compact_key(token) in _FUNCTION_WORDS
+            or cls._compact_key(token) in _ORG_PREPOSITION_WORDS
+            for token in leading
+        ):
+            return False
+        return any(len(cls._compact_key(token)) == 1 for token in leading)
+
     def _non_person_reason(self, surface: str) -> str | None:  # noqa: PLR0911
         lowered = surface.casefold()
         if "@" in surface or "://" in surface:
@@ -1583,7 +1610,10 @@ class PersonNameNormalizationService:
             return "author-list connector"
         raw_tokens = _TOKEN_RE.findall(lowered)
         words = {self._compact_key(token) for token in raw_tokens}
-        if words & _ORGANIZATION_WORDS or self._has_nonfinal_org_preposition(raw_tokens):
+        org_hit = words & _ORGANIZATION_WORDS
+        if org_hit and not (org_hit <= _SURNAME_COLLISION_ORG_WORDS and self._is_collision_surname_shape(raw_tokens)):
+            return "organization input"
+        if self._has_nonfinal_org_preposition(raw_tokens):
             return "organization input"
         # An org word fused into a hyphenated token ("Koch-Institut", "Ruhr-Universität",
         # "Courier-Journal") — only for words that are never part of a real surname.

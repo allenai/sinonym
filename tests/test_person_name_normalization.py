@@ -1780,6 +1780,22 @@ def test_real_people_with_org_like_surnames_kept(
     assert result.canonical_name is not None
 
 
+def test_center_surname_collision_gate(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # "Center"/"Centre" is a real surname (e.g. David M. Center, the immunologist). A clean
+    # "Given [Initial] Center" name is spared from the org-reject, while org uses of the word
+    # still reject (no leading given name + initial).
+    for raw_name in ("David M. Center", "Sharon A. Center", "Allen H. Center"):
+        assert normalizer.normalize_text(raw_name).outcome is PersonNameOutcome.PERSON, raw_name
+    for raw_name in ("Cosmic Dawn Center", "Media Center", "MS Center", "Genetics Center"):
+        assert normalizer.normalize_text(raw_name).outcome is PersonNameOutcome.NON_PERSON, raw_name
+    # "Company" is a Catalan surname too, but its person shape ("Initial Surname Company") is
+    # indistinguishable from a firm ("A Boeing Company"), so it stays a hard org word — a
+    # "... Company" personal name is a documented casualty (still rejected).
+    assert normalizer.normalize_text("Maria J. Company").outcome is PersonNameOutcome.NON_PERSON
+
+
 def test_organization_hard_and_ambiguous_cases_characterization(
     normalizer: PersonNameNormalizationService,
 ) -> None:
