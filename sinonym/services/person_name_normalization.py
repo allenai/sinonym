@@ -366,6 +366,11 @@ _HYPHEN_ORG_WORDS = frozenset(
 _STANDARD_SUFFIXES = {
     "jr": "Jr.",
     "junior": "Jr.",
+    # Portuguese spelling of the generational suffix. Keyed separately because the
+    # lookup casefolds but does not strip diacritics, so "Júnior" never matches
+    # "junior"; without this it stays in the surname slot and displaces the family
+    # name (e.g. "Francisco Aquino Júnior" -> surname "Júnior" instead of "Aquino").
+    "júnior": "Jr.",
     "sr": "Sr.",
     "senior": "Sr.",
     "2nd": "2nd",
@@ -376,7 +381,7 @@ _STANDARD_SUFFIXES = {
 }
 # Spelled-out "Senior"/"Junior" are also common surnames ("Roxy Senior", "Peter A.
 # Senior"); demote them to a suffix only when a real surname survives the removal.
-_SURNAME_LIKE_SUFFIX_KEYS = frozenset({"senior", "junior"})
+_SURNAME_LIKE_SUFFIX_KEYS = frozenset({"senior"})
 _RAW_ROMAN_SUFFIXES = frozenset({"II", "III", "IV", "VI", "VII", "VIII", "IX", "X"})
 _EXPLICIT_ROMAN_SUFFIXES = _RAW_ROMAN_SUFFIXES | {"I", "V", "X"}
 _CASE_INSENSITIVE_ROMAN_SUFFIXES = _RAW_ROMAN_SUFFIXES - {"II"}
@@ -977,9 +982,8 @@ class PersonNameNormalizationService:
             # "Senior"/"Junior" is a suffix only if a surname survives its removal:
             # at least two non-initial tokens must precede it (a given AND a surname),
             # or an external name context already supplies the surname.
-            surname_like_ok = (
-                has_external_name_context
-                or sum(1 for other in remaining[:-1] if not self._is_initial(other.text)) >= _TWO_COMPONENTS
+            surname_like_ok = has_external_name_context or any(
+                not self._is_initial(other.text) for other in remaining[1:-1]
             )
             if (
                 candidate
