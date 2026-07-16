@@ -755,6 +755,11 @@ class PersonNameNormalizationService:
         suffix: str,
         dropped: list[_DroppedToken],
     ) -> PersonNameNormalizationResult:
+        # Mononym contract: a single-token person always keeps its token in the surname
+        # slot (a person always needs a surname; kept as-is, no length rejection).
+        name_tokens = [*given, *middle, *surname]
+        if len(name_tokens) == 1:
+            given, middle, surname = [], [], [replace(name_tokens[0], source_role="surname")]
         normalized_given = self._canonical_tokens(given, "given")
         normalized_middle = self._canonical_tokens(middle, "middle")
         normalized_surname = self._canonical_tokens(surname, "surname")

@@ -531,7 +531,8 @@ def test_two_token_raw_roman_numeral_is_a_surname_but_explicit_is_a_suffix(
     assert raw.canonical_name.normalized.suffix == ""
     assert structured.canonical_name is not None
     assert structured.canonical_name.text == f"{given_name} {roman_surname.upper()}"
-    assert structured.canonical_name.normalized.surname == ""
+    assert structured.canonical_name.normalized.given_name == ""
+    assert structured.canonical_name.normalized.surname == given_name
     assert structured.canonical_name.normalized.suffix == roman_surname.upper()
 
 
@@ -2117,3 +2118,59 @@ def test_real_corpus_hyphenated_compound_surnames_kept(
 
     assert result.outcome is PersonNameOutcome.PERSON
     assert result.canonical_name is not None
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_surname"),
+    [
+        ("Wang", "Wang"),
+        ("Madonna", "Madonna"),
+        ("Ku", "Ku"),
+        ("Smith", "Smith"),
+        ("Dr. Wang", "Wang"),  # title stripped, remaining mononym -> surname
+        ("O", "O"),  # single char kept as-is in surname (S2 applies any length gate downstream)
+        ("Smith,", "Smith"),  # surname-only comma form -> surname
+    ],
+)
+def test_mononym_goes_to_surname(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_surname: str,
+) -> None:
+    """Mononym contract: a single-token person keeps the token in the surname slot, as-is."""
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    normalized = result.canonical_name.normalized
+    assert normalized.surname == expected_surname
+    assert normalized.given_name == ""
+    assert normalized.middle_name == ""
+
+
+def test_multitoken_names_unaffected_by_mononym_filter(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    """The mononym filter only touches single-token results."""
+    result = normalizer.normalize_text("Li Wei")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    normalized = result.canonical_name.normalized
+    assert normalized.given_name == "Li"
+    assert normalized.surname == "Wei"
+
+
+def test_single_token_with_suffix_goes_to_surname(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    """A lone name token still becomes the surname even with a suffix — a person always
+    needs a surname (matches S2 shifting a sole token into the last name)."""
+    result = normalizer.normalize_components(first_name="Malcolm", suffix="X")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    normalized = result.canonical_name.normalized
+    assert normalized.given_name == ""
+    assert normalized.surname == "Malcolm"
+    assert normalized.suffix == "X"
