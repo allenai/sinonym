@@ -82,6 +82,9 @@ _INITIAL_RE = re.compile(r"([^\W\d_])\.", re.UNICODE)
 _MULTI_INITIAL_RE = re.compile(r"(?:[^\W\d_]\.)+[^\W\d_]\.?", re.UNICODE)
 _ABBREVIATED_TOKEN_RE = re.compile(r"(?:[^\W\d_]+[-'])*[^\W\d_]{1,3}\.", re.UNICODE)
 _COMPOUND_INITIAL_RE = re.compile(r"[^\W\d_]\.-[^\W\d_]\.", re.UNICODE)
+# Hyphenated single-letter groups are initials, never a degree ("M-A", "M.-A.", "J-D",
+# "M-S." — but not "MA"/"JD"): a hyphen distinguishes compound initials from a credential.
+_HYPHEN_INITIAL_RE = re.compile(r"[^\W\d_]\.?(?:-[^\W\d_]\.?)+", re.UNICODE)
 _LEADING_HYPHEN_INITIAL_RE = re.compile(r"^-([^\W\d_])\.$", re.UNICODE)
 _FUSED_INITIAL_SURNAME_RE = re.compile(r"^([^\W\d_])\.(.+)$", re.UNICODE)
 _LOWER_MARKER_INITIAL_RE = re.compile(r"^([a-z])([A-Z])\.$")
@@ -174,6 +177,11 @@ _CREDENTIAL_KEYS = frozenset(
     },
 )
 _AMBIGUOUS_CREDENTIAL_KEYS = frozenset({"ba", "bs", "do", "edd", "jd", "ma", "mba", "md", "meng", "mpa", "ms", "rn"})
+# Ambiguous credential keys that have ~no real given-name use (unlike "md"=Mohammad,
+# "ma"=María/Ma, "do"=Korean Do, "meng"=Meng, "ba"=Ba, "edd"=Edd, which are genuine names).
+# A Title-case one before a complete name is a credential prefix, not a given name, so it
+# should still drop ("Rn Rachael Zimlich" -> "Rachael Zimlich").
+_PURE_CREDENTIAL_TITLE_DROP_KEYS = frozenset({"bs", "jd", "mba", "mpa", "rn"})
 _MIXED_CASE_CREDENTIALS = {"meng": "MEng", "edd": "EdD"}
 _FAMILY_PARTICLES = frozenset(
     {
@@ -920,7 +928,26 @@ class PersonNameNormalizationService:
             leading_name_abbreviation = (
                 key in _LEADING_NAME_ABBREVIATION_KEYS and token.text.endswith(".") and len(remaining) >= _TWO_COMPONENTS
             ) or self._is_ma_given_abbreviation(remaining)
-            if self._is_credential(token.text) and not ambiguous_name_token and not leading_name_abbreviation:
+            hyphen_initials = bool(_HYPHEN_INITIAL_RE.fullmatch(token.text))
+            if (
+                self._is_credential(token.text)
+                and not ambiguous_name_token
+                and not leading_name_abbreviation
+                and not hyphen_initials
+            ):
+                dropped.append(_DroppedToken(token, DropReason.CREDENTIAL))
+                remaining.pop(0)
+                continue
+            # A Title-case pure-credential token (Rn/Jd/Mba/Mpa/Bs) is a credential prefix,
+            # not a given name, when a complete name follows (>=2 following tokens, at least
+            # one non-initial surname): "Rn Rachael Zimlich" -> drop "Rn". A bare surname
+            # after it ("Rn Cahn") is left alone, since the token could be initials there.
+            if (
+                key in _PURE_CREDENTIAL_TITLE_DROP_KEYS
+                and not leading_name_abbreviation
+                and len(remaining) - 1 >= _TWO_COMPONENTS
+                and any(not self._is_initial(other.text) for other in remaining[1:])
+            ):
                 dropped.append(_DroppedToken(token, DropReason.CREDENTIAL))
                 remaining.pop(0)
                 continue
