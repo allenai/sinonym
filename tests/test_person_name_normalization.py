@@ -471,6 +471,41 @@ def test_ambiguous_uppercase_credential_is_still_dropped_from_complete_name(
         ]
 
 
+def test_title_case_pure_credential_before_complete_name_is_dropped(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # Title-case pure-credential tokens (Rn/Jd/Mba/Mpa/Bs) with no real given-name use are
+    # a credential prefix when a complete name follows, so they drop.
+    for raw, text in [("Rn Rachael Zimlich", "Rachael Zimlich"), ("Jd Dawn Collins", "Dawn Collins")]:
+        result = normalizer.normalize_text(raw)
+        assert result.outcome is PersonNameOutcome.PERSON
+        assert result.canonical_name is not None
+        assert result.canonical_name.text == text
+        assert [(token.text, token.reason) for token in result.dropped_tokens][:1] == [(raw.split()[0], DropReason.CREDENTIAL)]
+
+
+def test_title_case_pure_credential_before_bare_surname_is_kept(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # Only a bare surname follows, so the token could be initials -> keep it, do not drop.
+    result = normalizer.normalize_text("Rn Cahn")
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.given_name == "Rn"
+    assert result.canonical_name.normalized.surname == "Cahn"
+
+
+def test_name_collision_credential_key_is_not_dropped_from_title_case(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # "Md"=Mohammad is a real given name, not a credential, and must survive.
+    result = normalizer.normalize_text("Md Saiful Islam")
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.given_name == "Md"
+    assert result.canonical_name.normalized.surname == "Islam"
+
+
 def test_meng_surname_is_preserved_while_meng_degree_is_dropped(
     normalizer: PersonNameNormalizationService,
 ) -> None:
