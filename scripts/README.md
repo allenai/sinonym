@@ -77,6 +77,13 @@ uv run python scripts/name_order_routing_rules.py pp-vys-abstain --input pp_vys_
 uv run python scripts/name_order_routing_rules.py pp-abstain --input pp_only_features.parquet --output routed.parquet
 ```
 
+### `change_class_tally.py`
+Reference detector behind the "change-class sizes" table in the PR review. Runs SQL slice-detectors (via DuckDB, memory-safe streaming) over a canonical parquet whose rows are one per distinct production `(first, middle, last)` split (a joined name string can recur under several splits, so row count > distinct name count). sinonym 0.4.0 was run on the joined `nm` only; the `db_*` fields are the untouched production reference and `norm_*` is sinonym's output — production vs sinonym side by side. Prints per-split count, occurrence count, and share of non-Chinese occ per change class. Counts are exact for each detector's signature, but a signature is a heuristic (can under-capture; the order-swap / compound-surname classes are ceilings that include correct cases) — not ground truth. Requires `duckdb`.
+
+```bash
+uv run python scripts/change_class_tally.py path/to/canonical.parquet
+```
+
 ## Abandoned Scripts
 
 These remain for historical reference but are not used by the library. The rule-based parser in `sinonym.services.parsing` replaced the ML approach.

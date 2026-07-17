@@ -531,7 +531,8 @@ def test_two_token_raw_roman_numeral_is_a_surname_but_explicit_is_a_suffix(
     assert raw.canonical_name.normalized.suffix == ""
     assert structured.canonical_name is not None
     assert structured.canonical_name.text == f"{given_name} {roman_surname.upper()}"
-    assert structured.canonical_name.normalized.surname == ""
+    assert structured.canonical_name.normalized.given_name == ""
+    assert structured.canonical_name.normalized.surname == given_name
     assert structured.canonical_name.normalized.suffix == roman_surname.upper()
 
 
@@ -779,14 +780,18 @@ def test_stacked_academic_titles_and_parenthetical_duplicate_are_removed(
     assert parenthetical.canonical_name.text == "Alan B. Cantor"
 
 
-def test_trailing_affiliation_is_removed_after_complete_person_name(
+def test_name_glued_to_affiliation_is_rejected_not_salvaged(
     normalizer: PersonNameNormalizationService,
 ) -> None:
+    # Previously this salvaged "Rachel Webster" by stripping the trailing affiliation.
+    # But the same salvage turned tens of thousands of pure organizations into garbage
+    # person-fragments ("Max Planck Institute ..." -> "Max Planck", "Niels Bohr
+    # Institute" -> "Niels Bohr"), so the whole contaminated string is now rejected.
+    # The real researcher is still captured via their clean (affiliation-free) entries.
     result = normalizer.normalize_text("Rachel Webster University of New South Wales")
 
-    assert result.outcome is PersonNameOutcome.PERSON
-    assert result.canonical_name is not None
-    assert result.canonical_name.text == "Rachel Webster"
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
 
 
 def test_two_token_particle_like_given_name_is_not_duplicated(
@@ -1305,3 +1310,871 @@ def test_particle_floor_does_not_override_weak_context_or_source_last(
     assert title_case_surname.canonical_name is not None
     assert title_case_surname.canonical_name.normalized.middle_name == "K."
     assert title_case_surname.canonical_name.normalized.surname == "Das Gupta"
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text"),
+    [
+        # A dangling author-list connector "and" (leading/trailing, from a truncated
+        # author list) is stripped, recovering the one real person's name. Real DB rows.
+        ("Alexander Campbell and", "Alexander Campbell"),
+        ("Benjamin R. Knoll and", "Benjamin R. Knoll"),
+        ("Sven Björkman and", "Sven Björkman"),
+        ("and Ariel Feldman", "Ariel Feldman"),
+        ("and Jürg Hutter", "Jürg Hutter"),
+        ("W. L. HAFLEY AND", "W. L. Hafley"),  # all-caps AND connector
+        ("Susana Patricia Cabrera Huerta, and", "Susana Patricia Cabrera Huerta"),  # comma + and
+        # A real surname "And" (title-case) or a hyphenated "-And" is NOT a connector.
+        ("Metin And", "Metin And"),
+        ("Lars And", "Lars And"),
+        ("K. Jon-And", "K. Jon-And"),
+    ],
+)
+def test_dangling_and_connector_stripped_but_real_and_surname_kept(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "Smith and Jones",  # two people joined by a mid connector
+        "Anna Smith and Bob Jones",
+        "Computational and Mathematical Methods in Medicine",  # journal with mid "and"
+    ],
+)
+def test_mid_and_connector_between_names_is_non_person(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text", "expected_surname"),
+    [
+        # Dutch "ten", Urdu "ur"/"ud" are family particles: kept lowercase and grouped
+        # into the surname (previously "ten"/"ur" were Title-cased and mis-split).
+        ("Henk ten Have", "Henk ten Have", ("ten", "Have")),
+        ("Peter ten Dijke", "Peter ten Dijke", ("ten", "Dijke")),
+        ("Zia ur Rehman", "Zia ur Rehman", ("ur", "Rehman")),
+        ("Ali ud Din", "Ali ud Din", ("ud", "Din")),
+        # Control: an established particle name is unchanged.
+        ("Jan van der Berg", "Jan van der Berg", ("van", "der", "Berg")),
+    ],
+)
+def test_dutch_urdu_particles_lowercased_and_grouped(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+    expected_surname: tuple[str, ...],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert result.canonical_name.normalized.surname_tokens == expected_surname
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    ["K. Dem'yankov", "Ol'ga V. Dem'yanova", "Yu. K. Dem'yanovich"],
+)
+def test_apostrophe_surname_not_lowercased_as_particle(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    # Regression guard: a surname starting "Dem'" must NOT be treated as the
+    # German particle "dem" (which is why "dem" is intentionally NOT in the set).
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert "dem" not in result.canonical_name.text.split()
+    assert result.canonical_name.text[0] == raw_name[0]  # leading capital preserved
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_given", "expected_surname"),
+    [
+        # "Van"/"Ten" are common real given names (Van Morrison, Van Jones). Adding
+        # "ten" to the particle set must NOT swallow a Title-cased LEADING one:
+        # casing + position disambiguate — Title-case leading token = given name.
+        ("Van Jones", "Van", ("Jones",)),
+        ("Van Morrison", "Van", ("Morrison",)),
+        ("Van A. Smith", "Van", ("Smith",)),
+        ("Ten Berge", "Ten", ("Berge",)),
+    ],
+)
+def test_titlecase_leading_van_ten_is_given_not_particle(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_given: str,
+    expected_surname: tuple[str, ...],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == raw_name
+    assert result.canonical_name.normalized.given_name == expected_given
+    assert result.canonical_name.normalized.surname_tokens == expected_surname
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_surname"),
+    [
+        # A Title-cased "Van" in the MIDDLE is a real Dutch-American compound surname
+        # (Van Dyke, Van Winkle) — grouped whole into the surname, casing preserved.
+        ("John Van Dyke", ("Van", "Dyke")),
+        ("Rob Van Winkle", ("Van", "Winkle")),
+    ],
+)
+def test_titlecase_medial_van_is_compound_surname(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_surname: tuple[str, ...],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == raw_name
+    assert result.canonical_name.normalized.surname_tokens == expected_surname
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text"),
+    [
+        # HTML entities were previously left as literal tokens, so every one of these
+        # real people was REJECTED (canonical_name=None). Decoding recovers them.
+        ("Martin G&#x00F6;tz", "Martin Götz"),          # hex numeric char ref -> ö
+        ("Benjamin I&#x00F1;iguez", "Benjamin Iñiguez"),
+        ("G. Kope&#263;", "G. Kopeć"),                    # decimal numeric char ref -> ć
+        ("A. Doboszy&#324;ska", "A. Doboszyńska"),
+        ("Mitch D&#39;Arcy", "Mitch D'Arcy"),            # named-ish decimal ref -> apostrophe
+        ("Fr&#x00E9;d&#x00E9;ric Sirois", "Frédéric Sirois"),  # multiple entities in one name
+        ("Jos&#x00E9; Rodr&#x00ED;guez", "José Rodríguez"),
+        ("Jos&eacute; Silva", "José Silva"),             # named entity -> é
+        ("Andr&eacute; M&uuml;ller", "André Müller"),    # two named entities
+    ],
+)
+def test_html_entities_decoded_and_name_recovered(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert "&" not in result.canonical_name.text  # no entity remnants
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # "&amp;" decodes to "&", which is a name separator: an org or a two-person
+        # string must still be rejected, never accepted as a single person.
+        "Texas A &amp; M",
+        "John &amp; Jane Smith",
+        "Smith &amp; Wesson",
+    ],
+)
+def test_amp_entity_decodes_to_separator_and_rejects(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+def test_html_entity_decoded_in_long_multi_token_string(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # A long author-list blob with an embedded entity: decoding must still apply
+    # (no "&#..." remnant, "Agnès" recovered). Whether such a blob is ultimately a
+    # person is a separate over-acceptance concern, orthogonal to entity decoding.
+    raw = (
+        "Gilles Julien Diego Anne Agn&#xe8;s Jacques Anne Florent  "
+        "Blancho Branchereau Cantarovich Cesbron Chapelet D"
+    )
+    result = normalizer.normalize_text(raw)
+
+    assert result.canonical_name is not None
+    assert "&#" not in result.canonical_name.text
+    assert "Agnès" in result.canonical_name.text
+
+
+def test_name_without_entity_is_unaffected_by_decode(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # Regression guard: names with no "&" skip the decode path entirely.
+    result = normalizer.normalize_text("John Smith")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "John Smith"
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_surname", "lead_kept"),
+    [
+        # Leading given/initials that collide with a credential/title acronym were
+        # dropped, collapsing the name (surname left EMPTY: "MS Islam" -> given "Islam").
+        # Now the leading token is kept and the surname is restored.
+        ("MS Islam", ("Islam",), "Ms"),          # all-caps initials, not the "Ms" honorific
+        ("MS Ali", ("Ali",), "Ms"),
+        ("M-S. Barisits", ("Barisits",), "M-S."),
+        ("M-S Barisits", ("Barisits",), "M-S"),
+        ("Edd Gent", ("Gent",), "Edd"),           # "Edd" given, not the "EdD" degree
+        ("Edd A. Blekkan", ("Blekkan",), "Edd"),
+        ("Ma. Lucila Lapar", ("Lapar",), "Ma."),  # "Ma." = María, not the "MA" degree
+        ("Ma. Mercedes T. Rodrigo", ("Rodrigo",), "Ma."),
+        ("Ma. Elena Medina-Mora", ("Medina-Mora",), "Ma."),
+    ],
+)
+def test_leading_name_token_not_dropped_as_credential(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_surname: tuple[str, ...],
+    lead_kept: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.surname_tokens == expected_surname
+    assert result.canonical_name.text.split()[0] == lead_kept  # leading token preserved
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text"),
+    [
+        # Genuine honorifics (Title-case, with or without a trailing dot) must STILL
+        # be dropped — casing is the signal: all-caps "MS" = initials, "Ms"/"Ms." = title.
+        ("Ms Smith", "Smith"),
+        ("Ms. Islam", "Islam"),
+        ("Mr Jones", "Jones"),
+        ("Dr Watson", "Watson"),
+    ],
+)
+def test_titlecase_honorific_still_dropped(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text", "dropped_token"),
+    [
+        # Trailing credentials (and the dotted "M.A." degree convention) still drop.
+        ("John Smith PhD", "John Smith", "PhD"),
+        ("Robert Jones MD", "Robert Jones", "MD"),
+        ("Jane Doe EdD", "Jane Doe", "EdD"),      # mixed-case degree dropped...
+        ("Jane Doe EDD", "Jane Doe", "EDD"),      # ...and its all-caps form
+        ("M.A. E. Zayas", "E. Zayas", "M.A."),    # dotted degree acronym (ambiguous; repo convention = drop)
+    ],
+)
+def test_trailing_and_dotted_credentials_still_dropped(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+    dropped_token: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert dropped_token not in result.canonical_name.text
+
+
+def test_credential_collision_hard_and_ambiguous_cases_characterization(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    """HARD / AMBIGUOUS cases for the leading-credential fix — documented for review.
+
+    These are NOT clean wins; they record current behavior so a reviewer can judge.
+    None is a regression vs the pre-fix baseline (which dropped the leading token
+    entirely and produced an empty surname or lost the María given).
+    """
+    # (1) "MS" is kept (surname restored) but re-cased to Title-case "Ms" downstream,
+    #     so the given reads like the honorific. Cosmetic; the surname is now correct.
+    r = normalizer.normalize_text("MS Islam")
+    assert r.canonical_name.text == "Ms Islam"
+    assert r.canonical_name.normalized.surname_tokens == ("Islam",)
+
+    # (2) "Ma. de los Ángeles Martínez Ortega": a Mexican compound. The strong particle
+    #     span "de los" pulls "Ma. de los Ángeles" into the surname role and makes
+    #     "Martínez" the given — mis-parsed, and rendered surname-first.
+    #     Baseline was also wrong (dropped "Ma." -> "de los Ángeles Martínez Ortega").
+    r = normalizer.normalize_text("Ma. de los Ángeles Martínez Ortega")
+    assert r.canonical_name.text == "Martínez Ortega Ma. de los Ángeles"
+
+    # (3) "Ma. del Mar Delgado": "Ma." kept as given; "del Mar" ends up in the surname
+    #     rather than the given "María del Mar". Imperfect but better than dropping María.
+    r = normalizer.normalize_text("Ma. del Mar Delgado")
+    assert r.canonical_name.text == "Ma. del Mar Delgado"
+    assert r.canonical_name.normalized.given_name == "Ma."
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # "Senior" is the SURNAME here (English given + Senior). It was being eaten as
+        # the "Sr." suffix, leaving an EMPTY surname ("Roxy Senior" -> given Roxy, s='').
+        "Roxy Senior",
+        "Kathryn Senior",
+        "Jane Senior",
+        "Carl Senior",
+        "Peter A. Senior",  # 3 tokens but only one non-initial precedes -> still a surname
+    ],
+)
+def test_trailing_senior_kept_as_surname_when_no_other_surname(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.surname_tokens == ("Senior",)
+    assert result.canonical_name.normalized.suffix == ""
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_surname", "expected_suffix"),
+    [
+        # A real generational suffix: a surname survives the removal, so Senior/Junior
+        # is correctly demoted to Sr./Jr.
+        ("Geraldo Bezerra da Silva Junior", ("da", "Silva"), "Jr."),
+        ("John Smith Jr", ("Smith",), "Jr."),
+        ("John Smith Sr.", ("Smith",), "Sr."),
+        ("Robert Downey Jr.", ("Downey",), "Jr."),
+        ("Mary Ann Evans Senior", ("Evans",), "Sr."),
+        ("Henry Ford III", ("Ford",), "III"),  # roman-numeral suffix unaffected
+    ],
+)
+def test_senior_junior_still_suffix_when_surname_survives(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_surname: tuple[str, ...],
+    expected_suffix: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.surname_tokens == expected_surname
+    assert result.canonical_name.normalized.suffix == expected_suffix
+
+
+def test_suffix_senior_junior_hard_and_ambiguous_cases_characterization(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    """Senior/Junior suffix handling.
+
+    "Junior" is a generational suffix, never a surname: the real family name is the
+    other token, so "Silva Junior" -> surname "Silva", suffix "Jr.".
+    """
+    r = normalizer.normalize_text("Silva Junior")
+    assert r.canonical_name.normalized.surname_tokens == ("Silva",)
+    assert r.canonical_name.normalized.suffix == "Jr."
+
+    # "Senior" IS a real English surname; with only a given/initials before it (no other
+    # surname token), it is kept as the surname.
+    r = normalizer.normalize_text("A Senior")
+    assert r.canonical_name.normalized.surname_tokens == ("Senior",)
+
+    # But when a real surname token precedes "Senior" (even behind an initial given),
+    # that token is the surname and "Senior" becomes the suffix.
+    r = normalizer.normalize_text("R. Baker Senior")
+    assert r.canonical_name.normalized.surname_tokens == ("Baker",)
+    assert r.canonical_name.normalized.suffix == "Sr."
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Pure organizations were accepted as persons (the old code even salvaged a
+        # garbage name-fragment from them). They are now rejected as a whole.
+        "Niels Bohr Institute",
+        "Jet Propulsion Laboratory",
+        "Max Planck Institute for Astronomy",
+        "Editorial Board",
+        "Editorial Office",
+        "Proceedings of SPIE",
+        "Journal of Healthcare Engineering",
+        "Institut Agama",                       # German/Indonesian "Institut" (no trailing e)
+        "Universitat Politecnica de Valencia",  # Catalan "Universitat"
+        "Faculty Senate",
+        "Proteomics Initiative",
+        "Ministry of Education",
+    ],
+)
+def test_organization_strings_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize("raw_name", ["null", "null null", "of the", "of", "the"])
+def test_null_literal_and_function_word_only_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Real people whose surname collides with an org word must NOT be rejected.
+        # These surnames are deliberately EXCLUDED from the org lexicon.
+        "Philip G. Board",       # Board (excluded: many real "* Board" people)
+        "Johnathan Board",
+        "Frank Press",           # Press (William H. Press, Frank Press the geophysicist)
+        "William H. Press",
+        "Christophe Bureau",     # Bureau (common French surname)
+        "Martin Bureau",
+        "Gary Null",             # Null is a real surname; "null" rejects only whole-name
+        "Cynthia H. Null",
+        "Linda M. Null",
+        # Org word only as a SUBSTRING of a real name (whole-token matching keeps these).
+        "John Boardman",
+        "F. Anulli",
+        "Luigi Canullo",
+        "Amanullah",
+        # Org word inside a hyphenated compound surname (not split into its own token).
+        "M. Huertas-Company",    # Marc Huertas-Company, astronomer
+        "J. G. Beebe-Center",
+    ],
+)
+def test_real_people_with_org_like_surnames_kept(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+
+
+def test_center_surname_collision_gate(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # "Center"/"Centre" is a real surname (e.g. David M. Center, the immunologist). A clean
+    # "Given [Initial] Center" name is spared from the org-reject, while org uses of the word
+    # still reject (no leading given name + initial).
+    for raw_name in ("David M. Center", "Sharon A. Center", "Allen H. Center"):
+        assert normalizer.normalize_text(raw_name).outcome is PersonNameOutcome.PERSON, raw_name
+    for raw_name in ("Cosmic Dawn Center", "Media Center", "MS Center", "Genetics Center"):
+        assert normalizer.normalize_text(raw_name).outcome is PersonNameOutcome.NON_PERSON, raw_name
+    # "Company" is a Catalan surname too, but its person shape ("Initial Surname Company") is
+    # indistinguishable from a firm ("A Boeing Company"), so it stays a hard org word — a
+    # "... Company" personal name is a documented casualty (still rejected).
+    assert normalizer.normalize_text("Maria J. Company").outcome is PersonNameOutcome.NON_PERSON
+
+
+def test_organization_hard_and_ambiguous_cases_characterization(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    """HARD / AMBIGUOUS org-vs-person cases — documented for review.
+
+    (A) Human name GLUED to an affiliation: we no longer salvage the name — the whole
+    contaminated string is rejected. The researcher is captured via their clean
+    (affiliation-free) entries elsewhere, so freq barely moves; meanwhile this avoids
+    turning tens of thousands of pure orgs into garbage name-fragments.
+    """
+    for org_glued in (
+        "Rachel Webster University of New South Wales",
+        "L. D. Landau Institute for Theoretical Physics",  # org named after a person
+        "C. W. Chu Department of Physics",                 # real researcher + affiliation
+    ):
+        assert normalizer.normalize_text(org_glued).outcome is PersonNameOutcome.NON_PERSON
+
+    # (B) An org word fused into a hyphenated token is now caught, but ONLY for words that
+    # are never part of a real surname (institut/university/journal/centre/team). So the org
+    # "Robert Koch-Institut" is rejected while the real surname "Beebe-Center" is kept.
+    #
+    # center/company/hospital/bureau/press are deliberately EXCLUDED from the hyphen split
+    # because each is a genuine (usually Catalan/French) compound-surname element with real
+    # people in the corpus, so splitting on them would false-reject:
+    #   company  -> Torres-Company, Huertas-Company, Company-Quiroga   (Catalan "Company")
+    #   hospital -> Gómez-Hospital, Hospital-Benito, Tirado-Hospital   (Catalan "Hospital")
+    #   bureau   -> Plu-Bureau, Bureau-Point, Bureau-Franz             (French "Bureau")
+    #   press    -> Broniarz-Press                                      ("Press" surname)
+    #   center   -> Beebe-Center                                        ("Center" surname)
+    # Per the 1M/full-corpus data these lose more real people than they gain orgs.
+    assert normalizer.normalize_text("Robert Koch-Institut").outcome is PersonNameOutcome.NON_PERSON
+    assert normalizer.normalize_text("J. G. Beebe-Center").outcome is PersonNameOutcome.PERSON
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "given", "middle", "surname"),
+    [
+        # A leading initial before a STRONG particle span was copied into the surname
+        # and duplicated ("M. van der Klis" -> "M. M. van der Klis"). Now the initial
+        # stays the given and the surname starts at the particle.
+        ("M. van der Klis", "M.", "", ("van", "der", "Klis")),
+        ("A.F.B. van der Poel", "A.F.B.", "", ("van", "der", "Poel")),
+        ("J.M.F. dos Santos", "J.M.F.", "", ("dos", "Santos")),
+        ("G. van der Laan", "G.", "", ("van", "der", "Laan")),
+        ("S. de la Torre", "S.", "", ("de", "la", "Torre")),
+        ("H. von der Schmitt", "H.", "", ("von", "der", "Schmitt")),
+        # A middle initial before the particle is placed in the middle, not the surname.
+        ("M. F. van der Berg", "M.", "F.", ("van", "der", "Berg")),
+        ("Nelson L. S. da Fonseca", "Nelson", "L. S.", ("da", "Fonseca")),
+    ],
+)
+def test_leading_initial_not_duplicated_into_particle_surname(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    given: str,
+    middle: str,
+    surname: tuple[str, ...],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    n = result.canonical_name.normalized
+    assert n.given_name == given
+    assert n.middle_name == middle
+    assert n.surname_tokens == surname
+    assert result.canonical_name.text == raw_name  # no duplicated token
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "surname"),
+    [
+        # Controls: a real surname-head token before the particle IS kept in the surname,
+        # single-particle names were never affected, and full given names are unchanged.
+        ("M. Carvalho da Silva", ("Carvalho", "da", "Silva")),
+        ("M. de Boer", ("de", "Boer")),
+        ("J. van den Berg", ("van", "den", "Berg")),
+        ("Anna van der Berg", ("van", "der", "Berg")),
+    ],
+)
+def test_particle_surname_controls_unchanged(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    surname: tuple[str, ...],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.surname_tokens == surname
+    assert result.canonical_name.text == raw_name
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # An org word FUSED into a hyphenated token is now detected (only for words that
+        # are never part of a real surname: institut/university/journal/laboratory/centre/team).
+        "Robert Koch-Institut",
+        "Ruhr-Universität Bochum",
+        "Louisville Courier-Journal",
+        "MGIMO-University",
+        "Goethe-Institut Glasgow",
+        "ASDEX-Team",
+    ],
+)
+def test_hyphenated_org_word_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Real hyphenated compound surnames whose second element is an org-ish word are
+        # KEPT — those words (company/hospital/bureau/press/center/board) are deliberately
+        # NOT in the hyphen-split set because they are genuine surnames.
+        "Victor Torres-Company",     # Catalan "Company"
+        "Marc Huertas-Company",
+        "Joan Antoni Gómez-Hospital",
+        "Geneviève Plu-Bureau",      # French "Bureau"
+        "Lubomira Broniarz-Press",
+        "J. G. Beebe-Center",
+    ],
+)
+def test_hyphenated_surname_with_org_element_kept(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Curated org/section nouns (empirically org-only) — rejected as non-person.
+        "Gene Therapy Program",
+        "Aaron Blake Publishers",
+        "Marketplace Services",
+        "Intelligence Division",
+        "World Health Organization",
+        "World Health Organisation",
+        "National Academy of Sciences",
+        "Meteorological Office",
+        "Climate Network",
+        "European Bulletin",
+    ],
+)
+def test_additional_org_section_nouns_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Words deliberately EXCLUDED from the org lexicon because they are real
+        # surnames — the people must be kept (verified against the corpus).
+        "Anne Cathrine Staff",   # "Staff" is a real surname
+        "Jeremy Staff",
+        "Ilene Staff",
+    ],
+)
+def test_excluded_org_words_that_are_real_surnames_kept(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Real high-occurrence organization strings from the corpus (occ in comments) —
+        # every one was previously ACCEPTED as a person; all now rejected.
+        "Proceedings of SPIE",                          # 2645
+        "Proteomics Initiative",                        # 1747
+        "journals Iosr",                                # 1353
+        "Journal of Healthcare Engineering",            # 973
+        "Faculty Senate",                               # 955
+        "Editorial Board",                              # 721
+        "Institut Agama",                               # 650
+        "Editors Archiv für katholisches Kirchenrech",  # 3843
+        "Ludwig-Maximilians-Universität München",       # 505
+        "Kapteyn Astronomical Institute",               # 239
+        "Robert Koch-Institut",                         # 1693
+    ],
+)
+def test_real_corpus_organization_strings_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Non-English org-only nouns (FR/ES/IT/PT/NL/DE). The English-centric org
+        # lexicon let these through as "persons"; all are real corpus strings (occ in
+        # comments) previously ACCEPTED, now rejected. Sized at ~30k names / 103k occ.
+        "Ministerio de Educación",                    # 419  ES
+        "ministère du Travail",                       # 330  FR
+        "Sächsische Akademie der Wissenschaften zu Leipzig",  # 13  DE
+        "Société des Auxiliaires des Missions",       # 12  FR
+        "Gesellschaft der Musikfreunde in Wien",      # 10  DE
+        "Sociedade Brasileira de Comportamento Motor",  # 5  PT
+        "Universidad Autonoma Metropolitana",         # 1  ES
+        "Istituto di Cosmogeofisica",                 # 1  IT
+        "Freudenthal Instituut",                      # 3  NL
+        "Stichting Nedeco",                           # 1  NL
+        "Federación Internacional Farmacéutica",      # 1  ES
+        "Ministerie van Onderwijs",                   # 1  NL
+        "Associazione Euratom-Enea",                  # 1  IT
+    ],
+)
+def test_non_english_org_strings_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # The prepositions "für" (DE) / "voor" (NL) mark an org ONLY when a token follows
+        # them (leading/mid position). All real corpus org strings, previously accepted.
+        "Bundesministerium für Bildung und Forschung",  # compound noun caught only via "für"
+        "Zentrum für Orthopädie",
+        "Institut für Physik",
+        "Voor Numismatiek",                             # NL, leading "voor"
+        "Vereniging voor Natuurwetenschappen",
+    ],
+)
+def test_org_preposition_nonfinal_rejected(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Real people whose surname IS the preposition token but as the FINAL token —
+        # "Für" (Hungarian) / "Voor" (Estonian/Dutch) are genuine surnames and must be kept.
+        # The positional rule (org only when NOT final) preserves these; a bare-token
+        # reject would have lost ~72 "Voor" + ~104 "Für" real people from the corpus.
+        "Gabriella Für",         # Hungarian surname Für
+        "Csilla Sepsey Für",
+        "Michael J. Voor",       # highest-occ real "Voor" author
+        "Tiia Voor",
+        "Ivo Voor",
+        # Contamination guards: "para"/"pour"/"und" are deliberately NOT org markers —
+        # they collide with real givens and noble compound surnames.
+        "Per Andersson",         # "Per" is a Scandinavian given name, not "per"
+        "Para Chandrasoma",      # leading "Para" is a real given name
+        "O. von Bohlen und Halbach",   # noble compound surname with "und"
+        "Marco von Strauss und Torney",
+    ],
+)
+def test_org_preposition_final_and_guards_kept(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        # Real people from the corpus whose compound surname ends in an org-ish word —
+        # these are exactly why company/hospital/bureau/press/center are NOT hyphen-split.
+        "Marc Huertas-Company",       # astronomer
+        "Victor Torres-Company",
+        "Jaime Company-Quiroga",
+        "Joan Antoni Gómez-Hospital",
+        "Daniel Hospital-Benito",
+        "Juan Luis Tirado-Hospital",
+        "Geneviève Plu-Bureau",
+        "Eve Bureau-Point",
+        "Lubomira Broniarz-Press",
+        "J. G. Beebe-Center",
+    ],
+)
+def test_real_corpus_hyphenated_compound_surnames_kept(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_surname"),
+    [
+        ("Wang", "Wang"),
+        ("Madonna", "Madonna"),
+        ("Ku", "Ku"),
+        ("Smith", "Smith"),
+        ("Dr. Wang", "Wang"),  # title stripped, remaining mononym -> surname
+        ("O", "O"),  # single char kept as-is in surname (S2 applies any length gate downstream)
+        ("Smith,", "Smith"),  # surname-only comma form -> surname
+    ],
+)
+def test_mononym_goes_to_surname(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_surname: str,
+) -> None:
+    """Mononym contract: a single-token person keeps the token in the surname slot, as-is."""
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    normalized = result.canonical_name.normalized
+    assert normalized.surname == expected_surname
+    assert normalized.given_name == ""
+    assert normalized.middle_name == ""
+
+
+def test_multitoken_names_unaffected_by_mononym_filter(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    """The mononym filter only touches single-token results."""
+    result = normalizer.normalize_text("Li Wei")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    normalized = result.canonical_name.normalized
+    assert normalized.given_name == "Li"
+    assert normalized.surname == "Wei"
+
+
+def test_single_token_with_suffix_goes_to_surname(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    """A lone name token still becomes the surname even with a suffix — a person always
+    needs a surname (matches S2 shifting a sole token into the last name)."""
+    result = normalizer.normalize_components(first_name="Malcolm", suffix="X")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    normalized = result.canonical_name.normalized
+    assert normalized.given_name == ""
+    assert normalized.surname == "Malcolm"
+    assert normalized.suffix == "X"

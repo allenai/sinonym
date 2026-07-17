@@ -1422,7 +1422,7 @@ class ChineseNameDetector:
         self,
         baseline: CanonicalName,
         decision: EastAsianNameOrderDecision,
-    ) -> CanonicalName:
+    ) -> CanonicalName | None:
         """Normalize routed components while retaining original source-role lineage."""
         routed = self._person_name_normalizer.normalize_components(
             first_name=decision.first_name,
@@ -1430,8 +1430,15 @@ class ChineseNameDetector:
             last_name=decision.last_name,
         )
         if routed.outcome is not PersonNameOutcome.PERSON or routed.canonical_name is None:
-            message = f"East Asian route {decision.reason!r} produced invalid components"
-            raise RuntimeError(message)
+            # Routed components failed to re-normalize (e.g. a stray leading-hyphen/apostrophe
+            # token such as "Shin -Ichi" or "O -P Sairanen" yields an empty component). Abstain
+            # from the re-ordering and let the caller keep the baseline canonical name, rather
+            # than raising and crashing the whole normalize_name() call on one bad input.
+            LOGGER.warning(
+                "East Asian route %r produced invalid components; keeping baseline order",
+                decision.reason,
+            )
+            return None
         return replace(
             routed.canonical_name,
             source_text=baseline.source_text,

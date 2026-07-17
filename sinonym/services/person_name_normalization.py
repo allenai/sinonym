@@ -8,6 +8,7 @@ decisions have been made.
 
 from __future__ import annotations
 
+import html
 import re
 import unicodedata
 from dataclasses import dataclass, replace
@@ -71,7 +72,10 @@ _WHITESPACE_RE = re.compile(r"\s+")
 _JOINER_SPACING_RE = re.compile(r"\s*([-'])\s*")
 _DUPLICATE_APOSTROPHE_RE = re.compile(r"'{2,}")
 _LEADING_STRAY_JOINER_RE = re.compile(r"^[-']\s+")
-_WORD_AND_RE = re.compile(r"\band\b", re.IGNORECASE)
+# Author-list connector "and" is whitespace-delimited ("First Last and First Last").
+# Must NOT match "and" inside a hyphenated surname token (e.g. "Jon-And", "Strand"),
+# so require real whitespace on both sides rather than a \b word boundary.
+_WORD_AND_RE = re.compile(r"(?<=\s)and(?=\s)", re.IGNORECASE)
 _TOKEN_RE = re.compile(r"\S+")
 _TRAILING_DIGITS_RE = re.compile(r"\d+$")
 _INITIAL_RE = re.compile(r"([^\W\d_])\.", re.UNICODE)
@@ -169,8 +173,8 @@ _CREDENTIAL_KEYS = frozenset(
         "rn",
     },
 )
-_AMBIGUOUS_CREDENTIAL_KEYS = frozenset({"ba", "bs", "do", "jd", "ma", "mba", "md", "meng", "mpa", "ms", "rn"})
-_MIXED_CASE_CREDENTIALS = {"meng": "MEng"}
+_AMBIGUOUS_CREDENTIAL_KEYS = frozenset({"ba", "bs", "do", "edd", "jd", "ma", "mba", "md", "meng", "mpa", "ms", "rn"})
+_MIXED_CASE_CREDENTIALS = {"meng": "MEng", "edd": "EdD"}
 _FAMILY_PARTICLES = frozenset(
     {
         "al",
@@ -195,7 +199,10 @@ _FAMILY_PARTICLES = frozenset(
         "le",
         "los",
         "st",
+        "ten",
         "ter",
+        "ud",
+        "ur",
         "van",
         "von",
         "zu",
@@ -227,16 +234,143 @@ _ORGANIZATION_WORDS = frozenset(
         "hospital",
         "inc",
         "institute",
+        # curated additions (org / publishing / section nouns with negligible use as a
+        # personal name; matched as whole tokens so substrings like "Institut"e in a
+        # surname are unaffected). Vetted empirically via person->reject flip judging.
+        "institut",  # German/Dutch "Institut" (no trailing e)
+        "universitat",
+        "universität",
+        "universite",
+        "université",
+        "editorial",
+        "editores",
+        "journal",
+        "journals",
+        "proceedings",
+        "initiative",
+        "faculty",
+        "ministry",
+        # further curated org/section nouns (empirically org-only; real-surname
+        # collisions like staff/editor/press/board/bureau are deliberately excluded)
+        "office",
+        "division",
+        "services",
+        "editors",
+        "network",
+        "bulletin",
+        "directorate",
+        "secretariat",
+        "academy",
+        "program",
+        "programme",
+        "publishers",
+        "institution",
+        "organization",
+        "organisation",
         "laboratory",
         "ltd",
         "society",
         "team",
         "university",
+        # Non-English org-only nouns (FR/ES/IT/PT/NL/DE), whole-token matched and
+        # empirically org-only (never real person names). The English-centric list
+        # above let non-English orgs through as "persons" (e.g. "Deutsche Gesellschaft
+        # für Kardiologie", "Società Italiana di …", "Ministère de la Santé"). Sized via
+        # a multilingual org sweep on post-fix output: ~29,972 names / 102,859 occ
+        # (0.0176% of non-Chinese occ). Both accented and diacritic-free forms are listed
+        # because _compact_key preserves diacritics.
+        "societe", "société",           # FR
+        "sociedad",                     # ES
+        "societa", "società",           # IT
+        "sociedade",                    # PT
+        "ministere", "ministère",       # FR
+        "ministerio",                   # ES / PT (ministério compacts to ministerio too)
+        "ministério",
+        "ministero",                    # IT
+        "ministerium",                  # DE
+        "ministerie",                   # NL
+        "universidad",                  # ES
+        "universita", "università",     # IT
+        "universidade",                 # PT
+        "universiteit",                 # NL
+        "federation", "fédération",     # FR
+        "federacion", "federación",     # ES
+        "federazione",                  # IT
+        "federacao", "federação",       # PT
+        "asociacion", "asociación",     # ES
+        "associazione",                 # IT
+        "associacao", "associação",     # PT
+        "instituto",                    # ES / PT
+        "istituto",                     # IT
+        "instituut",                    # NL
+        "gesellschaft",                 # DE
+        "gewerkschaft",                 # DE
+        "genootschap",                  # NL
+        "syndicat",                     # FR
+        "stiftung",                     # DE
+        "stichting",                    # NL
+        "akademie",                     # DE
+        "academie", "académie",         # FR
+        "accademia",                    # IT
+        "dipartimento",                 # IT
+        "gmbh",                         # DE company suffix
+        # NOTE: the prepositions "für" (DE) / "voor" (NL) are strong org signals for
+        # compound-noun orgs ("Bundesministerium für …", "Voor Numismatiek") but collide
+        # with the real surnames "Für" (Hungarian) / "Voor" (Estonian/Dutch). They are
+        # handled positionally in _non_person_reason (org only when NOT the final token),
+        # not listed here, so a trailing surname is preserved. "para"/"pour"/"und" are
+        # excluded entirely (real givens "Para"/"Pour"; noble "von X und Y").
+    },
+)
+# Prepositions that signal an org ONLY when a token follows them (mid/leading position):
+# "Institut für Physik" / "Voor Numismatiek" are orgs, but "Gabriella Für" / "Michael J.
+# Voor" are people whose surname is the final token. Whole-token matched via _compact_key.
+_ORG_PREPOSITION_WORDS = frozenset({"für", "voor"})
+# Whole-name strings made only of these connectives are not persons ("of", "the ...").
+_FUNCTION_WORDS = frozenset({"of", "the", "for", "und", "der", "des"})
+# English "Center"/"Centre" is also a real surname (David M. Center, the immunologist), so
+# it must NOT reject a clean personal name whose surname IS "Center" ("David M. Center").
+# "Company" is deliberately NOT here: it is a Catalan surname too, but its person shape
+# ("Initial Surname Company") is indistinguishable from a firm ("A Boeing Company",
+# "M.T. Company"), so gating it admits ~as many orgs as people — kept as a hard org word.
+_SURNAME_COLLISION_ORG_WORDS = frozenset({"center", "centre"})
+# Org words that are ~never part of a real hyphenated surname, so a hyphenated token
+# containing one is an org ("Robert Koch-Institut", "Ruhr-Universität", "Courier-Journal").
+# Deliberately EXCLUDES company/hospital/center/bureau/press (real hyphenated surnames:
+# "Torres-Company", "Gómez-Hospital", "Plu-Bureau", "Beebe-Center").
+_HYPHEN_ORG_WORDS = frozenset(
+    {
+        "institut",
+        "institute",
+        "university",
+        "universitat",
+        "universität",
+        "universite",
+        "université",
+        "universidad",
+        "universita",
+        "università",
+        "universidade",
+        "universiteit",
+        "instituto",
+        "istituto",
+        "instituut",
+        "journal",
+        "journals",
+        "proceedings",
+        "laboratory",
+        "centre",
+        "team",
     },
 )
 _STANDARD_SUFFIXES = {
     "jr": "Jr.",
     "junior": "Jr.",
+    # Portuguese spelling of the generational suffix. Keyed separately because the
+    # lookup casefolds but does not strip diacritics, so "Júnior" never matches
+    # "junior"; without this it stays in the surname slot and displaces the family
+    # name (e.g. "Francisco Aquino Júnior" -> surname "Júnior" instead of "Aquino").
+    "júnior": "Jr.",
     "sr": "Sr.",
     "senior": "Sr.",
     "2nd": "2nd",
@@ -245,6 +379,9 @@ _STANDARD_SUFFIXES = {
     "5th": "5th",
     "6th": "6th",
 }
+# Spelled-out "Senior"/"Junior" are also common surnames ("Roxy Senior", "Peter A.
+# Senior"); demote them to a suffix only when a real surname survives the removal.
+_SURNAME_LIKE_SUFFIX_KEYS = frozenset({"senior"})
 _RAW_ROMAN_SUFFIXES = frozenset({"II", "III", "IV", "VI", "VII", "VIII", "IX", "X"})
 _EXPLICIT_ROMAN_SUFFIXES = _RAW_ROMAN_SUFFIXES | {"I", "V", "X"}
 _CASE_INSENSITIVE_ROMAN_SUFFIXES = _RAW_ROMAN_SUFFIXES - {"II"}
@@ -253,9 +390,10 @@ _SIMPLE_TWO_TOKEN_POLICY_KEYS = frozenset(
     | _TITLE_QUALIFIER_KEYS
     | _CREDENTIAL_KEYS
     | _ORGANIZATION_WORDS
+    | _FUNCTION_WORDS
     | _STANDARD_SUFFIXES.keys()
     | {suffix.casefold() for suffix in _RAW_ROMAN_SUFFIXES}
-    | {"and"},
+    | {"and", "null"},
 )
 _TWO_COMPONENTS = 2
 _THREE_COMPONENTS = 3
@@ -286,19 +424,31 @@ class PersonNameNormalizationService:
         if not any(character.isalpha() for character in surface):
             return self._invalid("name has no letters")
 
-        dropped: list[_DroppedToken] = []
-        if leading_markers:
-            dropped.append(_DroppedToken(_Token(leading_markers, "", 0), DropReason.AFFILIATION))
-        surface, affiliation_dropped = self._strip_trailing_affiliation_surface(surface)
-        dropped.extend(affiliation_dropped)
-        surface = self._collapse_parenthetical_duplicate_surface(surface)
+        # Reject an organization / non-person string as a whole rather than salvaging a
+        # name from it: "Rachel Webster University of New South Wales" and "Niels Bohr
+        # Institute" are both non-persons — trying to extract a name from contaminated
+        # input is unreliable, so check BEFORE any trailing-affiliation strip.
         non_person_reason = self._non_person_reason(surface)
         if non_person_reason is not None:
             return self._non_person(non_person_reason)
 
+        dropped: list[_DroppedToken] = []
+        if leading_markers:
+            dropped.append(_DroppedToken(_Token(leading_markers, "", 0), DropReason.AFFILIATION))
+        surface = self._collapse_parenthetical_duplicate_surface(surface)
+
         segment_matches = list(re.finditer(r"[^,]+", surface))
         segments = [self._tokens(match.group(), "", match.start()) for match in segment_matches]
         segments = [segment for segment in segments if segment]
+        # Drop a comma segment that is only a dangling ``and`` connector
+        # ("Susana ... Huerta, and" -> one real name), recording its lineage.
+        kept_segments: list[list[_Token]] = []
+        for segment in segments:
+            if len(segment) == 1 and segment[0].text in {"and", "AND"}:
+                dropped.append(_DroppedToken(segment[0], DropReason.CONNECTOR))
+            else:
+                kept_segments.append(segment)
+        segments = kept_segments
         if not segments:
             return self._invalid("name has no usable tokens")
         if leading_markers:
@@ -352,6 +502,10 @@ class PersonNameNormalizationService:
         if len(raw_tokens) != _TWO_COMPONENTS or any(not token.isalpha() for token in raw_tokens):
             return None
         if any(token.casefold() in _SIMPLE_TWO_TOKEN_POLICY_KEYS for token in raw_tokens):
+            return None
+        # A leading org preposition ("Voor Numismatiek") is an org, not "Voor" the surname
+        # ("Michael Voor" is handled by the final-token rule); defer to the full path.
+        if raw_tokens[0].casefold() in _ORG_PREPOSITION_WORDS:
             return None
 
         source_tokens = [
@@ -478,6 +632,7 @@ class PersonNameNormalizationService:
         tokens = self._repair_leading_marker_initial(tokens, dropped)
         tokens = self._join_separated_compound_initials(tokens)
         tokens = self._strip_leading_titles(tokens, dropped)
+        tokens = self._strip_dangling_and(tokens, dropped)
         tokens = self._strip_standalone_periods(tokens, dropped)
         tokens = self._strip_boundary_markers(tokens, dropped)
         tokens, boundary_suffix, boundary_suffix_token = self._strip_trailing_boundaries(tokens, dropped)
@@ -555,6 +710,8 @@ class PersonNameNormalizationService:
         given_tokens = [replace(token, source_role="given") for token in given_tokens]
         family_tokens = self._strip_leading_titles(family_tokens, dropped, preserve_ambiguous_credentials=True)
         given_tokens = self._strip_leading_titles(given_tokens, dropped, preserve_ambiguous_credentials=True)
+        family_tokens = self._strip_dangling_and(family_tokens, dropped)
+        given_tokens = self._strip_dangling_and(given_tokens, dropped)
         family_tokens = self._strip_standalone_periods(family_tokens, dropped)
         given_tokens = self._strip_standalone_periods(given_tokens, dropped)
         family_tokens = self._strip_boundary_markers(family_tokens, dropped)
@@ -603,6 +760,11 @@ class PersonNameNormalizationService:
         suffix: str,
         dropped: list[_DroppedToken],
     ) -> PersonNameNormalizationResult:
+        # Mononym contract: a single-token person always keeps its token in the surname
+        # slot (a person always needs a surname; kept as-is, no length rejection).
+        name_tokens = [*given, *middle, *surname]
+        if len(name_tokens) == 1:
+            given, middle, surname = [], [], [replace(name_tokens[0], source_role="surname")]
         normalized_given = self._canonical_tokens(given, "given")
         normalized_middle = self._canonical_tokens(middle, "middle")
         normalized_surname = self._canonical_tokens(surname, "surname")
@@ -641,6 +803,11 @@ class PersonNameNormalizationService:
 
     @staticmethod
     def _normalize_surface(value: str) -> str:
+        if "&" in value:
+            # Decode HTML entities so encoded diacritics/apostrophes are recovered
+            # ("Martin G&#x00F6;tz" -> "Martin Götz", "D&#39;Arcy" -> "D'Arcy") and a
+            # literal "&amp;" collapses to "&" for the downstream separator logic.
+            value = html.unescape(value)
         if value.isascii():
             normalized = value.translate(_ASCII_JOINER_TRANSLATION)
         else:
@@ -666,19 +833,6 @@ class PersonNameNormalizationService:
         if marker_end == 0 or marker_end >= len(value) or not value[marker_end].isalpha():
             return value, ""
         return value[marker_end:], value[:marker_end]
-
-    def _strip_trailing_affiliation_surface(
-        self,
-        surface: str,
-    ) -> tuple[str, list[_DroppedToken]]:
-        """Remove an organization phrase after at least two name tokens."""
-        tokens = self._tokens(surface, "suffix", 0)
-        for index, token in enumerate(tokens):
-            if index < _TWO_COMPONENTS or self._compact_key(token.text) not in _ORGANIZATION_WORDS:
-                continue
-            dropped = [_DroppedToken(item, DropReason.AFFILIATION) for item in tokens[index:]]
-            return surface[: token.position].rstrip(" ,"), dropped
-        return surface, []
 
     def _collapse_parenthetical_duplicate_surface(self, surface: str) -> str:
         """Collapse ``Alan (Alan B.) Cantor``-style duplicate given forms."""
@@ -748,8 +902,14 @@ class PersonNameNormalizationService:
             prefixed_academic_title = (
                 token.text == "PD" and len(remaining) > 1 and self._compact_key(remaining[1].text) in _TITLE_KEYS
             )
+            ambiguous_name_token = self._is_ambiguous_credential(token.text) and (
+                preserve_ambiguous_credentials or len(remaining) == _TWO_COMPONENTS
+            )
+            # An all-caps token that reads as initials ("MS", "M-S.") must not be dropped
+            # as the honorific "Ms": all-caps = initials, Title-case "Ms"/"Ms." = honorific.
+            title_is_really_initials = ambiguous_name_token and token.text.isupper()
             if (
-                (key in _TITLE_KEYS and not multi_initial)
+                (key in _TITLE_KEYS and not multi_initial and not title_is_really_initials)
                 or (stripped_title and key in _TITLE_QUALIFIER_KEYS)
                 or prefixed_academic_title
             ):
@@ -757,12 +917,9 @@ class PersonNameNormalizationService:
                 remaining.pop(0)
                 stripped_title = True
                 continue
-            ambiguous_name_token = self._is_ambiguous_credential(token.text) and (
-                preserve_ambiguous_credentials or len(remaining) == _TWO_COMPONENTS
-            )
             leading_name_abbreviation = (
                 key in _LEADING_NAME_ABBREVIATION_KEYS and token.text.endswith(".") and len(remaining) >= _TWO_COMPONENTS
-            ) or self._is_exact_ma_given_abbreviation(remaining)
+            ) or self._is_ma_given_abbreviation(remaining)
             if self._is_credential(token.text) and not ambiguous_name_token and not leading_name_abbreviation:
                 dropped.append(_DroppedToken(token, DropReason.CREDENTIAL))
                 remaining.pop(0)
@@ -821,7 +978,19 @@ class PersonNameNormalizationService:
             candidate = self._canonical_suffix(token.text, explicit=False)
             has_complete_name = len(remaining) > _TWO_COMPONENTS or has_external_name_context
             is_roman = candidate in _RAW_ROMAN_SUFFIXES
-            if candidate and not suffix and (not is_roman or has_complete_name):
+            surname_like = self._compact_key(token.text) in _SURNAME_LIKE_SUFFIX_KEYS
+            # "Senior"/"Junior" is a suffix only if a surname survives its removal:
+            # at least two non-initial tokens must precede it (a given AND a surname),
+            # or an external name context already supplies the surname.
+            surname_like_ok = has_external_name_context or any(
+                not self._is_initial(other.text) for other in remaining[1:-1]
+            )
+            if (
+                candidate
+                and not suffix
+                and (not is_roman or has_complete_name)
+                and (not surname_like or surname_like_ok)
+            ):
                 suffix = candidate
                 suffix_token = replace(token, source_role="suffix")
                 remaining.pop()
@@ -907,6 +1076,28 @@ class PersonNameNormalizationService:
         return remaining
 
     @staticmethod
+    def _strip_dangling_and(
+        tokens: list[_Token],
+        dropped: list[_DroppedToken],
+    ) -> list[_Token]:
+        """Drop a leading/trailing lowercase ``and`` connector from a truncated author list.
+
+        A dangling lowercase ``and`` (``Alexander Campbell and``, ``and Ariel Feldman``)
+        or all-caps ``AND`` (``W. L. HAFLEY AND``) is an author-list fragment; stripping
+        it recovers the one real name. Title-case ``And`` is KEPT (real surname, e.g.
+        ``Metin And``), and a hyphenated ``Jon-And`` is one token, never matched. A MID
+        ``and`` between two complete names is handled earlier by ``_non_person_reason``
+        (rejected as two people).
+        """
+        connectors = {"and", "AND"}
+        remaining = list(tokens)
+        while len(remaining) > 1 and remaining[0].text in connectors:
+            dropped.append(_DroppedToken(remaining.pop(0), DropReason.CONNECTOR))
+        while len(remaining) > 1 and remaining[-1].text in connectors:
+            dropped.append(_DroppedToken(remaining.pop(), DropReason.CONNECTOR))
+        return remaining
+
+    @staticmethod
     def _strip_boundary_markers(
         tokens: list[_Token],
         dropped: list[_DroppedToken],
@@ -977,13 +1168,17 @@ class PersonNameNormalizationService:
         combined = replace(tokens[0], text=f"{tokens[0].text}-{trailing_initial.group(1)}.")
         return [combined, *tokens[2:]]
 
-    def _is_exact_ma_given_abbreviation(self, tokens: list[_Token]) -> bool:
-        """Recognize exact mixed-case ``Ma. Initial Surname`` given-name context."""
+    def _is_ma_given_abbreviation(self, tokens: list[_Token]) -> bool:
+        """Recognize a leading María abbreviation ``Ma.`` before a real given name.
+
+        Mixed-case dotted ``Ma.`` (not the all-caps ``MA`` degree) followed by any
+        full name token is the Filipino/Spanish given ``María`` ("Ma. Mercedes T.
+        Rodrigo", "Ma. Lucila Lapar"), so it must be kept, not dropped as a credential.
+        """
         return bool(
-            len(tokens) == _THREE_COMPONENTS
+            len(tokens) >= _TWO_COMPONENTS
             and tokens[0].text == "Ma."
-            and self._is_initial(tokens[1].text)
-            and self._is_full_name_token(tokens[2].text),
+            and any(self._is_full_name_token(token.text) for token in tokens[1:]),
         )
 
     def _is_full_name_token(self, token: str) -> bool:
@@ -1054,7 +1249,13 @@ class PersonNameNormalizationService:
         surname_start = len(tokens) - 1
         strong_particle = self._find_strong_particle_span(tokens)
         if strong_particle is not None and (strong_particle[0] > _TWO_COMPONENTS or self._is_initial(tokens[0].text)):
-            surname_start = strong_particle[0] - 1
+            anchor = strong_particle[0] - 1
+            # The token before the particle joins the surname only if it is a real
+            # surname head; a leading given initial must not be pulled in (and then
+            # duplicated as both given and surname): "M. van der Klis" -> given "M.".
+            if not self._is_full_name_token(tokens[anchor].text):
+                anchor = strong_particle[0]
+            surname_start = anchor
         elif particle_positions := [
             index for index, token in enumerate(tokens[1:-1], start=1) if self._particle_key(token.text) in _FAMILY_PARTICLES
         ]:
@@ -1380,7 +1581,34 @@ class PersonNameNormalizationService:
             return False
         return not any(self._is_initial(token.text) for token in [*left, *right])
 
-    def _non_person_reason(self, surface: str) -> str | None:
+    @classmethod
+    def _has_nonfinal_org_preposition(cls, raw_tokens: list[str]) -> bool:
+        # Org prepositions ("für"/"voor") mark an org only when a token follows them — a
+        # trailing occurrence is a real surname ("Gabriella Für", "Michael J. Voor").
+        return any(cls._compact_key(token) in _ORG_PREPOSITION_WORDS for token in raw_tokens[:-1])
+
+    @classmethod
+    def _is_collision_surname_shape(cls, raw_tokens: list[str]) -> bool:
+        # A clean personal name whose SURNAME is a collision org word ("Company"/"Center"):
+        # 2-3 tokens, the collision word is the final (surname) token, at least one leading
+        # token is a single-letter initial (a strong person signal an org lacks), and no
+        # other org / function / preposition word appears. "David M. Center" -> person;
+        # "Cosmic Dawn Center" / "Media Center" / "ABC Trading Company" -> still org.
+        if not _TWO_COMPONENTS <= len(raw_tokens) < _FOUR_COMPONENTS:
+            return False
+        if cls._compact_key(raw_tokens[-1]) not in _SURNAME_COLLISION_ORG_WORDS:
+            return False
+        leading = raw_tokens[:-1]
+        if any(
+            cls._compact_key(token) in _ORGANIZATION_WORDS
+            or cls._compact_key(token) in _FUNCTION_WORDS
+            or cls._compact_key(token) in _ORG_PREPOSITION_WORDS
+            for token in leading
+        ):
+            return False
+        return any(len(cls._compact_key(token)) == 1 for token in leading)
+
+    def _non_person_reason(self, surface: str) -> str | None:  # noqa: PLR0911
         lowered = surface.casefold()
         if "@" in surface or "://" in surface:
             return "contact or URL input"
@@ -1389,9 +1617,24 @@ class PersonNameNormalizationService:
         and_match = _WORD_AND_RE.search(surface)
         if and_match is not None and and_match.start() > 0:
             return "author-list connector"
-        words = {self._compact_key(token) for token in _TOKEN_RE.findall(lowered)}
-        if words & _ORGANIZATION_WORDS:
+        raw_tokens = _TOKEN_RE.findall(lowered)
+        words = {self._compact_key(token) for token in raw_tokens}
+        org_hit = words & _ORGANIZATION_WORDS
+        if org_hit and not (org_hit <= _SURNAME_COLLISION_ORG_WORDS and self._is_collision_surname_shape(raw_tokens)):
             return "organization input"
+        if self._has_nonfinal_org_preposition(raw_tokens):
+            return "organization input"
+        # An org word fused into a hyphenated token ("Koch-Institut", "Ruhr-Universität",
+        # "Courier-Journal") — only for words that are never part of a real surname.
+        for token in raw_tokens:
+            if "-" in token and any(self._compact_key(part) in _HYPHEN_ORG_WORDS for part in token.split("-")):
+                return "organization input"
+        # Reject the literal placeholder "null"/"null null" only when the WHOLE name is
+        # "null" tokens — "Null" is a real surname ("Linda M. Null"), so a mixed name keeps it.
+        if words and words <= {"null"}:
+            return "null literal"
+        if words and words <= _FUNCTION_WORDS:
+            return "function words only"
         return None
 
     @staticmethod

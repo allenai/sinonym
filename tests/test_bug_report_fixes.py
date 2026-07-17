@@ -592,3 +592,22 @@ def test_normalize_name_with_embedded_variation_selector_does_not_crash(detector
     (U+E0100, seen on paper_id 274957019) crashed normalize_name via the capitalize step."""
     result = detector.normalize_name("彬人 樽\U000E0100井")  # 彬人 樽󠄀井
     assert result is not None  # no exception raised; the classification value is out of scope here
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "Shin -Ichi Hara",   # space + leading-hyphen token (117 of 124 prod failures)
+        "O -P Sairanen",
+        "Yang -Gyu Jei",
+        "KU 'TSAO-CHUEN",    # space + leading-apostrophe token
+        "O --Sl",            # double hyphen
+    ],
+)
+def test_leading_hyphen_or_apostrophe_token_does_not_crash(detector, raw_name):
+    """Regression: a stray leading-hyphen/apostrophe token made the East Asian order route
+    produce invalid components, and _canonical_name_from_order_decision raised RuntimeError,
+    crashing normalize_name (prod chinese_detected backfill 20260714, 124 rows). The route must
+    now abstain (fall back to the baseline canonical name), not raise."""
+    result = detector.normalize_name(raw_name)  # must not raise
+    assert result is not None

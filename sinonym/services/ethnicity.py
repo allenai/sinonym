@@ -234,10 +234,12 @@ class EthnicityClassificationService:
                 return normalized_cache[token]
             return self._normalizer.norm(token)
 
-        # Create comprehensive key sets for pattern matching
+        # Create comprehensive key sets for pattern matching. Dedup while preserving
+        # insertion order (NOT list(set(...)), whose order is PYTHONHASHSEED-dependent and
+        # made the first-match ethnicity loop below non-deterministic across processes).
         original_keys_raw = [t.lower() for t in expanded_tokens]
         original_keys_normalized = [get_normalized(t) for t in expanded_tokens]
-        expanded_keys = list(set(original_keys_raw + original_keys_normalized))
+        expanded_keys = list(dict.fromkeys(original_keys_raw + original_keys_normalized))
 
         # Directional Korean structure must be evaluated before every
         # affirmative Chinese shortcut. Surname/given roles are essential:
