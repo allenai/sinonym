@@ -506,6 +506,24 @@ def test_name_collision_credential_key_is_not_dropped_from_title_case(
     assert result.canonical_name.normalized.surname == "Islam"
 
 
+def test_hyphenated_initials_are_kept_not_dropped_as_credential(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # "M-A"/"M.-A."/"J-D" are compound given-name initials (a hyphen -> initials, never a
+    # degree), so they are kept even though the bare "MA"/"JD" degree would drop.
+    for raw, given, surname in [("M-A Le Pogam", "M-A", "Le Pogam"), ("J-D Fournier", "J-D", "Fournier")]:
+        result = normalizer.normalize_text(raw)
+        assert result.outcome is PersonNameOutcome.PERSON
+        assert result.canonical_name is not None
+        assert result.canonical_name.normalized.given_name == given
+        assert result.canonical_name.normalized.surname == surname
+        assert result.dropped_tokens == ()
+    # a bare degree with no hyphen still drops
+    degree = normalizer.normalize_text("John Smith MA")
+    assert degree.canonical_name is not None
+    assert degree.canonical_name.text == "John Smith"
+
+
 def test_meng_surname_is_preserved_while_meng_degree_is_dropped(
     normalizer: PersonNameNormalizationService,
 ) -> None:
