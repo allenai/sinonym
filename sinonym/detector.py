@@ -1528,23 +1528,49 @@ class ChineseNameDetector:
 
         if self._batch_analysis_service is None:
             # Fallback to individual processing if batch service not available
-            individual_results = [self.normalize_name(name) for name in names]
+            individual_results = [self._guarded_normalize_name(name) for name in names]
             return self._create_fallback_batch_result(names, individual_results)
 
-        batch_result = self._batch_analysis_service.analyze_name_batch(
-            names,
-            self._normalizer,
-            self._formatting_service,
-            BatchAnalysisOptions(
-                minimum_batch_size=minimum_batch_size,
-                format_threshold=format_threshold,
-            ),
-        )
+        # Service paths (timo v1/v2/routing) all flow through here: one pathological name
+        # must degrade to a per-name failure, never crash the batch (a crash surfaces as a
+        # deterministic 500 and poisons the caller's whole paper).
+        try:
+            batch_result = self._batch_analysis_service.analyze_name_batch(
+                names,
+                self._normalizer,
+                self._formatting_service,
+                BatchAnalysisOptions(
+                    minimum_batch_size=minimum_batch_size,
+                    format_threshold=format_threshold,
+                ),
+            )
+        except Exception:
+            LOGGER.exception("batch analysis crashed; degrading to guarded per-name processing")
+            return self._create_fallback_batch_result(
+                names,
+                [self._guarded_normalize_name(name) for name in names],
+            )
         canonical_results = [
-            self._attach_canonical_name(name, result)
+            self._guarded_attach_canonical_name(name, result)
             for name, result in zip(batch_result.names, batch_result.results, strict=True)
         ]
         return replace(batch_result, results=canonical_results)
+
+    def _guarded_normalize_name(self, raw_name: str) -> ParseResult:
+        try:
+            return self.normalize_name(raw_name)
+        except Exception:
+            LOGGER.exception("normalize_name crashed for %r; returning per-name failure", raw_name)
+            return ParseResult.failure("internal error while parsing name")
+
+    def _guarded_attach_canonical_name(self, name: str, result: ParseResult) -> ParseResult:
+        try:
+            return self._attach_canonical_name(name, result)
+        except Exception:
+            LOGGER.exception(
+                "canonical-name attachment crashed for %r; keeping base result", name
+            )
+            return result
 
     def detect_batch_format(
         self,
