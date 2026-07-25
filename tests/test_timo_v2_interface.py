@@ -166,6 +166,65 @@ def test_v2_pp_vys_routing_retains_canonical_without_changing_decision(
     assert v2[0].vys.canonical_name is not None
 
 
+def test_v2_pp_only_abstain_without_input_order_drops_canonical(predictor_v2: PredictorV2) -> None:
+    # These end in a middle initial, so the as-typed reading cannot be materialized and the
+    # abstain surfaces as a failure. The PP parse pins the surname to the first token either
+    # way ("Wei Zhang Q." -> surname Wei), so the declined reorder must not reach canonical.
+    for result in predictor_v2.route_pp(["Zhang Wei Q.", "Wei Zhang Q."]):
+        assert result.router_prediction.value == "abstain"
+        assert not result.success
+        assert (result.given_name, result.middle_name, result.surname) == (None, None, None)
+        assert result.pp.success
+        assert result.canonical_name is None
+        # The candidate object keeps its own canonical: `pp` is not the routed answer.
+        assert result.pp.canonical_name is not None
+
+
+def test_routing_predictor_v2_drops_canonical_for_declined_abstain_but_keeps_pooled_answer() -> None:
+    predictor = RoutingPredictorV2(config=PredictorConfig(parallel="never"), artifacts_dir=".")
+    pp_names = ["Zhang Wei Q."]
+    pool = [*pp_names, "Li Xiaoming", "Chen Jianguo", "Zhao Yuting", "Sun Haoran", "Zhou Mengqi"]
+
+    pp_only, pooled = predictor.predict_batch(
+        [RoutingInstance(pp_names=pp_names), RoutingInstance(pp_names=pp_names, vys_pool_names=pool)],
+    )
+
+    (declined,) = pp_only.authors
+    assert declined.router_prediction.value == "abstain"
+    assert not declined.success
+    assert declined.canonical_name is None
+
+    # A venue pool supplies the evidence PP-only lacks, so the same name still normalizes.
+    (routed,) = pooled.authors
+    assert routed.success
+    assert (routed.given_name, routed.middle_name, routed.surname) == ("Wei", "Q", "Zhang")
+    assert routed.canonical_name is not None
+    assert routed.canonical_name.normalized.given_name == "Wei"
+    assert routed.canonical_name.normalized.middle_name == "Q"
+    assert routed.canonical_name.normalized.surname == "Zhang"
+
+
+def test_v2_routing_keeps_generic_canonical_for_non_chinese_rows(predictor_v2: PredictorV2) -> None:
+    results = predictor_v2.route_pp(["Michael Johnson", "Dr. Ana-Maria O'Neill PhD", "UW University"])
+
+    assert not any(result.success for result in results)
+    assert results[0].canonical_name is not None
+    assert results[0].canonical_name.text == "Michael Johnson"
+    assert results[1].canonical_name is not None
+    assert results[1].canonical_name.text == "Ana-Maria O'Neill"
+    assert results[2].canonical_name is None
+
+
+def test_v2_routing_never_exposes_canonical_for_a_declined_parse(predictor_v2: PredictorV2) -> None:
+    pp_names = ["Zhang Wei Q.", "Wang Lin A.", "Zhang Wei", "Michael Johnson", "UW University"]
+    pool = [*pp_names, "Li Xiaoming", "Chen Jianguo", "Zhao Yuting", "Sun Haoran"]
+
+    for results in (predictor_v2.route_pp(pp_names), predictor_v2.route_pp_vys(pp_names, pool)):
+        for result in results:
+            if not result.success and result.pp.success:
+                assert result.canonical_name is None
+
+
 def test_routing_predictor_v2_is_one_to_one_and_round_trips() -> None:
     predictor = RoutingPredictorV2(config=PredictorConfig(parallel="never"), artifacts_dir=".")
     instances = [

@@ -976,7 +976,16 @@ class PredictorV2(Predictor):
         )
 
     def _to_routed_canonical_name(self, parse_result, parsed) -> CanonicalNameValue | None:
-        """Convert canonical data, matching a PP-abstain input-order parse when needed."""
+        """Convert canonical data, matching a PP-abstain input-order parse when needed.
+
+        A routed row without a parsed person must not expose a canonical name built from the
+        parse the router declined. `parse_result.success` is exactly that condition: the
+        canonical came from the Chinese parse, so an abstain that could not materialize its
+        as-typed reading suppresses it. Non-Chinese rows keep their generic all-person
+        canonical, which is attached only when the Chinese parse failed.
+        """
+        if parsed is None and parse_result.success:
+            return None
         canonical = self._to_canonical_name(parse_result.canonical_name)
         if canonical is None or parsed is None or parsed is parse_result.parsed:
             return canonical
