@@ -44,3 +44,16 @@ def assert_middle_name_result(result: ParseResult, raw_name: str, expected: dict
     assert parsed.surname == expected["surname"], (
         f"{raw_name!r}: expected surname {expected['surname']!r}, got {parsed.surname!r}"
     )
+
+
+def person_normalized_text(person) -> str:
+    """Return the space-joined normalized components of an all-person parse."""
+    parts = (person.normalized.given_name, person.normalized.middle_name, person.normalized.surname)
+    return " ".join(part for part in parts if part)
+
+
+def assert_person_normalized_name(person, raw_name: str, expected: str) -> None:
+    """Assert the normalized full text of an all-person parse."""
+    assert person is not None, f"{raw_name!r}: expected a person parse, got None"
+    actual = person_normalized_text(person)
+    assert actual == expected, f"{raw_name!r}: expected normalized name {expected!r}, got {actual!r}"

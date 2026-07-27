@@ -215,16 +215,24 @@ def test_middle_initial_trailing_after_given_preserves_original_order(detector):
     assert res.parsed_original_order.order == ["surname", "given", "middle"]
 
 
-def test_compact_middle_initial_trailing_after_given_preserves_original_order(detector):
-    raw = "Zhang WeiA"
+@pytest.mark.parametrize("raw", ["Awei Zhang", "Ahao Wu"])
+def test_compact_leading_letter_is_not_read_as_a_middle_initial(detector, raw):
+    # A leading lone letter is not a syllable, and peeling it would take the given name's first
+    # initial with it, so these decline rather than reporting a fabricated middle initial.
     res = detector.normalize_name(raw)
 
-    assert res.success, f"Expected success, got error: {res.error_message}"
-    assert res.result == "Wei A Zhang"
-    assert res.parsed.middle_tokens == ["A"]
-    assert res.parsed_original_order is not None
-    assert res.parsed_original_order.middle_tokens == ["A"]
-    assert res.parsed_original_order.order == ["surname", "given", "middle"]
+    assert not res.success
+
+
+@pytest.mark.parametrize("raw", ["Zhang WeiA", "WeiA Zhang"])
+def test_compact_trailing_letter_is_a_given_syllable(detector, raw):
+    # The camelCase boundary is author-supplied evidence that `A` is a syllable (娅), so it
+    # joins the given name instead of becoming an initial.
+    res = detector.normalize_name(raw)
+
+    assert res.success
+    assert res.result == "Wei-A Zhang"
+    assert res.parsed.middle_tokens == []
 
 
 def test_middle_initial_trailing_batch_preserves_original_order(detector):
@@ -241,10 +249,10 @@ def test_middle_initial_trailing_batch_preserves_original_order(detector):
 @pytest.mark.parametrize(
     ("raw", "expected_result", "expected_order", "expected_middle_tokens"),
     [
-        ("A-wei Zhang", "Wei A Zhang", ["middle", "given", "surname"], ["A"]),
-        ("Wei-A Zhang", "Wei A Zhang", ["given", "middle", "surname"], ["A"]),
-        ("Awei Zhang", "Wei A Zhang", ["middle", "given", "surname"], ["A"]),
-        ("WeiA Zhang", "Wei A Zhang", ["given", "middle", "surname"], ["A"]),
+        # A hyphenated single letter is a given-name syllable, not an initial: the bilingual
+        # corpus rows (王阿川 WANG A-chuan, 曹阿秀 CAO A-xiu) confirm the surname is the other token.
+        ("A-wei Zhang", "A-Wei Zhang", ["given", "surname"], []),
+        ("Wei-A Zhang", "Wei-A Zhang", ["given", "surname"], []),
         ("A Wei Zhang", "Wei A Zhang", ["middle", "given", "surname"], ["A"]),
         ("Wei Zhang", "Wei Zhang", ["given", "surname"], []),
     ],
@@ -267,14 +275,14 @@ def test_hyphenated_initial_middle_order_preserves_source_position(
 
 
 def test_hyphenated_initial_middle_order_batch_preserves_source_position(detector):
-    names = ["A-wei Zhang", "Wei-A Zhang"]
+    names = ["A-wei Zhang", "A Wei Zhang"]
     batch = detector.analyze_name_batch(names)
 
-    assert [result.result for result in batch.results] == ["Wei A Zhang", "Wei A Zhang"]
-    assert [result.parsed_original_order.middle_tokens for result in batch.results] == [["A"], ["A"]]
+    assert [result.result for result in batch.results] == ["A-Wei Zhang", "Wei A Zhang"]
+    assert [result.parsed_original_order.middle_tokens for result in batch.results] == [[], ["A"]]
     assert [result.parsed_original_order.order for result in batch.results] == [
+        ["given", "surname"],
         ["middle", "given", "surname"],
-        ["given", "middle", "surname"],
     ]
     assert [
         ("middle" in result.parsed_original_order.order) is bool(result.parsed_original_order.middle_tokens)
