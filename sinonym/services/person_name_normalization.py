@@ -939,20 +939,31 @@ class PersonNameNormalizationService:
                 remaining.pop(0)
                 continue
             # A Title-case pure-credential token (Rn/Jd/Mba/Mpa/Bs) is a credential prefix,
-            # not a given name, when a complete name follows (>=2 following tokens, at least
+            # not a given name, when a complete name follows (>=2 SURVIVING tokens, at least
             # one non-initial surname): "Rn Rachael Zimlich" -> drop "Rn". A bare surname
-            # after it ("Rn Cahn") is left alone, since the token could be initials there.
+            # after it ("Rn Cahn") is left alone, since the token could be initials there —
+            # and trailing credentials/suffixes must not count as name evidence, or
+            # "Rn Cahn PhD" parses differently from "Rn Cahn".
             if (
                 key in _PURE_CREDENTIAL_TITLE_DROP_KEYS
                 and not leading_name_abbreviation
-                and len(remaining) - 1 >= _TWO_COMPONENTS
-                and any(not self._is_initial(other.text) for other in remaining[1:])
+                and not hyphen_initials
+                and self._followed_by_complete_name(remaining)
             ):
                 dropped.append(_DroppedToken(token, DropReason.CREDENTIAL))
                 remaining.pop(0)
                 continue
             break
         return remaining
+
+    def _followed_by_complete_name(self, remaining: list[_Token]) -> bool:
+        """A complete name follows only among tokens that survive trailing cleanup."""
+        tail = remaining[1:]
+        while tail and (
+            self._is_credential(tail[-1].text) or self._canonical_suffix(tail[-1].text, explicit=False)
+        ):
+            tail = tail[:-1]
+        return len(tail) >= _TWO_COMPONENTS and any(not self._is_initial(token.text) for token in tail)
 
     @staticmethod
     def _has_leading_et_al_contamination(tokens: list[_Token]) -> bool:

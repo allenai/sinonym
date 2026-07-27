@@ -495,6 +495,50 @@ def test_title_case_pure_credential_before_bare_surname_is_kept(
     assert result.canonical_name.normalized.surname == "Cahn"
 
 
+def test_trailing_credentials_do_not_count_as_completeness_evidence(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # A trailing credential is not name evidence: after stripping it, only a bare
+    # surname follows, so the leading token is kept exactly as in the bare form
+    # ("Rn Cahn"). Corpus: "Rn VézinaCarole BSc" — KNOWN LIMITATION, this is a
+    # characterization, not the desired output: the person is Carole Vézina (RN,
+    # BSc), so "Rn" really is a credential and "VézinaCarole" is two fused names
+    # we do not split. Keeping "Rn" is the price of deciding bare-surname prefixes
+    # identically with and without a trailing credential; the fused token is the
+    # real defect either way.
+    result = normalizer.normalize_text("Rn VézinaCarole BSc")
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.given_name == "Rn"
+    assert result.canonical_name.normalized.surname == "VézinaCarole"
+    # A complete name that still stands after the trailing credential is stripped
+    # keeps dropping the prefix: "Rn Anita Kurt PhD" (corpus, 11 occ).
+    complete = normalizer.normalize_text("Rn Anita Kurt PhD")
+    assert complete.canonical_name is not None
+    assert complete.canonical_name.normalized.given_name == "Anita"
+    assert complete.canonical_name.normalized.surname == "Kurt"
+
+
+def test_hyphenated_initials_survive_the_title_case_credential_drop(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # "J.-D."/"J-D" are compound initials even though the compact key "jd" is a
+    # pure-credential drop key. Corpus: J.-D. F. Bartoe (astronaut, 45 occ),
+    # J.-D. do Nascimento Jr. (astronomer).
+    bartoe = normalizer.normalize_text("J.-D. F. Bartoe")
+    assert bartoe.canonical_name is not None
+    assert bartoe.canonical_name.normalized.given_name == "J.-D."
+    assert bartoe.canonical_name.normalized.surname == "Bartoe"
+    raw = normalizer.normalize_text("J.-D. do Nascimento Jr.")
+    assert raw.canonical_name is not None
+    assert raw.canonical_name.normalized.given_name == "J.-D."
+    assert raw.canonical_name.normalized.suffix == "Jr."
+    structured = normalizer.normalize_components(first_name="J.-D.", last_name="do Nascimento Jr.")
+    assert structured.canonical_name is not None
+    assert structured.canonical_name.normalized.given_name == "J.-D."
+    assert structured.canonical_name.normalized.suffix == "Jr."
+
+
 def test_name_collision_credential_key_is_not_dropped_from_title_case(
     normalizer: PersonNameNormalizationService,
 ) -> None:
