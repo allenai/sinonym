@@ -21,7 +21,12 @@ from pathlib import Path
 import pytest
 
 from sinonym.timo.interface import PredictorConfig, RoutingInstance, RoutingPredictorV2
-from tests._case_assertions import assert_no_canonical_name, assert_routed_rejection
+from tests._case_assertions import (
+    assert_no_canonical_name,
+    assert_person_normalized_name,
+    assert_rejected,
+    assert_routed_rejection,
+)
 
 
 @pytest.fixture(scope="module")
@@ -65,6 +70,61 @@ def test_all_cjk_segmentation_of_all_cjk_input_is_kept(routing_predictor, raw, g
     assert canonical is not None
     assert canonical.normalized.given_name == given
     assert canonical.normalized.surname == surname
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        # U+FA11 﨑 is a compatibility ideograph with no Unicode decomposition, folded to 崎 in
+        # fix_ocr_artifacts; the classification gate applies the same fold, so these reach the
+        # ML classifier as the 崎 forms it knows and are rejected as Japanese at the library
+        # level, not merely by the serving-interface guard.
+        ("田﨑 修"),
+        ("野﨑 涼太朗"),
+        ("山﨑 洋輔"),
+        ("汐﨑 綾子"),
+        ("田崎 修"),
+    ],
+)
+def test_compatibility_ideograph_saki_names_classify_as_japanese(detector, raw):
+    assert_rejected(detector, raw)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # The family-first rule for spaced kanji names folds compatibility ideographs for its
+        # surname/given lookups, so 田﨑 is recognised as the surname 田崎; the emitted tokens
+        # keep the glyph the author wrote.
+        ("田﨑 修", "修 田﨑"),
+        ("岩﨑 一郎", "一郎 岩﨑"),
+        ("岡﨑 惠美子", "惠美子 岡﨑"),
+        ("田崎 修", "修 田崎"),
+        # Given-first input needs no flip; the default reading is already right.
+        ("涼太朗 野﨑", "涼太朗 野﨑"),
+    ],
+)
+def test_spaced_kanji_family_first_recognises_compatibility_ideographs(detector, raw, expected):
+    person = detector.normalize_person_name(raw)
+
+    assert_person_normalized_name(person, raw, expected)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # Expected failures, in the check_test_status baseline: 濱崎/間崎 are not in the
+        # Japanese surname asset (濱 is itself a variant of 浜, a second-order fold), so the
+        # conservative family-first rule declines and the default reading keeps the surname in
+        # the given field.
+        ("濱﨑 将臣", "将臣 濱﨑"),
+        ("間﨑 光", "光 間﨑"),
+    ],
+)
+def test_spaced_kanji_family_first_surnames_missing_from_the_asset(detector, raw, expected):
+    person = detector.normalize_person_name(raw)
+
+    assert_person_normalized_name(person, raw, expected)
 
 
 @pytest.mark.parametrize(

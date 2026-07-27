@@ -208,8 +208,11 @@ class EthnicityClassificationService:
         # ML ENHANCEMENT: All-Chinese Character Japanese Detection
         # =================================================================
 
-        # Check if this is an all-Chinese character input that could be Japanese
-        compact_chinese_text = self._normalizer._text_preprocessor.compact_all_chinese_input(original_text)
+        # Check if this is an all-Chinese character input that could be Japanese. The ML model
+        # was trained on unified ideographs, so compatibility variants are folded for its input
+        # only (﨑 -> 崎: 田﨑/野﨑/山﨑 are exactly the names it must recognise).
+        folded_text = self._normalizer._text_normalizer.fold_compatibility_ideographs(original_text)
+        compact_chinese_text = self._normalizer._text_preprocessor.compact_all_chinese_input(folded_text)
         if compact_chinese_text and self._ml_classifier.is_available():
             # Use ML classifier to check for Japanese names in Chinese characters
             ml_result = self._ml_classifier.classify_all_chinese_name(compact_chinese_text)

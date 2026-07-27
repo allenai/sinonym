@@ -11,6 +11,7 @@ import unicodedata
 from functools import lru_cache
 
 from sinonym.chinese_names_data import (
+    COMPATIBILITY_IDEOGRAPH_FOLDS,
     NON_WADE_GILES_SYLLABLE_RULES,
     ONE_LETTER_RULES,
     ROMANIZATION_EXCEPTIONS,
@@ -153,3 +154,13 @@ class TextNormalizer:
         }
         translation_table = str.maketrans(ocr_fixes)
         return result.translate(translation_table)
+
+    # Applied ONLY to classification/lookup inputs: folding in the parse pipeline would romanize
+    # the char (﨑 -> qi) and turn names the classifier never reaches (parenthetical and
+    # role-prefixed rows) into clean-looking Mandarin misreads that nothing downstream can
+    # recognise as mis-segmentations.
+    _COMPATIBILITY_IDEOGRAPH_FOLDS = str.maketrans(COMPATIBILITY_IDEOGRAPH_FOLDS)
+
+    def fold_compatibility_ideographs(self, text: str) -> str:
+        """Fold compatibility ideographs to their unified forms for classification input."""
+        return text.translate(self._COMPATIBILITY_IDEOGRAPH_FOLDS)

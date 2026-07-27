@@ -13,6 +13,7 @@ from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
 from sinonym.chinese_names_data import (
+    COMPATIBILITY_IDEOGRAPH_FOLDS,
     KOREAN_AMBIGUOUS_PATTERNS,
     KOREAN_GIVEN_PATTERNS,
     KOREAN_ONLY_SURNAMES,
@@ -145,6 +146,18 @@ def _native_lexicons() -> _NativeLexicons:
 def _contains(values: tuple[str, ...], key: str) -> bool:
     index = bisect_left(values, key)
     return index < len(values) and values[index] == key
+
+
+_COMPATIBILITY_FOLD_TABLE = str.maketrans(COMPATIBILITY_IDEOGRAPH_FOLDS)
+
+
+def _fold_compatibility_ideographs(value: str) -> str:
+    """Fold compatibility ideographs for lexicon and ML lookups; emitted tokens keep the original.
+
+    Length-preserving by construction, so boundary indices computed on the folded text slice the
+    original correctly.
+    """
+    return value.translate(_COMPATIBILITY_FOLD_TABLE)
 
 
 def _fold(value: str) -> str:
@@ -281,9 +294,10 @@ class EastAsianNameOrderService:
             )
         if not _is_compact_japanese(surface):
             return self._infer_spaced_japanese_native(surface, japanese_probability)
-        if japanese_probability(surface) < JAPANESE_ML_THRESHOLD:
+        lookup_surface = _fold_compatibility_ideographs(surface)
+        if japanese_probability(lookup_surface) < JAPANESE_ML_THRESHOLD:
             return None
-        boundary = self._japanese_native_boundary(surface)
+        boundary = self._japanese_native_boundary(lookup_surface)
         return EastAsianNameOrderDecision(
             surface=surface,
             given_tokens=(surface[boundary:],),
@@ -309,17 +323,18 @@ class EastAsianNameOrderService:
         tokens = surface.split(" ")
         if len(tokens) != 2 or not all(_is_compact_japanese(token) for token in tokens):  # noqa: PLR2004
             return None
-        if japanese_probability(surface) < JAPANESE_ML_THRESHOLD:
+        if japanese_probability(_fold_compatibility_ideographs(surface)) < JAPANESE_ML_THRESHOLD:
             return None
         lexicons = _native_lexicons()
         first, last = tokens
-        surname_first = _contains(lexicons.japanese_surnames, first) and _contains(
+        first_key, last_key = (_fold_compatibility_ideographs(token) for token in tokens)
+        surname_first = _contains(lexicons.japanese_surnames, first_key) and _contains(
             lexicons.japanese_given_names,
-            last,
+            last_key,
         )
-        reverse_plausible = _contains(lexicons.japanese_given_names, first) and _contains(
+        reverse_plausible = _contains(lexicons.japanese_given_names, first_key) and _contains(
             lexicons.japanese_surnames,
-            last,
+            last_key,
         )
         if not surname_first or reverse_plausible:
             return None

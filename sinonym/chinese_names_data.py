@@ -799,6 +799,12 @@ VALID_CHINESE_RIMES = frozenset(
 # TIERED CONFIDENCE SETS FOR GIVEN NAME SPLITTING
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Compatibility ideographs with NO Unicode decomposition (NFKC leaves them unchanged), mapped
+# to the unified forms every lexicon and the CN-vs-JP classifier were built on. Applied to
+# LOOKUP and classification inputs only, never to emitted components: 田﨑/野﨑/山﨑 must be
+# recognised as the 崎 names, but the output keeps the glyph the author wrote.
+COMPATIBILITY_IDEOGRAPH_FOLDS = {"﨑": "崎"}
+
 # Tier 1: High-Confidence Anchors. A small set of the ~60 most common and
 # statistically significant given name syllables. Their presence is a strong
 # signal that a split is legitimate.

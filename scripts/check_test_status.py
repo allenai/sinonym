@@ -19,6 +19,18 @@ UNEXPECTED_FAILURE_SAMPLE_SIZE = 5
 PERFORMANCE_METRIC_MARKERS = ("Time per name:", "names/second")
 EXPECTED_NORMALIZED_NAME_FAILURES = (
     (
+        r"tests.test_cjk_component_leaks::test_spaced_kanji_family_first_surnames_missing_from_the_asset[\u6ff1\ufa11 \u5c06\u81e3-\u5c06\u81e3 \u6ff1\ufa11]",
+        "濱﨑 将臣",
+        "将臣 濱﨑",
+        "濱﨑 将臣",
+    ),
+    (
+        r"tests.test_cjk_component_leaks::test_spaced_kanji_family_first_surnames_missing_from_the_asset[\u9593\ufa11 \u5149-\u5149 \u9593\ufa11]",
+        "間﨑 光",
+        "光 間﨑",
+        "間﨑 光",
+    ),
+    (
         "tests.test_manufactured_initials::test_surname_first_concatenated_forms_keep_their_surname[Liang Alei-Alei Liang]",
         "Liang Alei",
         "Alei Liang",
