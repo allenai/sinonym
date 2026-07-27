@@ -1,3 +1,4 @@
+import re
 from enum import Enum
 from typing import cast
 
@@ -11,6 +12,20 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_abstain_rows,
     route_pp_vys_abstain_batches,
 )
+
+# Han, Hangul (syllables + jamo), and kana (incl. half-width). The pipeline romanizes what it
+# parses and has no segmentation for these scripts otherwise, so their letters surviving into
+# output components mark a mis-segmentation.
+_CJK_LETTER = re.compile(
+    r"[ᄀ-ᇿ぀-ヿ㐀-䶿一-鿿가-힯豈-﫿ｦ-ﾟ]",
+)
+_LATIN_LETTER = re.compile(r"[A-Za-z]")
+
+
+def _routed_components_leak_cjk(parsed) -> bool:
+    """A routed answer must be fully romanized; a surviving CJK letter is a mis-segmentation."""
+    joined = " ".join(part for part in (parsed.given_name, parsed.middle_name, parsed.surname) if part)
+    return bool(_CJK_LETTER.search(joined))
 
 
 class _PoolPreconditionError(ValueError):
@@ -939,11 +954,23 @@ class PredictorV2(Predictor):
     def _to_canonical_name(self, canonical_name) -> CanonicalNameValue | None:
         if canonical_name is None:
             return None
+        normalized = self._to_canonical_components(canonical_name.normalized)
+        # A canonical whose SURNAME still carries a CJK letter next to Latin components is a
+        # mis-segmentation the consumer would write over its own fields (`A Ra 아라 Cho 조` ->
+        # surname `조` with `Cho` moved to the middle field), so it is not exposed. The other
+        # two script shapes are correct output and pass through: an all-CJK canonical is a real
+        # segmentation of an all-CJK name (`김효진` -> given `효진`, surname `김`), and a Latin
+        # surname with CJK elsewhere is the dual-name shape where the surname was isolated
+        # correctly (`李維哲 Chee-Siong Lee` -> surname `Lee`). `source` legitimately keeps the
+        # original scripts; only `normalized` is what gets consumed.
+        components = (normalized.given_name, normalized.middle_name, normalized.surname, normalized.suffix)
+        if _CJK_LETTER.search(normalized.surname) and any(_LATIN_LETTER.search(part) for part in components):
+            return None
         return CanonicalNameValue(
             source_text=canonical_name.source_text,
             text=canonical_name.text,
             source=self._to_canonical_components(canonical_name.source),
-            normalized=self._to_canonical_components(canonical_name.normalized),
+            normalized=normalized,
         )
 
     @staticmethod
@@ -1081,10 +1108,13 @@ class PredictorV2(Predictor):
                 raise ValueError(message)
 
             parsed = chosen.parsed if (chosen is not None and chosen.success) else None
+            leaks = parsed is not None and _routed_components_leak_cjk(parsed)
+            if leaks:
+                parsed = None
             canonical_result = chosen or pp_result
             output.append(
                 RoutedPredictionV2(
-                    success=bool(chosen is not None and chosen.success),
+                    success=bool(chosen is not None and chosen.success and not leaks),
                     **self._routed_name_fields(parsed),
                     router_prediction=decision,
                     router_reason=cast("str", row.get("router_reason", "")),
@@ -1117,6 +1147,8 @@ class PredictorV2(Predictor):
             else:
                 message = f"pp-abstain router returned unexpected router_prediction={decision!r}"
                 raise ValueError(message)
+            if parsed is not None and _routed_components_leak_cjk(parsed):
+                parsed = None
             output.append(
                 PPRoutedPredictionV2(
                     success=bool(parsed is not None),

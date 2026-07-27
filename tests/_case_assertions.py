@@ -57,3 +57,26 @@ def assert_person_normalized_name(person, raw_name: str, expected: str) -> None:
     assert person is not None, f"{raw_name!r}: expected a person parse, got None"
     actual = person_normalized_text(person)
     assert actual == expected, f"{raw_name!r}: expected normalized name {expected!r}, got {actual!r}"
+
+
+def routed_author_text(author) -> str:
+    """Return the space-joined routed components of one routed author."""
+    parts = (author.given_name, author.middle_name, author.surname)
+    return " ".join(part for part in parts if part)
+
+
+def assert_routed_rejection(author, raw_name: str) -> None:
+    """Assert that one routed input is rejected rather than parsed as Chinese."""
+    actual = routed_author_text(author)
+    assert not author.success, f"{raw_name!r}: expected rejection, got {actual!r}"
+
+
+def assert_no_canonical_name(author, raw_name: str) -> None:
+    """Assert that one routed input exposes no canonical name."""
+    canonical = author.canonical_name
+    if canonical is None:
+        actual = ""
+    else:
+        parts = (canonical.normalized.given_name, canonical.normalized.middle_name, canonical.normalized.surname)
+        actual = " ".join(part for part in parts if part)
+    assert canonical is None, f"{raw_name!r}: expected no canonical name, got {actual!r}"

@@ -157,15 +157,39 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Xi Zhao",
     ),
 )
-EXPECTED_FAILURES = len(EXPECTED_NORMALIZED_NAME_FAILURES)
-EXPECTED_FAILURE_SIGNATURES = tuple(
-    (
-        nodeid,
-        "failure",
-        f"AssertionError: {raw_name!r}: expected normalized name {expected!r}, got {actual!r}",
-    )
-    for nodeid, raw_name, expected, actual in EXPECTED_NORMALIZED_NAME_FAILURES
+EXPECTED_REJECTION_FAILURES = (
 )
+
+EXPECTED_NO_CANONICAL_FAILURES = (
+)
+
+EXPECTED_FAILURE_SIGNATURES = (
+    *(
+        (
+            nodeid,
+            "failure",
+            f"AssertionError: {raw_name!r}: expected normalized name {expected!r}, got {actual!r}",
+        )
+        for nodeid, raw_name, expected, actual in EXPECTED_NORMALIZED_NAME_FAILURES
+    ),
+    *(
+        (
+            nodeid,
+            "failure",
+            f"AssertionError: {raw_name!r}: expected rejection, got {actual!r}",
+        )
+        for nodeid, raw_name, actual in EXPECTED_REJECTION_FAILURES
+    ),
+    *(
+        (
+            nodeid,
+            "failure",
+            f"AssertionError: {raw_name!r}: expected no canonical name, got {actual!r}",
+        )
+        for nodeid, raw_name, actual in EXPECTED_NO_CANONICAL_FAILURES
+    ),
+)
+EXPECTED_FAILURES = len(EXPECTED_FAILURE_SIGNATURES)
 EXPECTED_FAILURE_NODEIDS = tuple(nodeid for nodeid, *_ in EXPECTED_NORMALIZED_NAME_FAILURES)
 
 if TYPE_CHECKING:
