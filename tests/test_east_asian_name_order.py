@@ -102,8 +102,12 @@ def test_korean_routes_strict_shapes_and_preserves_ambiguous_romanization(
 def test_vietnamese_requires_unicode_evidence_and_preserves_given_span(
     detector: ChineseNameDetector,
 ) -> None:
+    # A diacritic is what identifies a bare surname match as Vietnamese, because most of the
+    # surname list is short and doubles as Korean/Chinese/Western syllables. `Le Van Thanh` stays
+    # given-first; the admitted exceptions are listed in
+    # ASCII_ROUTABLE_VIETNAMESE_SURNAMES and have their own tests below.
     unicode_name = detector.normalize_person_name("Nguyễn Văn An")
-    ascii_name = detector.normalize_person_name("Nguyen Van An")
+    ascii_name = detector.normalize_person_name("Le Van Thanh")
 
     assert unicode_name is not None
     assert unicode_name.text == "An Văn Nguyễn"
@@ -112,7 +116,75 @@ def test_vietnamese_requires_unicode_evidence_and_preserves_given_span(
     assert unicode_name.normalized.surname == "Nguyễn"
     assert unicode_name.source.order == ("surname", "middle", "given")
     assert ascii_name is not None
-    assert ascii_name.text == "Nguyen Van An"
+    assert ascii_name.text == "Le Van Thanh"
+
+
+def test_bare_ascii_admitted_vietnamese_surnames_route_family_first(
+    detector: ChineseNameDetector,
+) -> None:
+    # Each admitted token is in no other lexicon, so it cannot preempt the Korean or Japanese
+    # routes, and each is near-exclusively a surname. Blind labelling put the leading token as the
+    # surname in 99.3-99.8% of sampled rows.
+    for surface, surname, given, middle in (
+        ("Nguyen Van Hieu", "Nguyen", "Hieu", "Van"),
+        ("Nguyen Minh Duc", "Nguyen", "Duc", "Minh"),
+        ("Nguyen Thi Oanh", "Nguyen", "Oanh", "Thi"),
+        ("NGUYEN XUAN THO", "Nguyen", "Tho", "Xuan"),
+        ("Tran Quoc Khanh", "Tran", "Khanh", "Quoc"),
+        ("Tran Tinh Hien", "Tran", "Hien", "Tinh"),
+        ("Pham Huu Tiep", "Pham", "Tiep", "Huu"),
+        ("Pham Hai Yen", "Pham", "Yen", "Hai"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+        assert routed.normalized.given_name == given, surface
+        assert routed.normalized.middle_name == middle, surface
+        assert routed.source.order == ("surname", "middle", "given"), surface
+
+
+def test_hoang_is_not_admitted_because_it_is_also_a_given_name(
+    detector: ChineseNameDetector,
+) -> None:
+    # `hoang` clears the no-other-lexicon test but fails the surname-purity one: where both tokens
+    # of a two-token name are Vietnamese surnames it is the GIVEN name two times in three, so
+    # "Hoang Nguyen" and "Hoang Pham" would be flipped backwards. Kept out deliberately; this
+    # pins the reason so it is not added on lexicon grounds alone.
+    for surface in ("Hoang Nguyen", "Hoang Pham", "Hoang Tran", "Hoang Van Minh"):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname != "Hoang", surface
+
+
+def test_unlisted_bare_ascii_vietnamese_surnames_still_need_a_diacritic(
+    detector: ChineseNameDetector,
+) -> None:
+    # The rest of the list stays gated. `Mai`, `Le`, `Do`, `Kim`, `Ha` and `Ho` are ordinary given
+    # names elsewhere, and `kim`/`ha`/`ho` are Korean surnames too — admitting them here would
+    # preempt the Korean route, since Vietnamese is tried first.
+    for surface in ("Le Van Thanh", "Do Van Hung", "Mai Smith", "Vu Van Thanh", "Ly Van Nam"):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.source.order != ("surname", "middle", "given"), surface
+        assert routed.normalized.surname != surface.split()[0], surface
+
+
+def test_nguyen_relaxation_does_not_preempt_the_korean_route(
+    detector: ChineseNameDetector,
+) -> None:
+    # Regression guard for the routing order: _infer_vietnamese runs before _infer_korean, so a
+    # laxer Vietnamese gate could swallow names the Korean guards are meant to decide. These are
+    # the exact cases those guards own.
+    for surface, surname in (
+        ("Kim Rudolph-Lund", "Rudolph-Lund"),
+        ("Ha van den Hout", "van den Hout"),
+        ("Ha Jae-Sung", "Ha"),
+        ("Oh Young-Jin", "Oh"),
+        ("Kim Ji Hoon", "Kim"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
 
 
 def test_comma_order_remains_authoritative(detector: ChineseNameDetector) -> None:

@@ -29,6 +29,12 @@ from sinonym.resources import read_bytes
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+# Membership is per-token and earned by measurement, not by being on the Vietnamese surname list.
+# The bar is that the token is near-exclusively a surname: where both tokens of a two-token name are
+# surnames, the route has to pick the leading one, and these are wrong there only 1.8-6.8% of the
+# time. `hoang` fails that bar at 66.7% ("Hoang Nguyen", "Hoang Pham" are given-name-first), and the
+# short entries fail it outright.
+ASCII_ROUTABLE_VIETNAMESE_SURNAMES = frozenset({"nguyen", "pham", "tran"})
 HOMOGRAPH_PRONE_SURNAME_LENGTH = 2
 JAPANESE_ML_THRESHOLD = 0.8
 KOREAN_NATIVE_TOKEN_LENGTH = 3
@@ -395,7 +401,18 @@ class EastAsianNameOrderService:
         surface: str,
         lexicons: _RomanLexicons,
     ) -> EastAsianNameOrderDecision | None:
-        if not _has_east_asian_diacritic_evidence(surface) or not _contains(lexicons.vietnamese_surnames, _fold(tokens[0])):
+        head = _fold(tokens[0])
+        if not _contains(lexicons.vietnamese_surnames, head):
+            return None
+        # Bare-ASCII Vietnamese is otherwise left alone, because most of the surname list is short
+        # and doubles as Korean, Chinese or Western given syllables ("Mai", "Le", "Do", "Kim"), so a
+        # diacritic is what identifies the name as Vietnamese at all. The listed exceptions appear
+        # in no other lexicon, so admitting them cannot preempt the Korean or Japanese routes that
+        # run after this one, and each is near-exclusively a surname rather than a given name.
+        # "Nguyen Van Hieu" and "Tran Quoc Khanh" parsed given-first before this, yielding surnames
+        # "Van Hieu" and "Quoc Khanh"; blind labelling put the leading token as the surname in
+        # 99.3-99.8% of sampled rows across the three.
+        if head not in ASCII_ROUTABLE_VIETNAMESE_SURNAMES and not _has_east_asian_diacritic_evidence(surface):
             return None
         middle_tokens = tuple(tokens[1:-1])
         return EastAsianNameOrderDecision(
