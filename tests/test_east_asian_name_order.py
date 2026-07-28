@@ -270,3 +270,38 @@ def test_east_asian_order_hard_and_ambiguous_cases_characterization(
     mojibake = detector.normalize_person_name("Nguyễn Duy Cƣờng")
     assert mojibake is not None
     assert mojibake.normalized.surname == "Nguyễn"
+
+
+def test_single_letter_leading_token_is_an_initial_not_a_korean_surname(
+    detector: ChineseNameDetector,
+) -> None:
+    # "O" is the only single-letter Korean surname romanization, so every "O <hyphenated>"
+    # row used to route as the surname 오 — but in bibliographic data a lone leading letter
+    # is an initial, and these are Western names ("O Braun-Falco" is Otto Braun-Falco).
+    for surface in (
+        "O Braun-Falco",
+        "O Guntinas-Lichius",
+        "O Siggaard-Andersen",
+        "O Lyon-Caen",
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname != "O", surface
+        assert routed.source.order != ("surname", "given"), surface
+
+
+def test_multi_letter_korean_surnames_still_route_family_first(
+    detector: ChineseNameDetector,
+) -> None:
+    # The single-letter refusal must not touch the ordinary Korean routes.
+    for surface, surname in (
+        ("Kim Dong-il", "Kim"),
+        ("Park Chan-Wook", "Park"),
+        ("Lee Sang-Ho", "Lee"),
+        ("Oh Young-Jin", "Oh"),
+        ("Ahn Chang-Jun", "Ahn"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+        assert routed.source.order == ("surname", "given"), surface

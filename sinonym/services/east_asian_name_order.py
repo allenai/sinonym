@@ -405,6 +405,11 @@ class EastAsianNameOrderService:
     ) -> EastAsianNameOrderDecision | None:
         if len(tokens) > MAX_KOREAN_ROMANIZED_TOKENS:
             return None
+        # A lone leading letter is an initial, not a surname ("O Braun-Falco" is Otto
+        # Braun-Falco). `o` is the only single-letter entry in the Korean surname lexicon,
+        # so without this the whole class routes as the Korean surname 오.
+        if len(tokens[0]) == 1:
+            return None
         # A European-exclusive diacritic (Nordic "Kim Hørslev-Petersen") is not romanized
         # Korean. McCune-Reischauer breve vowels (ŏ/ŭ) stay allowed — they are inside the
         # East-Asian-plausible repertoire, so only ø/å/ö/ü/ñ/… disqualify.

@@ -106,6 +106,7 @@ ignore = ["S101", "T201"]  # Allow assert statements and print statements
 "sinonym/patterns/regex_builders.py" = ["N806", "PLR2004", "RUF001"]
 "sinonym/resources.py" = ["PLC0415", "TC003"]
 "sinonym/services/cache.py" = ["BLE001", "PERF203", "PLC0415", "RUF002", "S112"]
+"sinonym/services/east_asian_name_order.py" = ["PLR0911"]
 "sinonym/services/formatting.py" = ["C901", "E741", "EM101", "FIX002", "PLR0911", "PLR0912", "PLR0915", "RUF003", "SIM114", "TD002", "TD003", "TRY003"]
 "sinonym/services/initialization.py" = ["C901", "PLR0911", "PLR0912", "PLR2004", "RUF003", "SIM102", "TC003"]
 "sinonym/services/normalization.py" = ["ARG002", "C901", "FBT001", "FBT002", "FBT003", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "SLF001"]
