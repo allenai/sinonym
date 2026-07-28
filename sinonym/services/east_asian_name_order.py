@@ -29,8 +29,10 @@ from sinonym.resources import read_bytes
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+HOMOGRAPH_PRONE_SURNAME_LENGTH = 2
 JAPANESE_ML_THRESHOLD = 0.8
 KOREAN_NATIVE_TOKEN_LENGTH = 3
+MAX_KOREAN_GIVEN_SYLLABLE_LENGTH = 6
 MAX_ROMANIZED_TOKENS = 5
 MAX_KOREAN_ROMANIZED_TOKENS = 3
 MIN_ROMANIZED_TOKENS = 2
@@ -430,6 +432,17 @@ class EastAsianNameOrderService:
         has_hyphen = any("-" in token for token in tokens[1:])
         all_known = bool(given_parts) and all(part in KOREAN_ROUTING_GIVEN_PARTS for part in given_parts)
         if not (has_hyphen or (len(tokens) == MAX_KOREAN_ROMANIZED_TOKENS and all_known)):
+            return None
+        # A surname-lexicon hit on token 0 is weak evidence by itself, because the short entries
+        # double as ordinary Western given names ("Yu Alonso", "Ra Sanchez", "Kim Rudolph-Lund").
+        # Demand corroboration from the given side in the two shapes blind labelling found
+        # unreliable without it: a two-letter surname (34.3% wrong), and a given part longer than
+        # a romanized Korean syllable can be — the syllabary tops out near six characters, so a
+        # longer part is a Western surname element ("Gillespie-White", "Kramer-Johansen", 92% wrong).
+        if not any(part in KOREAN_ROUTING_GIVEN_PARTS for part in given_parts) and (
+            len(tokens[0]) == HOMOGRAPH_PRONE_SURNAME_LENGTH
+            or any(len(part) > MAX_KOREAN_GIVEN_SYLLABLE_LENGTH for part in given_parts)
+        ):
             return None
         given_tokens = tuple(tokens[1:])
         return EastAsianNameOrderDecision(

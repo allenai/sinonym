@@ -249,13 +249,14 @@ def test_east_asian_order_hard_and_ambiguous_cases_characterization(
     the Western given-first default apply. The cases below have no clean linguistic
     invariant and would need an ORCID/Western-surname signal + an LLM judge (see PR19).
     """
-    # (A) Pure-ASCII Western hyphenated partner: indistinguishable from a hyphenated Korean
-    # given by any character rule (the Korean given-syllable lexicon is incomplete, so
-    # requiring known syllables would break real Korean like "Kim Bong-Whan"). Still swaps.
-    for surface in ("Kim Dam-Johansen", "Jo Leonardi-Bee", "Jo Rycroft-Malone"):
-        routed = detector.normalize_person_name(surface)
-        assert routed is not None, surface
-        assert routed.source.order == ("surname", "given"), surface  # unchanged (abstain)
+    # (A) is gone. The pure-ASCII Western hyphenated partner used to abstain and swap here on
+    # the grounds that no character rule separates it from a hyphenated Korean given name. Two
+    # rules now separate most of it without a lexicon: a two-letter surname with nothing Korean
+    # on the given side (labelled 34.3% wrong), and a given part longer than a romanized Korean
+    # syllable (92% wrong). "Jo Leonardi-Bee", "Jo Rycroft-Malone" and "Kim Dam-Johansen" all
+    # moved to test_two_letter_korean_surname_needs_a_korean_given_part and
+    # test_overlong_given_part_is_a_western_surname_not_a_korean_syllable. What remains hard is
+    # a short unlisted Korean syllable, still unfixed and still costing names like "Jo Hea-Soog".
 
     # (B) A shared diacritic (é is both French and Vietnamese) cannot disambiguate ethnicity,
     # so "Kim André" still routes as Vietnamese (surname = Kim). Documented limitation.
@@ -305,6 +306,85 @@ def test_multi_letter_korean_surnames_still_route_family_first(
         assert routed is not None, surface
         assert routed.normalized.surname == surname, surface
         assert routed.source.order == ("surname", "given"), surface
+
+
+def test_two_letter_korean_surname_needs_a_korean_given_part(
+    detector: ChineseNameDetector,
+) -> None:
+    # Two-letter Korean surnames double as Western given names, and the surname lexicon alone
+    # cannot separate "Jo Leonardi-Bee" (Jo is English) from "Jo Jae-Yoon" (Jo is Korean). With
+    # nothing Korean on the given side these are Western people, so the leading token stays given.
+    for surface, surname in (
+        ("Jo Leonardi-Bee", "Leonardi-Bee"),
+        ("Jo Rycroft-Malone", "Rycroft-Malone"),
+        ("An Dooms-Goossens", "Dooms-Goossens"),
+        ("Yu Deuerling-Zheng", "Deuerling-Zheng"),
+        ("Ra Sanchez-Gomez", "Sanchez-Gomez"),
+        ("Na Rodriguez-Perez", "Rodriguez-Perez"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+        assert routed.source.order != ("surname", "given"), surface
+
+
+def test_two_letter_korean_surname_routes_when_a_given_part_is_korean(
+    detector: ChineseNameDetector,
+) -> None:
+    # One recognised Korean given syllable is enough corroboration to keep the family-first read.
+    for surface, surname in (
+        ("Ha Jae-Sung", "Ha"),
+        ("Jo Jae-Yoon", "Jo"),
+        ("Oh Kwang-Soo", "Oh"),
+        ("Yi Seon-ung", "Yi"),
+        ("Ji Won Suk", "Ji"),
+        ("Ho Kyung Sung", "Ho"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+        assert routed.source.order[0] == "surname", surface
+
+
+def test_overlong_given_part_is_a_western_surname_not_a_korean_syllable(
+    detector: ChineseNameDetector,
+) -> None:
+    # Romanized Korean syllables top out near six characters, so a longer hyphen part is a
+    # Western surname element and the leading Korean-surname homograph is really a given name.
+    # This reaches the lengths the two-letter rule cannot ("Kim", "Lee", "Hwang").
+    for surface, surname in (
+        ("Kim Rudolph-Lund", "Rudolph-Lund"),
+        ("Lee Gillespie-White", "Gillespie-White"),
+        ("Lee Laurent-Applegate", "Laurent-Applegate"),
+        ("Kim Theilgaard-Monch", "Theilgaard-Monch"),
+        ("Kim Padgett-Clarke", "Padgett-Clarke"),
+        ("Min Chen-Gaddini", "Chen-Gaddini"),
+        ("Kim Dam-Johansen", "Dam-Johansen"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+        assert routed.source.order != ("surname", "given"), surface
+
+
+def test_unlisted_korean_syllables_still_route_family_first(
+    detector: ChineseNameDetector,
+) -> None:
+    # None of these has a single part in the syllable lexicon — "jeong", "sook", "kyoung",
+    # "myong", "byeong" are all missing from it. They keep routing because every part is within
+    # syllable length, which is the whole point of testing length rather than lexicon membership:
+    # it protects the Korean names the incomplete lexicon cannot vouch for.
+    for surface, surname in (
+        ("Kim Kyoung-Duck", "Kim"),
+        ("Lee Byeong-Do", "Lee"),
+        ("Han Myong-Sook", "Han"),
+        ("Hwang Jenn-Kang", "Hwang"),
+        ("Park Jeong-sook", "Park"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+        assert routed.source.order[0] == "surname", surface
 
 
 def test_spaced_kanji_routes_on_one_sided_dictionary_evidence(
