@@ -102,26 +102,14 @@ def test_compatibility_ideograph_saki_names_classify_as_japanese(detector, raw):
         ("田崎 修", "修 田崎"),
         # Given-first input needs no flip; the default reading is already right.
         ("涼太朗 野﨑", "涼太朗 野﨑"),
-    ],
-)
-def test_spaced_kanji_family_first_recognises_compatibility_ideographs(detector, raw, expected):
-    person = detector.normalize_person_name(raw)
-
-    assert_person_normalized_name(person, raw, expected)
-
-
-@pytest.mark.parametrize(
-    ("raw", "expected"),
-    [
-        # Expected failures, in the check_test_status baseline: 濱崎/間崎 are not in the
-        # Japanese surname asset (濱 is itself a variant of 浜, a second-order fold), so the
-        # conservative family-first rule declines and the default reading keeps the surname in
-        # the given field.
+        # 濱崎/間崎 are absent from the 2,000-entry surname asset (濱 is itself a variant of
+        # 浜, a second-order fold), so both were reordered wrongly while the rule demanded
+        # surname AND given evidence. The given side alone now carries them.
         ("濱﨑 将臣", "将臣 濱﨑"),
         ("間﨑 光", "光 間﨑"),
     ],
 )
-def test_spaced_kanji_family_first_surnames_missing_from_the_asset(detector, raw, expected):
+def test_spaced_kanji_family_first_recognises_compatibility_ideographs(detector, raw, expected):
     person = detector.normalize_person_name(raw)
 
     assert_person_normalized_name(person, raw, expected)

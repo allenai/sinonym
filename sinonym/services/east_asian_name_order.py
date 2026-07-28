@@ -313,12 +313,16 @@ class EastAsianNameOrderService:
         japanese_probability: Callable[[str], float],
     ) -> EastAsianNameOrderDecision | None:
         """Route a SPACED two-token kanji/kana name family-first when the native
-        dictionary unambiguously supports it ("佐藤 優" -> surname 佐藤, given 優).
+        dictionary supports it ("佐藤 優" -> surname 佐藤, given 優).
 
         Only the compact form was handled before, so spaced kanji fell through to the
-        generic given-first assumption and swapped the roles. Kept conservative like the
-        romanized case: route only when token0 is a surname and token1 a given, and the
-        reverse is NOT also plausible. ML-Japanese gated, so spaced Chinese is untouched.
+        generic given-first assumption and swapped the roles. Evidence is one-sided far
+        more often than not, because the surname asset holds 2,000 entries against 69,002
+        given names: requiring BOTH sides left 615,837 names / 3.74M occ reordered wrongly
+        ("松中 成浩", "三浦 耕吉郎"), judged family-first 187/187 blind. So a single
+        unopposed side routes too, and only genuinely two-sided evidence abstains:
+        reverse-plausible, both-surname and both-given pairs. ML-Japanese gated, so spaced
+        Chinese is untouched.
         """
         tokens = surface.split(" ")
         if len(tokens) != 2 or not all(_is_compact_japanese(token) for token in tokens):  # noqa: PLR2004
@@ -328,15 +332,18 @@ class EastAsianNameOrderService:
         lexicons = _native_lexicons()
         first, last = tokens
         first_key, last_key = (_fold_compatibility_ideographs(token) for token in tokens)
-        surname_first = _contains(lexicons.japanese_surnames, first_key) and _contains(
-            lexicons.japanese_given_names,
-            last_key,
-        )
-        reverse_plausible = _contains(lexicons.japanese_given_names, first_key) and _contains(
-            lexicons.japanese_surnames,
-            last_key,
-        )
-        if not surname_first or reverse_plausible:
+        first_surname = _contains(lexicons.japanese_surnames, first_key)
+        first_given = _contains(lexicons.japanese_given_names, first_key)
+        last_surname = _contains(lexicons.japanese_surnames, last_key)
+        last_given = _contains(lexicons.japanese_given_names, last_key)
+        surname_first = first_surname and last_given
+        reverse_plausible = first_given and last_surname
+        if not surname_first:
+            if reverse_plausible or (first_surname and last_surname) or (first_given and last_given):
+                return None
+            if not first_surname and not last_given:
+                return None
+        elif reverse_plausible:
             return None
         return EastAsianNameOrderDecision(
             surface=surface,

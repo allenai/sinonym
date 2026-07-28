@@ -305,3 +305,42 @@ def test_multi_letter_korean_surnames_still_route_family_first(
         assert routed is not None, surface
         assert routed.normalized.surname == surname, surface
         assert routed.source.order == ("surname", "given"), surface
+
+
+def test_spaced_kanji_routes_on_one_sided_dictionary_evidence(
+    detector: ChineseNameDetector,
+) -> None:
+    # The surname asset holds 2,000 entries against 69,002 given names, so most real spaced
+    # kanji names match on exactly one side. Requiring both left 615,837 names / 3.74M occ
+    # reordered wrongly; blind judges called that class family-first 187/187.
+    for surface, surname in (
+        ("三浦 耕吉郎", "三浦"),   # leading token is a known surname, 耕吉郎 unknown
+        ("小川 福次郎", "小川"),
+        ("山瀬 豊", "山瀬"),       # trailing token is a known given name, 山瀬 unknown
+        ("松中 成浩", "松中"),
+        ("梅川 尚嗣", "梅川"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+        assert routed.source.order == ("surname", "given"), surface
+
+
+def test_spaced_kanji_abstains_when_the_evidence_is_two_sided(
+    detector: ChineseNameDetector,
+) -> None:
+    # Two-sided evidence is the ambiguity that one-sided routing must not swallow: a
+    # reverse-plausible pair, a pair of surnames, and a pair of given names all keep the
+    # given-first default, which is right for the reversed inputs the corpus does contain.
+    for surface, surname in (
+        ("優 佐藤", "佐藤"),        # reverse plausible: given + surname
+        ("和則 西﨑", "西﨑"),
+        ("吉行 水畑", "水畑"),      # both tokens are known surnames
+        ("智幸 小枝", "小枝"),      # both tokens are known given names
+        ("歩 中野渡", "中野渡"),    # neither token is in either asset
+        ("ジョン スミス", "スミス"),  # katakana Western name
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+        assert routed.source.order != ("surname", "given"), surface
