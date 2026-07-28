@@ -1784,17 +1784,191 @@ def test_senior_junior_still_suffix_when_surname_survives(
     assert result.canonical_name.normalized.suffix == expected_suffix
 
 
+def test_portuguese_agnomes_demote_to_suffix(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # "Filho" (son) and "Neto" (grandson) are registered agnomes that follow the
+    # family name, like "Júnior". Leaving them in the surname slot displaces the
+    # real surname. Corpus: 110,043 occ of 3+-token Filho, 79,188 occ of Neto.
+    for raw, surname, suffix in [
+        ("Carlos Alberto da Silva Filho", "da Silva", "Filho"),
+        ("Antonio Carlos Pereira Filho", "Pereira", "Filho"),
+        ("José Ribamar Santos Neto", "Santos", "Neto"),
+    ]:
+        result = normalizer.normalize_text(raw)
+        assert result.canonical_name is not None, raw
+        assert result.canonical_name.normalized.surname == surname, raw
+        assert result.canonical_name.normalized.suffix == suffix, raw
+    # Each agnome keeps its own spelling — Filho/Neto/Júnior mark different
+    # generations and must not fold into a shared "Jr.".
+    junior = normalizer.normalize_text("Carlos Alberto da Silva Júnior")
+    assert junior.canonical_name is not None
+    assert junior.canonical_name.normalized.suffix == "Jr."
+
+def test_agnome_kept_when_it_is_the_only_surname(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # "Neto" is also a real Portuguese surname, so it demotes only when a surname
+    # survives its removal (same rule as "Senior"). Corpus: Chiara Neto (126 occ,
+    # chemist), Andrea Neto (271), Pedro Neto (217); Agostinho Neto is the
+    # canonical namesake.
+    for raw in ("Chiara Neto", "Andrea Neto", "Pedro Neto", "Agostinho Neto"):
+        result = normalizer.normalize_text(raw)
+        assert result.canonical_name is not None, raw
+        assert result.canonical_name.normalized.surname == "Neto", raw
+        assert result.canonical_name.normalized.suffix == "", raw
+    # KNOWN LIMITATION: a two-token surname-first fragment keeps "Neto" as the
+    # surname too ("Silva Neto" is really <given> Silva Neto). Two tokens carry no
+    # signal separating it from "Chiara Neto", and this matches the pre-existing
+    # behaviour, so the fragment is left alone rather than risking real surnames.
+    fragment = normalizer.normalize_text("Silva Neto")
+    assert fragment.canonical_name is not None
+    assert fragment.canonical_name.normalized.surname == "Neto"
+    # "Filho" is gated the same way. Blind labelling put its two-token rows at 82.8%
+    # truncated fragment vs 12.8% real surname, so demoting looks right on counts —
+    # but it buys no merge: "Mesquita Filho" would key on the bare surname
+    # "mesquita" while the person's full-name mentions key "<initial> mesquita".
+    # Relabelling 82.8% for no merge is not worth breaking the 12.8% that parse
+    # correctly today.
+    for raw, given in [("Edson Filho", "Edson"), ("Mesquita Filho", "Mesquita")]:
+        result = normalizer.normalize_text(raw)
+        assert result.canonical_name is not None, raw
+        assert result.canonical_name.normalized.given_name == given, raw
+        assert result.canonical_name.normalized.surname == "Filho", raw
+        assert result.canonical_name.normalized.suffix == "", raw
+    # Only initials survive the agnome's removal, so no surname is left to promote
+    # and the agnome stays put — same rule as "Thomas B. A. Senior".
+    initials = normalizer.normalize_text("J. R. Neto")
+    assert initials.canonical_name is not None
+    assert initials.canonical_name.normalized.surname == "Neto"
+    assert initials.canonical_name.normalized.suffix == ""
+    # A real surname among the initials does survive, so the agnome demotes.
+    mixed = normalizer.normalize_text("A. Costa Filho")
+    assert mixed.canonical_name is not None
+    assert mixed.canonical_name.normalized.surname == "Costa"
+    assert mixed.canonical_name.normalized.suffix == "Filho"
+    # "Senior" keeps its own behaviour (shares the same gate set).
+    senior = normalizer.normalize_text("Roxy Senior")
+    assert senior.canonical_name is not None
+    assert senior.canonical_name.normalized.surname == "Senior"
+
+def test_agnome_demotion_keeps_particles_and_ignores_case(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # A particle stays with the surname when the agnome leaves it. Corpus:
+    # "J. R. T. de Mello Neto" (180 occ), "Carlos Roberto de Souza Filho" (177 occ).
+    for raw, surname, suffix in [
+        ("J. R. T. de Mello Neto", "de Mello", "Neto"),
+        ("Carlos Roberto de Souza Filho", "de Souza", "Filho"),
+    ]:
+        result = normalizer.normalize_text(raw)
+        assert result.canonical_name is not None, raw
+        assert result.canonical_name.normalized.surname == surname, raw
+        assert result.canonical_name.normalized.suffix == suffix, raw
+    # Casing does not matter to the suffix lookup, in either direction.
+    for raw in ("CARLOS ALBERTO DA SILVA FILHO", "carlos alberto da silva filho"):
+        result = normalizer.normalize_text(raw)
+        assert result.canonical_name is not None, raw
+        assert result.canonical_name.normalized.surname == "da Silva", raw
+        assert result.canonical_name.normalized.suffix == "Filho", raw
+    caps_neto = normalizer.normalize_text("José Ribamar Santos NETO")
+    assert caps_neto.canonical_name is not None
+    assert caps_neto.canonical_name.normalized.suffix == "Neto"
+    # The two-token gate is casing-blind too: every spelling keeps the agnome.
+    for raw in ("MESQUITA FILHO", "mesquita filho", "Mesquita Filho"):
+        result = normalizer.normalize_text(raw)
+        assert result.canonical_name is not None, raw
+        assert result.canonical_name.normalized.surname == "Filho", raw
+
+def test_agnome_demotion_matches_on_the_structured_path(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    # Structured components must reach the same parse as the raw string, so a
+    # source that files the agnome inside last_name does not drift from one that
+    # writes the whole name out.
+    for components, surname, suffix in [
+        ({"first_name": "Carlos", "middle_name": "Alberto", "last_name": "da Silva Filho"}, "da Silva", "Filho"),
+        ({"first_name": "José", "middle_name": "Ribamar", "last_name": "Santos Neto"}, "Santos", "Neto"),
+        ({"first_name": "Chiara", "last_name": "Neto"}, "Neto", ""),
+    ]:
+        result = normalizer.normalize_components(**components)
+        assert result.canonical_name is not None, components
+        assert result.canonical_name.normalized.surname == surname, components
+        assert result.canonical_name.normalized.suffix == suffix, components
+    # "Sobrinho" (nephew) is deliberately NOT handled yet — 1,618 occ, mixed usage.
+    sobrinho = normalizer.normalize_text("Paulo Costa Sobrinho")
+    assert sobrinho.canonical_name is not None
+    assert sobrinho.canonical_name.normalized.surname == "Sobrinho"
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_given", "expected_surname"),
+    [
+        # A two-token name is given + surname, so spelled-out Junior stays in the
+        # surname slot. Demoting it left the given name carrying the family name
+        # ("Roxy Junior" -> given "", surname "Roxy") and, behind a middle initial,
+        # put an initial in the surname slot ("Peter A. Junior" -> surname "A.").
+        ("Roxy Junior", "Roxy", ("Junior",)),
+        ("Silva Junior", "Silva", ("Junior",)),
+        ("Peter A. Junior", "Peter", ("Junior",)),
+        # Both spellings: _compact_key preserves diacritics, so "Júnior" needs its own key.
+        ("Roxy Júnior", "Roxy", ("Júnior",)),
+        ("Carlos A. Júnior", "Carlos", ("Júnior",)),
+    ],
+)
+def test_two_token_junior_is_the_surname(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_given: str,
+    expected_surname: tuple[str, ...],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.canonical_name is not None, raw_name
+    assert result.canonical_name.normalized.given_name == expected_given, raw_name
+    assert result.canonical_name.normalized.surname_tokens == expected_surname, raw_name
+    assert result.canonical_name.normalized.suffix == "", raw_name
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_surname", "expected_suffix"),
+    [
+        # A real surname survives the removal, so Junior demotes as before. The
+        # abbreviated forms are never surnames and demote regardless of shape.
+        ("John Smith Junior", ("Smith",), "Jr."),
+        ("R. Baker Junior", ("Baker",), "Jr."),
+        ("Geraldo Bezerra da Silva Junior", ("da", "Silva"), "Jr."),
+        ("Francisco Aquino Júnior", ("Aquino",), "Jr."),
+        ("John Smith Jr", ("Smith",), "Jr."),
+        ("Robert Downey Jr.", ("Downey",), "Jr."),
+    ],
+)
+def test_junior_still_demotes_when_a_surname_survives(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_surname: tuple[str, ...],
+    expected_suffix: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.canonical_name is not None, raw_name
+    assert result.canonical_name.normalized.surname_tokens == expected_surname, raw_name
+    assert result.canonical_name.normalized.suffix == expected_suffix, raw_name
+
+
 def test_suffix_senior_junior_hard_and_ambiguous_cases_characterization(
     normalizer: PersonNameNormalizationService,
 ) -> None:
     """Senior/Junior suffix handling.
 
-    "Junior" is a generational suffix, never a surname: the real family name is the
-    other token, so "Silva Junior" -> surname "Silva", suffix "Jr.".
+    Spelled-out "Junior" is treated like "Senior": a generational suffix only when a
+    real surname survives its removal. A two-token name, with or without a middle
+    initial, is read as given + surname, so "Silva Junior" keeps "Junior" as the
+    surname rather than demoting it and leaving "Silva" to carry the family name.
     """
     r = normalizer.normalize_text("Silva Junior")
-    assert r.canonical_name.normalized.surname_tokens == ("Silva",)
-    assert r.canonical_name.normalized.suffix == "Jr."
+    assert r.canonical_name.normalized.surname_tokens == ("Junior",)
+    assert r.canonical_name.normalized.suffix == ""
 
     # "Senior" IS a real English surname; with only a given/initials before it (no other
     # surname token), it is kept as the surname.

@@ -379,6 +379,13 @@ _STANDARD_SUFFIXES = {
     # "junior"; without this it stays in the surname slot and displaces the family
     # name (e.g. "Francisco Aquino Júnior" -> surname "Júnior" instead of "Aquino").
     "júnior": "Jr.",
+    # Portuguese agnomes for "son" and "grandson". Like Júnior they are registered
+    # parts of a Brazilian name that follow the family name, so leaving them in the
+    # surname slot displaces it ("José Ribamar Santos Neto" -> surname "Neto"). They
+    # keep their own spelling rather than folding into "Jr." — Filho/Neto/Júnior mark
+    # different generations and are not interchangeable.
+    "filho": "Filho",
+    "neto": "Neto",
     "sr": "Sr.",
     "senior": "Sr.",
     "2nd": "2nd",
@@ -389,7 +396,19 @@ _STANDARD_SUFFIXES = {
 }
 # Spelled-out "Senior"/"Junior" are also common surnames ("Roxy Senior", "Peter A.
 # Senior"); demote them to a suffix only when a real surname survives the removal.
-_SURNAME_LIKE_SUFFIX_KEYS = frozenset({"senior"})
+# Both spellings of Junior need their own key because _compact_key preserves
+# diacritics, so "Júnior" folds to "júnior" and would otherwise miss the set while the
+# unaccented spelling matched.
+# "Neto"/"Filho" are also used as the surname itself (Agostinho Neto, Félix Neto,
+# Chiara Neto, Edson Filho), so both demote only when a surname survives the
+# removal, which leaves the two-token forms alone. Blind labelling of the two-token
+# corpus rows put Neto at 50.8% real surname vs 44.6% truncated fragment, and Filho
+# at 12.8% vs 82.8% — but demoting Filho's fragments buys nothing: "Mesquita Filho"
+# would key on the bare surname "mesquita" while the person's full-name mentions key
+# "<initial> mesquita", so no block merges (checked over all 431 judged fragments),
+# while the 12.8% lose a correct parse. Multi-token forms of both demote either way;
+# that is where the displaced-surname bug lives (110k occ Filho, 79k Neto).
+_SURNAME_LIKE_SUFFIX_KEYS = frozenset({"senior", "junior", "júnior", "neto", "filho"})
 _RAW_ROMAN_SUFFIXES = frozenset({"II", "III", "IV", "VI", "VII", "VIII", "IX", "X"})
 _EXPLICIT_ROMAN_SUFFIXES = _RAW_ROMAN_SUFFIXES | {"I", "V", "X"}
 _CASE_INSENSITIVE_ROMAN_SUFFIXES = _RAW_ROMAN_SUFFIXES - {"II"}
