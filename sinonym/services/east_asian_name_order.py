@@ -349,9 +349,22 @@ class EastAsianNameOrderService:
         more often than not, because the surname asset holds 2,000 entries against 69,002
         given names: requiring BOTH sides left 615,837 names / 3.74M occ reordered wrongly
         ("松中 成浩", "三浦 耕吉郎"), judged family-first 187/187 blind. So a single
-        unopposed side routes too, and only genuinely two-sided evidence abstains:
-        reverse-plausible, both-surname and both-given pairs. ML-Japanese gated, so spaced
-        Chinese is untouched.
+        unopposed side routes too. ML-Japanese gated, so spaced Chinese is untouched.
+
+        Only ONE two-sided shape still abstains: reverse-plausible, where the leading token
+        is a known given name AND the trailing token a known surname ("剛 長谷川"). That is
+        positive evidence of an inverted byline, and blind labelling agrees on 150 of 150.
+
+        Both-surname and both-given pairs used to abstain as well, on the assumption that two
+        signals cancel. They do not — a shared token is normally the given name, because the
+        given asset is 35x the surname asset, so "both are surnames" usually means the
+        trailing one is also a given name that the 2,000-entry surname list happens to list,
+        and "both are given names" usually means the leading one is a surname the list
+        happens to list. Blind labelling puts the family name FIRST on 91.6% of
+        both-given-plausible occ (297 PPS-sampled names) and 89.3% of both-surname occ (159),
+        so abstaining was wrong far more often than right: it mis-ordered 174,201 of 190,342
+        occ across the two classes. Sampled at name level the shares are 84.0% (486 names)
+        and 93.9% (428), across two independent rounds whose overlap agreed 60/60.
         """
         tokens = surface.split(" ")
         if len(tokens) != 2 or not all(_is_compact_japanese(token) for token in tokens):  # noqa: PLR2004
@@ -368,7 +381,7 @@ class EastAsianNameOrderService:
         surname_first = first_surname and last_given
         reverse_plausible = first_given and last_surname
         if not surname_first:
-            if reverse_plausible or (first_surname and last_surname) or (first_given and last_given):
+            if reverse_plausible:
                 return None
             if not first_surname and not last_given:
                 return None

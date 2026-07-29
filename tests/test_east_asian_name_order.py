@@ -483,14 +483,14 @@ def test_spaced_kanji_routes_on_one_sided_dictionary_evidence(
 def test_spaced_kanji_abstains_when_the_evidence_is_two_sided(
     detector: ChineseNameDetector,
 ) -> None:
-    # Two-sided evidence is the ambiguity that one-sided routing must not swallow: a
-    # reverse-plausible pair, a pair of surnames, and a pair of given names all keep the
-    # given-first default, which is right for the reversed inputs the corpus does contain.
+    # Only ONE two-sided shape is real ambiguity: reverse-plausible, a known given name in
+    # front of a known surname. That is positive evidence of an inverted byline, and blind
+    # labelling agrees on 150 of 150. Names with no evidence on either side keep the
+    # given-first default too, because it is right on ~75% of that class.
     for surface, surname in (
         ("優 佐藤", "佐藤"),        # reverse plausible: given + surname
         ("和則 西﨑", "西﨑"),
-        ("吉行 水畑", "水畑"),      # both tokens are known surnames
-        ("智幸 小枝", "小枝"),      # both tokens are known given names
+        ("吉行 水畑", "水畑"),      # 吉行 is a known given name too, so this is reverse-plausible
         ("歩 中野渡", "中野渡"),    # neither token is in either asset
         ("ジョン スミス", "スミス"),  # katakana Western name
     ):
@@ -498,6 +498,49 @@ def test_spaced_kanji_abstains_when_the_evidence_is_two_sided(
         assert routed is not None, surface
         assert routed.normalized.surname == surname, surface
         assert routed.source.order != ("surname", "given"), surface
+
+
+def test_spaced_kanji_routes_when_both_tokens_are_given_plausible(
+    detector: ChineseNameDetector,
+) -> None:
+    # Both tokens in the given-name asset used to abstain, on the theory that two signals
+    # cancel. They do not: the given asset is 35x the surname asset, so a leading token that
+    # appears in both is usually a surname the given list also happens to carry. Blind
+    # labelling puts the family name first on 91.6% of this class's occ (297 PPS-sampled
+    # names) and 84.0% by name (486 names, two independent rounds).
+    for surface, surname, given in (
+        ("智幸 小枝", "智幸", "小枝"),
+        ("秋光 純", "秋光", "純"),
+        ("弥永 真生", "弥永", "真生"),
+        ("江里 健輔", "江里", "健輔"),
+        ("霞 三郎", "霞", "三郎"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+        assert routed.normalized.given_name == given, surface
+        assert routed.source.order == ("surname", "given"), surface
+
+
+def test_spaced_kanji_routes_when_both_tokens_are_surnames(
+    detector: ChineseNameDetector,
+) -> None:
+    # Same correction for the both-surname class: the trailing token is normally a given name
+    # that the 2,000-entry surname list happens to list as well (穂積 Hozumi, 末広 Suehiro,
+    # 真木 Maki, 牧 Maki all behave that way). Blind labelling puts the family name first on
+    # 89.3% of this class's occ and 93.9% by name; 58% of the whole class carries a label.
+    for surface, surname, given in (
+        ("北口 末広", "北口", "末広"),
+        ("田中 穂積", "田中", "穂積"),
+        ("三橋 牧", "三橋", "牧"),
+        ("内藤 林", "内藤", "林"),
+        ("中田 真木", "中田", "真木"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+        assert routed.normalized.given_name == given, surface
+        assert routed.source.order == ("surname", "given"), surface
 
 
 def test_hangul_compound_surnames_take_the_second_syllable(

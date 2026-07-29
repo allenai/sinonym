@@ -36,18 +36,24 @@ ACCURACY_FLOORS = {
     "FLIP(shipped)": 1.0,
     "A: t0 sur, t1 unknown": 1.0,
     "B: t1 giv, t0 unknown": 1.0,
-    # Abstain classes. The judged shares behind these floors are 60/60, 41/50, 34/49, 1/11
-    # and 0/1: declining is right for reverse-plausible pairs and for most of the unknown
-    # pairs, and wrong for the two small both-plausible classes, which are the open question.
+    # Abstain classes. Declining is right for reverse-plausible pairs (60/60 here, 150/150 in
+    # a later round) and for most of the no-evidence pairs (41/50 and 34/49 here, 74.7% and
+    # 64.1% of class occ in a later round).
     "REV(t0 giv, t1 sur)": 1.0,
     "D: neither known": 0.80,
     "D: neither known/kata": 0.65,
-    "C: both given-plausible": 0.05,
-    "AMBIG(both surnames)": 0.0,
+    # Both-sided classes now route, so these are routed floors rather than residue floors.
+    # 10/11 and 1/1 here; the wider evidence is 91.6% and 89.3% of class occ (297 and 159
+    # PPS-sampled names) and 84.0% / 93.9% by name over 486 and 428 names.
+    "C: both given-plausible": 0.85,
+    "AMBIG(both surnames)": 1.0,
     # Names carrying a character the gate rejects (々 U+3005 is Script=Han but outside
-    # sinonym's Han ranges), so the rule never runs. Judged family-first 13/13 and all wrong
-    # today. Small here (452 names / 1,799 occ) because the ~101K occ of 々 names in the
-    # corpus are claimed by the Chinese path and romanized as pinyin instead.
+    # sinonym's Han ranges), so the rule never runs. These 13 items are family-first and so
+    # all wrong today, but they are NOT representative: a uniform draw of 59 more from the
+    # class is only 20.3% family-first, because most 々 names are given-first bylines
+    # ("ささぶね 佐々木", "勉 野々山") where refusing to route is the right answer. Widening
+    # the gate would break ~1,433 occ to fix ~366, so the floor stays 0.0 for this slice and
+    # the class is deliberately left alone.
     "BLOCKED(gate rejects a char)": 0.0,
     "attention_check": 1.0,
 }
