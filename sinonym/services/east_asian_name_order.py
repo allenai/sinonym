@@ -35,6 +35,17 @@ if TYPE_CHECKING:
 # time. `hoang` fails that bar at 66.7% ("Hoang Nguyen", "Hoang Pham" are given-name-first), and the
 # short entries fail it outright.
 ASCII_ROUTABLE_VIETNAMESE_SURNAMES = frozenset({"nguyen", "pham", "tran"})
+# The same bar, met only once the two-surname shape above is excluded rather than absorbed: these
+# heads are absent from the Korean and Japanese lexicons, so admitting them preempts no later route,
+# and outside that shape blind labelling puts the leading token in the surname. Corpus-wide they move
+# 32,071 bare-ASCII names / 142,756 mentions that read "Van Minh" or "Huu Tai" as the surname today.
+ASCII_ROUTABLE_VIETNAMESE_SURNAMES_WITHOUT_SURNAME_PARTNER = frozenset(
+    {
+        "bui", "dam", "dang", "dinh", "doan", "duong", "hoang", "huynh", "khuc", "luong", "luu",
+        "ngo", "phan", "phi", "phung", "thach", "thuong", "trac", "trieu", "trinh", "truong",
+        "quach", "tieu", "vo", "vu", "vuong",
+    },
+)
 HOMOGRAPH_PRONE_SURNAME_LENGTH = 2
 JAPANESE_ML_THRESHOLD = 0.8
 KOREAN_NATIVE_TOKEN_LENGTH = 3
@@ -423,7 +434,24 @@ class EastAsianNameOrderService:
         # "Van Hieu" and "Quoc Khanh"; blind labelling put the leading token as the surname in
         # 99.3-99.8% of sampled rows across the three.
         if head not in ASCII_ROUTABLE_VIETNAMESE_SURNAMES and not _has_east_asian_diacritic_evidence(surface):
-            return None
+            if head not in ASCII_ROUTABLE_VIETNAMESE_SURNAMES_WITHOUT_SURNAME_PARTNER:
+                return None
+            # A trailing surname means the byline was inverted for an English-language journal, at any
+            # length: "Vu Nguyen", "Hoang Xuan Tran", "Truong Khang Nguyen" all carry the family name
+            # last. Blind labelling of this shape put the family name in the trailing token on 74% of
+            # mentions, and declining lifts the whole relaxation from 71.6% to 82.9% mention-weighted
+            # accuracy — the leading token is the family name on 188 of the 197 rows that survive.
+            # The surname may be the first half of a hyphenated compound rather than the whole token
+            # ("Thuong Le-Tien", "Vu Thuy Khanh Le-Trilling", "Truong Nguyen-Ba" — judged 8/8 family
+            # last), which is another 235 names / 984 mentions and takes a mention-weighted sample
+            # from 96.4% to 98.5%. A hyphen whose first half is NOT a surname is a given name
+            # ("Ngo Si-Huy"), so only the lexicon hit declines.
+            trailing = _fold(tokens[-1])
+            if _contains(lexicons.vietnamese_surnames, trailing) or _contains(
+                lexicons.vietnamese_surnames,
+                trailing.split("-")[0],
+            ):
+                return None
         middle_tokens = tuple(tokens[1:-1])
         return EastAsianNameOrderDecision(
             surface=surface,

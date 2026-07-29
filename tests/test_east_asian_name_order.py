@@ -143,26 +143,28 @@ def test_bare_ascii_admitted_vietnamese_surnames_route_family_first(
         assert routed.source.order == ("surname", "middle", "given"), surface
 
 
-def test_hoang_is_not_admitted_because_it_is_also_a_given_name(
+def test_hoang_is_not_admitted_where_both_tokens_are_surnames(
     detector: ChineseNameDetector,
 ) -> None:
-    # `hoang` clears the no-other-lexicon test but fails the surname-purity one: where both tokens
-    # of a two-token name are Vietnamese surnames it is the GIVEN name two times in three, so
-    # "Hoang Nguyen" and "Hoang Pham" would be flipped backwards. Kept out deliberately; this
-    # pins the reason so it is not added on lexicon grounds alone.
-    for surface in ("Hoang Nguyen", "Hoang Pham", "Hoang Tran", "Hoang Van Minh"):
+    # `hoang` clears the no-other-lexicon test but fails the surname-purity one in ONE shape: where
+    # both tokens of a two-token name are Vietnamese surnames it is the GIVEN name two times in
+    # three, so "Hoang Nguyen" and "Hoang Pham" would be flipped backwards. That shape stays
+    # declined for every head admitted on the without-surname-partner list, which is what makes the
+    # rest of the list safe to admit.
+    for surface in ("Hoang Nguyen", "Hoang Pham", "Hoang Tran", "Vu Nguyen", "Ngo Le"):
         routed = detector.normalize_person_name(surface)
         assert routed is not None, surface
-        assert routed.normalized.surname != "Hoang", surface
+        assert routed.normalized.surname != surface.split()[0], surface
 
 
 def test_unlisted_bare_ascii_vietnamese_surnames_still_need_a_diacritic(
     detector: ChineseNameDetector,
 ) -> None:
-    # The rest of the list stays gated. `Mai`, `Le`, `Do`, `Kim`, `Ha` and `Ho` are ordinary given
+    # The short entries stay gated. `Mai`, `Le`, `Do`, `Kim`, `Ha`, `Ho` and `Ly` are ordinary given
     # names elsewhere, and `kim`/`ha`/`ho` are Korean surnames too — admitting them here would
-    # preempt the Korean route, since Vietnamese is tried first.
-    for surface in ("Le Van Thanh", "Do Van Hung", "Mai Smith", "Vu Van Thanh", "Ly Van Nam"):
+    # preempt the Korean route, since Vietnamese is tried first. Relaxing the whole 46-entry list
+    # would move 550,469 mentions, of which `kim` alone is 181,705 ("Kim Overvad", "Kim Krisberg").
+    for surface in ("Le Van Thanh", "Do Van Hung", "Mai Smith", "Ly Van Nam", "Ha Van Tien"):
         routed = detector.normalize_person_name(surface)
         assert routed is not None, surface
         assert routed.source.order != ("surname", "middle", "given"), surface
@@ -527,3 +529,64 @@ def test_hangul_single_syllable_surnames_are_unchanged(detector: ChineseNameDete
         routed = detector.normalize_person_name(surface)
         assert routed is not None, surface
         assert routed.normalized.surname == surname, surface
+
+
+def test_bare_ascii_vietnamese_routes_outside_the_two_surname_shape(
+    detector: ChineseNameDetector,
+) -> None:
+    # Distinctive heads route family-first, so "Van Minh" and "Huu Tai" stop being surnames.
+    for surface, surname, given in (
+        ("Vu Van Quang", "Vu", "Quang"),
+        ("Hoang Van Minh", "Hoang", "Minh"),
+        ("Phan Van Kiem", "Phan", "Kiem"),
+        ("Bui Huu Tai", "Bui", "Tai"),
+        ("Huynh Quang Huy", "Huynh", "Huy"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+        assert routed.normalized.given_name == given, surface
+
+
+def test_bare_ascii_vietnamese_declines_a_pair_of_surnames_and_foreign_homographs(
+    detector: ChineseNameDetector,
+) -> None:
+    # A trailing Vietnamese surname marks an inverted byline at any length, so the shape is declined
+    # whether or not a middle token sits between the two surnames; the excluded heads stay excluded
+    # because they are ordinary Korean surnames, Japanese given names or Western names.
+    for surface, surname in (
+        ("Vu Nguyen", "Nguyen"),
+        ("Hoang Pham", "Pham"),
+        ("Truong Khang Nguyen", "Nguyen"),
+        ("Hoang Xuan Tran", "Tran"),
+        ("Dinh Chau Phan", "Phan"),
+        ("Kim Overvad", "Overvad"),
+        ("Le Corbusier", "Corbusier"),
+        ("Ho Jin Kim", "Kim"),
+        ("Mai Sato", "Sato"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+
+
+def test_bare_ascii_vietnamese_declines_a_hyphenated_trailing_surname(
+    detector: ChineseNameDetector,
+) -> None:
+    # The inverted-byline marker survives hyphenation: the trailing token's first half is the family
+    # name, so the whole compound is, and blind labelling put the family name last on 8 of 8 such
+    # rows. A hyphen whose first half is not a surname is an ordinary given name.
+    for surface, surname in (
+        ("Thuong Le-Tien", "Le-Tien"),
+        ("Vu Thuy Khanh Le-Trilling", "Le-Trilling"),
+        ("Truong Nguyen-Ba", "Nguyen-Ba"),
+        ("Hoang Le-Huu", "Le-Huu"),
+        ("Dinh Vo-Ngoc", "Vo-Ngoc"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+
+    given_first_hyphen = detector.normalize_person_name("Ngo Si-Huy")
+    assert given_first_hyphen is not None
+    assert given_first_hyphen.normalized.surname == "Ngo"
