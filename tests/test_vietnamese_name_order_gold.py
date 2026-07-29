@@ -149,3 +149,60 @@ def test_no_multi_token_surname_is_emitted_for_a_routed_name(
             offenders.append(f"{item['name']}: routed surname {got!r}")
 
     assert not offenders, "\n".join(offenders)
+
+
+# Representative names the rule gets right, one per mechanism, so a regression names itself instead of
+# only moving a floor.
+KNOWN_GOOD = (
+    ("Vu Van Quang", "Vu"),              # 3 tokens, admitted head: was surname "Van Quang"
+    ("Bui Huu Tai", "Bui"),              # middle particle `Huu` marks domestic order
+    ("Huynh Quang Huy", "Huynh"),
+    ("Vo Thi My Hanh", "Vo"),            # `Thi` only ever follows the family name
+    ("Vu Thi", "Vu"),                    # truncated record: family + particle, given name lost
+    ("Nguyen Van Hieu", "Nguyen"),       # the three pre-existing heads keep working
+    ("Truong Khang Nguyen", "Nguyen"),   # trailing surname: inverted byline, correctly declined
+    ("Thuong Le-Tien", "Le-Tien"),       # trailing surname behind a hyphen, correctly declined
+    ("Ngo Si-Huy", "Ngo"),               # hyphenated GIVEN name: still routes
+    ("Kim Overvad", "Overvad"),          # excluded head, Danish name untouched
+    ("Ho Jin Kim", "Kim"),               # excluded head, Korean name untouched
+)
+
+# Names the rule gets WRONG today, with the surname it currently emits. Pinned deliberately: these are
+# the residue quantified in the commit that shipped the relaxation, and a future asset or guard that
+# fixes one must delete its line here, which is the point — the defect cannot be fixed silently, and it
+# cannot regress further without a named failure. Roughly 74 of the 690 gold rows are in this class;
+# these are the ten highest-mention ones.
+KNOWN_RESIDUE = (
+    ("Doan Perdana", "Perdana", "Doan"),            # Indonesian surname trailing, no asset sees it
+    ("Vu Dinh", "Vu", "Dinh"),                      # two bare surnames: declined, right on mentions
+    ("Hoang Ha", "Hoang", "Ha"),                    # same shape
+    ("Truong Nghiem", "Nghiem", "Truong"),          # rare Vietnamese surname trailing
+    ("Hoang Van Luong", "Hoang", "Van Luong"),      # guard declines, old two-token surname survives
+    ("Truong Son Hy", "Hy", "Truong"),
+    ("Doan Nainggolan", "Nainggolan", "Doan"),      # Batak surname trailing
+    ("Vu Lam", "Vu", "Lam"),
+    ("Hoang Vu-Thien", "Hoang", "Vu-Thien"),        # hyphen guard fires where judges split
+    ("Dam Sunwoo", "Sunwoo", "Dam"),                # Korean compound surname, absent from the 83-entry list
+)
+
+
+def test_named_successes_stay_correct(detector: ChineseNameDetector) -> None:
+    wrong = []
+    for surface, surname in KNOWN_GOOD:
+        got = _routed_surname(detector, surface)
+        if got != surname:
+            wrong.append(f"{surface}: expected {surname!r}, got {got!r}")
+
+    assert not wrong, "\n".join(wrong)
+
+
+def test_named_residue_is_unchanged(detector: ChineseNameDetector) -> None:
+    """Fails when a known defect is fixed as well as when a new one appears — update the list."""
+    moved = []
+    for surface, gold_surname, current in KNOWN_RESIDUE:
+        got = _routed_surname(detector, surface)
+        if got != current:
+            verdict = "FIXED" if got == gold_surname else "changed"
+            moved.append(f"{surface}: was {current!r}, now {got!r} (gold {gold_surname!r}) — {verdict}")
+
+    assert not moved, "\n".join([*moved, "", "Update KNOWN_RESIDUE: a pinned defect moved."])

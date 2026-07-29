@@ -127,3 +127,44 @@ def test_compound_surnames_are_never_split_after_one_syllable(
     ]
 
     assert not offenders, f"compound surname split after one syllable: {offenders}"
+
+
+# One name per mechanism, so a regression names itself rather than only moving a floor.
+KNOWN_GOOD = (
+    ("남궁원", "남궁"),   # compound surname, the defect this fixture was built for
+    ("황보관", "황보"),
+    ("독고석", "독고"),
+    ("김민수", "김"),     # ordinary single-syllable surname, unchanged
+    ("이상훈", "이"),
+    ("강원실", "강"),     # compound-looking head (강원 is a province) but 강 is the surname
+    ("남기웅", "남"),     # 남 alone, not the compound 남궁
+)
+
+# Judged wrong today and pinned so the defect cannot move silently. 샤오젠 is Xiao Jian: the Chinese
+# surname Xiao occupies two Hangul syllables, so the boundary falls after syllable 2, and no shipped
+# asset can detect that — sinonym/data has no Hangul lexicon at all.
+KNOWN_RESIDUE = (("샤오젠", "샤오", "샤"),)
+
+
+def test_named_successes_stay_correct(detector: ChineseNameDetector) -> None:
+    wrong = []
+    for surface, surname in KNOWN_GOOD:
+        person = detector.normalize_person_name(surface)
+        got = None if person is None else person.normalized.surname
+        if got != surname:
+            wrong.append(f"{surface}: expected {surname!r}, got {got!r}")
+
+    assert not wrong, "\n".join(wrong)
+
+
+def test_named_residue_is_unchanged(detector: ChineseNameDetector) -> None:
+    """Fails when the known defect is fixed as well as when it worsens — update the list."""
+    moved = []
+    for surface, gold_surname, current in KNOWN_RESIDUE:
+        person = detector.normalize_person_name(surface)
+        got = None if person is None else person.normalized.surname
+        if got != current:
+            verdict = "FIXED" if got == gold_surname else "changed"
+            moved.append(f"{surface}: was {current!r}, now {got!r} (gold {gold_surname!r}) — {verdict}")
+
+    assert not moved, "\n".join([*moved, "", "Update KNOWN_RESIDUE: a pinned defect moved."])
