@@ -1,0 +1,1544 @@
+{
+ "provenance": {
+  "what": "blind labels for 3-syllable all-Hangul author strings: where the family-name boundary falls (1 or 2 syllables), or that the string is not a person",
+  "judged": "2026-07-28, 3 independent judge personas, each labelling all items; judges saw the raw string only, never any sinonym output",
+  "items": 135,
+  "unanimous": "131/135",
+  "controls": "19/19 externally-known answers recovered",
+  "withdrawn_controls": {
+   "강원실": "강 (surname) + 원실 (given) is the ordinary reading"
+  },
+  "strata": "A_compound and C_translit oversample the two failure classes; B_nonname and B4_top_mention were drawn top-by-mentions, so they are cost-weighted sweeps rather than uniform samples; baseline is uniform",
+  "rule_measured": "sinonym/services/east_asian_name_order.py::_infer_native, the korean_native_three_syllable branch (unchanged since 0.4.0)",
+  "population": "231,786 names / 6,258,735 mentions reach this rule; every all-Hangul name fails Chinese detection, so production consumes canonical_name.normalized",
+  "scripts": "author-names/sinonym_split_experiment/hangul_route/scripts/"
+ },
+ "class_population": {
+  "A_compound": {
+   "names": 313,
+   "mentions": 5332
+  },
+  "baseline": {
+   "names": 226839,
+   "mentions": 6226534
+  },
+  "B_nonname": {
+   "names": 2016,
+   "mentions": 22958
+  },
+  "B4_top_mention": {
+   "names": 300,
+   "mentions": 503884
+  },
+  "C_translit": {
+   "names": 2670,
+   "mentions": 4011
+  }
+ },
+ "items": [
+  {
+   "name": "강병광",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 5
+  },
+  {
+   "name": "강원실",
+   "class": "control",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 10
+  },
+  {
+   "name": "구대회",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 140
+  },
+  {
+   "name": "구인회",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 170
+  },
+  {
+   "name": "기국서",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 3
+  },
+  {
+   "name": "김경수",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2416
+  },
+  {
+   "name": "김경회",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 142
+  },
+  {
+   "name": "김규재",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "김동욱",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2662
+  },
+  {
+   "name": "김동현",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 3443
+  },
+  {
+   "name": "김동회",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 134
+  },
+  {
+   "name": "김민수",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 3263
+  },
+  {
+   "name": "김민정",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2815
+  },
+  {
+   "name": "김민회",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 132
+  },
+  {
+   "name": "김봉채",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 30
+  },
+  {
+   "name": "김봉회",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 229
+  },
+  {
+   "name": "김선회",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 274
+  },
+  {
+   "name": "김성수",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 3942
+  },
+  {
+   "name": "김성훈",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 3226
+  },
+  {
+   "name": "김연아",
+   "class": "control",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 90,
+   "expected": "one"
+  },
+  {
+   "name": "김영민",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2347
+  },
+  {
+   "name": "김영수",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2945
+  },
+  {
+   "name": "김영실",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 175
+  },
+  {
+   "name": "김영진",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 3682
+  },
+  {
+   "name": "김영호",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 3248
+  },
+  {
+   "name": "김은실",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 266
+  },
+  {
+   "name": "김재실",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 144
+  },
+  {
+   "name": "김정수",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2661
+  },
+  {
+   "name": "김정호",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2618
+  },
+  {
+   "name": "김정회",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 170
+  },
+  {
+   "name": "김정훈",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 3016
+  },
+  {
+   "name": "김종회",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 188
+  },
+  {
+   "name": "김지영",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2867
+  },
+  {
+   "name": "김지현",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2320
+  },
+  {
+   "name": "김진수",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2643
+  },
+  {
+   "name": "김진호",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2674
+  },
+  {
+   "name": "김창회",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 147
+  },
+  {
+   "name": "김철위",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 130
+  },
+  {
+   "name": "김태형",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2345
+  },
+  {
+   "name": "김태훈",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2610
+  },
+  {
+   "name": "김현수",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 3410
+  },
+  {
+   "name": "김현실",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 231
+  },
+  {
+   "name": "김현정",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2434
+  },
+  {
+   "name": "김현주",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2482
+  },
+  {
+   "name": "김형준",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2428
+  },
+  {
+   "name": "꿈지모",
+   "class": "control",
+   "family": "not_a_person",
+   "votes": [
+    "NOT-A-PERSON",
+    "NOT-A-PERSON",
+    "NOT-A-PERSON"
+   ],
+   "mentions": 25,
+   "expected": "not_a_person"
+  },
+  {
+   "name": "남궁강",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 3
+  },
+  {
+   "name": "남궁랑",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 2
+  },
+  {
+   "name": "남궁석",
+   "class": "control",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 104,
+   "expected": "two"
+  },
+  {
+   "name": "남궁성",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 93
+  },
+  {
+   "name": "남궁승",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 21
+  },
+  {
+   "name": "남궁원",
+   "class": "control",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 137,
+   "expected": "two"
+  },
+  {
+   "name": "남궁은",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 33
+  },
+  {
+   "name": "남궁장",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "남궁전",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "남궁한",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 60
+  },
+  {
+   "name": "남동환",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 7
+  },
+  {
+   "name": "노은철",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 4
+  },
+  {
+   "name": "독고승",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "독고욱",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 6
+  },
+  {
+   "name": "렴금화",
+   "class": "C_translit",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "류용운",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "류제청",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 141
+  },
+  {
+   "name": "맹은혜",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2
+  },
+  {
+   "name": "문재인",
+   "class": "control",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 14,
+   "expected": "one"
+  },
+  {
+   "name": "미명훈",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "박점문",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 7
+  },
+  {
+   "name": "박찬호",
+   "class": "control",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 546,
+   "expected": "one"
+  },
+  {
+   "name": "반기문",
+   "class": "control",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 3,
+   "expected": "one"
+  },
+  {
+   "name": "발행인",
+   "class": "control",
+   "family": "not_a_person",
+   "votes": [
+    "NOT-A-PERSON",
+    "NOT-A-PERSON",
+    "NOT-A-PERSON"
+   ],
+   "mentions": 15,
+   "expected": "not_a_person"
+  },
+  {
+   "name": "배준익",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 4
+  },
+  {
+   "name": "백남준",
+   "class": "control",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 54,
+   "expected": "one"
+  },
+  {
+   "name": "봉준호",
+   "class": "control",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 8,
+   "expected": "one"
+  },
+  {
+   "name": "사공용",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 15
+  },
+  {
+   "name": "사공운",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "사공준",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 88
+  },
+  {
+   "name": "사공환",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 6
+  },
+  {
+   "name": "샤오젠",
+   "class": "C_translit",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 3
+  },
+  {
+   "name": "서문훈",
+   "class": "A_compound",
+   "family": "ambiguous",
+   "votes": [
+    "AMBIGUOUS",
+    "AMBIGUOUS",
+    "AMBIGUOUS"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "선우석",
+   "class": "A_compound",
+   "family": "ambiguous",
+   "votes": [
+    "AMBIGUOUS",
+    "AMBIGUOUS",
+    "AMBIGUOUS"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "선우진",
+   "class": "A_compound",
+   "family": "ambiguous",
+   "votes": [
+    "2",
+    "AMBIGUOUS",
+    "AMBIGUOUS"
+   ],
+   "mentions": 30
+  },
+  {
+   "name": "선우찬",
+   "class": "A_compound",
+   "family": "ambiguous",
+   "votes": [
+    "AMBIGUOUS",
+    "AMBIGUOUS",
+    "AMBIGUOUS"
+   ],
+   "mentions": 21
+  },
+  {
+   "name": "선우청",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "소민관",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 4
+  },
+  {
+   "name": "손흥민",
+   "class": "control",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 10,
+   "expected": "one"
+  },
+  {
+   "name": "송길섭",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 38
+  },
+  {
+   "name": "송선화",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 49
+  },
+  {
+   "name": "쉬얀얀",
+   "class": "C_translit",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 13
+  },
+  {
+   "name": "쉬프라",
+   "class": "C_translit",
+   "family": "unsure",
+   "votes": [
+    "UNSURE",
+    "UNSURE",
+    "UNSURE"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "쉬환즈",
+   "class": "C_translit",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "슈미트",
+   "class": "C_translit",
+   "family": "unsure",
+   "votes": [
+    "UNSURE",
+    "UNSURE",
+    "UNSURE"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "슈쥬키",
+   "class": "C_translit",
+   "family": "unsure",
+   "votes": [
+    "UNSURE",
+    "UNSURE",
+    "UNSURE"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "쑤쇼링",
+   "class": "C_translit",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2
+  },
+  {
+   "name": "쑤퀸쳉",
+   "class": "C_translit",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "안철수",
+   "class": "control",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 261,
+   "expected": "one"
+  },
+  {
+   "name": "우의정",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "NOT-A-PERSON"
+   ],
+   "mentions": 4
+  },
+  {
+   "name": "웨훙쥔",
+   "class": "C_translit",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "유섬이",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "은성수",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 11
+  },
+  {
+   "name": "이경회",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 431
+  },
+  {
+   "name": "이동훈",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2770
+  },
+  {
+   "name": "이상민",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2338
+  },
+  {
+   "name": "이상호",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 3961
+  },
+  {
+   "name": "이상훈",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 4052
+  },
+  {
+   "name": "이순신",
+   "class": "control",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 18,
+   "expected": "one"
+  },
+  {
+   "name": "이은실",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 244
+  },
+  {
+   "name": "이정훈",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2885
+  },
+  {
+   "name": "이현주",
+   "class": "B4_top_mention",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2494
+  },
+  {
+   "name": "일본팀",
+   "class": "control",
+   "family": "not_a_person",
+   "votes": [
+    "NOT-A-PERSON",
+    "NOT-A-PERSON",
+    "NOT-A-PERSON"
+   ],
+   "mentions": 1,
+   "expected": "not_a_person"
+  },
+  {
+   "name": "장경춘",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 5
+  },
+  {
+   "name": "쟝리리",
+   "class": "C_translit",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2
+  },
+  {
+   "name": "정금나",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "정몽구",
+   "class": "control",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 0,
+   "expected": "one"
+  },
+  {
+   "name": "정헌정",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 7
+  },
+  {
+   "name": "조수미",
+   "class": "control",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 41,
+   "expected": "one"
+  },
+  {
+   "name": "중국팀",
+   "class": "control",
+   "family": "not_a_person",
+   "votes": [
+    "NOT-A-PERSON",
+    "NOT-A-PERSON",
+    "NOT-A-PERSON"
+   ],
+   "mentions": 14,
+   "expected": "not_a_person"
+  },
+  {
+   "name": "지상우",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 56
+  },
+  {
+   "name": "첸이이",
+   "class": "C_translit",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "첸찌창",
+   "class": "C_translit",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "최은실",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 130
+  },
+  {
+   "name": "펑부스",
+   "class": "C_translit",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 2
+  },
+  {
+   "name": "펑쑤친",
+   "class": "C_translit",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "편집실",
+   "class": "control",
+   "family": "not_a_person",
+   "votes": [
+    "NOT-A-PERSON",
+    "NOT-A-PERSON",
+    "NOT-A-PERSON"
+   ],
+   "mentions": 1108,
+   "expected": "not_a_person"
+  },
+  {
+   "name": "하남규",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 28
+  },
+  {
+   "name": "허창회",
+   "class": "B_nonname",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 161
+  },
+  {
+   "name": "호완혜",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  },
+  {
+   "name": "황규복",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 6
+  },
+  {
+   "name": "황보관",
+   "class": "control",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 3,
+   "expected": "two"
+  },
+  {
+   "name": "황보근",
+   "class": "A_compound",
+   "family": "ambiguous",
+   "votes": [
+    "AMBIGUOUS",
+    "AMBIGUOUS",
+    "2"
+   ],
+   "mentions": 6
+  },
+  {
+   "name": "황보백",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 2
+  },
+  {
+   "name": "황보석",
+   "class": "A_compound",
+   "family": "ambiguous",
+   "votes": [
+    "AMBIGUOUS",
+    "AMBIGUOUS",
+    "2"
+   ],
+   "mentions": 31
+  },
+  {
+   "name": "황보설",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 2
+  },
+  {
+   "name": "황보종",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 112
+  },
+  {
+   "name": "황보창",
+   "class": "A_compound",
+   "family": "two",
+   "votes": [
+    "2",
+    "2",
+    "2"
+   ],
+   "mentions": 3
+  },
+  {
+   "name": "황솔지",
+   "class": "baseline",
+   "family": "one",
+   "votes": [
+    "1",
+    "1",
+    "1"
+   ],
+   "mentions": 1
+  }
+ ]
+}

@@ -496,3 +496,34 @@ def test_spaced_kanji_abstains_when_the_evidence_is_two_sided(
         assert routed is not None, surface
         assert routed.normalized.surname == surname, surface
         assert routed.source.order != ("surname", "given"), surface
+
+
+def test_hangul_compound_surnames_take_the_second_syllable(
+    detector: ChineseNameDetector,
+) -> None:
+    # The seven two-syllable Korean surnames: the default 1+2 split lands inside the surname, so
+    # 남궁원 shipped as surname 남 (a different, much commoner surname) with given 궁원.
+    for surface, surname, given in (
+        ("남궁원", "남궁", "원"),
+        ("황보관", "황보", "관"),
+        ("제갈돈", "제갈", "돈"),
+        ("사공준", "사공", "준"),
+        ("선우영", "선우", "영"),
+        ("서문희", "서문", "희"),
+        ("독고석", "독고", "석"),
+    ):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface
+        assert routed.normalized.given_name == given, surface
+        assert routed.source.order == ("surname", "given"), surface
+
+
+def test_hangul_single_syllable_surnames_are_unchanged(detector: ChineseNameDetector) -> None:
+    # 강원실 has a compound-looking head (강원 is a province) but 강 is the surname, and 남 / 황 / 서 /
+    # 선 are commoner surnames than the compounds that start with them, so only an exact match moves.
+    for surface, surname in (("김민수", "김"), ("이상훈", "이"), ("강원실", "강"), ("남기웅", "남"),
+                             ("황영조", "황"), ("서정원", "서"), ("선동열", "선")):
+        routed = detector.normalize_person_name(surface)
+        assert routed is not None, surface
+        assert routed.normalized.surname == surname, surface

@@ -38,6 +38,11 @@ ASCII_ROUTABLE_VIETNAMESE_SURNAMES = frozenset({"nguyen", "pham", "tran"})
 HOMOGRAPH_PRONE_SURNAME_LENGTH = 2
 JAPANESE_ML_THRESHOLD = 0.8
 KOREAN_NATIVE_TOKEN_LENGTH = 3
+# 남궁 / 황보 / 제갈 / 사공 / 선우 / 서문 / 독고: the surname occupies two of the three syllables, so the
+# default 1+2 split lands inside it. Blind labelling of the class put the boundary after the second
+# syllable on 19 of 25 items and called the rest genuinely ambiguous — never after the first.
+KOREAN_NATIVE_COMPOUND_SURNAMES = frozenset({"남궁", "황보", "제갈", "사공", "선우", "서문", "독고"})
+KOREAN_NATIVE_COMPOUND_SURNAME_LENGTH = 2
 MAX_KOREAN_GIVEN_SYLLABLE_LENGTH = 6
 MAX_ROMANIZED_TOKENS = 5
 MAX_KOREAN_ROMANIZED_TOKENS = 3
@@ -292,11 +297,16 @@ class EastAsianNameOrderService:
         if _is_hangul(surface):
             if len(surface) != KOREAN_NATIVE_TOKEN_LENGTH:
                 return None
+            boundary = (
+                KOREAN_NATIVE_COMPOUND_SURNAME_LENGTH
+                if surface[:KOREAN_NATIVE_COMPOUND_SURNAME_LENGTH] in KOREAN_NATIVE_COMPOUND_SURNAMES
+                else 1
+            )
             return EastAsianNameOrderDecision(
                 surface=surface,
-                given_tokens=(surface[1:],),
+                given_tokens=(surface[boundary:],),
                 middle_tokens=(),
-                surname_tokens=(surface[:1],),
+                surname_tokens=(surface[:boundary],),
                 source_order=("surname", "given"),
                 reason="korean_native_three_syllable",
             )
