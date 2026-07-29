@@ -273,7 +273,10 @@ class NormalizationService:
                 han_tokens.extend(pinyin_tokens)
             else:
                 # Clean Roman token
-                clean_token = self._config.clean_roman_pattern.sub("", token)
+                clean_token = self._config.clean_roman_pattern.sub(
+                    "",
+                    token.translate(self._config.roman_punctuation_fold_tr),
+                )
                 # Filter out empty tokens and tokens that are only punctuation
                 if clean_token and not all(c in string.punctuation for c in clean_token):
                     roman_tokens_original.append(clean_token)
@@ -391,7 +394,8 @@ class NormalizationService:
 
     def _clean_roman_token(self, token: str) -> str:
         """Clean a Roman token without changing its source capitalization."""
-        return self._config.clean_roman_pattern.sub("", token)
+        folded = token.translate(self._config.roman_punctuation_fold_tr)
+        return self._config.clean_roman_pattern.sub("", folded)
 
     def _roman_matches_han_token(self, roman_token: str, han_pinyin: tuple[str, ...]) -> bool:
         """Return whether a Roman token is the pinyin equivalent of a Han token group."""

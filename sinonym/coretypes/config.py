@@ -43,6 +43,11 @@ class ChineseNameConfig:
     # Character translation table
     hyphens_apostrophes_tr: dict[int, None]
 
+    # Unicode hyphen/apostrophe variants folded to their ASCII form. Without this they fall
+    # outside clean_roman_pattern and are DELETED, which destroys the author-supplied syllable
+    # boundary that `Cui'e` and `Ji-Ae` carry: `Cui’e` reached the splitter as `Cuie`.
+    roman_punctuation_fold_tr: dict[int, str]
+
     # Pre-sorted Chinese onsets for phonetic validation (performance optimization)
     sorted_chinese_onsets: tuple[str, ...]
 
@@ -78,6 +83,21 @@ class ChineseNameConfig:
             clean_pattern=CLEAN_PATTERN,
             forbidden_patterns_regex=FORBIDDEN_PATTERNS_REGEX,
             hyphens_apostrophes_tr=str.maketrans("", "", "-‐‒–—―﹘﹣－⁃₋''''''''"),
+            # U+2011-U+2015 and the fullwidth/small forms are already sep_pattern separators;
+            # only the variants nothing else claims are folded here.
+            roman_punctuation_fold_tr=str.maketrans(
+                {
+                    "‐": "-",  # HYPHEN
+                    "−": "-",  # MINUS SIGN
+                    "‘": "'",  # LEFT SINGLE QUOTATION MARK
+                    "’": "'",  # RIGHT SINGLE QUOTATION MARK
+                    "‛": "'",  # SINGLE HIGH-REVERSED-9 QUOTATION MARK
+                    "ʼ": "'",  # MODIFIER LETTER APOSTROPHE
+                    "ʹ": "'",  # MODIFIER LETTER PRIME
+                    "′": "'",  # PRIME
+                    "＇": "'",  # FULLWIDTH APOSTROPHE
+                },
+            ),
             sorted_chinese_onsets=tuple(sorted(VALID_CHINESE_ONSETS, key=len, reverse=True)),
             default_surname_logp=-15.0,
             default_given_logp=-15.0,

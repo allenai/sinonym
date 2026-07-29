@@ -46,6 +46,11 @@ HAN = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
         ("Zheng Cui'e", "Cui-E Zheng"),
         ("Wu Yue'e", "Yue-E Wu"),
         ("Xiu'e Zheng", "Xiu-E Zheng"),
+        # the curly forms are what real metadata carries, and they must fold to the ASCII
+        # boundary rather than being deleted
+        ("Zheng Cui’e", "Cui-E Zheng"),
+        ("Wu Yue’e", "Yue-E Wu"),
+        ("Xiu’e Zheng", "Xiu-E Zheng"),
     ],
 )
 def test_hyphenated_single_letter_stays_in_the_given_name(detector, raw, expected):

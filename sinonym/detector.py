@@ -688,7 +688,8 @@ class ChineseNameDetector:
 
     def _clean_source_roman_token(self, token: str) -> str:
         """Clean a source Roman token while preserving source capitalization."""
-        return self._config.clean_roman_pattern.sub("", token)
+        folded = token.translate(self._config.roman_punctuation_fold_tr)
+        return self._config.clean_roman_pattern.sub("", folded)
 
     def _roman_tokens_match_han_pinyin(self, roman_tokens: list[str], han_pinyin: tuple[str, ...]) -> bool:
         """Return whether Roman source tokens exactly transliterate the Han pinyin."""

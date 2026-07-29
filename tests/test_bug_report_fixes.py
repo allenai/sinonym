@@ -611,3 +611,35 @@ def test_leading_hyphen_or_apostrophe_token_does_not_crash(detector, raw_name):
     now abstain (fall back to the baseline canonical name), not raise."""
     result = detector.normalize_name(raw_name)  # must not raise
     assert result is not None
+
+
+@pytest.mark.parametrize(
+    ("ascii_form", "variant"),
+    [
+        ("Zheng Cui'e", "Zheng Cui’e"),  # RIGHT SINGLE QUOTATION MARK
+        ("Zheng Cui'e", "Zheng Cui‘e"),  # LEFT SINGLE QUOTATION MARK
+        ("Zheng Cui'e", "Zheng Cuiʼe"),  # MODIFIER LETTER APOSTROPHE
+        ("Zheng Cui'e", "Zheng Cui′e"),  # PRIME
+        ("Zheng Cui'e", "Zheng Cui＇e"),  # FULLWIDTH APOSTROPHE
+        ("Wu Yue'e", "Wu Yue’e"),
+        ("Xiu'e Zheng", "Xiu’e Zheng"),
+        ("Ji-Ae Shin", "Ji‐Ae Shin"),  # HYPHEN
+        ("Ji-Ae Shin", "Ji−Ae Shin"),  # MINUS SIGN
+        ("Mohd Ma'ruf", "Mohd Ma’ruf"),
+        ("Ana-Maria O'Neill", "Ana‐Maria O’Neill"),
+    ],
+)
+def test_unicode_hyphen_and_apostrophe_variants_match_their_ascii_form(detector, ascii_form, variant):
+    """Regression: clean_roman_pattern preserved only ASCII `-` and `'`, so every other Unicode
+    hyphen/apostrophe was DELETED rather than folded. That destroyed the author-supplied syllable
+    boundary the splitter looks for: `Cui’e` arrived as `Cuie` and split into `Cui` + a middle
+    initial `E`, while `Cui'e` correctly joined as `Cui-E`. Same name, different punctuation,
+    different answer."""
+    baseline = detector.normalize_name(ascii_form)
+    result = detector.normalize_name(variant)
+
+    assert result.success == baseline.success, variant
+    assert result.result == baseline.result, variant
+    if baseline.success:
+        assert result.parsed.middle_tokens == baseline.parsed.middle_tokens, variant
+        assert result.parsed.surname == baseline.parsed.surname, variant
