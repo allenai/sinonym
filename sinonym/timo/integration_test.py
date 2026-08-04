@@ -1,5 +1,6 @@
 import unittest
 
+from sinonym.coretypes.routing_resolution import ResolutionAction, ResolutionReason
 from sinonym.timo.interface import (
     Instance,
     Prediction,
@@ -9,10 +10,14 @@ from sinonym.timo.interface import (
     PredictorV2,
     RoutedPaperPrediction,
     RoutedPaperPredictionV2,
+    RoutedPaperPredictionV3,
     RoutedPrediction,
     RoutingInstance,
+    RoutingInstanceV3,
     RoutingPredictor,
     RoutingPredictorV2,
+    RoutingPredictorV3,
+    SourceAuthorFields,
 )
 
 
@@ -163,3 +168,46 @@ class TestRoutingIntegrationV2(TestRoutingIntegration):
         assert canonical_name is not None
         self.assertEqual(canonical_name.text, "Steve Blando IV")
         self.assertEqual(canonical_name.normalized.suffix, "IV")
+
+
+class TestRoutingIntegrationV3(unittest.TestCase):
+    """Integration contract for terminal, source-shaped routed V3 output."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.predictor = RoutingPredictorV3(config=PredictorConfig(), artifacts_dir=".")
+
+    def test_structured_input_produces_directly_writable_fields(self):
+        instance = RoutingInstanceV3(
+            pp_authors=[
+                SourceAuthorFields(first_name="Steve", last_name="Blando", suffix="IV"),
+                SourceAuthorFields(first_name="Li", last_name="Wei"),
+            ],
+            vys_other_names=["Jun Zhao", "Hui Li"],
+        )
+
+        (paper,) = self.predictor.predict_batch([instance])
+
+        self.assertIsInstance(paper, RoutedPaperPredictionV3)
+        self.assertEqual(len(paper.authors), 2)
+        self.assertEqual(paper.authors[0].resolved_fields.suffix, "IV")
+        self.assertEqual(paper.authors[1].resolved_fields.last_name, "Li")
+        self.assertEqual(set(paper.authors[0].dict()), {"resolved_fields"})
+
+    def test_empty_paper_still_emits_one_prediction(self):
+        (paper,) = self.predictor.predict_batch([RoutingInstanceV3(pp_authors=[])])
+        self.assertEqual(paper.authors, [])
+
+    def test_reviewed_non_person_is_machine_actionable(self):
+        instance = RoutingInstanceV3(
+            pp_authors=[SourceAuthorFields(first_name="STADT", last_name="NÜRNBERG")],
+        )
+
+        (paper,) = self.predictor.predict_batch([instance])
+
+        resolved = paper.authors[0].resolved_fields
+        self.assertIs(resolved.resolution_action, ResolutionAction.SUPPRESS)
+        self.assertIs(resolved.resolution_reason, ResolutionReason.REVIEWED_NON_PERSON_PATTERN)
+
+    def test_predict_batch_empty(self):
+        self.assertEqual(self.predictor.predict_batch([]), [])

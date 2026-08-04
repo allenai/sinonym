@@ -1,0 +1,1418 @@
+"""Wire contracts and terminal author resolution for routed V3.
+
+V3 receives structured source fields so source fallback is lossless.  The
+first/middle/last labels are not semantic evidence: scalar and batch inference
+run on ``SourceAuthorFields.full_name()``, matching the existing ``fullNameOf``
+sequence and deliberately excluding suffix.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import unicodedata
+from dataclasses import replace
+from enum import Enum
+from typing import TYPE_CHECKING
+
+from pydantic import BaseModel, Field, StrictStr, root_validator
+
+from sinonym.coretypes import NameComponents
+from sinonym.coretypes.routing_resolution import (
+    ApplyAssignment,
+    EvidenceFailure,
+    HardScalarConstraint,
+    HardScalarMaterializationFailure,
+    PreserveBaseline,
+    ResolutionAction,
+    ResolutionProvenance,
+    ResolutionReason,
+    resolution_decision_spec,
+)
+from sinonym.pipeline.name_order_routing import pp_abstain_parsed
+from sinonym.services.non_person import REVIEWED_HANGUL_ORGANIZATION_MARKERS, reviewed_non_person_source_pattern
+from sinonym.services.person_name_normalization import (
+    PersonNameNormalizationService,
+    PersonNameOutcome,
+    reviewed_closed_comma_credential_tail_head,
+    reviewed_source_cleanup_pattern,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from sinonym.detector import ChineseNameDetector
+
+
+LOGGER = logging.getLogger("sinonym.timo.interface")
+
+# Routed batch components must be fully Romanized. Scalar canonicals may retain
+# CJK, but a CJK surname beside Latin components is an unsafe mixed-script split.
+_CJK_LETTER_NAME_MARKERS = (
+    "CJK UNIFIED IDEOGRAPH",
+    "CJK COMPATIBILITY IDEOGRAPH",
+    "HIRAGANA",
+    "KATAKANA",
+    "HANGUL",
+    "BOPOMOFO LETTER",
+    "IDEOGRAPHIC ITERATION MARK",
+)
+_KATAKANA_GENERATION_SUFFIXES = frozenset(
+    {
+        "ジュニア",
+        "シニア",
+        "ザサード",
+        "ザセカンド",
+        "ザフォース",
+        "サード",
+        "セカンド",
+        "フォース",
+    },
+)
+_CATALOG_SEPARATORS = frozenset({",", "\u3001", "\uff0c"})
+_REVIEWED_JR_FORMS = frozenset({"Jr", "Jr.", "jr", "jr."})
+_REVIEWED_JR_ORGANIZATION_WORDS = frozenset(
+    {
+        "academy",
+        "board",
+        "college",
+        "department",
+        "engineering",
+        "institute",
+        "laboratory",
+        "school",
+        "university",
+    },
+)
+_REVIEWED_JR_FAMILY_PARTICLES = frozenset(
+    {
+        "al",
+        "ap",
+        "ben",
+        "bin",
+        "da",
+        "dal",
+        "das",
+        "de",
+        "del",
+        "della",
+        "den",
+        "der",
+        "di",
+        "dos",
+        "du",
+        "el",
+        "ibn",
+        "la",
+        "las",
+        "le",
+        "los",
+        "st",
+        "ten",
+        "ter",
+        "ud",
+        "ur",
+        "van",
+        "von",
+        "zu",
+        "zum",
+        "zur",
+    },
+)
+_UNICODE_LETTER_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
+_MULTI_INITIAL_TOKEN_RE = re.compile(r"(?:[^\W\d_]\.){2,}[^\W\d_]?\.?$", re.UNICODE)
+_REVIEWED_CLEANUP_PREFIX_CREDENTIAL_KEYS = frozenset({"dnb"})
+_CYRILLIC_NAME_TOKEN_RE = re.compile(r"[\u0410-\u042f\u0401][\u0410-\u044f\u0401\u0451'\u2019-]+")
+_FEMININE_CYRILLIC_SURNAME_SUFFIXES = (
+    "\u043e\u0432\u0430",
+    "\u0435\u0432\u0430",
+    "\u0441\u043a\u0430\u044f",
+    "\u0446\u043a\u0430\u044f",
+)
+_MASCULINE_CYRILLIC_SURNAME_SUFFIXES = ("\u0441\u043a\u0438\u0439", "\u0446\u043a\u0438\u0439")
+_FEMININE_CYRILLIC_PATRONYMIC_SUFFIXES = ("\u043e\u0432\u043d\u0430", "\u0435\u0432\u043d\u0430")
+_MASCULINE_CYRILLIC_PATRONYMIC_SUFFIXES = ("\u043e\u0432\u0438\u0447", "\u0435\u0432\u0438\u0447")
+_CYRILLIC_PATRONYMIC_SUFFIXES = (
+    *_FEMININE_CYRILLIC_PATRONYMIC_SUFFIXES,
+    *_MASCULINE_CYRILLIC_PATRONYMIC_SUFFIXES,
+)
+# Exact source tuples whose scalar fallback was manually verified to split a
+# compound family name. The broader initials + multi-token-last shape includes
+# thousands of legitimate bundled given/surname fields and is not safe.
+REVIEWED_SCALAR_COMPOUND_SURNAMES = frozenset(
+    {
+        ("andrigo", "", "barboza de nardi"),
+        ("angélica", "", "rico alonso"),
+        ("r", "f", "lai a fat"),
+        ("bahareh", "", "rezaei mirghaed"),
+        ("camilo", "josé", "tamayo borray"),
+        ("celso", "", "cancela outeda"),
+        ("cristina", "", "bastidas redin"),
+        ("dayana", "", "luna reyes"),
+        ("elías", "alberto", "bedoya marrugo"),
+        ("fahimeh", "", "asadi amoli"),
+        ("federica", "", "li pomi"),
+        ("gabith", "", "quispe fernández"),
+        ("j", "", "aibar manero"),
+        ("karolina", "", "hoppe gromadzka"),
+        ("l", "", "carreras matas"),
+        ("m.", "", "olmedo negrete"),
+        ("magdalena", "sofía", "paláu cardona"),
+        ("marina", "", "aguilar rubio"),
+        ("mónica", "", "zamora zapata"),
+        ("n.m.a.", "", "nik long"),
+        ("natalia", "", "agudelo sep\u00falveda"),
+        ("paulo josé", "", "mata pereira"),
+        ("suzan", "", "gonçalves rosa"),
+        ("a", "y f", "li yim"),
+        ("valerio", "antonio", "pamplona salomon"),
+        ("walter", "", "cardona maya"),
+    },
+)
+REVIEWED_TRAILING_HYPHENATED_COMPOUND_SURNAMES = frozenset({"au-yeung", "ou-yang"})
+REVIEWED_ATOMIC_KOREAN_TOKEN_REPAIRS = {
+    "hana": "Ha-Na",
+    "hoon": "Ho-On",
+    "seon": "Se-On",
+    "seungbo": "Seung-Bo",
+    "woong": "Woo-Ng",
+    "young": "You-Ng",
+}
+
+# Every occurrence of these exact normalized source tuples was reviewed in the
+# full corpus. The first set only exchanges the supplied endpoint components;
+# the maps below record field-sourced and literal output roles.
+REVIEWED_EXACT_SOURCE_ENDPOINT_REORDERS = frozenset(
+    {
+        ("abramova", "", "na"),
+        ("arbabi", "", "masoud"),
+        ("bakulina", "", "li"),
+        ("barani", "", "hossein"),
+        ("batista", "", "juanize matias da silva"),
+        ("boriskova", "", "pi"),
+        ("cho", "", "yk"),
+        ("clyman", "", "mj"),
+        ("dahl", "", "mm"),
+        ("firmbach", "", "f-p."),
+        ("gol'dman", "", "an"),
+        ("grube", "", "mr"),
+        ("ha", "", "sh"),
+        ("hashimoto", "", "keiichi"),
+        ("ho", "", "jm"),
+        ("hori", "", "maiya"),
+        ("im", "", "jj"),
+        ("iwasaki", "", "tohru"),
+        ("khurs", "", "en"),
+        ("kim", "", "jina"),
+        ("kim", "", "jy"),
+        ("kim", "", "namseok"),
+        ("kim", "", "woansub"),
+        ("kim", "", "ys"),
+        ("korolev", "", "vv"),
+        ("kwon", "", "yong"),
+        ("lemomu", "", "km"),
+        ("nishanov", "", "d.a"),
+        ("pappanikou", "", "aj"),
+        ("park", "", "sh"),
+        ("podol'nikova", "", "np"),
+        ("rorem", "", "da"),
+        ("seo", "", "myeongwhoon"),
+        ("sodimu", "", "isiaka"),
+        ("sugino", "", "eiichi"),
+        ("veselov", "", "vf"),
+        ("wada", "", "shin-ichi"),
+        ("\u4e2d\u5c71", "", "\u8fc5"),
+        ("\u6842", "", "\u7460\u4ee5"),
+        ("برخورداری،", "", "وحید"),
+        ("دعایی،", "", "فریما"),
+        ("昌谷", "", "忠海"),
+        ("赫勒", "", "m"),
+    },
+)
+REVIEWED_EXACT_SOURCE_ROLE_ASSIGNMENTS = {
+    ("augustin", "mary", "ann"): ("middle_names", "last_name", "first_name"),
+    ("choi", "seung", "wook"): ("middle_names", "last_name", "first_name"),
+    ("do", "thi kim", "lanh"): ("last_name", "middle_names", "first_name"),
+    ("karkabounas", "spyridon", "ch."): ("middle_names", "last_name", "first_name"),
+    ("kim", "sun", "hyoung"): ("middle_names", "last_name", "first_name"),
+    ("lee", "joo", "youn"): ("middle_names", "last_name", "first_name"),
+    ("mai", "dac", "bien"): ("last_name", "middle_names", "first_name"),
+    ("kim", "tae", "in"): ("middle_names", "last_name", "first_name"),
+    ("lee", "joo", "hee"): ("middle_names", "last_name", "first_name"),
+    ("tormos", "josep", "maria"): ("middle_names", "last_name", "first_name"),
+    ("jidong", "", "sung"): ("first_name", "middle_names", "last_name"),
+    ("mung", "", "chiang"): ("first_name", "middle_names", "last_name"),
+    ("onchee", "", "yu"): ("first_name", "middle_names", "last_name"),
+    ("seah", "h.", "lim"): ("first_name", "middle_names", "last_name"),
+    ("seah", "h", "lim"): ("first_name", "middle_names", "last_name"),
+    ("nabiev", "valery", "sharifyanovich"): ("middle_names", "last_name", "first_name"),
+    ("turaxodjayeva", "moxidil", "obidjonovna"): ("middle_names", "last_name", "first_name"),
+    (
+        "\u0430\u043b\u0435\u043a\u0441\u0435\u0435\u0432",
+        "\u0433\u0435\u043d\u043d\u0430\u0434\u0438\u0439",
+        "\u0432\u0430\u043b\u0435\u043d\u0442\u0438\u043d\u043e\u0432\u0438\u0447",
+    ): ("middle_names", "last_name", "first_name"),
+    (
+        "\u0431\u0435\u043b\u043e\u0432",
+        "\u0432\u043b\u0430\u0434\u0438\u043c\u0438\u0440",
+        "\u043d\u0438\u043a\u043e\u043b\u0430\u0435\u0432\u0438\u0447",
+    ): ("middle_names", "last_name", "first_name"),
+    (
+        "\u0432\u043e\u043b\u044b\u043d\u043e\u0432",
+        "\u043c\u0438\u0445\u0430\u0438\u043b",
+        "\u0430\u043d\u0430\u0442\u043e\u043b\u044c\u0435\u0432\u0438\u0447",
+    ): ("middle_names", "last_name", "first_name"),
+    (
+        "\u043a\u0438\u0440\u0441\u0430\u043d\u043e\u0432",
+        "\u0430\u043d\u0434\u0440\u0435\u0439",
+        "\u0440\u043e\u043c\u0430\u043d\u043e\u0432\u0438\u0447",
+    ): ("middle_names", "last_name", "first_name"),
+    (
+        "\u043a\u0438\u0441\u0442\u0435\u0440\u0441\u043a\u0438\u0439",
+        "\u0430\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440",
+        "\u043f\u0435\u0442\u0440\u043e\u0432\u0438\u0447",
+    ): ("middle_names", "last_name", "first_name"),
+    (
+        "\u043c\u0430\u043a\u0430\u0440\u043e\u0432\u0430",
+        "\u0435\u043a\u0430\u0442\u0435\u0440\u0438\u043d\u0430",
+        "\u0432\u043b\u0430\u0434\u0438\u043c\u0438\u0440\u043e\u0432\u043d\u0430",
+    ): ("middle_names", "last_name", "first_name"),
+    (
+        "\u043d\u0435\u0432\u0435\u0440\u043e\u0432\u0430",
+        "\u043e\u043b\u044c\u0433\u0430",
+        "\u0430\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440\u043e\u0432\u043d\u0430",
+    ): ("middle_names", "last_name", "first_name"),
+    (
+        "\u0441\u0432\u0438\u0434\u0443\u043d\u043e\u0432\u0438\u0447",
+        "\u043d\u0438\u043a\u043e\u043b\u0430\u0439",
+        "\u0430\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440\u043e\u0432\u0438\u0447",
+    ): ("middle_names", "last_name", "first_name"),
+    (
+        "\u0442\u0440\u043e\u0444\u0438\u043c\u043e\u0432",
+        "\u0430\u0440\u0442\u0435\u043c",
+        "\u0430\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440\u043e\u0432\u0438\u0447",
+    ): ("middle_names", "last_name", "first_name"),
+    (
+        "\u0442\u0443\u0445\u0442\u0430\u043c\u0443\u0440\u043e\u0434",
+        "\u0437\u0438\u0451\u0434\u0443\u043b\u043b\u0430",
+        "\u0437\u0438\u043a\u0440\u0438\u043b\u043b\u0430",
+    ): ("middle_names", "last_name", "first_name"),
+    (
+        "\u0448\u0435\u0432\u0447\u0435\u043d\u043a\u043e",
+        "\u0435\u043b\u0435\u043d\u0430",
+        "\u0432\u0438\u043a\u0442\u043e\u0440\u043e\u0432\u043d\u0430",
+    ): ("middle_names", "last_name", "first_name"),
+    (
+        "\u044f\u043c\u0430\u043b\u0434\u0438\u043d\u043e\u0432",
+        "\u0442\u0438\u043c\u0443\u0440",
+        "\u0440\u0438\u0444\u0430\u0442\u043e\u0432\u0438\u0447",
+    ): ("middle_names", "last_name", "first_name"),
+}
+# Reviewed tuples whose correct output needs literal text rather than source
+# field selectors. Their complete corpus occurrence sets agree on the roles.
+REVIEWED_EXACT_SOURCE_LITERAL_ASSIGNMENTS = {
+    ("fernando", "del.", "pulgar"): NameComponents(
+        given_name="Fernando",
+        surname="del Pulgar",
+    ),
+    ("m.", "d", "services-reginald m. atwater"): NameComponents(
+        given_name="Reginald",
+        middle_name="M.",
+        surname="Atwater",
+    ),
+    ("ibschons", "", "ioanna zimianiti mbbs"): NameComponents(
+        given_name="Ioanna",
+        surname="Zimianiti",
+    ),
+    ("johannes", "k steinweg", "mbbs"): NameComponents(
+        given_name="Johannes",
+        middle_name="K",
+        surname="Steinweg",
+    ),
+    ("mao", "", "kai"): NameComponents(
+        given_name="Kai",
+        surname="Mao",
+    ),
+    ("min", "-fu", "tsan"): NameComponents(
+        given_name="Min-Fu",
+        surname="Tsan",
+    ),
+    ("ms", "frcs facs", "ronnie t. p. poon mbbs"): NameComponents(
+        given_name="Ronnie",
+        middle_name="T. P.",
+        surname="Poon",
+    ),
+    ("phd", "msn rn aocnp", "carolyn s. phillips"): NameComponents(
+        given_name="Carolyn",
+        middle_name="S.",
+        surname="Phillips",
+    ),
+    ("\u5289\u6bb7\u4f50", "", "i-ting wang"): NameComponents(
+        given_name="Yin-Zuo",
+        surname="Liu",
+    ),
+    ("モンゴメリー\uff0c", "エイチ\uff0e", "マンニング\uff0c"): NameComponents(
+        given_name="エイチ.",
+        middle_name="モンゴメリー",
+        surname="マンニング",
+    ),
+}
+REVIEWED_EXACT_SOURCE_REORDER_VETOES = frozenset(
+    {
+        ("han", "w.", "tun"),
+        ("kai", "", "zenger"),
+        ("masaki", "", "morishige"),
+        ("miki", "", "toyota"),
+        ("shinsei", "", "ryu"),
+    },
+)
+
+
+def _source_component_key(source: SourceAuthorFields) -> tuple[str, str, str]:
+    """Normalize one source tuple exactly as the reviewed rule inventory does."""
+    return tuple(" ".join((part or "").split()).casefold() for part in (source.first_name, source.middle_names, source.last_name))
+
+
+def _alnum_key(value: str) -> str:
+    """Return the case-insensitive letters and digits in one endpoint.
+
+    Unlike ``east_asian_name_order._endpoint_key`` this deliberately applies no
+    NFKC or accent folding: the reviewed tables were frozen against raw surfaces.
+    """
+    return "".join(character.casefold() for character in value if character.isalnum())
+
+
+def _has_reviewed_cleanup_surname_prefix(tokens: list[str]) -> bool:
+    """Return whether cleanup put initials or a credential before a surname."""
+    return any(
+        _MULTI_INITIAL_TOKEN_RE.fullmatch(token) or _alnum_key(token) in _REVIEWED_CLEANUP_PREFIX_CREDENTIAL_KEYS
+        for token in tokens
+    )
+
+
+def reviewed_cleanup_surname_expansion_prefers_scalar(
+    cleanup: NameComponents,
+    scalar: NameComponents,
+) -> bool:
+    """Keep scalar's narrower surname for the reviewed cleanup expansion shape."""
+    cleanup_tokens = cleanup.surname.split()
+    scalar_tokens = scalar.surname.split()
+    if not scalar_tokens or len(cleanup_tokens) <= len(scalar_tokens):
+        return False
+    if [_alnum_key(token) for token in cleanup_tokens[-len(scalar_tokens) :]] != [
+        _alnum_key(token) for token in scalar_tokens
+    ]:
+        return False
+    return _has_reviewed_cleanup_surname_prefix(cleanup_tokens[: -len(scalar_tokens)])
+
+
+def _compatibility_component_key(value: str) -> str:
+    """Fold width, case, and punctuation for a structured component match."""
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return "".join(character for character in normalized if character.isalnum())
+
+
+def _contains_katakana(value: str) -> bool:
+    """Return whether a component contains Katakana after width folding."""
+    return any(
+        "\u30a0" <= character <= "\u30ff" and unicodedata.category(character).startswith("L")
+        for character in unicodedata.normalize("NFKC", value)
+    )
+
+
+def _ends_in_catalog_comma(value: str) -> bool:
+    """Return whether a component ends in a catalog comma."""
+    return unicodedata.normalize("NFKC", value).rstrip().endswith((",", "、"))
+
+
+def _contains_katakana_generation_suffix(value: str) -> bool:
+    """Return whether a component contains a complete generation-suffix token."""
+    normalized = unicodedata.normalize("NFKC", value)
+    return any(
+        _compatibility_component_key(token) in _KATAKANA_GENERATION_SUFFIXES
+        for token in re.split(r"[\s,\u3001\u30fb\uff0c]+", normalized)
+    )
+
+
+def _alnum_token_sequence(value: str) -> tuple[str, ...]:
+    """Return NFKC/case-folded maximal alphanumeric runs."""
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    tokens: list[str] = []
+    current: list[str] = []
+    for character in normalized:
+        if character.isalnum():
+            current.append(character)
+        elif current:
+            tokens.append("".join(current))
+            current = []
+    if current:
+        tokens.append("".join(current))
+    return tuple(tokens)
+
+
+def _is_katakana_catalog_surface(value: str) -> bool:
+    """Match the reviewed Katakana catalog grammar on one flattened name."""
+    normalized = unicodedata.normalize("NFKC", value)
+    segments = tuple(segment.strip() for segment in re.split(r"[,\u3001]", normalized) if segment.strip())
+    if len(segments) < 2 or not any(separator in normalized for separator in _CATALOG_SEPARATORS):  # noqa: PLR2004
+        return False
+    allowed_punctuation = _CATALOG_SEPARATORS | frozenset({".", "-", "\u30fb", "(", ")", "[", "]"})
+    return _contains_katakana(normalized) and all(
+        _contains_katakana(character)
+        or character.isspace()
+        or unicodedata.category(character).startswith("M")
+        or character in allowed_punctuation
+        for character in normalized
+    )
+
+
+def reviewed_leading_jr_peer_assignment(
+    source: SourceAuthorFields,
+    paper_authors: list[SourceAuthorFields],
+    focal_index: int,
+) -> NameComponents | None:
+    """Copy one exact structured peer and move a reviewed leading Jr to suffix."""
+    if source.first_name not in _REVIEWED_JR_FORMS or source.suffix:
+        return None
+    remainder = f"{source.middle_names or ''} {source.last_name or ''}".strip()
+    organization_words = {match.group().casefold() for match in _UNICODE_LETTER_WORD_RE.finditer(remainder)}
+    if organization_words & _REVIEWED_JR_ORGANIZATION_WORDS:
+        return None
+
+    remainder_tokens = _alnum_token_sequence(remainder)
+    matches = [
+        peer
+        for index, peer in enumerate(paper_authors)
+        if index != focal_index
+        and (peer.first_name or "").strip()
+        and (peer.last_name or "").strip()
+        and _alnum_token_sequence(peer.full_name()) == remainder_tokens
+        and not (
+            not (peer.middle_names or "").strip()
+            and unicodedata.normalize("NFKC", (peer.first_name or "").strip()).casefold() in _REVIEWED_JR_FAMILY_PARTICLES
+        )
+    ]
+    if len(matches) != 1:
+        return None
+    peer = matches[0]
+    return NameComponents(
+        given_name=peer.first_name or "",
+        middle_name=peer.middle_names or "",
+        surname=peer.last_name or "",
+        suffix=source.first_name or "",
+    )
+
+
+def reviewed_fullwidth_katakana_alias_assignment(
+    source: SourceAuthorFields,
+    paper_names: list[str],
+    focal_index: int,
+) -> NameComponents | None:
+    """Split one reviewed family-first Katakana catalog alias shape."""
+    if (source.first_name or "").strip() or (source.middle_names or "").strip() or source.suffix:
+        return None
+    raw = source.last_name or ""
+    if raw.count("\uff0c") != 1 or "," in raw or "\u3001" in raw or not _is_katakana_catalog_surface(raw):
+        return None
+    family, given = (segment.strip() for segment in raw.split("\uff0c"))
+    normalized_segments = tuple(unicodedata.normalize("NFKC", segment) for segment in (family, given))
+    if not family or not given or any(marker in segment for segment in normalized_segments for marker in ("\u30fb", ".")):
+        return None
+
+    normalized_given = normalized_segments[1]
+    open_index = normalized_given.find("(")
+    alias = normalized_given[open_index + 1 : -1].strip()
+    if not (
+        normalized_given[:open_index].strip()
+        and alias
+        and normalized_given.endswith(")")
+        and normalized_given.count("(") == normalized_given.count(")") == 1
+    ):
+        return None
+    if any(marker in _compatibility_component_key(raw) for marker in _KATAKANA_GENERATION_SUFFIXES) or not any(
+        index != focal_index and _is_katakana_catalog_surface(name) for index, name in enumerate(paper_names)
+    ):
+        return None
+    return NameComponents(given_name=given, surname=family)
+
+
+def reviewed_exact_source_assignment(source: SourceAuthorFields) -> NameComponents | None:
+    """Assign roles for a full source tuple whose every corpus occurrence agrees."""
+    source_key = _source_component_key(source)
+    literal_assignment = REVIEWED_EXACT_SOURCE_LITERAL_ASSIGNMENTS.get(source_key)
+    if literal_assignment is not None:
+        return literal_assignment
+    if source_key in REVIEWED_EXACT_SOURCE_ENDPOINT_REORDERS:
+        return NameComponents(
+            given_name=source.last_name or "",
+            surname=(source.first_name or "").rstrip(",،"),
+        )
+
+    selectors = REVIEWED_EXACT_SOURCE_ROLE_ASSIGNMENTS.get(source_key)
+    if selectors is None:
+        return None
+    given_field, middle_field, surname_field = selectors
+    return NameComponents(
+        given_name=getattr(source, given_field) or "",
+        middle_name=getattr(source, middle_field) or "",
+        surname=getattr(source, surname_field) or "",
+    )
+
+
+def reviewed_cyrillic_surname_given_patronymic_assignment(
+    source: SourceAuthorFields,
+) -> NameComponents | None:
+    """Rotate a reviewed long-suffix Cyrillic surname-given-patronymic shape."""
+    surname = (source.first_name or "").strip()
+    given = (source.middle_names or "").strip()
+    patronymic = (source.last_name or "").strip()
+    if not all(_CYRILLIC_NAME_TOKEN_RE.fullmatch(part) for part in (surname, given, patronymic)):
+        return None
+
+    surname_key = surname.casefold()
+    given_key = given.casefold()
+    patronymic_key = patronymic.casefold()
+    if given_key.endswith(_CYRILLIC_PATRONYMIC_SUFFIXES):
+        return None
+    gender_concordant = (
+        surname_key.endswith(_FEMININE_CYRILLIC_SURNAME_SUFFIXES)
+        and patronymic_key.endswith(_FEMININE_CYRILLIC_PATRONYMIC_SUFFIXES)
+    ) or (
+        surname_key.endswith(_MASCULINE_CYRILLIC_SURNAME_SUFFIXES)
+        and patronymic_key.endswith(_MASCULINE_CYRILLIC_PATRONYMIC_SUFFIXES)
+    )
+    if not gender_concordant:
+        return None
+    return NameComponents(given_name=given, middle_name=patronymic, surname=surname)
+
+
+def reviewed_hangul_affiliation_person_assignment(source: SourceAuthorFields) -> NameComponents | None:
+    """Recover a Latin author after the complete reviewed MD/Hangul affiliation shape."""
+    middle = (source.middle_names or "").strip()
+    last_tokens = (source.last_name or "").split()
+    if (
+        (source.first_name or "").strip() != "MD"
+        or (source.suffix or "").strip()
+        or not middle.startswith("PhD ")
+        or not any(marker in middle for marker in REVIEWED_HANGUL_ORGANIZATION_MARKERS)
+        or not 2 <= len(last_tokens) <= 3  # noqa: PLR2004 - complete four-row corpus shape.
+        or not all(token.isascii() and token.isalpha() for token in last_tokens)
+    ):
+        return None
+    return NameComponents(
+        given_name=" ".join(last_tokens[:-1]),
+        surname=last_tokens[-1],
+    )
+
+
+def reviewed_katakana_middle_period_cyclic_reversal(
+    source: SourceAuthorFields,
+    selected: NameComponents,
+) -> bool:
+    """Match the reviewed catalog shape that promotes a middle token to given."""
+    source_parts = (source.first_name or "", source.middle_names or "", source.last_name or "")
+    middle = unicodedata.normalize("NFKC", source_parts[1]).strip()
+    source_keys = tuple(_compatibility_component_key(part) for part in source_parts)
+    selected_keys = tuple(
+        _compatibility_component_key(part) for part in (selected.given_name, selected.middle_name, selected.surname)
+    )
+    return (
+        all(source_keys)
+        and all(_contains_katakana(part) for part in source_parts)
+        and _ends_in_catalog_comma(source_parts[0])
+        and _ends_in_catalog_comma(source_parts[2])
+        and middle.endswith(".")
+        and middle.count(".") == 1
+        and not _contains_katakana_generation_suffix(source_parts[1])
+        and selected_keys == (source_keys[1], source_keys[2], source_keys[0])
+    )
+
+
+def reviewed_exact_source_reversal(
+    source: SourceAuthorFields,
+    selected: NameComponents,
+) -> bool:
+    """Return whether a candidate reverses one exact reviewed given-first tuple."""
+    if _source_component_key(source) not in REVIEWED_EXACT_SOURCE_REORDER_VETOES:
+        return False
+    return _alnum_key(source.first_name or "") == _alnum_key(selected.surname) and _alnum_key(
+        source.last_name or "",
+    ) == _alnum_key(selected.given_name)
+
+
+def reviewed_initials_comma_reversal(
+    source: SourceAuthorFields,
+    selected: NameComponents,
+) -> bool:
+    """Return whether a candidate reverses a reviewed initials-comma source shape."""
+    source_first = (source.first_name or "").rstrip()
+    source_last = (source.last_name or "").strip()
+    letter_runs = re.findall(r"[A-Za-z]+", source_first)
+    if (
+        source.middle_names
+        or not source_first.isascii()
+        or not source_first.endswith(",")
+        or source_first.count(",") != 1
+        or not 1 <= sum(map(len, letter_runs)) <= 3  # noqa: PLR2004 - reviewed initials cap.
+        or any(len(run) != 1 for run in letter_runs)
+        or not source_last
+    ):
+        return False
+
+    first_key = _alnum_key(source_first)
+    last_key = _alnum_key(source_last)
+    return bool(
+        first_key
+        and last_key
+        and first_key != last_key
+        and first_key == _alnum_key(selected.surname)
+        and last_key == _alnum_key(selected.given_name),
+    )
+
+
+def restore_reviewed_atomic_korean_tokens(
+    source: SourceAuthorFields,
+    selected: NameComponents,
+) -> NameComponents:
+    """Undo Chinese syllable boundaries invented inside reviewed Korean tokens."""
+    source_tokens = {token.casefold(): token for token in source.full_name().split()}
+    replacements = {
+        mutation: source_tokens[token]
+        for token, mutation in REVIEWED_ATOMIC_KOREAN_TOKEN_REPAIRS.items()
+        if token in source_tokens
+    }
+    if not replacements:
+        return selected
+
+    def repaired(value: str, tokens: tuple[str, ...]) -> tuple[str, tuple[str, ...]]:
+        """Repair complete hyphen-part sequences and matching lineage together."""
+        repaired_value = value
+        repairs: list[tuple[str, str]] = []
+        for mutation, source_token in replacements.items():
+            pattern = re.compile(rf"(?<![^\W\d_]){re.escape(mutation)}(?![^\W\d_])", re.IGNORECASE)
+            repaired_value, count = pattern.subn(source_token, repaired_value)
+            repairs.extend((mutation, source_token) for _ in range(count))
+        if not repairs:
+            return value, tokens
+
+        repaired_tokens = list(tokens)
+        for mutation, source_token in repairs:
+            mutation_key = mutation.casefold()
+            mutation_parts = tuple(part.casefold() for part in mutation.split("-"))
+            for index, token in enumerate(repaired_tokens):
+                if token.casefold() == mutation_key:
+                    repaired_tokens[index] = source_token
+                    break
+                end = index + len(mutation_parts)
+                if tuple(part.casefold() for part in repaired_tokens[index:end]) == mutation_parts:
+                    repaired_tokens[index:end] = [source_token]
+                    break
+            else:
+                repaired_tokens = [part for atom in repaired_value.split() for part in atom.split("-") if part]
+        return repaired_value, tuple(repaired_tokens)
+
+    given_name, given_tokens = repaired(selected.given_name, selected.given_tokens)
+    middle_name, middle_tokens = repaired(selected.middle_name, selected.middle_tokens)
+    surname, surname_tokens = repaired(selected.surname, selected.surname_tokens)
+
+    return replace(
+        selected,
+        given_name=given_name,
+        middle_name=middle_name,
+        surname=surname,
+        given_tokens=given_tokens,
+        middle_tokens=middle_tokens,
+        surname_tokens=surname_tokens,
+    )
+
+
+def routed_components_leak_cjk(parsed) -> bool:
+    """Return whether a routed answer retains an unsegmented CJK letter."""
+    joined = " ".join(part for part in (parsed.given_name, parsed.middle_name, parsed.surname) if part)
+    return any(_is_cjk_letter(character) for character in joined)
+
+
+def _is_cjk_letter(character: str) -> bool:
+    """Return whether one Unicode letter belongs to a routed CJK script."""
+    if not unicodedata.category(character).startswith("L"):
+        return False
+    name = unicodedata.name(character, "")
+    return any(marker in name for marker in _CJK_LETTER_NAME_MARKERS)
+
+
+def _is_latin_letter(character: str) -> bool:
+    """Return whether one Unicode letter belongs to the Latin script."""
+    return unicodedata.category(character).startswith("L") and "LATIN" in unicodedata.name(character, "")
+
+
+def canonical_name_leaks_mixed_script(canonical_name) -> bool:
+    """Return whether a normalized surname retains CJK beside Latin components."""
+    if canonical_name is None:
+        return False
+    normalized = canonical_name.normalized
+    components = (normalized.given_name, normalized.middle_name, normalized.surname, normalized.suffix)
+    return any(_is_cjk_letter(character) for character in normalized.surname) and any(
+        _is_latin_letter(character) for part in components for character in part
+    )
+
+
+def serialize_enum_values(value):
+    """Recursively convert enum instances to plain values for `.dict()` output."""
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, list):
+        return [serialize_enum_values(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(serialize_enum_values(item) for item in value)
+    if isinstance(value, dict):
+        return {key: serialize_enum_values(item) for key, item in value.items()}
+    return value
+
+
+class RoutingV3Model(BaseModel):
+    """Strict base model for the new V3 request and response boundary."""
+
+    class Config:
+        extra = "forbid"
+
+    def dict(self, *args, **kwargs):
+        """Return plain Python serialization values for enum fields."""
+        return serialize_enum_values(super().dict(*args, **kwargs))
+
+
+class SourceAuthorFields(RoutingV3Model):
+    """Original author fields, retained without treating their labels as truth."""
+
+    first_name: StrictStr | None = Field(default=None)
+    middle_names: StrictStr | None = Field(default=None)
+    last_name: StrictStr | None = Field(default=None)
+    suffix: StrictStr | None = Field(default=None)
+
+    def full_name(self) -> str:
+        """Derive the current scalar/PP input; suffix is intentionally excluded."""
+        return " ".join(part for part in (self.first_name or "", self.middle_names or "", self.last_name or "") if part).strip()
+
+
+def _reviewed_closed_comma_credential_assignment(
+    source: SourceAuthorFields,
+    normalizer: PersonNameNormalizationService,
+) -> NameComponents | None:
+    """Normalize one full-corpus-reviewed closed credential tail atomically."""
+    retained_last = reviewed_closed_comma_credential_tail_head(source.last_name, source.suffix)
+    if retained_last is None:
+        return None
+    if retained_last:
+        atomic = normalizer.normalize_components(
+            first_name=source.first_name,
+            middle_name=source.middle_names,
+            last_name=retained_last,
+        )
+    else:
+        atomic = normalizer.normalize_text(
+            " ".join(value for value in (source.first_name, source.middle_names) if value),
+        )
+    if atomic.outcome is not PersonNameOutcome.PERSON or atomic.canonical_name is None:
+        return None
+
+    selected = atomic.canonical_name.normalized
+    if not selected.given_name or not selected.surname:
+        return None
+    current = normalizer.normalize_components(
+        first_name=source.first_name,
+        middle_name=source.middle_names,
+        last_name=source.last_name,
+    )
+    current_selected = current.canonical_name.normalized if current.canonical_name is not None else None
+    selected_fields = (selected.given_name, selected.middle_name, selected.surname, selected.suffix)
+    current_fields = (
+        (
+            current_selected.given_name,
+            current_selected.middle_name,
+            current_selected.surname,
+            current_selected.suffix,
+        )
+        if current_selected is not None
+        else None
+    )
+    return selected if selected_fields != current_fields else None
+
+
+class RoutingInstanceV3(RoutingV3Model):
+    """One paper and only the non-focal portion of its optional VYS pool.
+
+    Focal names are derived from ``pp_authors`` and prepended internally.  This
+    makes it impossible to supply a second focal slice that disagrees with the
+    source authors.  All alignment is positional; duplicate text is valid and
+    must never be joined back to authors by name.
+
+    ``vys_other_names=None`` means PP-only.  An empty list is a present VYS
+    context whose pool consists only of the focal paper authors.
+    """
+
+    pp_authors: list[SourceAuthorFields] = Field(
+        description="paper authors; output remains aligned to this exact order",
+    )
+    vys_other_names: list[StrictStr] | None = Field(
+        default=None,
+        description="non-focal VYS names only; None selects PP-only routing",
+    )
+
+    def dict(self, *args, **kwargs):
+        """Serialize the request without optional nulls to keep the wire compact."""
+        kwargs.setdefault("exclude_none", True)
+        return super().dict(*args, **kwargs)
+
+    def json(self, *args, **kwargs):
+        """Serialize the request JSON without optional nulls."""
+        kwargs.setdefault("exclude_none", True)
+        return super().json(*args, **kwargs)
+
+    @property
+    def pp_names(self) -> list[str]:
+        """Return scalar/PP inputs derived positionally from ``pp_authors``."""
+        return [author.full_name() for author in self.pp_authors]
+
+    @property
+    def vys_pool_names(self) -> list[str] | None:
+        """Return the derived leading PP slice plus the supplied non-focal names."""
+        if self.vys_other_names is None:
+            return None
+        return [*self.pp_names, *self.vys_other_names]
+
+
+def merge_resolved_suffix(source_suffix: str | None, selected_suffix: str | None) -> str | None:
+    """Apply the complete current fill-only suffix policy.
+
+    A nonempty source suffix wins unchanged.  Otherwise a nonempty suffix from
+    the selected semantic result fills it.  If neither is available, the exact
+    source value (``None`` or ``""``) is retained.  Whitespace is nonempty and
+    is therefore preserved rather than silently cleaned at this boundary.
+    """
+    if source_suffix:
+        return source_suffix
+    if selected_suffix:
+        return selected_suffix
+    return source_suffix
+
+
+class ResolvedAuthorFields(RoutingV3Model):
+    """One terminal, directly writable author-field result.
+
+    ``PRESERVE_INPUT`` means the selected policy did not flip the derived input
+    order. ``SUPPRESS`` tells the writer not to emit the author while retaining
+    this aligned diagnostic slot. ``SOURCE`` plus either action promises exact source fields;
+    ``SOURCE`` plus ``ASSIGN`` applies roles proven from reviewed source
+    structure or one exact source tuple.
+    PP/VYS materialization may also assign source tokens to output fields. The
+    suffix is already final, so an application must not merge it again.
+    """
+
+    first_name: StrictStr
+    middle_names: StrictStr
+    last_name: StrictStr
+    suffix: StrictStr | None = None
+    resolution_provenance: ResolutionProvenance
+    resolution_action: ResolutionAction
+    resolution_reason: ResolutionReason
+
+    @root_validator
+    def _validate_legal_decision(cls, values):  # noqa: N805
+        """Reject reason/provenance/action combinations outside the closed table."""
+        reason = values.get("resolution_reason")
+        provenance = values.get("resolution_provenance")
+        action = values.get("resolution_action")
+        if reason is None or provenance is None or action is None:
+            return values
+        expected = resolution_decision_spec(reason)
+        if provenance is not expected.provenance or action is not expected.action:
+            message = (
+                f"{reason.value} requires "
+                f"({expected.provenance.value}, {expected.action.value}), got "
+                f"({provenance.value}, {action.value})"
+            )
+            raise ValueError(message)
+        return values
+
+    @classmethod
+    def from_selected_components(
+        cls,
+        *,
+        source: SourceAuthorFields,
+        selected: NameComponents,
+        reason: ResolutionReason,
+    ) -> ResolvedAuthorFields:
+        """Materialize one selected result, including the final suffix and metadata."""
+        decision = resolution_decision_spec(reason)
+        if decision.provenance is ResolutionProvenance.SOURCE and decision.action is not ResolutionAction.ASSIGN:
+            message = f"{reason.value} requires exact source materialization"
+            raise ValueError(message)
+        return cls(
+            first_name=selected.given_name,
+            middle_names=selected.middle_name,
+            last_name=selected.surname,
+            suffix=merge_resolved_suffix(source.suffix, selected.suffix),
+            resolution_provenance=decision.provenance,
+            resolution_action=decision.action,
+            resolution_reason=reason,
+        )
+
+    @classmethod
+    def from_source(
+        cls,
+        source: SourceAuthorFields,
+        *,
+        reason: ResolutionReason,
+    ) -> ResolvedAuthorFields:
+        """Copy exact source boundaries for a legal non-assignment SOURCE reason."""
+        decision = resolution_decision_spec(reason)
+        if decision.provenance is not ResolutionProvenance.SOURCE or decision.action is ResolutionAction.ASSIGN:
+            message = f"{reason.value} is not a SOURCE non-assignment reason"
+            raise ValueError(message)
+        return cls(
+            first_name=source.first_name or "",
+            middle_names=source.middle_names or "",
+            last_name=source.last_name or "",
+            suffix=source.suffix,
+            resolution_provenance=decision.provenance,
+            resolution_action=decision.action,
+            resolution_reason=reason,
+        )
+
+
+class RoutingV3Resolver:
+    """Apply V3's terminal author policy to scalar and batch candidates."""
+
+    def __init__(self, detector: ChineseNameDetector):
+        self._detector = detector
+        self._source_normalizer = PersonNameNormalizationService()
+
+    @staticmethod
+    def _source_resolution(
+        source: SourceAuthorFields,
+        reason: ResolutionReason,
+    ) -> ResolvedAuthorFields:
+        return ResolvedAuthorFields.from_source(source, reason=reason)
+
+    @staticmethod
+    def _selected_has_personal_initials(selected: NameComponents) -> bool:
+        """Return whether a reviewed semantic assignment needs initial canonicalization."""
+
+        for value in (selected.given_name, selected.middle_name):
+            for token in value.split():
+                parts = [part for part in re.split(r"[.-]+", token) if part]
+                if parts and all(
+                    len(part) == 1 and unicodedata.name(part, "").startswith("LATIN ")
+                    for part in parts
+                ):
+                    return True
+        return False
+
+    def _reviewed_source_assignment_resolution(
+        self,
+        *,
+        source: SourceAuthorFields,
+        selected: NameComponents,
+        reason: ResolutionReason,
+    ) -> ResolvedAuthorFields:
+        """Canonicalize initials in a closed reviewed SOURCE assignment.
+
+        SOURCE non-assignment resolutions remain byte-exact.  These reviewed
+        assignments are already proven people with semantic roles, but their
+        literal/source-derived components bypass the ordinary formatters.
+        """
+
+        if self._selected_has_personal_initials(selected):
+            normalized = self._source_normalizer.normalize_components(
+                first_name=selected.given_name,
+                middle_name=selected.middle_name,
+                last_name=selected.surname,
+                suffix=selected.suffix,
+            )
+            if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
+                message = f"reviewed source assignment could not be normalized: {selected!r}"
+                raise RuntimeError(message)
+            selected = normalized.canonical_name.normalized
+        return ResolvedAuthorFields.from_selected_components(
+            source=source,
+            selected=selected,
+            reason=reason,
+        )
+
+    def _hard_scalar_resolution(
+        self,
+        source: SourceAuthorFields,
+        constraint: HardScalarConstraint,
+    ) -> ResolvedAuthorFields:
+        """Materialize the one canonical value carried by a hard constraint."""
+        canonical = constraint.canonical_name
+        if canonical_name_leaks_mixed_script(canonical) or not canonical.normalized.surname:
+            return self._source_resolution(
+                source,
+                ResolutionReason.HARD_SCALAR_MATERIALIZATION_FAILED,
+            )
+        return ResolvedAuthorFields.from_selected_components(
+            source=source,
+            selected=canonical.normalized,
+            reason=constraint.reason,
+        )
+
+    @staticmethod
+    def _scalar_repartitions_reviewed_compound_surname(
+        source: SourceAuthorFields,
+        selected: NameComponents,
+    ) -> bool:
+        """Return whether scalar parsing only breaks apart a compound surname."""
+        if _source_component_key(source) not in REVIEWED_SCALAR_COMPOUND_SURNAMES:
+            return False
+
+        given = (source.first_name or "").split()
+        middle = (source.middle_names or "").split()
+        surname = (source.last_name or "").split()
+
+        def folded(tokens: list[str]) -> list[str]:
+            return [token.casefold() for token in tokens]
+
+        return (
+            folded(selected.given_name.split()) == folded(given)
+            and folded(selected.middle_name.split()) == folded([*middle, *surname[:-1]])
+            and folded(selected.surname.split()) == folded(surname[-1:])
+        )
+
+    def _reviewed_source_rules_resolution(
+        self,
+        source: SourceAuthorFields,
+        paper_authors: list[SourceAuthorFields],
+        focal_index: int,
+    ) -> ResolvedAuthorFields | None:
+        """Apply the closed reviewed-source rules in precedence order.
+
+        Rules are evaluated lazily so a later rule never runs (or raises) on a
+        row a higher-precedence rule already claims.
+        """
+        pattern_reason = ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT
+        hangul_assignment = reviewed_hangul_affiliation_person_assignment(source)
+        if hangul_assignment is not None:
+            return self._reviewed_source_assignment_resolution(
+                source=source,
+                selected=hangul_assignment,
+                reason=pattern_reason,
+            )
+        if (
+            reviewed_non_person_source_pattern(source.first_name, source.middle_names, source.last_name, source.suffix)
+            is not None
+        ):
+            return self._source_resolution(source, ResolutionReason.REVIEWED_NON_PERSON_PATTERN)
+        assignment_rules: tuple[tuple[Callable[[], NameComponents | None], ResolutionReason], ...] = (
+            (lambda: reviewed_exact_source_assignment(source), ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT),
+            (lambda: reviewed_cyrillic_surname_given_patronymic_assignment(source), pattern_reason),
+            (lambda: reviewed_leading_jr_peer_assignment(source, paper_authors, focal_index), pattern_reason),
+            (lambda: _reviewed_closed_comma_credential_assignment(source, self._source_normalizer), pattern_reason),
+        )
+        for rule, reason in assignment_rules:
+            selected = rule()
+            if selected is not None:
+                return self._reviewed_source_assignment_resolution(source=source, selected=selected, reason=reason)
+        return None
+
+    def _reviewed_cleanup_resolution(
+        self,
+        source: SourceAuthorFields,
+    ) -> tuple[ResolvedAuthorFields | None, NameComponents | None]:
+        """Resolve the reviewed cleanup pattern, or defer it to a scalar tiebreak.
+
+        Returns ``(resolved, None)`` when cleanup is terminal, ``(None, selected)``
+        when cleanup expanded the surname and must be weighed against the scalar
+        result, and ``(None, None)`` when the pattern does not apply.
+        """
+        cleanup_pattern = reviewed_source_cleanup_pattern(
+            source.first_name,
+            source.middle_names,
+            source.last_name,
+            source.suffix,
+        )
+        if cleanup_pattern is None:
+            return None, None
+        normalized = self._source_normalizer.normalize_components(
+            first_name=source.first_name,
+            middle_name=source.middle_names,
+            last_name=source.last_name,
+            suffix=source.suffix,
+        )
+        if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
+            return None, None
+        selected = normalized.canonical_name.normalized
+        source_suffix = (source.suffix or "").strip()
+        if not normalized.dropped_tokens and selected.suffix == source_suffix:
+            return None, None
+        surname_tokens = selected.surname.split()
+        if len(surname_tokens) <= 1 or not _has_reviewed_cleanup_surname_prefix(surname_tokens[:-1]):
+            resolved = self._reviewed_source_assignment_resolution(
+                source=source,
+                selected=selected,
+                reason=ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
+            )
+            return resolved, None
+        return None, selected
+
+    def terminal_resolution(  # noqa: C901, PLR0911, PLR0912, PLR0913
+        self,
+        *,
+        source: SourceAuthorFields,
+        paper_authors: list[SourceAuthorFields],
+        raw_name: str,
+        paper_names: list[str],
+        focal_index: int,
+        parsed,
+        batch_reason: ResolutionReason,
+        router_not_person: bool,
+    ) -> ResolvedAuthorFields:
+        """Choose and materialize exactly one operational author result."""
+        reviewed_resolution = self._reviewed_source_rules_resolution(source, paper_authors, focal_index)
+        if reviewed_resolution is not None:
+            return reviewed_resolution
+        cleanup_resolution, cleanup_selected = self._reviewed_cleanup_resolution(source)
+        if cleanup_resolution is not None:
+            return cleanup_resolution
+        try:
+            scalar_resolution = self._detector.routing_scalar_resolution(raw_name)
+        except EvidenceFailure as error:
+            LOGGER.warning(
+                "Routed V3 preserved source fields after evidence failure for %r: %s",
+                raw_name,
+                error,
+            )
+            return self._source_resolution(
+                source,
+                ResolutionReason.HANDLED_EVIDENCE_FAILURE,
+            )
+        except HardScalarMaterializationFailure as error:
+            LOGGER.warning(
+                "Routed V3 preserved source fields after hard scalar materialization failed for %r: %s",
+                raw_name,
+                error,
+            )
+            return self._source_resolution(
+                source,
+                ResolutionReason.HARD_SCALAR_MATERIALIZATION_FAILED,
+            )
+
+        if cleanup_selected is not None:
+            if (
+                scalar_resolution is not None
+                and not isinstance(scalar_resolution, ApplyAssignment | PreserveBaseline)
+                and not canonical_name_leaks_mixed_script(scalar_resolution)
+                and reviewed_cleanup_surname_expansion_prefers_scalar(
+                    cleanup_selected,
+                    scalar_resolution.normalized,
+                )
+            ):
+                return self._materialize_selected_candidate(
+                    source=source,
+                    raw_name=raw_name,
+                    paper_names=paper_names,
+                    focal_index=focal_index,
+                    selected=scalar_resolution.normalized,
+                    reason=ResolutionReason.SCALAR_BASELINE,
+                )
+            return self._reviewed_source_assignment_resolution(
+                source=source,
+                selected=cleanup_selected,
+                reason=ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
+            )
+
+        if isinstance(scalar_resolution, ApplyAssignment | PreserveBaseline):
+            return self._hard_scalar_resolution(source, scalar_resolution)
+
+        if parsed is not None and routed_components_leak_cjk(parsed):
+            return self._source_resolution(
+                source,
+                ResolutionReason.ROUTED_CJK_SAFETY_SUPPRESSION,
+            )
+        if batch_reason in {
+            ResolutionReason.PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME,
+            ResolutionReason.BATCH_ABSTAIN_MATERIALIZATION_FAILED,
+        }:
+            return self._source_resolution(source, batch_reason)
+
+        scalar_canonical = scalar_resolution
+        scalar_is_unsafe = canonical_name_leaks_mixed_script(scalar_canonical)
+        selected_suffix = scalar_canonical.normalized.suffix if scalar_canonical is not None and not scalar_is_unsafe else None
+        if parsed is not None and parsed.surname:
+            return self._materialize_selected_candidate(
+                source=source,
+                raw_name=raw_name,
+                paper_names=paper_names,
+                focal_index=focal_index,
+                selected=NameComponents(
+                    given_name=parsed.given_name,
+                    middle_name=parsed.middle_name,
+                    surname=parsed.surname,
+                    suffix=selected_suffix or "",
+                ),
+                reason=batch_reason,
+            )
+
+        if scalar_is_unsafe:
+            return self._source_resolution(
+                source,
+                ResolutionReason.MIXED_SCRIPT_SAFETY_SUPPRESSION,
+            )
+        if scalar_canonical is not None and scalar_canonical.normalized.surname:
+            if self._scalar_repartitions_reviewed_compound_surname(source, scalar_canonical.normalized):
+                return self._source_resolution(
+                    source,
+                    ResolutionReason.SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT,
+                )
+            return self._materialize_selected_candidate(
+                source=source,
+                raw_name=raw_name,
+                paper_names=paper_names,
+                focal_index=focal_index,
+                selected=scalar_canonical.normalized,
+                reason=ResolutionReason.SCALAR_BASELINE,
+            )
+
+        if router_not_person:
+            katakana_assignment = reviewed_fullwidth_katakana_alias_assignment(source, paper_names, focal_index)
+            if katakana_assignment is not None:
+                return self._reviewed_source_assignment_resolution(
+                    source=source,
+                    selected=katakana_assignment,
+                    reason=ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
+                )
+        source_reason = (
+            ResolutionReason.NON_PERSON_SOURCE_PASSTHROUGH if router_not_person else ResolutionReason.NO_USABLE_SEMANTIC_RESULT
+        )
+        return self._source_resolution(source, source_reason)
+
+    def _materialize_selected_candidate(  # noqa: PLR0913
+        self,
+        *,
+        source: SourceAuthorFields,
+        raw_name: str,
+        paper_names: list[str],
+        focal_index: int,
+        selected: NameComponents,
+        reason: ResolutionReason,
+    ) -> ResolvedAuthorFields:
+        """Apply candidate-aware reorder vetoes, then materialize once."""
+        if reviewed_initials_comma_reversal(source, selected) or reviewed_katakana_middle_period_cyclic_reversal(
+            source,
+            selected,
+        ):
+            return self._source_resolution(
+                source,
+                ResolutionReason.INITIALS_COMMA_REORDER_VETO_PRESERVE_INPUT,
+            )
+        if reviewed_exact_source_reversal(source, selected):
+            return self._source_resolution(
+                source,
+                ResolutionReason.REVIEWED_EXACT_SOURCE_REORDER_VETO_PRESERVE_INPUT,
+            )
+        selected = restore_reviewed_atomic_korean_tokens(source, selected)
+        selected, conflict_reason = self._detector.routing_reorder_veto(
+            raw_name,
+            selected,
+            paper_names=paper_names,
+            focal_index=focal_index,
+        )
+        return ResolvedAuthorFields.from_selected_components(
+            source=source,
+            selected=selected,
+            reason=conflict_reason or reason,
+        )
+
+    def resolve_pp_vys_author(  # noqa: PLR0913
+        self,
+        *,
+        source: SourceAuthorFields,
+        paper_authors: list[SourceAuthorFields],
+        raw_name: str,
+        paper_names: list[str],
+        focal_index: int,
+        row,
+        pp_result,
+        vys_result,
+    ) -> ResolvedAuthorFields:
+        """Resolve one author from a PP/VYS routing row."""
+        decision = row["router_prediction"]
+        input_order_candidate = row.get("input_order_candidate", "unknown")
+        if decision == "pp":
+            chosen = pp_result
+            batch_reason = ResolutionReason.PP_SELECTED
+        elif decision == "vys":
+            chosen = vys_result
+            batch_reason = ResolutionReason.VYS_SELECTED
+        elif decision == "abstain":
+            if input_order_candidate == "pp":
+                chosen = pp_result
+                batch_reason = ResolutionReason.PP_VYS_ABSTAIN_PP_INPUT
+            elif input_order_candidate == "vys":
+                chosen = vys_result
+                batch_reason = ResolutionReason.PP_VYS_ABSTAIN_VYS_INPUT
+            else:
+                message = f"abstain with unexpected input_order_candidate={input_order_candidate!r} (expected 'pp'/'vys')"
+                raise ValueError(message)
+        elif decision == "not_person":
+            chosen = None
+            batch_reason = ResolutionReason.PP_SELECTED
+        else:
+            message = f"pp-vys router returned unexpected router_prediction={decision!r}"
+            raise ValueError(message)
+
+        parsed = chosen.parsed if chosen is not None and chosen.success else None
+        if decision == "abstain" and (parsed is None or not parsed.surname):
+            batch_reason = ResolutionReason.BATCH_ABSTAIN_MATERIALIZATION_FAILED
+        return self.terminal_resolution(
+            source=source,
+            paper_authors=paper_authors,
+            raw_name=raw_name,
+            paper_names=paper_names,
+            focal_index=focal_index,
+            parsed=parsed,
+            batch_reason=batch_reason,
+            router_not_person=decision == "not_person",
+        )
+
+    def resolve_pp_author(  # noqa: PLR0913
+        self,
+        *,
+        source: SourceAuthorFields,
+        paper_authors: list[SourceAuthorFields],
+        raw_name: str,
+        paper_names: list[str],
+        focal_index: int,
+        row,
+        result,
+    ) -> ResolvedAuthorFields:
+        """Resolve one author from a PP-only routing row."""
+        decision = row["router_prediction"]
+        if decision == "pp":
+            parsed = result.parsed if result.success else None
+            batch_reason = ResolutionReason.PP_SELECTED
+        elif decision == "abstain":
+            if source.last_name is not None and source.last_name.casefold() in REVIEWED_TRAILING_HYPHENATED_COMPOUND_SURNAMES:
+                parsed = None
+                batch_reason = ResolutionReason.PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME
+            else:
+                parsed = pp_abstain_parsed(result, row)
+                batch_reason = ResolutionReason.PP_ONLY_ABSTAIN_INPUT
+                if parsed is None or not parsed.surname:
+                    batch_reason = ResolutionReason.BATCH_ABSTAIN_MATERIALIZATION_FAILED
+        elif decision == "not_person":
+            parsed = None
+            batch_reason = ResolutionReason.PP_SELECTED
+        else:
+            message = f"pp-abstain router returned unexpected router_prediction={decision!r}"
+            raise ValueError(message)
+
+        return self.terminal_resolution(
+            source=source,
+            paper_authors=paper_authors,
+            raw_name=raw_name,
+            paper_names=paper_names,
+            focal_index=focal_index,
+            parsed=parsed,
+            batch_reason=batch_reason,
+            router_not_person=decision == "not_person",
+        )

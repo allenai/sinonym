@@ -1,4 +1,3 @@
-import re
 from enum import Enum
 from typing import cast
 
@@ -12,20 +11,15 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_abstain_rows,
     route_pp_vys_abstain_batches,
 )
-
-# Han, Hangul (syllables + jamo), and kana (incl. half-width). The pipeline romanizes what it
-# parses and has no segmentation for these scripts otherwise, so their letters surviving into
-# output components mark a mis-segmentation.
-_CJK_LETTER = re.compile(
-    r"[ᄀ-ᇿ぀-ヿ㐀-䶿一-鿿가-힯豈-﫿ｦ-ﾟ]",
+from sinonym.timo.routing_v3 import (
+    ResolvedAuthorFields,
+    RoutingInstanceV3,
+    RoutingV3Resolver,
+    SourceAuthorFields,
+    canonical_name_leaks_mixed_script,
+    routed_components_leak_cjk,
+    serialize_enum_values,
 )
-_LATIN_LETTER = re.compile(r"[A-Za-z]")
-
-
-def _routed_components_leak_cjk(parsed) -> bool:
-    """A routed answer must be fully romanized; a surviving CJK letter is a mis-segmentation."""
-    joined = " ".join(part for part in (parsed.given_name, parsed.middle_name, parsed.surname) if part)
-    return bool(_CJK_LETTER.search(joined))
 
 
 class _PoolPreconditionError(ValueError):
@@ -43,7 +37,7 @@ class TimoModel(BaseModel):
 
     def dict(self, *args, **kwargs):
         """Return plain Python serialization values for enum fields."""
-        return _serialize_enum_values(super().dict(*args, **kwargs))
+        return serialize_enum_values(super().dict(*args, **kwargs))
 
 
 class NameFormatValue(str, Enum):
@@ -110,19 +104,6 @@ class FormatPattern(TimoModel):
         output.setdefault("vote_margin_count", vote_margin_count)
         output.setdefault("vote_margin", vote_margin_count / total_count if total_count > 0 else 0.0)
         return output
-
-
-def _serialize_enum_values(value):
-    """Recursively convert Enum objects to their values for `.dict()` output."""
-    if isinstance(value, Enum):
-        return value.value
-    if isinstance(value, list):
-        return [_serialize_enum_values(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_serialize_enum_values(item) for item in value)
-    if isinstance(value, dict):
-        return {key: _serialize_enum_values(item) for key, item in value.items()}
-    return value
 
 
 class Prediction(TimoModel):
@@ -331,7 +312,13 @@ class RoutedPaperPrediction(TimoModel):
 
 
 class RoutedPredictionV2(RoutedPrediction):
-    """Versioned routed result with canonical data on the answer and candidates."""
+    """Versioned routed result with canonical data on the answer and candidates.
+
+    A proven canonical override is serialized as an unsuccessful ``abstain``
+    with ``input_order_candidate='unknown'`` because neither PP nor VYS supplied
+    the authoritative components. The final apply cascade then uses the
+    populated canonical name.
+    """
 
     pp: PredictionV2
     vys: PredictionV2 | None = None
@@ -339,7 +326,11 @@ class RoutedPredictionV2(RoutedPrediction):
 
 
 class PPRoutedPredictionV2(PPRoutedPrediction):
-    """Versioned PP-only routed result with canonical data."""
+    """Versioned PP-only result with canonical data.
+
+    Proven canonical overrides use an unsuccessful ``abstain`` so the final
+    apply cascade selects the canonical name instead of the declined PP parse.
+    """
 
     pp: PredictionV2
     canonical_name: CanonicalNameValue | None = None
@@ -349,6 +340,18 @@ class RoutedPaperPredictionV2(RoutedPaperPrediction):
     """One paper's routed v2 results."""
 
     authors: list[RoutedPredictionV2] = Field(default_factory=list)
+
+
+class RoutedPredictionV3(TimoModel):
+    """One terminal V3 result with no competing candidate representation."""
+
+    resolved_fields: ResolvedAuthorFields
+
+
+class RoutedPaperPredictionV3(TimoModel):
+    """One paper's positionally aligned, directly writable V3 author results."""
+
+    authors: list[RoutedPredictionV3] = Field(default_factory=list)
 
 
 class PredictorConfig(BaseSettings):
@@ -567,9 +570,7 @@ class Predictor:
         results = self._detector.process_name_batches(
             batches,
             parallel=parallel or self._config.parallel,
-            min_parallel_batches=(
-                self._config.mp_min_parallel_batches if min_parallel_batches is None else min_parallel_batches
-            ),
+            min_parallel_batches=(self._config.mp_min_parallel_batches if min_parallel_batches is None else min_parallel_batches),
             max_workers=self._config.mp_max_workers if max_workers is None else max_workers,
             chunk_size=self._config.mp_chunk_size if chunk_size is None else chunk_size,
             mp_start_method=self._config.mp_start_method,
@@ -954,7 +955,6 @@ class PredictorV2(Predictor):
     def _to_canonical_name(self, canonical_name) -> CanonicalNameValue | None:
         if canonical_name is None:
             return None
-        normalized = self._to_canonical_components(canonical_name.normalized)
         # A canonical whose SURNAME still carries a CJK letter next to Latin components is a
         # mis-segmentation the consumer would write over its own fields (`A Ra 아라 Cho 조` ->
         # surname `조` with `Cho` moved to the middle field), so it is not exposed. The other
@@ -963,9 +963,9 @@ class PredictorV2(Predictor):
         # surname with CJK elsewhere is the dual-name shape where the surname was isolated
         # correctly (`李維哲 Chee-Siong Lee` -> surname `Lee`). `source` legitimately keeps the
         # original scripts; only `normalized` is what gets consumed.
-        components = (normalized.given_name, normalized.middle_name, normalized.surname, normalized.suffix)
-        if _CJK_LETTER.search(normalized.surname) and any(_LATIN_LETTER.search(part) for part in components):
+        if canonical_name_leaks_mixed_script(canonical_name):
             return None
+        normalized = self._to_canonical_components(canonical_name.normalized)
         return CanonicalNameValue(
             source_text=canonical_name.source_text,
             text=canonical_name.text,
@@ -1073,7 +1073,7 @@ class PredictorV2(Predictor):
         pool: BatchParseResult,
         n: int,
     ) -> list[RoutedPredictionV2]:
-        """Route analyzed PP/VYS batches and convert their unchanged decisions to v2."""
+        """Route analyzed PP/VYS batches and apply proven canonical overrides."""
         vys_batch = BatchParseResult(
             names=list(pool.names[:n]),
             results=list(pool.results[:n]),
@@ -1092,6 +1092,26 @@ class PredictorV2(Predictor):
             input_order_candidate = row.get("input_order_candidate", "unknown")
             pp_result = pp_batch.results[index]
             vys_result = vys_batch.results[index]
+            canonical_override = self._detector.routing_canonical_override(
+                pp_batch.names[index],
+            )
+            if canonical_override is not None:
+                canonical_name, override_reason = canonical_override
+                canonical_value = self._to_canonical_name(canonical_name)
+                if canonical_value is not None:
+                    output.append(
+                        RoutedPredictionV2(
+                            success=False,
+                            **self._routed_name_fields(None),
+                            router_prediction="abstain",
+                            router_reason=override_reason,
+                            input_order_candidate="unknown",
+                            pp=self._to_prediction(pp_result, format_pattern=pp_format.copy(deep=True)),
+                            vys=self._to_prediction(vys_result, format_pattern=vys_format.copy(deep=True)),
+                            canonical_name=canonical_value,
+                        ),
+                    )
+                    continue
             if decision == "pp":
                 chosen = pp_result
             elif decision == "vys":
@@ -1108,7 +1128,7 @@ class PredictorV2(Predictor):
                 raise ValueError(message)
 
             parsed = chosen.parsed if (chosen is not None and chosen.success) else None
-            leaks = parsed is not None and _routed_components_leak_cjk(parsed)
+            leaks = parsed is not None and routed_components_leak_cjk(parsed)
             if leaks:
                 parsed = None
             canonical_result = chosen or pp_result
@@ -1130,7 +1150,7 @@ class PredictorV2(Predictor):
         self,
         pp_batch: BatchParseResult,
     ) -> list[PPRoutedPredictionV2]:
-        """Route an analyzed PP-only batch and convert its unchanged decisions to v2."""
+        """Route an analyzed PP-only batch and apply proven canonical overrides."""
         rows = route_pp_abstain_rows(build_pp_abstain_rows(pp_batch, self._detector))
         pp_format = self._to_format_pattern(pp_batch.format_pattern)
 
@@ -1138,6 +1158,24 @@ class PredictorV2(Predictor):
         for index, row in enumerate(rows):
             decision = row["router_prediction"]
             result = pp_batch.results[index]
+            canonical_override = self._detector.routing_canonical_override(
+                pp_batch.names[index],
+            )
+            if canonical_override is not None:
+                canonical_name, override_reason = canonical_override
+                canonical_value = self._to_canonical_name(canonical_name)
+                if canonical_value is not None:
+                    output.append(
+                        PPRoutedPredictionV2(
+                            success=False,
+                            **self._routed_name_fields(None),
+                            router_prediction="abstain",
+                            router_reason=override_reason,
+                            pp=self._to_prediction(result, format_pattern=pp_format.copy(deep=True)),
+                            canonical_name=canonical_value,
+                        ),
+                    )
+                    continue
             if decision == "pp":
                 parsed = result.parsed if result.success else None
             elif decision == "abstain":
@@ -1147,7 +1185,7 @@ class PredictorV2(Predictor):
             else:
                 message = f"pp-abstain router returned unexpected router_prediction={decision!r}"
                 raise ValueError(message)
-            if parsed is not None and _routed_components_leak_cjk(parsed):
+            if parsed is not None and routed_components_leak_cjk(parsed):
                 parsed = None
             output.append(
                 PPRoutedPredictionV2(
@@ -1226,5 +1264,192 @@ class RoutingPredictorV2(PredictorV2):
 
         if any(prediction is None for prediction in predictions):
             message = "routing prediction plan did not fill every instance slot"
+            raise RuntimeError(message)
+        return [prediction for prediction in predictions if prediction is not None]
+
+
+class RoutingPredictorV3:
+    """Resolve routed names once and return directly writable source-shaped fields.
+
+    V3 keeps PP and VYS as batch-policy candidates and scalar normalization as
+    a separate candidate over the derived flattened name.  One terminal
+    resolver applies their precedence, safety gates, and suffix policy.  No
+    downstream code needs (or is able) to fall through between candidates.
+    """
+
+    def __init__(self, config: PredictorConfig, artifacts_dir: str):
+        self._config = config
+        self._artifacts_dir = artifacts_dir
+        self._detector = ChineseNameDetector()
+        self._resolver = RoutingV3Resolver(self._detector)
+
+    def _resolve_pp_vys_batch(
+        self,
+        *,
+        sources: list[SourceAuthorFields],
+        pp_batch: BatchParseResult,
+        pool: BatchParseResult,
+    ) -> list[RoutedPredictionV3]:
+        n = len(sources)
+        rows = route_pp_vys_abstain_batches(pp_batch, pool)
+        if len(rows) != n:
+            message = "PP/VYS router output no longer aligns with V3 source authors"
+            raise RuntimeError(message)
+
+        output: list[RoutedPredictionV3] = []
+        for index, (source, row) in enumerate(zip(sources, rows, strict=True)):
+            resolved = self._resolver.resolve_pp_vys_author(
+                source=source,
+                paper_authors=sources,
+                raw_name=pp_batch.names[index],
+                paper_names=pp_batch.names,
+                focal_index=index,
+                row=row,
+                pp_result=pp_batch.results[index],
+                vys_result=pool.results[index],
+            )
+            output.append(
+                RoutedPredictionV3(
+                    resolved_fields=resolved,
+                ),
+            )
+        return output
+
+    def _resolve_pp_batch(
+        self,
+        *,
+        sources: list[SourceAuthorFields],
+        pp_batch: BatchParseResult,
+    ) -> list[RoutedPredictionV3]:
+        n = len(sources)
+        rows = route_pp_abstain_rows(build_pp_abstain_rows(pp_batch, self._detector))
+        if len(rows) != n:
+            message = "PP router output no longer aligns with V3 source authors"
+            raise RuntimeError(message)
+
+        output: list[RoutedPredictionV3] = []
+        for index, (source, row) in enumerate(zip(sources, rows, strict=True)):
+            resolved = self._resolver.resolve_pp_author(
+                source=source,
+                paper_authors=sources,
+                raw_name=pp_batch.names[index],
+                paper_names=pp_batch.names,
+                focal_index=index,
+                row=row,
+                result=pp_batch.results[index],
+            )
+            output.append(
+                RoutedPredictionV3(
+                    resolved_fields=resolved,
+                ),
+            )
+        return output
+
+    @staticmethod
+    def _validate_batch_alignment(
+        submitted_names: list[str],
+        batch_result: BatchParseResult,
+        *,
+        batch_index: int,
+    ) -> None:
+        """Reject any batch result that no longer matches its submitted slots."""
+        if list(batch_result.names) != submitted_names:
+            message = f"V3 batch result {batch_index} names/order do not match the submitted batch"
+            raise RuntimeError(message)
+
+        expected = len(submitted_names)
+        aligned_lengths = {
+            "results": len(batch_result.results),
+            "individual_analyses": len(batch_result.individual_analyses),
+            "name_order_evidence": len(batch_result.name_order_evidence),
+        }
+        mismatched = {name: length for name, length in aligned_lengths.items() if length != expected}
+        if mismatched:
+            message = f"V3 batch result {batch_index} has misaligned fields: expected {expected}, got {mismatched}"
+            raise RuntimeError(message)
+        if any(index < 0 or index >= expected for index in batch_result.improvements):
+            message = f"V3 batch result {batch_index} has an out-of-range improvement index"
+            raise RuntimeError(message)
+
+    def _validate_related_batch_results(self, requests, batch_results) -> None:
+        """Validate complete PP rows and focal VYS rows before resolution."""
+        if len(batch_results) != len(requests):
+            message = (
+                f"V3 batch analysis returned the wrong number of batches: expected {len(requests)}, got {len(batch_results)}"
+            )
+            raise RuntimeError(message)
+        for request_index, ((pp_names, vys_pool_names), batch_result) in enumerate(
+            zip(requests, batch_results, strict=True),
+        ):
+            self._validate_batch_alignment(pp_names, batch_result.pp_batch, batch_index=request_index * 2)
+            if vys_pool_names is None:
+                if batch_result.vys_batch is not None or batch_result.vys_context_names is not None:
+                    message = "V3 PP-only analysis unexpectedly returned a VYS result"
+                    raise RuntimeError(message)
+                continue
+            if batch_result.vys_batch is None or batch_result.vys_context_names != tuple(vys_pool_names):
+                message = f"V3 batch result {request_index * 2 + 1} names/order do not match the submitted batch"
+                raise RuntimeError(message)
+            self._validate_batch_alignment(pp_names, batch_result.vys_batch, batch_index=request_index * 2 + 1)
+
+    def predict_batch(
+        self,
+        instances: list[RoutingInstanceV3],
+    ) -> list[RoutedPaperPredictionV3]:
+        """Resolve each paper without accepting a duplicate focal-name slice.
+
+        An empty non-focal VYS slice remains present on the request DTO but adds
+        no evidence, so it follows the same PP-only policy as an absent slice.
+        """
+        predictions: list[RoutedPaperPredictionV3 | None] = [None] * len(instances)
+        requests: list[tuple[list[str], list[str] | None]] = []
+        plans: list[tuple[int, int]] = []
+
+        for instance_index, instance in enumerate(instances):
+            pp_names = instance.pp_names
+            if not pp_names:
+                predictions[instance_index] = RoutedPaperPredictionV3(authors=[])
+                continue
+
+            request_index = len(requests)
+            # An observed-empty non-focal VYS slice adds no routing evidence.
+            # Keep the request DTO's None/[] wire distinction, but analyze both
+            # cases through the same PP-only policy so presence alone cannot
+            # change the terminal semantic assignment.
+            vys_pool_names = instance.vys_pool_names if instance.vys_other_names else None
+            requests.append((pp_names, vys_pool_names))
+            plans.append((instance_index, request_index))
+
+        batch_results = self._detector._analyze_related_batch_requests_strict(  # noqa: SLF001
+            requests,
+            parallel=self._config.parallel,
+            min_parallel_batches=self._config.mp_min_parallel_batches,
+            max_workers=self._config.mp_max_workers,
+            chunk_size=self._config.mp_chunk_size,
+            mp_start_method=self._config.mp_start_method,
+        )
+        self._validate_related_batch_results(requests, batch_results)
+
+        for instance_index, request_index in plans:
+            instance = instances[instance_index]
+            batch_result = batch_results[request_index]
+            if requests[request_index][1] is not None:
+                if batch_result.vys_batch is None:
+                    message = "pp_vys routing plan missing VYS batch result"
+                    raise RuntimeError(message)
+                authors = self._resolve_pp_vys_batch(
+                    sources=instance.pp_authors,
+                    pp_batch=batch_result.pp_batch,
+                    pool=batch_result.vys_batch,
+                )
+            else:
+                authors = self._resolve_pp_batch(
+                    sources=instance.pp_authors,
+                    pp_batch=batch_result.pp_batch,
+                )
+            predictions[instance_index] = RoutedPaperPredictionV3(authors=authors)
+
+        if any(prediction is None for prediction in predictions):
+            message = "routing V3 prediction plan did not fill every instance slot"
             raise RuntimeError(message)
         return [prediction for prediction in predictions if prediction is not None]
