@@ -7,6 +7,7 @@ claude_scripts/
 data_backup/
 scratch/
 .pytest_failures.txt
+.tmp/
 
 # C extensions
 *.so

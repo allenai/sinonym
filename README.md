@@ -39,10 +39,11 @@ Formatted Output
     *   The output is consistently formatted in Title Case, with the first letter of the surname and each part of the given name capitalized.
     *   **Input:** `"DAN CHEN"` → **Output:** `"Dan Chen"`
 
-*   **Given Names are Hyphenated**
-    *   Given names composed of multiple syllables are joined by a hyphen. This applies to standard names, names with initials, and reduplicated (repeated) names.
+*   **Chinese Given Names are Hyphenated**
+    *   Recognized Chinese given names composed of multiple fully written syllables are joined by a hyphen. An all-initial Chinese given span remains one compound first name, with every true initial rendered with a period. In a mixed span, fully written syllables form the given name and standalone initials occupy the middle-name field.
     *   **Input (Standard):** `"Wang Li Ming"` → **Output:** `"Li-Ming Wang"`
-    *   **Input (Initials):** `"Y. Z. Wei"` → **Output:** `"Y-Z Wei"`
+    *   **Input (Initials):** `"Y. Z. Wei"` → **Output:** `"Y.-Z. Wei"`
+    *   **Input (Mixed):** `"Wei M. Wang"` → **Output:** `"Wei M. Wang"` (`given_name="Wei"`, `middle_name="M."`)
     *   **Input (Reduplicated):** `"Chen Linlin"` → **Output:** `"Lin-Lin Chen"`
 
 ### 2. Name Component Handling
@@ -267,10 +268,25 @@ and true generational suffixes are kept in the suffix field.
 
 Periods are treated by role and shape rather than removed globally. Known
 leading titles and trailing credentials are consumed; generational suffixes are
-canonicalized; pure dotted initial clusters are uppercased while preserving the
-source dot positions; transliteration abbreviations such as ``M.Yu.`` retain
-their mixed casing; and a terminal full stop on an ordinary word is removed as
-sentence punctuation.
+canonicalized; every true initial is rendered as an uppercase letter followed
+by one period; transliteration abbreviations such as ``M.Yu.`` retain their
+mixed casing; and a terminal full stop on an ordinary word is removed as
+sentence punctuation. Dotted, fused-dotted, and spaced initial sequences are
+semantically equivalent. An undelimited token such as ``AD`` is not split
+without separate compact-initial evidence.
+
+The culture-specific field policy is:
+
+- On the non-Chinese path, the first unbound initial is the given name and all
+  later initials are middle names. A fully written given name remains given and
+  any following initials are middle names.
+- On the Chinese path, an all-initial given span is one hyphenated compound
+  given name. In a mixed span, fully written Chinese syllables form the
+  hyphenated given name and every standalone initial is placed in the middle
+  field, regardless of its source position.
+- Explicit hyphens bind their parts. Native-script alignment and reviewed
+  identity evidence override shape-based initial inference, so a proven
+  one-letter syllable remains undotted.
 
 ```python
 western = detector.normalize_name("Dr. Ana–Maria O’Neill PhD")
@@ -295,15 +311,45 @@ assert repaired.normalized.middle_name == ""
 assert repaired.normalized.surname == "Marsh"
 ```
 
-For an undelimited raw name, token order alone cannot always distinguish middle
-names from multi-token family names. Passing structured components makes the
-caller's first/middle/last assignment the default normalized contract. Cultural
-convention alone does not move a source middle token into the given or family
-field. The same conservative East Asian router used for raw names may reinterpret
-a structured source sequence when its directional evidence is decisive; the
-structured ``canonical_name.source`` still retains the caller's original roles,
-order, and token lineage. Otherwise, roles are re-inferred only when mechanical
-cleanup, such as removing a title or credential, empties a required boundary.
+### Canonical output contract
+
+`normalize_name` keeps its legacy Chinese-recognition fields (`success`,
+`result`, `parsed`, and `error_message`) and attaches `canonical_name` for any
+recoverable person. Consumers that write normalized author fields should use
+`canonical_name.normalized`; `canonical_name.source` records source spelling
+and supplied component order for lineage, not an alternative normalized
+answer.
+
+`normalize_person_name_components` accepts structured first/middle/last input,
+preserves that input in `canonical_name.source`, and may update
+`canonical_name.normalized` through the same culture-specific initial and
+East Asian routing policies used for raw names. Unsupported inputs keep the
+generic canonical assignment; invalid and non-person inputs have no canonical
+name.
+
+Initials do not themselves establish that a name is Chinese. In particular, an
+initials-only name with a cross-cultural surname spelling such as `Lee`, `Lim`,
+or `Tan` stays on the non-Chinese fallback unless native script, identity data,
+or other affirmative evidence establishes the Chinese path.
+
+The routed v2 API may use `abstain` internally to decline a PP/VYS parse. That
+is not a user-visible unresolved name: the downstream write path continues to
+`canonical_name.normalized` and then to cleaned source fields, so it still
+emits an author name.
+
+For new writer integrations, `sinonym_routing_v3` makes that application
+cascade part of Sinonym's contract. It accepts positionally aligned structured
+source authors plus only the non-focal VYS names, derives the focal strings
+internally, and returns one final `resolved_fields` value per author. Source
+field labels are fallback boundaries, not semantic evidence; scalar inference
+runs on the derived first/middle/last string. The response includes a typed
+provenance, action, and reason, and its suffix is already final. Writers copy
+the fields without another fallback or suffix merge, except that they must omit
+an author whose action is `suppress`. Suppressed results retain an exact
+source-shaped response slot for positional alignment and diagnostics; the
+reviewed semantic non-person decision is distinct from an ordinary parser
+failure. The structured request, response, and resolution-decision types define
+the full routing contract.
 
 Raw parsing preserves visible order by default. A separate conservative router
 assigns semantic family-first components only for evidence combinations that
@@ -321,8 +367,9 @@ sources, hashes, licenses, and regeneration command are documented in
 `scripts/build_east_asian_name_lexicons.py`.
 
 TIMO clients can opt into `sinonym_v2` or `sinonym_routing_v2` to receive the
-same nested canonical payload. The existing `sinonym_v1` and
-`sinonym_routing_v1` response schemas remain unchanged.
+nested canonical payload, or `sinonym_routing_v3` for terminal writer-ready
+author fields. The existing v1 and v2 request/response schemas remain
+unchanged; routed v2 is the V3 rollout rollback path.
 
 Notes:
 - The tokens in `parsed` and `parsed_original_order` are the same normalized tokens; only the conceptual ordering differs via the `order` list.
@@ -339,9 +386,9 @@ res = detector.normalize_name("Li Wei")
 # res.parsed_original_order.surname == "Li"
 
 res = detector.normalize_name("Chi-Ying F. Huang")
-# res.result == "Chi-Ying F Huang"
+# res.result == "Chi-Ying F. Huang"
 # res.parsed.given_tokens == ["Chi", "Ying"]
-# res.parsed.middle_tokens == ["F"]
+# res.parsed.middle_tokens == ["F."]
 # res.parsed.order == ["given", "middle", "surname"]
 # res.parsed_original_order.order == ["given", "middle", "surname"]
 # res.parsed_original_order.given_name == "Chi-Ying"

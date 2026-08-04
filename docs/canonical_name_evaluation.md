@@ -2,8 +2,11 @@
 
 ## Result
 
-The final rules were evaluated on 1,000 manually reviewed, real non-Chinese
-author names:
+These numbers record the historical policy snapshot evaluated on 1,000
+manually reviewed, real non-Chinese author names. They predate canonical periods
+for every true initial and decomposition of packed dotted initial sequences, so
+they must not be presented as accuracy measurements for the current policy
+until the manual gold is versioned and re-adjudicated:
 
 | Measure | Exact | Accuracy |
 |---|---:|---:|
@@ -17,9 +20,13 @@ author names:
 
 The 18 component-only differences are reported as semantic-boundary
 differences, separately from display accuracy. Raw undelimited strings cannot
-identify those middle/surname boundaries reliably. When callers provide
-structured first/middle/last fields, those source roles are authoritative by
-default and are repaired only after mechanical cleanup empties a boundary.
+identify those middle/surname boundaries reliably. This historical
+compatibility evaluation scored surviving structured first/middle/last labels
+as the expected output unless mechanical cleanup emptied a boundary. That was
+an evaluation convention, not evidence that upstream field labels are always
+semantically correct. `CanonicalName.source` preserves those supplied labels
+for lineage, while `CanonicalName.normalized` records the final semantic
+assignment.
 
 The originally frozen 200-name holdout scores 196/200 (98.0%) on semantic
 components and 200/200 on canonical display. The four component differences
@@ -62,8 +69,9 @@ user explicitly requested a web-source adjudication of every mismatch. Six
 manual labels were corrected from structured institutional or bibliographic
 authority records. The remaining 18 boundaries are retained as semantic
 benchmark differences; they are not treated as sufficient evidence to override
-structured source roles. Each changed review row records its external source
-URLs, and the full adjudication ledger is retained in ignored scratch artifacts.
+the benchmark's frozen structured-label convention. Each changed review row
+records its external source URLs, and the full adjudication ledger is retained
+in ignored scratch artifacts.
 
 The selected JSONL has SHA-256
 `B367254A7282DA3B30A37B478A679202E5C65D465541A3A0E772AA649D30B8DE`.
@@ -110,6 +118,8 @@ An undelimited raw string still cannot identify every middle/surname boundary
 from shape alone. The normalizer therefore keeps the conservative final-token
 surname rule, family-particle rules, and initial-shape rules as its default.
 It does not use person-specific or authority-specific family-span exceptions.
-Structured input preserves the supplied first/middle/last roles unless
-mechanical cleanup empties a required boundary. Semantic boundary evaluation is
-reported separately rather than changing that storage contract.
+Structured input preserves source-field lineage for the supplied
+first/middle/last values; those labels are not assumed to be semantic roles.
+The normalizer may reroute semantic roles when a high-confidence East Asian
+rule fires. Semantic boundary evaluation is reported separately from that
+lineage contract.
