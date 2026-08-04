@@ -22,6 +22,7 @@ from sinonym.chinese_names_data import (
     KOREAN_GIVEN_PATTERNS,
     KOREAN_ONLY_SURNAMES,
     KOREAN_SPECIFIC_PATTERNS,
+    NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES,
     NAME_ORDER_ROUTING_KOREAN_SURNAMES,
     OVERLAPPING_KOREAN_SURNAMES,
     OVERLAPPING_VIETNAMESE_SURNAMES,
@@ -47,6 +48,11 @@ CONTEXTUAL_TAIWAN_GIVEN_PARTS = {
 }
 KOREAN_DIRECTIONAL_SURNAMES = frozenset(
     NAME_ORDER_ROUTING_KOREAN_SURNAMES | KOREAN_ONLY_SURNAMES | OVERLAPPING_KOREAN_SURNAMES,
+)
+AMBIGUOUS_INITIAL_ONLY_SURNAMES = frozenset(
+    NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES
+    | OVERLAPPING_KOREAN_SURNAMES
+    | OVERLAPPING_VIETNAMESE_SURNAMES,
 )
 
 # Optional ML Japanese classifier imports - consolidated from separate service
@@ -120,23 +126,18 @@ class _MLJapaneseClassifier:
             return result
 
     def japanese_probability(self, name: str) -> float:
-        """Return the Japanese-class probability, raising on model runtime failures."""
+        """Return the Japanese-class probability."""
         if not self.is_available():
             return 0.0
 
-        try:
-            probabilities = self._model.predict_proba([name])[0]
-            classes = list(getattr(self._model, "classes_", ()))
-            if "jp" in classes:
-                return float(probabilities[classes.index("jp")])
+        probabilities = self._model.predict_proba([name])[0]
+        classes = list(getattr(self._model, "classes_", ()))
+        if "jp" in classes:
+            return float(probabilities[classes.index("jp")])
 
-            prediction = self._model.predict([name])[0]
-            if prediction == "jp":
-                return float(max(probabilities))
-        except Exception as e:
-            LOGGER.warning("ML Japanese classifier probability error for %r: %s", name, e, exc_info=True)
-            message = "ML Japanese classifier probability failed"
-            raise RuntimeError(message) from e
+        prediction = self._model.predict([name])[0]
+        if prediction == "jp":
+            return float(max(probabilities))
         return 0.0
 
 
@@ -250,6 +251,9 @@ class EthnicityClassificationService:
         if self._has_directional_korean_structure(tokens):
             return ParseResult.failure("Korean structural patterns detected")
 
+        if self._has_ambiguous_initial_only_surface(tokens):
+            return ParseResult.failure("initial-only name has an ambiguous cross-cultural surname")
+
         if self.contextual_taiwan_given_parts(tokens) is not None:
             return ParseResult.success_with_name("")
 
@@ -325,6 +329,46 @@ class EthnicityClassificationService:
         return bool(tokens) and (
             tokens[0].lower() in ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES
             or tokens[-1].lower() in ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES
+        )
+
+    def _has_ambiguous_initial_only_surface(self, tokens: tuple[str, ...]) -> bool:
+        """Decline initials plus a surname spelling shared across name systems.
+
+        Initial punctuation is not cultural evidence.  With no full given-name
+        material, a spelling such as ``A. S. Lee`` cannot distinguish a Chinese
+        compound given name from a non-Chinese first and middle initial.  Native
+        aligned inputs are resolved before ethnicity classification, so this
+        conservative gate applies only to otherwise evidence-poor Roman text.
+        """
+
+        if len(tokens) < 2:
+            return False
+
+        for surname_index in (0, len(tokens) - 1):
+            surname = StringManipulationUtils.remove_spaces(tokens[surname_index]).lower()
+            if surname not in AMBIGUOUS_INITIAL_ONLY_SURNAMES:
+                continue
+            personal_parts = [
+                part
+                for index, token in enumerate(tokens)
+                if index != surname_index
+                for part in token.split("-")
+                if part
+            ]
+            if personal_parts and all(self._is_initial_only_surface_part(part) for part in personal_parts):
+                return True
+        return False
+
+    def _is_initial_only_surface_part(self, part: str) -> bool:
+        """Recognize explicit initials and reviewed compact-initial shapes."""
+        folded = self._normalizer.norm_light(part.rstrip("."))
+        return bool(
+            (len(folded) == 1 and folded.isalpha())
+            or (
+                part.isalpha()
+                and 2 <= len(folded) <= 3
+                and not any(character in "aeiou" for character in folded)
+            ),
         )
 
     def _has_wade_giles_apostrophe_surname(self, tokens: tuple[str, ...]) -> bool:

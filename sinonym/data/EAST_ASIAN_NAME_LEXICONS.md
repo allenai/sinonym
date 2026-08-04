@@ -25,6 +25,9 @@ Pinned commit: `eb62e13d4d62dd96cdfae79d293a02066352205f`
 
 Distributed under CC0-1.0. The derived assets use only the Korean and
 Vietnamese surname rows whose provenance is recorded in the generated JSON.
+The Roman asset also retains the folded Vietnamese surnames ranked 1-4 as a
+separate thresholded list for the candidate-conditioned reorder-conflict rule;
+it does not expose or infer a general runtime rank map.
 
 ## Excluded research source
 

@@ -23,6 +23,8 @@ USER_AGENT = "sinonym-east-asian-lexicon-builder/1.0"
 MAX_ATTEMPTS = 4
 RETRYABLE_HTTP_CODES = frozenset({429, 502, 503, 504})
 MIN_GIVEN_FIELDS = 2
+ASSET_SCHEMA_VERSION = 2
+TOP_VIETNAMESE_SURNAME_RANK = 4
 
 
 @dataclass(frozen=True)
@@ -223,18 +225,33 @@ def main() -> None:
             for romanized in slash_variants(row["Romanized Name"])
         },
     )
+    vietnamese_top4_surnames_roman = sorted(
+        {
+            fold(romanized)
+            for row in country_rows
+            if row["Country"] == "VN" and int(row["Rank"]) <= TOP_VIETNAMESE_SURNAME_RANK
+            for romanized in slash_variants(row["Romanized Name"])
+        },
+    )
+    if len(vietnamese_top4_surnames_roman) != TOP_VIETNAMESE_SURNAME_RANK:
+        message = (
+            "pinned Vietnamese surname source no longer yields exactly "
+            f"{TOP_VIETNAMESE_SURNAME_RANK} top-ranked forms: {vietnamese_top4_surnames_roman!r}"
+        )
+        raise ValueError(message)
 
     provenance = source_metadata()
     roman_payload: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": ASSET_SCHEMA_VERSION,
         "sources": provenance,
         "japanese_surnames": japanese_surnames_roman,
         "japanese_given_names": japanese_given_roman,
         "korean_surnames": korean_surnames_roman,
         "vietnamese_surnames": vietnamese_surnames_roman,
+        "vietnamese_top4_surnames": vietnamese_top4_surnames_roman,
     }
     native_payload: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": ASSET_SCHEMA_VERSION,
         "sources": provenance,
         "japanese_surnames": japanese_surnames_native,
         "japanese_given_names": japanese_given_native,
@@ -259,6 +276,7 @@ def main() -> None:
         "japanese_given_native": len(japanese_given_native),
         "korean_surnames_roman": len(korean_surnames_roman),
         "vietnamese_surnames_roman": len(vietnamese_surnames_roman),
+        "vietnamese_top4_surnames_roman": len(vietnamese_top4_surnames_roman),
     }
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
 

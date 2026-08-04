@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import math
 import re
 import unicodedata
 from bisect import bisect_left
@@ -18,12 +19,14 @@ from sinonym.chinese_names_data import (
     KOREAN_GIVEN_PATTERNS,
     KOREAN_ONLY_SURNAMES,
     KOREAN_SPECIFIC_PATTERNS,
+    NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES,
     NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES,
     NAME_ORDER_ROUTING_KOREAN_SURNAMES,
     OVERLAPPING_KOREAN_SURNAMES,
     VIETNAMESE_ONLY_SURNAMES,
 )
 from sinonym.coretypes import NameComponents
+from sinonym.coretypes.routing_resolution import EastAsianEvidenceReason, EvidenceFailure, ResolutionReason
 from sinonym.resources import read_bytes
 
 if TYPE_CHECKING:
@@ -35,19 +38,102 @@ if TYPE_CHECKING:
 # time. `hoang` fails that bar at 66.7% ("Hoang Nguyen", "Hoang Pham" are given-name-first), and the
 # short entries fail it outright.
 ASCII_ROUTABLE_VIETNAMESE_SURNAMES = frozenset({"nguyen", "pham", "tran"})
+# The pinned Vietnamese-surname/Japanese-given overlap is {do, mai, to} after
+# excluding Korean surnames. ``do`` is also a Portuguese particle and an
+# ambiguous credential, and its audited activations were malformed or
+# non-Japanese. Freeze the positively adjudicated signal rather than allowing
+# future lexicon additions to widen the rule silently.
+CROSS_CULTURAL_CONFLICT_HEADS = frozenset({"mai", "to"})
+VIETNAMESE_TOP_SURNAME_COUNT = 4
+# These reviewed source-order exceptions are deliberately exact. Generalizing
+# either shape would override correct family-first names in the same lexicons.
+JAPANESE_GIVEN_FIRST_EXACT_SURFACES = frozenset({"智幸 小枝"})
+VIETNAMESE_GIVEN_FIRST_EXACT_SURFACES = frozenset({"tuan le"})
+# The sole corpus identity is independently verified and already receives this
+# reason when supportive Japanese paper context is present.  Exact matching
+# extends the same decision to singleton/PP-only use without changing that
+# production result.
+CROSS_CULTURAL_GIVEN_FIRST_EXACT_SURFACES = frozenset({"to keku"})
+# Exact lexical false friends whose reviewed PP/VYS flips are family-first when
+# another complete paper author supplies context. Token-level exclusions would
+# suppress verified Japanese names such as Ma Kai. Yuan Tai is deliberately
+# absent because its complete corpus census supports given-first order.
+JAPANESE_FAMILY_FIRST_CONFLICT_SURFACES = frozenset({"gan kai", "shi kai", "yu mi"})
 # The same bar, met only once the two-surname shape above is excluded rather than absorbed: these
 # heads are absent from the Korean and Japanese lexicons, so admitting them preempts no later route,
 # and outside that shape blind labelling puts the leading token in the surname. Corpus-wide they move
 # 32,071 bare-ASCII names / 142,756 mentions that read "Van Minh" or "Huu Tai" as the surname today.
 ASCII_ROUTABLE_VIETNAMESE_SURNAMES_WITHOUT_SURNAME_PARTNER = frozenset(
     {
-        "bui", "dam", "dang", "dinh", "doan", "duong", "hoang", "huynh", "khuc", "luong", "luu",
-        "ngo", "phan", "phi", "phung", "thach", "thuong", "trac", "trieu", "trinh", "truong",
-        "quach", "tieu", "vo", "vu", "vuong",
+        "bui",
+        "dam",
+        "dang",
+        "dinh",
+        "doan",
+        "duong",
+        "hoang",
+        "huynh",
+        "khuc",
+        "luong",
+        "luu",
+        "ngo",
+        "phan",
+        "phi",
+        "phung",
+        "thach",
+        "thuong",
+        "trac",
+        "trieu",
+        "trinh",
+        "truong",
+        "quach",
+        "tieu",
+        "vo",
+        "vu",
+        "vuong",
     },
 )
+# Blind family-name judgments and identity evidence identified these exact
+# surfaces as given-first. Keep the evidence surface-specific: tokens such as
+# `Hy` are also valid given names in family-first names such as `Nguyen Hy`.
+VIETNAMESE_GIVEN_FIRST_CONFLICT_SURFACES = frozenset(
+    {
+        "bùi hoàng thảo trần",
+        "dam smith",
+        "dam sunwoo",
+        "doan nainggolan",
+        "doan nugyen",
+        "doan perdana",
+        "hoá nguyễn",
+        "hoang bao khanh chu",
+        "huynh lien buia",
+        "luu n'guyen",
+        "nguyen van nhi tran",
+        "phan datthuyawat",
+        "phi goy",
+        "thach tungnguyen",
+        "tran duc le",
+        "truong nghiem",
+        "truong son hy",
+        "vo ebuara",
+        "vu sudakov",
+    },
+)
+# Identity-backed exact assignments for corpus spellings whose correct roles
+# cannot be inferred safely from token-level lexicons. Broad interior-surname
+# and spaced-compound rules both fail on mostly-correct control populations.
+IDENTITY_BACKED_EXACT_ROLES = {
+    "ming hsien ou yang": ("given", "middle", "surname", "surname"),
+    "shiu lun au yeung": ("given", "middle", "surname", "surname"),
+    "thuong le thi": ("given", "surname", "middle"),
+    "trinh nguyen duy": ("middle", "surname", "given"),
+}
 HOMOGRAPH_PRONE_SURNAME_LENGTH = 2
+JAPANESE_ITERATION_MARK = "\u3005"
 JAPANESE_ML_THRESHOLD = 0.8
+JAPANESE_MARKED_SURNAME_LENGTH = 3
+MIN_JAPANESE_ITERATION_COMPLEMENT_LENGTH = 1
+MAX_JAPANESE_ITERATION_COMPLEMENT_LENGTH = 3
 KOREAN_NATIVE_TOKEN_LENGTH = 3
 # 남궁 / 황보 / 제갈 / 사공 / 선우 / 서문 / 독고: the surname occupies two of the three syllables, so the
 # default 1+2 split lands inside it. Blind labelling of the class put the boundary after the second
@@ -58,9 +144,60 @@ MAX_KOREAN_GIVEN_SYLLABLE_LENGTH = 6
 MAX_ROMANIZED_TOKENS = 5
 MAX_KOREAN_ROMANIZED_TOKENS = 3
 MIN_ROMANIZED_TOKENS = 2
+MIN_WESTERN_SUFFIX_TOKEN_LENGTH = 5
+# Frozen before the fresh validation sample. These endings are positive
+# Western-family evidence only when the proposed Korean given side has no
+# known syllable evidence.
+WESTERN_SURNAME_SUFFIXES = (
+    "sen",
+    "son",
+    "sson",
+    "ssen",
+    "berg",
+    "bergh",
+    "lund",
+    "gren",
+    "strom",
+    "quist",
+    "qvist",
+    "gaard",
+    "gard",
+    "holm",
+    "dahl",
+    "stad",
+    "borg",
+    "mann",
+    "stein",
+    "feld",
+    "bauer",
+    "meyer",
+    "meier",
+    "schmidt",
+    "burg",
+    "burger",
+    "smith",
+    "well",
+    "ford",
+    "wood",
+    "field",
+    "stone",
+    "white",
+    "worth",
+    "ley",
+    "ridge",
+    "shaw",
+    "cliffe",
+    "combe",
+)
+KOREAN_ROMANIZATION_BREVE_LETTERS = frozenset({"Ŏ", "ŏ", "Ŭ", "ŭ"})
 ROMAN_ASSET = "east_asian_roman_lexicons.json.gz"
 NATIVE_ASSET = "japanese_native_lexicons.json.gz"
 WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _normalized_surface(value: str) -> str:
+    """Collapse whitespace and apply NFKC for exact-surface comparison."""
+    return WHITESPACE_RE.sub(" ", unicodedata.normalize("NFKC", value)).strip()
 
 
 @dataclass(frozen=True)
@@ -72,7 +209,7 @@ class EastAsianNameOrderDecision:
     middle_tokens: tuple[str, ...]
     surname_tokens: tuple[str, ...]
     source_order: tuple[str, ...]
-    reason: str
+    reason: EastAsianEvidenceReason
 
     @property
     def first_name(self) -> str:
@@ -105,11 +242,20 @@ class EastAsianNameOrderDecision:
 
 
 @dataclass(frozen=True)
+class EastAsianNameOrderPreservation:
+    """A proven veto that keeps the generic scalar baseline."""
+
+    surface: str
+    reason: EastAsianEvidenceReason
+
+
+@dataclass(frozen=True)
 class _RomanLexicons:
     japanese_surnames: tuple[str, ...]
     japanese_given_names: tuple[str, ...]
     korean_surnames: tuple[str, ...]
     vietnamese_surnames: tuple[str, ...]
+    vietnamese_top4_surnames: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -121,7 +267,7 @@ class _NativeLexicons:
 def _load_payload(name: str) -> dict[str, Any]:
     """Load one strict gzip JSON package resource."""
     payload = json.loads(gzip.decompress(read_bytes(name)).decode("utf-8"))
-    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+    if not isinstance(payload, dict) or payload.get("schema_version") != 2:  # noqa: PLR2004 - asset contract
         message = f"unsupported East Asian lexicon schema in {name}"
         raise ValueError(message)
     return payload
@@ -146,15 +292,23 @@ def _roman_lexicons() -> _RomanLexicons:
     korean = sorted(
         set(external_korean) | NAME_ORDER_ROUTING_KOREAN_SURNAMES | KOREAN_ONLY_SURNAMES | OVERLAPPING_KOREAN_SURNAMES,
     )
-    vietnamese = sorted(
-        set(_validated_values(payload, "vietnamese_surnames", ROMAN_ASSET))
-        | {_fold(value) for value in VIETNAMESE_ONLY_SURNAMES},
-    )
+    external_vietnamese = _validated_values(payload, "vietnamese_surnames", ROMAN_ASSET)
+    vietnamese_top4 = _validated_values(payload, "vietnamese_top4_surnames", ROMAN_ASSET)
+    if len(vietnamese_top4) != VIETNAMESE_TOP_SURNAME_COUNT:
+        message = (
+            f"vietnamese_top4_surnames must contain exactly {VIETNAMESE_TOP_SURNAME_COUNT} entries; got {len(vietnamese_top4)}"
+        )
+        raise ValueError(message)
+    if not set(vietnamese_top4).issubset(external_vietnamese):
+        message = "vietnamese_top4_surnames must be a subset of the pinned Vietnamese surname asset"
+        raise ValueError(message)
+    vietnamese = sorted(set(external_vietnamese) | {_fold(value) for value in VIETNAMESE_ONLY_SURNAMES})
     return _RomanLexicons(
         japanese_surnames=_validated_values(payload, "japanese_surnames", ROMAN_ASSET),
         japanese_given_names=_validated_values(payload, "japanese_given_names", ROMAN_ASSET),
         korean_surnames=tuple(korean),
         vietnamese_surnames=tuple(vietnamese),
+        vietnamese_top4_surnames=vietnamese_top4,
     )
 
 
@@ -170,6 +324,94 @@ def _native_lexicons() -> _NativeLexicons:
 def _contains(values: tuple[str, ...], key: str) -> bool:
     index = bisect_left(values, key)
     return index < len(values) and values[index] == key
+
+
+def _iteration_surname_only(
+    value: str,
+    lexicons: _NativeLexicons,
+) -> bool:
+    """Return whether a marked source span is exclusively a known surname."""
+    key = _fold_compatibility_ideographs(value)
+    return (
+        JAPANESE_ITERATION_MARK in value
+        and _contains(lexicons.japanese_surnames, key)
+        and not _contains(lexicons.japanese_given_names, key)
+    )
+
+
+def _one_sided_iteration_surname_evidence(
+    marked: str,
+    complement: str,
+    lexicons: _NativeLexicons,
+) -> bool:
+    """Return whether one positive role plus two negative vetoes prove the marked surname."""
+    if (
+        len(marked) != JAPANESE_MARKED_SURNAME_LENGTH
+        or not MIN_JAPANESE_ITERATION_COMPLEMENT_LENGTH <= len(complement) <= MAX_JAPANESE_ITERATION_COMPLEMENT_LENGTH
+        or not all(any(_is_han(character) or _is_kana(character) for character in span) for span in (marked, complement))
+    ):
+        return False
+
+    marked_key = _fold_compatibility_ideographs(marked)
+    complement_key = _fold_compatibility_ideographs(complement)
+    marked_is_surname = _contains(lexicons.japanese_surnames, marked_key)
+    marked_is_given = _contains(lexicons.japanese_given_names, marked_key)
+    complement_is_surname = _contains(lexicons.japanese_surnames, complement_key)
+    complement_is_given = _contains(lexicons.japanese_given_names, complement_key)
+    return not marked_is_given and not complement_is_surname and (marked_is_surname or complement_is_given)
+
+
+def _one_sided_iteration_mark_decision(
+    surface: str,
+    tokens: list[str],
+    lexicons: _NativeLexicons,
+) -> EastAsianNameOrderDecision | None:
+    """Build the spaced-only decision after the strict rule has abstained."""
+    if len(tokens) != MIN_ROMANIZED_TOKENS:
+        return None
+    marked_indices = [index for index, token in enumerate(tokens) if JAPANESE_ITERATION_MARK in token]
+    if len(marked_indices) != 1:
+        return None
+    marked_index = marked_indices[0]
+    complement_index = 1 - marked_index
+    marked = tokens[marked_index]
+    complement = tokens[complement_index]
+    if not _one_sided_iteration_surname_evidence(marked, complement, lexicons):
+        return None
+    return EastAsianNameOrderDecision(
+        surface=surface,
+        given_tokens=(complement,),
+        middle_tokens=(),
+        surname_tokens=(marked,),
+        source_order=("surname", "given") if marked_index == 0 else ("given", "surname"),
+        reason=EastAsianEvidenceReason.JAPANESE_ITERATION_MARK_ONE_SIDED_EXCLUSIVE,
+    )
+
+
+def _select_iteration_mark_decision(
+    surface: str,
+    tokens: list[str],
+    lexicons: _NativeLexicons,
+    strict_candidates: list[EastAsianNameOrderDecision],
+) -> EastAsianNameOrderDecision | None:
+    """Preserve one strict result and extend only after a clean strict abstention."""
+    if len(strict_candidates) == 1:
+        return strict_candidates[0]
+    if strict_candidates:
+        return None
+    return _one_sided_iteration_mark_decision(surface, tokens, lexicons)
+
+
+def _japanese_given_only(
+    value: str,
+    lexicons: _NativeLexicons,
+) -> bool:
+    """Return whether a source span is exclusively a known given name."""
+    key = _fold_compatibility_ideographs(value)
+    return _contains(
+        lexicons.japanese_given_names,
+        key,
+    ) and not _contains(lexicons.japanese_surnames, key)
 
 
 _COMPATIBILITY_FOLD_TABLE = str.maketrans(COMPATIBILITY_IDEOGRAPH_FOLDS)
@@ -191,6 +433,11 @@ def _fold(value: str) -> str:
     return "".join(
         character for character in unicodedata.normalize("NFD", translated).casefold() if not unicodedata.combining(character)
     )
+
+
+def _endpoint_key(value: str) -> str:
+    """Fold case, accents, and punctuation for exact endpoint comparison."""
+    return "".join(character for character in _fold(unicodedata.normalize("NFKC", value)) if character.isalnum())
 
 
 KOREAN_ROUTING_GIVEN_PARTS = frozenset(
@@ -272,6 +519,20 @@ def _is_compact_japanese(value: str) -> bool:
     return bool(value) and " " not in value and all(_is_han(character) or _is_kana(character) for character in value)
 
 
+def _clears_japanese_classifier(
+    surface: str,
+    japanese_probability: Callable[[str], float],
+) -> bool:
+    """Validate one classifier response and apply the frozen Japanese gate."""
+    probability = japanese_probability(
+        _fold_compatibility_ideographs(surface),
+    )
+    if not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
+        message = f"Japanese classifier returned invalid probability {probability!r}"
+        raise EvidenceFailure(message)
+    return probability >= JAPANESE_ML_THRESHOLD
+
+
 def _han_to_kana_boundary(value: str) -> int | None:
     index = 0
     while index < len(value) and _is_han(value[index]):
@@ -284,21 +545,311 @@ def _han_to_kana_boundary(value: str) -> int | None:
 class EastAsianNameOrderService:
     """Infer only the family-first cases supported by conservative evidence."""
 
-    def infer(
+    def reorder_conflict_reason(
+        self,
+        raw_name: str,
+        selected: NameComponents,
+        *,
+        paper_names: list[str],
+        focal_index: int,
+    ) -> ResolutionReason | None:
+        """Veto a demonstrated endpoint reversal with strict role evidence.
+
+        The source component labels are deliberately absent from this API. A
+        conflict can veto only a candidate that visibly exchanges the first
+        and final tokens of the flattened input; ordinary cleanup, dropped
+        titles, and same-order candidates are outside its scope. Japanese
+        given-first evidence can come from the focal spelling itself. Exact
+        reviewed surfaces need no paper context. The remaining Vietnamese and
+        cross-cultural rules require positional paper context: only the focal
+        index is excluded, so duplicate name text cannot collapse or exclude
+        another author.
+        """
+        if not 0 <= focal_index < len(paper_names):
+            message = f"focal index {focal_index} is outside {len(paper_names)} paper names"
+            raise IndexError(message)
+        if paper_names[focal_index] != raw_name:
+            message = "focal raw name does not match its positional paper-name slot"
+            raise ValueError(message)
+
+        surface = _normalized_surface(raw_name)
+        if not surface or "," in surface:
+            return None
+        tokens = surface.split(" ")
+        if len(tokens) < MIN_ROMANIZED_TOKENS or not self._reverses_endpoints(tokens, selected):
+            return None
+
+        first = _fold(tokens[0])
+        last = _fold(tokens[-1])
+        lexicons = _roman_lexicons()
+        reviewed_family_first = (
+            surface.casefold() in JAPANESE_FAMILY_FIRST_CONFLICT_SURFACES
+            and self._has_surname_bearing_peer(paper_names, focal_index)
+        )
+        if not reviewed_family_first and (
+            surface in JAPANESE_GIVEN_FIRST_EXACT_SURFACES or self._japanese_order_vote(surface) == "given_first"
+        ):
+            return ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
+        exact_vietnamese = surface.casefold() in VIETNAMESE_GIVEN_FIRST_EXACT_SURFACES
+        exact_cross_cultural = surface.casefold() in CROSS_CULTURAL_GIVEN_FIRST_EXACT_SURFACES
+        if exact_vietnamese or exact_cross_cultural:
+            return (
+                ResolutionReason.VIETNAMESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
+                if exact_vietnamese
+                else ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT
+            )
+        if (
+            len(tokens) == MIN_ROMANIZED_TOKENS
+            and first in CROSS_CULTURAL_CONFLICT_HEADS
+            and _contains(lexicons.vietnamese_surnames, first)
+            and _contains(lexicons.japanese_given_names, first)
+            and not _contains(lexicons.korean_surnames, first)
+            and self._has_given_first_context(
+                paper_names,
+                focal_index,
+                self._japanese_order_vote,
+            )
+        ):
+            return ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT
+        if (
+            _contains(lexicons.vietnamese_top4_surnames, first)
+            and _contains(lexicons.vietnamese_top4_surnames, last)
+            and self._has_given_first_context(
+                paper_names,
+                focal_index,
+                self._vietnamese_order_vote,
+            )
+        ):
+            return ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT
+        if (
+            surface.isascii()
+            and _contains(lexicons.vietnamese_surnames, first)
+            and not _contains(lexicons.vietnamese_top4_surnames, first)
+            and _contains(lexicons.vietnamese_top4_surnames, last)
+            and self._has_given_first_context(
+                paper_names,
+                focal_index,
+                self._vietnamese_order_vote,
+            )
+        ):
+            return ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT
+        return None
+
+    @staticmethod
+    def _has_given_first_context(
+        paper_names: list[str],
+        focal_index: int,
+        vote: Callable[[str], str | None],
+    ) -> bool:
+        """Return whether other positional authors strictly favor given-first."""
+        given_first = 0
+        surname_first = 0
+        for index, name in enumerate(paper_names):
+            if index == focal_index:
+                continue
+            direction = vote(name)
+            given_first += direction == "given_first"
+            surname_first += direction == "surname_first"
+        return given_first >= 1 and given_first > surname_first
+
+    @staticmethod
+    def _has_surname_bearing_peer(paper_names: list[str], focal_index: int) -> bool:
+        """Return whether another paper author has a common Chinese surname endpoint."""
+        for index, name in enumerate(paper_names):
+            if index == focal_index:
+                continue
+            tokens = _normalized_surface(name).split(" ")
+            if len(tokens) >= MIN_ROMANIZED_TOKENS and (
+                _endpoint_key(tokens[0]) in NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES
+                or _endpoint_key(tokens[-1]) in NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES
+            ):
+                return True
+        return False
+
+    @staticmethod
+    def _vietnamese_order_vote(name: str) -> str | None:
+        """Return one strict endpoint-only Vietnamese order vote."""
+        tokens = _normalized_surface(name).split(" ")
+        if len(tokens) < MIN_ROMANIZED_TOKENS:
+            return None
+        lexicons = _roman_lexicons()
+        first_is_surname = _contains(lexicons.vietnamese_surnames, _fold(tokens[0]))
+        last_is_surname = _contains(lexicons.vietnamese_surnames, _fold(tokens[-1]))
+        if first_is_surname == last_is_surname:
+            return None
+        return "surname_first" if first_is_surname else "given_first"
+
+    @staticmethod
+    def _japanese_order_vote(name: str) -> str | None:
+        """Return one unambiguous two-token Japanese role-pair vote."""
+        tokens = _normalized_surface(name).split(" ")
+        if len(tokens) != MIN_ROMANIZED_TOKENS:
+            return None
+        lexicons = _roman_lexicons()
+        first_keys = _japanese_roman_keys(tokens[0])
+        last_keys = _japanese_roman_keys(tokens[-1])
+        given_first = _contains_any(lexicons.japanese_given_names, first_keys) and _contains_any(
+            lexicons.japanese_surnames,
+            last_keys,
+        )
+        surname_first = _contains_any(lexicons.japanese_surnames, first_keys) and _contains_any(
+            lexicons.japanese_given_names,
+            last_keys,
+        )
+        if given_first == surname_first:
+            return None
+        return "given_first" if given_first else "surname_first"
+
+    @staticmethod
+    def _reverses_endpoints(tokens: list[str], selected: NameComponents) -> bool:
+        """Return whether ``selected`` exactly exchanges the input endpoints."""
+        first = _endpoint_key(tokens[0])
+        last = _endpoint_key(tokens[-1])
+        return bool(
+            first
+            and last
+            and first != last
+            and first == _endpoint_key(selected.surname)
+            and last == _endpoint_key(selected.given_name),
+        )
+
+    def infer_iteration_mark(
         self,
         raw_name: str,
         *,
         japanese_probability: Callable[[str], float],
     ) -> EastAsianNameOrderDecision | None:
-        """Return semantic components or abstain without changing visible order."""
-        surface = WHITESPACE_RE.sub(" ", unicodedata.normalize("NFKC", raw_name)).strip()
+        """Resolve one iteration-mark surname from the frozen role-evidence rules."""
+        surface = _normalized_surface(raw_name)
+        if not surface or "," in surface:
+            return None
+        return self._infer_japanese_iteration_mark(
+            surface,
+            japanese_probability,
+        )
+
+    def infer_resolution(
+        self,
+        raw_name: str,
+        *,
+        japanese_probability: Callable[[str], float],
+    ) -> EastAsianNameOrderDecision | EastAsianNameOrderPreservation | None:
+        """Return one typed assignment, preservation veto, or non-applicability."""
+        surface = _normalized_surface(raw_name)
         if not surface or "," in surface:
             return None
 
+        iteration_mark = self._infer_japanese_iteration_mark(
+            surface,
+            japanese_probability,
+        )
+        if iteration_mark is not None:
+            return iteration_mark
         native = self._infer_native(surface, japanese_probability)
         if native is not None:
             return native
-        return self._infer_romanized(surface)
+        return self._infer_romanized_resolution(surface)
+
+    def _infer_romanized_resolution(
+        self,
+        surface: str,
+    ) -> EastAsianNameOrderDecision | EastAsianNameOrderPreservation | None:
+        """Resolve Roman evidence without erasing a proven preservation veto."""
+        romanized = self._infer_romanized(surface)
+        if (
+            romanized is not None
+            and romanized.reason is EastAsianEvidenceReason.KOREAN_ROMANIZED_STRICT
+            and self._family_first_western_suffix_conflict(surface)
+        ):
+            return EastAsianNameOrderPreservation(
+                surface=surface,
+                reason=EastAsianEvidenceReason.KOREAN_WESTERN_SUFFIX_CONFLICT,
+            )
+        return romanized
+
+    def family_first_conflict_reason(self, raw_name: str) -> EastAsianEvidenceReason | None:
+        """Return a frozen reason when the legacy Korean flip is unsafe."""
+        surface = _normalized_surface(raw_name)
+        if not surface or "," in surface:
+            return None
+        resolution = self._infer_romanized_resolution(surface)
+        return resolution.reason if isinstance(resolution, EastAsianNameOrderPreservation) else None
+
+    @staticmethod
+    def _family_first_western_suffix_conflict(surface: str) -> bool:
+        """Veto a family-first route with unsupported Korean and Western tail evidence."""
+        tokens = surface.split()
+        if len(tokens) < MIN_ROMANIZED_TOKENS:
+            return False
+        lexicons = _roman_lexicons()
+        if not _contains(lexicons.korean_surnames, _fold(tokens[0])):
+            return False
+        if any(character in KOREAN_ROMANIZATION_BREVE_LETTERS for character in surface):
+            return False
+        tail_parts = tuple(_fold(part) for token in tokens[1:] for part in token.split("-") if part and part.isalpha())
+        if not tail_parts or any(part in KOREAN_ROUTING_GIVEN_PARTS for part in tail_parts):
+            return False
+        return any(
+            len(part) >= MIN_WESTERN_SUFFIX_TOKEN_LENGTH and part.endswith(WESTERN_SURNAME_SUFFIXES) for part in tail_parts
+        )
+
+    @staticmethod
+    def _infer_japanese_iteration_mark(
+        surface: str,
+        japanese_probability: Callable[[str], float],
+    ) -> EastAsianNameOrderDecision | None:
+        """Resolve a marked surname from one unique complete source partition."""
+        if JAPANESE_ITERATION_MARK not in surface:
+            return None
+        if not all(
+            character in {" ", JAPANESE_ITERATION_MARK} or _is_han(character) or _is_kana(character) for character in surface
+        ):
+            return None
+
+        if not _clears_japanese_classifier(surface, japanese_probability):
+            return None
+
+        lexicons = _native_lexicons()
+        tokens = surface.split(" ")
+        partitions: list[tuple[str, str]] = []
+        if len(tokens) == MIN_ROMANIZED_TOKENS:
+            partitions.append((tokens[0], tokens[1]))
+        elif len(tokens) == 1:
+            partitions.extend((surface[:boundary], surface[boundary:]) for boundary in range(1, len(surface)))
+        else:
+            return None
+
+        candidates: list[EastAsianNameOrderDecision] = []
+        for first, second in partitions:
+            if _iteration_surname_only(
+                first,
+                lexicons,
+            ) and _japanese_given_only(second, lexicons):
+                candidates.append(
+                    EastAsianNameOrderDecision(
+                        surface=surface,
+                        given_tokens=(second,),
+                        middle_tokens=(),
+                        surname_tokens=(first,),
+                        source_order=("surname", "given"),
+                        reason=EastAsianEvidenceReason.JAPANESE_ITERATION_MARK_DUAL_EXCLUSIVE,
+                    ),
+                )
+            if _japanese_given_only(
+                first,
+                lexicons,
+            ) and _iteration_surname_only(second, lexicons):
+                candidates.append(
+                    EastAsianNameOrderDecision(
+                        surface=surface,
+                        given_tokens=(first,),
+                        middle_tokens=(),
+                        surname_tokens=(second,),
+                        source_order=("given", "surname"),
+                        reason=EastAsianEvidenceReason.JAPANESE_ITERATION_MARK_DUAL_EXCLUSIVE,
+                    ),
+                )
+        return _select_iteration_mark_decision(surface, tokens, lexicons, candidates)
 
     def _infer_native(
         self,
@@ -319,12 +870,12 @@ class EastAsianNameOrderService:
                 middle_tokens=(),
                 surname_tokens=(surface[:boundary],),
                 source_order=("surname", "given"),
-                reason="korean_native_three_syllable",
+                reason=EastAsianEvidenceReason.KOREAN_NATIVE_THREE_SYLLABLE,
             )
         if not _is_compact_japanese(surface):
             return self._infer_spaced_japanese_native(surface, japanese_probability)
         lookup_surface = _fold_compatibility_ideographs(surface)
-        if japanese_probability(lookup_surface) < JAPANESE_ML_THRESHOLD:
+        if not _clears_japanese_classifier(surface, japanese_probability):
             return None
         boundary = self._japanese_native_boundary(lookup_surface)
         return EastAsianNameOrderDecision(
@@ -333,7 +884,7 @@ class EastAsianNameOrderService:
             middle_tokens=(),
             surname_tokens=(surface[:boundary],),
             source_order=("surname", "given"),
-            reason="japanese_native_dictionary",
+            reason=EastAsianEvidenceReason.JAPANESE_NATIVE_DICTIONARY,
         )
 
     @staticmethod
@@ -369,7 +920,7 @@ class EastAsianNameOrderService:
         tokens = surface.split(" ")
         if len(tokens) != 2 or not all(_is_compact_japanese(token) for token in tokens):  # noqa: PLR2004
             return None
-        if japanese_probability(_fold_compatibility_ideographs(surface)) < JAPANESE_ML_THRESHOLD:
+        if not _clears_japanese_classifier(surface, japanese_probability):
             return None
         lexicons = _native_lexicons()
         first, last = tokens
@@ -393,7 +944,7 @@ class EastAsianNameOrderService:
             middle_tokens=(),
             surname_tokens=(first,),
             source_order=("surname", "given"),
-            reason="japanese_native_spaced_dictionary",
+            reason=EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_DICTIONARY,
         )
 
     @staticmethod
@@ -417,6 +968,17 @@ class EastAsianNameOrderService:
         tokens = surface.split()
         if not MIN_ROMANIZED_TOKENS <= len(tokens) <= MAX_ROMANIZED_TOKENS:
             return None
+        normalized_surface = unicodedata.normalize("NFKC", " ".join(tokens)).casefold()
+        exact_roles = IDENTITY_BACKED_EXACT_ROLES.get(normalized_surface)
+        if exact_roles is not None:
+            return EastAsianNameOrderDecision(
+                surface=surface,
+                given_tokens=tuple(token for token, role in zip(tokens, exact_roles, strict=True) if role == "given"),
+                middle_tokens=tuple(token for token, role in zip(tokens, exact_roles, strict=True) if role == "middle"),
+                surname_tokens=tuple(token for token, role in zip(tokens, exact_roles, strict=True) if role == "surname"),
+                source_order=exact_roles,
+                reason=EastAsianEvidenceReason.IDENTITY_BACKED_EXACT_FULL_SURFACE,
+            )
         if not all(all(character.isalpha() or character in "-'" for character in token) for token in tokens):
             return None
         lexicons = _roman_lexicons()
@@ -438,6 +1000,18 @@ class EastAsianNameOrderService:
         head = _fold(tokens[0])
         if not _contains(lexicons.vietnamese_surnames, head):
             return None
+        trailing = _fold(tokens[-1])
+        normalized_surface = unicodedata.normalize("NFKC", " ".join(tokens)).casefold()
+        if normalized_surface in VIETNAMESE_GIVEN_FIRST_CONFLICT_SURFACES:
+            middle_tokens = tuple(tokens[1:-1])
+            return EastAsianNameOrderDecision(
+                surface=surface,
+                given_tokens=(tokens[0],),
+                middle_tokens=middle_tokens,
+                surname_tokens=(tokens[-1],),
+                source_order=("given", *("middle" for _ in middle_tokens), "surname"),
+                reason=EastAsianEvidenceReason.VIETNAMESE_GIVEN_FIRST_EXACT_SURFACE,
+            )
         # Bare-ASCII Vietnamese is otherwise left alone, because most of the surname list is short
         # and doubles as Korean, Chinese or Western given syllables ("Mai", "Le", "Do", "Kim"), so a
         # diacritic is what identifies the name as Vietnamese at all. The listed exceptions appear
@@ -459,7 +1033,6 @@ class EastAsianNameOrderService:
             # last), which is another 235 names / 984 mentions and takes a mention-weighted sample
             # from 96.4% to 98.5%. A hyphen whose first half is NOT a surname is a given name
             # ("Ngo Si-Huy"), so only the lexicon hit declines.
-            trailing = _fold(tokens[-1])
             if _contains(lexicons.vietnamese_surnames, trailing) or _contains(
                 lexicons.vietnamese_surnames,
                 trailing.split("-")[0],
@@ -472,7 +1045,7 @@ class EastAsianNameOrderService:
             middle_tokens=middle_tokens,
             surname_tokens=(tokens[0],),
             source_order=("surname", *("middle" for _ in middle_tokens), "given"),
-            reason="vietnamese_unicode_surname_first",
+            reason=EastAsianEvidenceReason.VIETNAMESE_UNICODE_SURNAME_FIRST,
         )
 
     @staticmethod
@@ -496,6 +1069,18 @@ class EastAsianNameOrderService:
             return None
         if _contains(lexicons.korean_surnames, _fold(tokens[-1])):
             return None
+        compact_given = EastAsianNameOrderService._unique_compact_korean_given(
+            tokens,
+        )
+        if compact_given is not None:
+            return EastAsianNameOrderDecision(
+                surface=" ".join(tokens),
+                given_tokens=(compact_given,),
+                middle_tokens=(),
+                surname_tokens=(tokens[0],),
+                source_order=("surname", "given"),
+                reason=EastAsianEvidenceReason.KOREAN_COMPACT_GIVEN_UNIQUE_SPLIT,
+            )
         given_parts = [_fold(part) for token in tokens[1:] for part in token.split("-") if part]
         has_hyphen = any("-" in token for token in tokens[1:])
         all_known = bool(given_parts) and all(part in KOREAN_ROUTING_GIVEN_PARTS for part in given_parts)
@@ -519,8 +1104,24 @@ class EastAsianNameOrderService:
             middle_tokens=(),
             surname_tokens=(tokens[0],),
             source_order=("surname", *("given" for _ in given_tokens)),
-            reason="korean_romanized_strict",
+            reason=EastAsianEvidenceReason.KOREAN_ROMANIZED_STRICT,
         )
+
+    @staticmethod
+    def _unique_compact_korean_given(tokens: list[str]) -> str | None:
+        """Return an unsplit compact given token with one known two-part reading."""
+        if len(tokens) != MIN_ROMANIZED_TOKENS:
+            return None
+        compact_given = tokens[1]
+        if not compact_given.isalpha():
+            return None
+        folded = _fold(compact_given)
+        splits = [
+            boundary
+            for boundary in range(1, len(folded))
+            if folded[:boundary] in KOREAN_ROUTING_GIVEN_PARTS and folded[boundary:] in KOREAN_ROUTING_GIVEN_PARTS
+        ]
+        return compact_given if len(splits) == 1 else None
 
     @staticmethod
     def _infer_japanese_romanized(
@@ -547,7 +1148,7 @@ class EastAsianNameOrderService:
             middle_tokens=(),
             surname_tokens=(tokens[0],),
             source_order=("surname", "given"),
-            reason="japanese_romanized_directional_dictionary",
+            reason=EastAsianEvidenceReason.JAPANESE_ROMANIZED_DIRECTIONAL_DICTIONARY,
         )
 
 
