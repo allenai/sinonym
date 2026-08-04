@@ -265,10 +265,7 @@ class NormalizationService:
         for token in mix:
             if self._config.cjk_pattern.search(token):
                 # Convert Han to pinyin. all-Chinese and mixed-script paths share the same behavior.
-                han_token = token
-                if is_all_chinese:
-                    han_token = self._config.sep_pattern.sub("", han_token)
-                    han_token = han_token.translate(self._config.hyphens_apostrophes_tr)
+                han_token = self._han_conversion_token(token, is_all_chinese)
                 pinyin_tokens = self._cache_service.han_to_pinyin_fast(han_token)
                 han_tokens.extend(pinyin_tokens)
             else:
@@ -321,6 +318,22 @@ class NormalizationService:
         if han_tokens:
             return han_tokens
         return roman_tokens_original
+
+    def han_roman_source_characters(self, normalized_input: NormalizedInput) -> tuple[str, ...]:
+        """Return source characters aligned with a Han-only input's Roman tokens."""
+        is_all_chinese = self._text_preprocessor.is_all_chinese_input(normalized_input.cleaned)
+        characters = []
+        for token in normalized_input.tokens:
+            if self._config.cjk_pattern.search(token):
+                characters.extend(self._han_conversion_token(token, is_all_chinese))
+        return tuple(characters)
+
+    def _han_conversion_token(self, token: str, is_all_chinese: bool) -> str:
+        """Return the source characters passed to the Han-to-pinyin cache."""
+        if not is_all_chinese:
+            return token
+        token = self._config.sep_pattern.sub("", token)
+        return token.translate(self._config.hyphens_apostrophes_tr)
 
     def classify_script_representation(self, normalized_input: NormalizedInput) -> ScriptRepresentation:
         """Classify script provenance for batch convention voting."""

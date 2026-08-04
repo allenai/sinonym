@@ -703,6 +703,12 @@ PYPINYIN_FREQUENCY_ALIASES = [
     ("yin", "wen"),  # 尹: pypinyin produces 'yin' but romanization system expects 'wen'
 ]
 
+# Contextual readings that are valid only after a Han component is assigned as
+# the surname. Keys are ``(source_character, pypinyin_reading)``.
+HAN_SURNAME_POSITION_READINGS = {
+    ("\u66fe", "ceng"): "zeng",
+}
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CHINESE PHONETIC VALIDATION (for rejecting Western names)
