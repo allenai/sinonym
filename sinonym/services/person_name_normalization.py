@@ -15,6 +15,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 
 from sinonym.coretypes import CanonicalName, NameComponents
+from sinonym.services.non_person import reviewed_non_person_text_pattern
 
 
 class PersonNameOutcome(str, Enum):
@@ -77,7 +78,11 @@ _LEADING_STRAY_JOINER_RE = re.compile(r"^[-']\s+")
 # so require real whitespace on both sides rather than a \b word boundary.
 _WORD_AND_RE = re.compile(r"(?<=\s)and(?=\s)", re.IGNORECASE)
 _TOKEN_RE = re.compile(r"\S+")
+_COMMA_TAIL_TOKEN_RE = re.compile(r"[^\s,]+")
+_LETTER_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
 _TRAILING_DIGITS_RE = re.compile(r"\d+$")
+_TRAILING_FOOTNOTE_RE = re.compile(r"(?P<name>.*[^\W\d_])(?P<marker>[*\u00a7\u2020\u2021]+)$", re.UNICODE)
+_MOJIBAKE_FOOTNOTE_ENDINGS = ("Ã§", "Ä‡", "\u0421‡", "ÃÍ§")
 _INITIAL_RE = re.compile(r"([^\W\d_])\.", re.UNICODE)
 _MULTI_INITIAL_RE = re.compile(r"(?:[^\W\d_]\.)+[^\W\d_]\.?", re.UNICODE)
 _ABBREVIATED_TOKEN_RE = re.compile(r"(?:[^\W\d_]+[-'])*[^\W\d_]{1,3}\.", re.UNICODE)
@@ -87,7 +92,12 @@ _COMPOUND_INITIAL_RE = re.compile(r"[^\W\d_]\.-[^\W\d_]\.", re.UNICODE)
 _HYPHEN_INITIAL_RE = re.compile(r"[^\W\d_]\.?(?:-[^\W\d_]\.?)+", re.UNICODE)
 _LEADING_HYPHEN_INITIAL_RE = re.compile(r"^-([^\W\d_])\.$", re.UNICODE)
 _FUSED_INITIAL_SURNAME_RE = re.compile(r"^([^\W\d_])\.(.+)$", re.UNICODE)
+_FUSED_INITIAL_SEQUENCE_SURNAME_RE = re.compile(
+    r"^(?P<initials>(?:[^\W\d_]\.){2,})(?P<surname>[^\W\d_].+)$",
+    re.UNICODE,
+)
 _LOWER_MARKER_INITIAL_RE = re.compile(r"^([a-z])([A-Z])\.$")
+_DOTTED_INITIAL_SEQUENCE_RE = re.compile(r"[A-Z][a-z](?:\.[A-Z])+\.")
 _PARENTHETICAL_DUPLICATE_RE = re.compile(r"^(\S+)\s+\(([^)]+)\)\s+(.+)$")
 _ASCII_JOINER_TRANSLATION = str.maketrans({"`": "'"})
 _PRE_NFKC_JOINER_TRANSLATION = str.maketrans({"\u00b4": "'"})
@@ -183,6 +193,56 @@ _AMBIGUOUS_CREDENTIAL_KEYS = frozenset({"ba", "bs", "do", "edd", "jd", "ma", "mb
 # should still drop ("Rn Rachael Zimlich" -> "Rachael Zimlich").
 _PURE_CREDENTIAL_TITLE_DROP_KEYS = frozenset({"bs", "jd", "mba", "mpa", "rn"})
 _MIXED_CASE_CREDENTIALS = {"meng": "MEng", "edd": "EdD"}
+_PACKED_LEADING_CREDENTIALS = frozenset({"BEng", "DNP", "MBBS"})
+_STRUCTURED_LEADING_CREDENTIALS = frozenset({"Dr.-Ing", "Dr.-Ing."})
+_EXACT_CASE_TRAILING_CREDENTIALS = frozenset(
+    {
+        "AGPCNP-BC",
+        "AOCNP",
+        "APRN",
+        "BCTMB",
+        "BEng",
+        "CHTP",
+        "CTRS/L",
+        "CTRS/LRT",
+        "DNP",
+        "EP-C",
+        "FDRT",
+        "LMBT",
+        "LRT/CTRS",
+        "MBBS",
+    },
+)
+_EXACT_CASE_BOUNDARY_CREDENTIALS = frozenset(
+    {
+        "CTRS",
+        "FACS",
+        "FEBS",
+        "FRACP",
+        "ScD",
+        "Se.Ak",
+        "Se.Ak.",
+    },
+)
+_EXACT_CASE_LEADING_TITLES = frozenset({"Apt", "Apt.", "Professur"})
+_REVIEWED_STRUCTURED_MIDDLE_CREDENTIALS = frozenset({"Dipl.-Ing. Fh"})
+_REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS = frozenset(
+    {
+        "DNB",
+        "FAAP",
+        "FCCM",
+        "FCCP",
+        "FRACS",
+        "FRCPA",
+        "FRCS",
+        "FRCSC",
+        "MB",
+        "MRCP",
+        "RD",
+    },
+)
+_REVIEWED_CLOSED_COMMA_HEAD_BLOCKERS = frozenset({"DM", "MDRD", "MDS"})
+_LEADING_ARRAY_REMAINDER_EXCLUSIONS = frozenset({"array", "редакционная", "статья"})
 _FAMILY_PARTICLES = frozenset(
     {
         "al",
@@ -287,41 +347,51 @@ _ORGANIZATION_WORDS = frozenset(
         # a multilingual org sweep on post-fix output: ~29,972 names / 102,859 occ
         # (0.0176% of non-Chinese occ). Both accented and diacritic-free forms are listed
         # because _compact_key preserves diacritics.
-        "societe", "société",           # FR
-        "sociedad",                     # ES
-        "societa", "società",           # IT
-        "sociedade",                    # PT
-        "ministere", "ministère",       # FR
-        "ministerio",                   # ES / PT (ministério compacts to ministerio too)
+        "societe",
+        "société",  # FR
+        "sociedad",  # ES
+        "societa",
+        "società",  # IT
+        "sociedade",  # PT
+        "ministere",
+        "ministère",  # FR
+        "ministerio",  # ES / PT (ministério compacts to ministerio too)
         "ministério",
-        "ministero",                    # IT
-        "ministerium",                  # DE
-        "ministerie",                   # NL
-        "universidad",                  # ES
-        "universita", "università",     # IT
-        "universidade",                 # PT
-        "universiteit",                 # NL
-        "federation", "fédération",     # FR
-        "federacion", "federación",     # ES
-        "federazione",                  # IT
-        "federacao", "federação",       # PT
-        "asociacion", "asociación",     # ES
-        "associazione",                 # IT
-        "associacao", "associação",     # PT
-        "instituto",                    # ES / PT
-        "istituto",                     # IT
-        "instituut",                    # NL
-        "gesellschaft",                 # DE
-        "gewerkschaft",                 # DE
-        "genootschap",                  # NL
-        "syndicat",                     # FR
-        "stiftung",                     # DE
-        "stichting",                    # NL
-        "akademie",                     # DE
-        "academie", "académie",         # FR
-        "accademia",                    # IT
-        "dipartimento",                 # IT
-        "gmbh",                         # DE company suffix
+        "ministero",  # IT
+        "ministerium",  # DE
+        "ministerie",  # NL
+        "universidad",  # ES
+        "universita",
+        "università",  # IT
+        "universidade",  # PT
+        "universiteit",  # NL
+        "federation",
+        "fédération",  # FR
+        "federacion",
+        "federación",  # ES
+        "federazione",  # IT
+        "federacao",
+        "federação",  # PT
+        "asociacion",
+        "asociación",  # ES
+        "associazione",  # IT
+        "associacao",
+        "associação",  # PT
+        "instituto",  # ES / PT
+        "istituto",  # IT
+        "instituut",  # NL
+        "gesellschaft",  # DE
+        "gewerkschaft",  # DE
+        "genootschap",  # NL
+        "syndicat",  # FR
+        "stiftung",  # DE
+        "stichting",  # NL
+        "akademie",  # DE
+        "academie",
+        "académie",  # FR
+        "accademia",  # IT
+        "dipartimento",  # IT
+        "gmbh",  # DE company suffix
         # NOTE: the prepositions "für" (DE) / "voor" (NL) are strong org signals for
         # compound-noun orgs ("Bundesministerium für …", "Voor Numismatiek") but collide
         # with the real surnames "Für" (Hungarian) / "Voor" (Estonian/Dutch). They are
@@ -416,6 +486,8 @@ _SIMPLE_TWO_TOKEN_POLICY_KEYS = frozenset(
     _TITLE_KEYS
     | _TITLE_QUALIFIER_KEYS
     | _CREDENTIAL_KEYS
+    | {credential.casefold() for credential in _EXACT_CASE_BOUNDARY_CREDENTIALS | _EXACT_CASE_TRAILING_CREDENTIALS}
+    | {title.casefold().rstrip(".") for title in _EXACT_CASE_LEADING_TITLES}
     | _ORGANIZATION_WORDS
     | _FUNCTION_WORDS
     | _STANDARD_SUFFIXES.keys()
@@ -431,6 +503,110 @@ _MIN_PARENTHESIZED_TOKEN_LENGTH = 3
 _MC_PREFIX_LENGTH = 2
 
 
+def _has_usable_array_remainder(middle: str, last: str) -> bool:
+    """Return whether removing a leading Array leaves a plausible name fragment."""
+    tokens = [token for token in f"{middle} {last}".split() if token]
+    return bool(
+        tokens
+        and any(character.isalpha() for token in tokens for character in token)
+        and not all(token.casefold().strip(".") in _LEADING_ARRAY_REMAINDER_EXCLUSIONS for token in tokens),
+    )
+
+
+def reviewed_leading_credential_source_pattern(
+    first_name: str | None,
+    middle_name: str | None,
+    last_name: str | None,
+    suffix: str | None = None,
+) -> str | None:
+    """Return the reviewed leading credential for one safe structured shape."""
+    first, middle, last = ((value or "").strip() for value in (first_name, middle_name, last_name))
+    if (suffix or "").strip():
+        return None
+    if first in _PACKED_LEADING_CREDENTIALS and not middle and len(_LETTER_WORD_RE.findall(last)) >= _TWO_COMPONENTS:
+        return first
+    if (
+        first in _STRUCTURED_LEADING_CREDENTIALS
+        and len(_LETTER_WORD_RE.findall(middle)) == 1
+        and len(_LETTER_WORD_RE.findall(last)) == 1
+    ):
+        return first
+    return None
+
+
+def _is_explicit_credential_surface(token: str) -> bool:
+    """Return whether one comma-tail token is an existing exact credential."""
+    surface = token.strip(",")
+    if surface in _EXACT_CASE_BOUNDARY_CREDENTIALS | _EXACT_CASE_TRAILING_CREDENTIALS:
+        return True
+    key = "".join(character.casefold() for character in surface if character.isalnum())
+    return key in _CREDENTIAL_KEYS
+
+
+def reviewed_closed_comma_credential_tail_head(
+    last_name: str | None,
+    suffix: str | None = None,
+) -> str | None:
+    """Return the retained surname field for one complete credential tail."""
+    if (suffix or "").strip():
+        return None
+    head, separator, tail = (last_name or "").partition(",")
+    if not separator:
+        return None
+    tail_tokens = _COMMA_TAIL_TOKEN_RE.findall(tail)
+    if (
+        not tail_tokens
+        or not any(token in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS for token in tail_tokens)
+        or not all(
+            token in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS or _is_explicit_credential_surface(token)
+            for token in tail_tokens
+        )
+    ):
+        return None
+
+    head_tokens = head.split()
+    while head_tokens and (
+        head_tokens[-1] in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS
+        or _is_explicit_credential_surface(head_tokens[-1])
+    ):
+        head_tokens.pop()
+    if any(token in _REVIEWED_CLOSED_COMMA_HEAD_BLOCKERS for token in head_tokens):
+        return None
+    retained = " ".join(head_tokens)
+    if retained.endswith("MD (Medicine)"):
+        return None
+    return retained
+
+
+def reviewed_source_cleanup_pattern(  # noqa: PLR0911 - one return per closed reviewed shape
+    first_name: str | None,
+    middle_name: str | None,
+    last_name: str | None,
+    suffix: str | None = None,
+) -> str | None:
+    """Return the reviewed structured cleanup shape for one source row."""
+    first, middle, last = ((value or "").strip() for value in (first_name, middle_name, last_name))
+    if (suffix or "").strip():
+        return None
+    if reviewed_leading_credential_source_pattern(first, middle, last) is not None:
+        return "leading_credential"
+    if any(
+        token.strip(",") in _EXACT_CASE_BOUNDARY_CREDENTIALS | _EXACT_CASE_TRAILING_CREDENTIALS
+        for value in (first, middle, last)
+        for token in value.split()
+    ):
+        return "exact_case_credential"
+    if first in _EXACT_CASE_LEADING_TITLES and len(_LETTER_WORD_RE.findall(f"{middle} {last}")) >= _TWO_COMPONENTS:
+        return "leading_title"
+    if first == "Array" and _has_usable_array_remainder(middle, last):
+        return "leading_array_artifact"
+    if middle in _REVIEWED_STRUCTURED_MIDDLE_CREDENTIALS and first and last:
+        return "structured_middle_credential"
+    if first and last and middle.split().count("Jr.") == 1:
+        return "structured_middle_suffix"
+    return None
+
+
 class PersonNameNormalizationService:
     """Normalize raw or structured personal names without Chinese routing."""
 
@@ -438,6 +614,8 @@ class PersonNameNormalizationService:
         """Normalize one raw name string into semantic canonical components."""
         if not isinstance(raw_name, str):
             return self._invalid("name must be a string")
+        if reviewed_non_person_text_pattern(raw_name) is not None:
+            return self._non_person("reviewed non-person input")
 
         simple_result = self._normalize_simple_two_token_text(raw_name)
         if simple_result is not None:
@@ -544,7 +722,7 @@ class PersonNameNormalizationService:
         source = self._components(given, [], surname, [])
         return self._person(raw_name, source, given, [], surname, "", [])
 
-    def normalize_components(  # noqa: C901, PLR0911
+    def normalize_components(  # noqa: C901, PLR0911, PLR0912
         self,
         *,
         first_name: str | None = None,
@@ -575,6 +753,8 @@ class PersonNameNormalizationService:
             return self._invalid("name is empty")
         if not any(character.isalpha() for character in source_text):
             return self._invalid("name has no letters")
+        if reviewed_non_person_text_pattern(source_text) is not None:
+            return self._non_person("reviewed non-person input")
 
         non_person_reason = self._non_person_reason(source_text)
         if non_person_reason is not None:
@@ -612,6 +792,13 @@ class PersonNameNormalizationService:
             source_by_role["surname"],
             dropped,
         )
+        middle_tokens, structured_middle_suffix = self._strip_reviewed_structured_middle(
+            middle_tokens,
+            middle_surface=surfaces["middle"],
+            has_name_endpoints=bool(source_by_role["given"] and source_by_role["surname"]),
+            has_explicit_suffix=bool(source_by_role["suffix"]),
+            dropped=dropped,
+        )
         name_tokens = [
             *source_by_role["given"],
             *middle_tokens,
@@ -619,7 +806,17 @@ class PersonNameNormalizationService:
         ]
         name_tokens = self._repair_leading_marker_initial(name_tokens, dropped)
         name_tokens = self._join_separated_compound_initials(name_tokens)
-        name_tokens = self._strip_leading_titles(name_tokens, dropped)
+        reviewed_credential = reviewed_leading_credential_source_pattern(
+            stripped_values["given"],
+            stripped_values["middle"],
+            stripped_values["surname"],
+            stripped_values["suffix"],
+        )
+        name_tokens = self._strip_leading_titles(
+            name_tokens,
+            dropped,
+            reviewed_credential=reviewed_credential,
+        )
         name_tokens = self._strip_standalone_periods(name_tokens, dropped)
         name_tokens = self._strip_boundary_markers(name_tokens, dropped)
 
@@ -627,6 +824,10 @@ class PersonNameNormalizationService:
             source_by_role["suffix"],
         )
         dropped.extend(explicit_dropped)
+        if structured_middle_suffix:
+            if canonical_suffix:
+                return self._invalid("name has multiple suffixes", dropped)
+            canonical_suffix = structured_middle_suffix
         name_tokens, boundary_suffix, _ = self._strip_trailing_boundaries(name_tokens, dropped)
         if boundary_suffix:
             if canonical_suffix:
@@ -634,6 +835,7 @@ class PersonNameNormalizationService:
             canonical_suffix = boundary_suffix
 
         name_tokens = self._strip_attached_affiliations(name_tokens, dropped)
+        name_tokens = self._strip_attached_terminal_footnote(name_tokens, dropped)
         invalid_reason = self._invalid_token_reason(name_tokens)
         if invalid_reason is not None:
             return self._invalid(invalid_reason, dropped)
@@ -642,6 +844,7 @@ class PersonNameNormalizationService:
             role: [token for token in name_tokens if token.source_role == role] for role in ("given", "middle", "surname")
         }
         given, middle, surname = self._repair_structured_roles(cleaned_by_role)
+        given, middle, surname = self._apply_unbound_initial_policy(given, middle, surname)
         if not given and not middle and not surname:
             return self._invalid("no personal-name tokens remain", dropped)
 
@@ -670,15 +873,17 @@ class PersonNameNormalizationService:
             suffix_token = boundary_suffix_token
 
         tokens = self._strip_attached_affiliations(tokens, dropped)
+        tokens = self._strip_attached_terminal_footnote(tokens, dropped)
         invalid_reason = self._invalid_token_reason(tokens)
         if invalid_reason is not None:
             return self._invalid(invalid_reason, dropped)
         if not tokens:
             return self._invalid("no personal-name tokens remain", dropped)
 
+        tokens = self._split_fused_initial_sequence_surname(tokens)
         packed_surname_first = self._is_packed_surname_first_initials(tokens)
-        given, middle, surname = self._infer_regular_roles(tokens)
-        assigned = [*given, *middle, *surname]
+        source_given, source_middle, source_surname = self._infer_regular_roles(tokens)
+        assigned = [*source_given, *source_middle, *source_surname]
         assigned_by_position = {token.position: token for token in assigned}
         prefix_source = self._regular_prefix_source(
             original_tokens,
@@ -692,13 +897,18 @@ class PersonNameNormalizationService:
         source_suffix = [*([suffix_token] if suffix_token is not None else []), *credential_source]
         source_order = None
         if packed_surname_first and not prefix_source and not source_suffix:
-            source_order = ("surname", "given", *("middle" for _token in middle))
+            source_order = ("surname", "given", *("middle" for _token in source_middle))
         source = self._components(
-            [*prefix_source, *given],
-            middle,
-            surname,
+            [*prefix_source, *source_given],
+            source_middle,
+            source_surname,
             source_suffix,
             order=source_order,
+        )
+        given, middle, surname = self._apply_unbound_initial_policy(
+            source_given,
+            source_middle,
+            source_surname,
         )
         return self._person(source_text, source, given, middle, surname, suffix, dropped)
 
@@ -756,6 +966,7 @@ class PersonNameNormalizationService:
 
         family_tokens = self._strip_attached_affiliations(family_tokens, dropped)
         given_tokens = self._strip_attached_affiliations(given_tokens, dropped)
+        given_tokens = self._strip_attached_terminal_footnote(given_tokens, dropped)
         invalid_reason = self._invalid_token_reason([*family_tokens, *given_tokens])
         if invalid_reason is not None:
             return self._invalid(invalid_reason, dropped)
@@ -775,6 +986,7 @@ class PersonNameNormalizationService:
             source_suffix,
             order=tuple(["surname"] * len(surname) + ["given"] + ["middle"] * len(middle) + ["suffix"] * len(source_suffix)),
         )
+        given, middle, surname = self._apply_unbound_initial_policy(given, middle, surname)
         return self._person(source_text, source, given, middle, surname, suffix, dropped)
 
     def _person(  # noqa: PLR0913
@@ -905,6 +1117,7 @@ class PersonNameNormalizationService:
         dropped: list[_DroppedToken],
         *,
         preserve_ambiguous_credentials: bool = False,
+        reviewed_credential: str | None = None,
     ) -> list[_Token]:
         remaining = list(tokens)
         if self._has_leading_et_al_contamination(remaining):
@@ -913,12 +1126,23 @@ class PersonNameNormalizationService:
         stripped_title = False
         while remaining:
             token = remaining[0]
+            if token.text == reviewed_credential:
+                dropped.append(_DroppedToken(token, DropReason.CREDENTIAL))
+                remaining.pop(0)
+                reviewed_credential = None
+                continue
             attached_title = self._split_attached_leading_title(token)
             if attached_title is not None:
                 title, remainder = attached_title
                 dropped.append(_DroppedToken(title, DropReason.TITLE))
                 remaining[0] = remainder
                 stripped_title = True
+                continue
+            reviewed_reason = self._reviewed_leading_drop_reason(remaining)
+            if reviewed_reason is not None:
+                dropped.append(_DroppedToken(token, reviewed_reason))
+                remaining.pop(0)
+                stripped_title = reviewed_reason is DropReason.TITLE
                 continue
             key = self._compact_key(token.text)
             if token.text == "AND":
@@ -975,12 +1199,23 @@ class PersonNameNormalizationService:
             break
         return remaining
 
+    @staticmethod
+    def _reviewed_leading_drop_reason(tokens: list[_Token]) -> DropReason | None:
+        """Return the reviewed reason for one exact-case leading source token."""
+        token = tokens[0]
+        if token.text in _EXACT_CASE_LEADING_TITLES and len(tokens) >= _THREE_COMPONENTS:
+            return DropReason.TITLE
+        if token.text == "Array" and _has_usable_array_remainder(
+            "",
+            " ".join(item.text for item in tokens[1:]),
+        ):
+            return DropReason.AFFILIATION
+        return None
+
     def _followed_by_complete_name(self, remaining: list[_Token]) -> bool:
         """A complete name follows only among tokens that survive trailing cleanup."""
         tail = remaining[1:]
-        while tail and (
-            self._is_credential(tail[-1].text) or self._canonical_suffix(tail[-1].text, explicit=False)
-        ):
+        while tail and (self._is_trailing_credential(tail[-1].text) or self._canonical_suffix(tail[-1].text, explicit=False)):
             tail = tail[:-1]
         return len(tail) >= _TWO_COMPONENTS and any(not self._is_initial(token.text) for token in tail)
 
@@ -1020,11 +1255,16 @@ class PersonNameNormalizationService:
             del remaining[-credential_width:]
         while remaining:
             token = remaining[-1]
+            attached_jr = self._split_attached_terminal_jr(token)
+            if attached_jr is not None and not suffix:
+                remaining[-1], suffix_token = attached_jr
+                suffix = "Jr."
+                continue
             ambiguous_name_token = self._is_ambiguous_credential(token.text) and (
                 (not has_external_name_context and len(remaining) == _TWO_COMPONENTS)
                 or (has_external_name_context and len(remaining) == 1)
             )
-            if self._is_credential(token.text) and not ambiguous_name_token:
+            if self._is_trailing_credential(token.text) and not ambiguous_name_token:
                 dropped.append(_DroppedToken(token, DropReason.CREDENTIAL))
                 remaining.pop()
                 continue
@@ -1039,21 +1279,28 @@ class PersonNameNormalizationService:
             # "Senior"/"Junior" is a suffix only if a surname survives its removal:
             # at least two non-initial tokens must precede it (a given AND a surname),
             # or an external name context already supplies the surname.
-            surname_like_ok = has_external_name_context or any(
-                not self._is_initial(other.text) for other in remaining[1:-1]
-            )
-            if (
-                candidate
-                and not suffix
-                and (not is_roman or has_complete_name)
-                and (not surname_like or surname_like_ok)
-            ):
+            surname_like_ok = has_external_name_context or any(not self._is_initial(other.text) for other in remaining[1:-1])
+            if candidate and not suffix and (not is_roman or has_complete_name) and (not surname_like or surname_like_ok):
                 suffix = candidate
                 suffix_token = replace(token, source_role="suffix")
                 remaining.pop()
                 continue
             break
         return remaining, suffix, suffix_token
+
+    @staticmethod
+    def _split_attached_terminal_jr(token: _Token) -> tuple[_Token, _Token] | None:
+        """Split the exact terminal ``-Jr.`` suffix from a surviving name token."""
+        marker = "-Jr."
+        if not token.text.endswith(marker):
+            return None
+        name = token.text[: -len(marker)]
+        if not name or not name[-1].isalpha():
+            return None
+        return (
+            replace(token, text=name),
+            _Token("Jr.", "suffix", token.position + len(name) + 1),
+        )
 
     def _consume_boundary_segment(
         self,
@@ -1066,7 +1313,7 @@ class PersonNameNormalizationService:
             dropped.extend(_DroppedToken(replace(token, source_role="suffix"), DropReason.CREDENTIAL) for token in tokens)
             return suffix, suffix_token, dropped
         for token in tokens:
-            if self._is_credential(token.text, explicit_context=True):
+            if self._is_trailing_credential(token.text, explicit_context=True):
                 dropped.append(_DroppedToken(replace(token, source_role="suffix"), DropReason.CREDENTIAL))
                 continue
             if token.text.strip(".,").isdigit():
@@ -1093,7 +1340,7 @@ class PersonNameNormalizationService:
             return " ".join(self._canonicalize_token(token.text, "suffix") for token in tokens), tokens[0], []
 
         token = tokens[0]
-        if self._is_credential(token.text, explicit_context=True):
+        if self._is_trailing_credential(token.text, explicit_context=True):
             return "", None, [_DroppedToken(token, DropReason.CREDENTIAL)]
         if token.text.strip(".,").isdigit():
             return "", None, [_DroppedToken(token, DropReason.AFFILIATION)]
@@ -1117,6 +1364,34 @@ class PersonNameNormalizationService:
             digit_token = _Token(match.group(), token.source_role, token.position + match.start())
             dropped.append(_DroppedToken(digit_token, DropReason.AFFILIATION))
         return cleaned
+
+    @staticmethod
+    def _strip_attached_terminal_footnote(
+        tokens: list[_Token],
+        dropped: list[_DroppedToken],
+    ) -> list[_Token]:
+        """Strip closed author-footnote markers from the final personal-name token."""
+        if not tokens:
+            return []
+        remaining = list(tokens)
+        token = remaining[-1]
+        if token.text.endswith(_MOJIBAKE_FOOTNOTE_ENDINGS):
+            return remaining
+        match = _TRAILING_FOOTNOTE_RE.fullmatch(token.text)
+        if match is None:
+            return remaining
+        name = match.group("name")
+        marker = match.group("marker")
+        if len(name) == 1 and marker == "***":
+            return remaining
+        remaining[-1] = replace(token, text=name)
+        dropped.append(
+            _DroppedToken(
+                _Token(marker, token.source_role, token.position + len(name)),
+                DropReason.AFFILIATION,
+            ),
+        )
+        return remaining
 
     @staticmethod
     def _strip_standalone_periods(
@@ -1188,6 +1463,27 @@ class PersonNameNormalizationService:
         dropped.append(_DroppedToken(middle[-1], DropReason.CONNECTOR))
         return list(middle[:-artifact_width])
 
+    @staticmethod
+    def _strip_reviewed_structured_middle(
+        middle: list[_Token],
+        *,
+        middle_surface: str,
+        has_name_endpoints: bool,
+        has_explicit_suffix: bool,
+        dropped: list[_DroppedToken],
+    ) -> tuple[list[_Token], str]:
+        """Remove one reviewed credential phrase or move a medial Jr. to suffix."""
+        if middle_surface in _REVIEWED_STRUCTURED_MIDDLE_CREDENTIALS and has_name_endpoints:
+            dropped.extend(_DroppedToken(token, DropReason.CREDENTIAL) for token in middle)
+            return [], ""
+        if not has_name_endpoints or has_explicit_suffix:
+            return list(middle), ""
+        suffix_indices = [index for index, token in enumerate(middle) if token.text == "Jr."]
+        if len(suffix_indices) != 1:
+            return list(middle), ""
+        suffix_index = suffix_indices[0]
+        return [token for index, token in enumerate(middle) if index != suffix_index], "Jr."
+
     def _repair_leading_marker_initial(
         self,
         tokens: list[_Token],
@@ -1224,6 +1520,124 @@ class PersonNameNormalizationService:
             return list(tokens)
         combined = replace(tokens[0], text=f"{tokens[0].text}-{trailing_initial.group(1)}.")
         return [combined, *tokens[2:]]
+
+    def _split_fused_initial_sequence_surname(self, tokens: list[_Token]) -> list[_Token]:
+        """Split an explicitly dotted multi-initial prefix from its fused surname.
+
+        The two-or-more-initial floor makes the boundary visible in ``A.D.Smith``
+        while leaving ambiguous one-dot words such as ``St.John`` untouched.  This
+        is the only initial expansion performed before surname inference.
+        """
+        if not tokens:
+            return list(tokens)
+        token = tokens[0]
+        match = _FUSED_INITIAL_SEQUENCE_SURNAME_RE.fullmatch(token.text)
+        if match is None or not self._is_full_name_token(match.group("surname")):
+            return list(tokens)
+        initials = match.group("initials")
+        return [
+            replace(token, text=initials),
+            replace(
+                token,
+                text=match.group("surname"),
+                position=token.position + len(initials),
+            ),
+            *tokens[1:],
+        ]
+
+    @staticmethod
+    def _is_initial_letter(character: str) -> bool:
+        """Return whether one letter belongs to a script with letter case.
+
+        Initial punctuation applies to Latin, Greek, Cyrillic, and other cased
+        alphabets.  Uncased native-script names such as Japanese ``純`` are full
+        name tokens, not initials merely because they contain one code point.
+        """
+        return bool(
+            len(character) == 1
+            and character.isalpha()
+            and character.lower() != character.upper(),
+        )
+
+    @staticmethod
+    def _packed_initial_letters(token: str) -> tuple[str, ...]:
+        """Return atoms from a dotted initial bundle, never from ``AD``/``M.Yu.``."""
+        cleaned = PersonNameNormalizationService._clean_name_token(token)
+        if _MULTI_INITIAL_RE.fullmatch(cleaned) is None:
+            return ()
+        letters = tuple(character for character in cleaned if character.isalpha())
+        return (
+            letters
+            if len(letters) >= _TWO_COMPONENTS
+            and all(PersonNameNormalizationService._is_initial_letter(letter) for letter in letters)
+            else ()
+        )
+
+    @staticmethod
+    def _is_atomic_initial(token: str) -> bool:
+        """Return whether one token is exactly one bare or dotted letter."""
+        cleaned = PersonNameNormalizationService._clean_name_token(token)
+        dotted = _INITIAL_RE.fullmatch(cleaned)
+        return bool(
+            PersonNameNormalizationService._is_initial_letter(cleaned)
+            or (
+                dotted is not None
+                and PersonNameNormalizationService._is_initial_letter(dotted.group(1))
+            ),
+        )
+
+    def _expand_packed_initials(self, token: _Token, role: str) -> list[_Token]:
+        """Expand one dotted bundle into canonicalizable semantic initial tokens."""
+        letters = self._packed_initial_letters(token.text)
+        if not letters:
+            return [replace(token, source_role=role)]
+        positions = [index for index, character in enumerate(token.text) if character.isalpha()]
+        return [
+            replace(
+                token,
+                text=f"{letter}.",
+                source_role=role,
+                position=token.position + positions[index],
+            )
+            for index, letter in enumerate(letters)
+        ]
+
+    def _apply_unbound_initial_policy(
+        self,
+        given: list[_Token],
+        middle: list[_Token],
+        surname: list[_Token],
+    ) -> tuple[list[_Token], list[_Token], list[_Token]]:
+        """Allocate unbound initials without revisiting the inferred surname floor.
+
+        Packed and spaced variants converge here, after surname/order inference:
+        the first personal initial may occupy ``given`` and every later unbound
+        initial occupies ``middle``.  Explicitly hyphenated initials are never
+        expanded, so they remain one compound given-name unit.
+        """
+        expanded_given = [
+            unit
+            for token in given
+            for unit in self._expand_packed_initials(token, "given")
+        ]
+        expanded_middle = [
+            unit
+            for token in middle
+            for unit in self._expand_packed_initials(token, "middle")
+        ]
+
+        normalized_given: list[_Token] = []
+        promoted_middle: list[_Token] = []
+        for token in expanded_given:
+            if self._is_atomic_initial(token.text) and normalized_given:
+                promoted_middle.append(replace(token, source_role="middle"))
+            else:
+                normalized_given.append(replace(token, source_role="given"))
+        return (
+            normalized_given,
+            [*promoted_middle, *(replace(token, source_role="middle") for token in expanded_middle)],
+            [replace(token, source_role="surname") for token in surname],
+        )
 
     def _is_ma_given_abbreviation(self, tokens: list[_Token]) -> bool:
         """Recognize a leading María abbreviation ``Ma.`` before a real given name.
@@ -1283,11 +1697,45 @@ class PersonNameNormalizationService:
         )
 
     def _is_packed_surname_first_initials(self, tokens: list[_Token]) -> bool:
-        return bool(
-            len(tokens) >= _THREE_COMPONENTS
-            and self._is_full_name_token(tokens[0].text)
-            and all(token.text.endswith(".") and self._is_initial(token.text) for token in tokens[1:]),
-        )
+        if (
+            len(tokens) < _TWO_COMPONENTS
+            or not self._is_full_name_token(tokens[0].text)
+            or tokens[0].text.isupper()
+        ):
+            return False
+        widths = [self._unbound_initial_width(token.text) for token in tokens[1:]]
+        if not all(widths):
+            return False
+        initial_count = sum(widths)
+        return initial_count >= _TWO_COMPONENTS
+
+    def _unbound_initial_width(self, token: str) -> int:
+        """Return the number of semantic initials in an unhyphenated token."""
+        packed = self._packed_initial_letters(token)
+        if packed:
+            return len(packed)
+        return 1 if self._is_atomic_initial(token) else 0
+
+    def _two_token_surname_after_initial_run(self, tokens: list[_Token]) -> int | None:
+        """Find a compound-surname floor without relying on typographic token count."""
+        if len(tokens) < _THREE_COMPONENTS:
+            return None
+        index = 1 if self._is_full_name_token(tokens[0].text) else 0
+        initial_count = 0
+        while index < len(tokens):
+            width = self._unbound_initial_width(tokens[index].text)
+            if not width:
+                break
+            initial_count += width
+            index += 1
+        minimum_initials = 1 if self._is_full_name_token(tokens[0].text) else _TWO_COMPONENTS
+        if (
+            initial_count >= minimum_initials
+            and len(tokens) - index == _TWO_COMPONENTS
+            and all(self._is_full_name_token(token.text) for token in tokens[index:])
+        ):
+            return index
+        return None
 
     def _infer_regular_roles(self, tokens: list[_Token]) -> tuple[list[_Token], list[_Token], list[_Token]]:
         if len(tokens) == 1:
@@ -1317,8 +1765,14 @@ class PersonNameNormalizationService:
             index for index, token in enumerate(tokens[1:-1], start=1) if self._particle_key(token.text) in _FAMILY_PARTICLES
         ]:
             surname_start = particle_positions[0]
-        elif len(tokens) == _FOUR_COMPONENTS and self._is_initial(tokens[1].text) and not self._is_initial(tokens[2].text):
+        elif (
+            len(tokens) == _FOUR_COMPONENTS
+            and self._is_initial(tokens[1].text)
+            and not self._is_initial(tokens[2].text)
+        ):
             surname_start = 2
+        elif initial_surname_start := self._two_token_surname_after_initial_run(tokens):
+            surname_start = initial_surname_start
         given = [replace(tokens[0], source_role="given")]
         middle = [replace(token, source_role="middle") for token in tokens[1:surname_start]]
         surname = [replace(token, source_role="surname") for token in tokens[surname_start:]]
@@ -1375,7 +1829,7 @@ class PersonNameNormalizationService:
             [replace(token, source_role="surname") for token in [*middle[surname_start:], *surname]],
         )
 
-    def _repair_structured_roles(  # noqa: C901, PLR0911
+    def _repair_structured_roles(  # noqa: C901, PLR0911, PLR0912
         self,
         by_role: dict[str, list[_Token]],
     ) -> tuple[list[_Token], list[_Token], list[_Token]]:
@@ -1392,6 +1846,21 @@ class PersonNameNormalizationService:
             if middle:
                 return [replace(middle[0], source_role="given")], middle[1:], surname
             if len(surname) == 1:
+                fused_sequence = _FUSED_INITIAL_SEQUENCE_SURNAME_RE.fullmatch(surname[0].text)
+                if fused_sequence is not None and self._is_full_name_token(fused_sequence.group("surname")):
+                    initials = fused_sequence.group("initials")
+                    return (
+                        [replace(surname[0], text=initials, source_role="given")],
+                        [],
+                        [
+                            replace(
+                                surname[0],
+                                text=fused_sequence.group("surname"),
+                                source_role="surname",
+                                position=surname[0].position + len(initials),
+                            ),
+                        ],
+                    )
                 fused = _FUSED_INITIAL_SURNAME_RE.fullmatch(surname[0].text)
                 if fused is not None and all(self._allowed_name_character(character) for character in fused.group(2)):
                     initial, family = fused.groups()
@@ -1408,6 +1877,8 @@ class PersonNameNormalizationService:
                         ],
                     )
             if len(surname) >= _TWO_COMPONENTS and self._particle_key(surname[0].text) not in _FAMILY_PARTICLES:
+                if self._is_packed_surname_first_initials(surname):
+                    return self._infer_regular_roles(surname)
                 if surname[-1].text.isupper() and not any(self._is_initial(token.text) for token in surname[:-1]):
                     return (
                         [replace(token, source_role="given") for token in surname[:-1]],
@@ -1454,13 +1925,20 @@ class PersonNameNormalizationService:
     def _canonical_tokens(self, tokens: list[_Token], role: str) -> tuple[str, ...]:
         return tuple(self._canonicalize_token(token.text, role) for token in tokens)
 
-    def _canonicalize_token(self, token: str, role: str) -> str:  # noqa: C901
+    def _canonicalize_token(self, token: str, role: str) -> str:  # noqa: C901, PLR0911, PLR0912
         cleaned = self._clean_name_token(token)
         if role in {"middle", "surname"} and cleaned in _LOWERCASE_RELATIONAL_TOKENS:
             return cleaned
-        if _INITIAL_RE.fullmatch(cleaned):
-            return cleaned[0].upper() + "."
-        if _MULTI_INITIAL_RE.fullmatch(cleaned) or self._is_uppercase_dotted_abbreviation(cleaned):
+        if _HYPHEN_INITIAL_RE.fullmatch(cleaned) and all(
+            self._is_initial_letter(part.rstrip(".")) for part in cleaned.split("-")
+        ):
+            return "-".join(f"{part.rstrip('.').upper()}." for part in cleaned.split("-"))
+        if role != "surname" and self._is_initial_letter(cleaned):
+            return cleaned.upper() + "."
+        dotted = _INITIAL_RE.fullmatch(cleaned)
+        if dotted is not None and self._is_initial_letter(dotted.group(1)):
+            return dotted.group(1).upper() + "."
+        if self._packed_initial_letters(cleaned) or self._is_uppercase_dotted_abbreviation(cleaned):
             return "".join(character.upper() if character.isalpha() else character for character in cleaned)
         if role != "surname" and cleaned.isalpha() and cleaned.isupper() and len(cleaned) == _TWO_COMPONENTS:
             # A two-letter all-caps given token is initials (e.g. "MS", "MA", "MD") — keep it
@@ -1509,6 +1987,8 @@ class PersonNameNormalizationService:
     @staticmethod
     def _looks_like_mixed_ocr_case(part: str) -> bool:
         """Return whether a token has an initial mixed-case prefix plus an all-caps OCR tail."""
+        if _DOTTED_INITIAL_SEQUENCE_RE.fullmatch(part):
+            return False
         return bool(
             (part.startswith("Mc") and len(part) > _MC_PREFIX_LENGTH and part[2:].isupper())
             or (len(part) > _TWO_COMPONENTS and part[0].isupper() and part[1].islower() and part[2:].isupper()),
@@ -1569,7 +2049,16 @@ class PersonNameNormalizationService:
             return roman
         return ""
 
+    def _is_trailing_credential(self, token: str, *, explicit_context: bool = False) -> bool:
+        """Match a credential at a reviewed trailing boundary."""
+        return token.strip(",") in _EXACT_CASE_TRAILING_CREDENTIALS or self._is_credential(
+            token,
+            explicit_context=explicit_context,
+        )
+
     def _is_credential(self, token: str, *, explicit_context: bool = False) -> bool:
+        if token.strip(",") in _EXACT_CASE_BOUNDARY_CREDENTIALS:
+            return True
         key = self._compact_key(token)
         if key not in _CREDENTIAL_KEYS:
             return False
@@ -1693,9 +2182,16 @@ class PersonNameNormalizationService:
 
     @staticmethod
     def _is_initial(token: str) -> bool:
+        """Return whether a token is any initial shape: atomic, packed, or hyphenated."""
         cleaned = PersonNameNormalizationService._clean_name_token(token)
+        if PersonNameNormalizationService._is_atomic_initial(cleaned) or PersonNameNormalizationService._packed_initial_letters(
+            cleaned,
+        ):
+            return True
+        hyphenated = _HYPHEN_INITIAL_RE.fullmatch(cleaned)
         return bool(
-            (len(cleaned) == 1 and cleaned.isalpha()) or _INITIAL_RE.fullmatch(cleaned) or _MULTI_INITIAL_RE.fullmatch(cleaned),
+            hyphenated is not None
+            and all(PersonNameNormalizationService._is_initial_letter(part.rstrip(".")) for part in cleaned.split("-")),
         )
 
     def _public_dropped(self, dropped: list[_DroppedToken]) -> tuple[DroppedNameToken, ...]:

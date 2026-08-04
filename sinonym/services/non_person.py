@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import TYPE_CHECKING
 
 from sinonym.services.name_lookup import SurnameResolver
@@ -18,10 +19,102 @@ MIN_CJK_NON_PERSON_PREFIX_CHARS = 2
 MIN_AUTHOR_LIST_LATIN_TOKENS = 6
 MIN_AUTHOR_LIST_SURNAME_TOKENS = 3
 MIN_TRANSLITERATED_CJK_CHARS = 2
+MIN_REVIEWED_METADATA_TOKENS = 2
+MIN_REVIEWED_LEGAL_TOKENS = 3
+MAX_REVIEWED_REFORMATION_TOKENS = 5
+
+REVIEWED_PLACEHOLDER_PHRASES = frozenset(
+    {
+        "None None",
+        "Not Available Not Available",
+        "Unknown Author",
+        "undefined No authorship indicated",
+    },
+)
+REVIEWED_NON_PERSON_LITERALS = frozenset(
+    {
+        "Anthony C. Laborte, Marissa C. Hitalia*",
+        "Array BioPharma",
+        "Professur Arbeitswissenschaft",
+        "Professur Fördertechnik",
+        "Professur Grundbau",
+        "Professur Rechnernetze",
+    },
+)
+REVIEWED_MONTHS = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
+REVIEWED_MONTH_RANGE_RE = re.compile(
+    rf"(?:{'|'.join(REVIEWED_MONTHS)})-(?:{'|'.join(REVIEWED_MONTHS)})",
+    re.IGNORECASE,
+)
+REVIEWED_ORGANIZATION_TOKENS = frozenset(
+    {
+        "kabupaten",
+        "libraries",
+    },
+)
+REVIEWED_HANGUL_ORGANIZATION_MARKERS = ("대학교", "연구소", "연구원", "학회", "위원회")
+REVIEWED_HANGUL_ORGANIZATION_SUFFIXES = (*REVIEWED_HANGUL_ORGANIZATION_MARKERS, "학부", "자료")
+REVIEWED_HYPHENATED_SERVICES_RE = re.compile(
+    r"(?:^|[^A-Za-z])(?:[A-Za-z]+-services|services-[A-Za-z]+)(?:[^A-Za-z]|$)",
+    re.IGNORECASE,
+)
+REVIEWED_SERVICES_PERSON_TAIL_RE = re.compile(
+    r"(?:^|\s)services-[A-Z][A-Za-z'-]+(?:\s+[A-Z][.]?)?\s+[A-Z][A-Za-z'-]+$",
+    re.IGNORECASE,
+)
+
+
+def _reviewed_literal_pattern(raw_name: str) -> str | None:
+    """Return one exact reviewed placeholder or month-range pattern."""
+    if raw_name in REVIEWED_PLACEHOLDER_PHRASES:
+        return "placeholder_literal"
+    if raw_name in REVIEWED_NON_PERSON_LITERALS:
+        return "non_person_literal"
+    if REVIEWED_MONTH_RANGE_RE.fullmatch(raw_name):
+        return "month_range"
+    return None
+
 
 LATIN_WORD_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)?")
 ASCII_WORD_RE = re.compile(r"[A-Za-z]+")
+ASCII_ALNUM_WORD_RE = re.compile(r"[a-z0-9]+")
 INITIAL_RE = re.compile(r"[^\W\d_]")
+
+
+def reviewed_non_person_text_pattern(raw_name: str) -> str | None:
+    """Return one reviewed literal or organization pattern for a raw surface."""
+    literal_pattern = _reviewed_literal_pattern(raw_name)
+    if literal_pattern is not None:
+        return literal_pattern
+    words = set(ASCII_ALNUM_WORD_RE.findall(raw_name.casefold()))
+    if words & REVIEWED_ORGANIZATION_TOKENS:
+        return "organization_token"
+    if REVIEWED_HYPHENATED_SERVICES_RE.search(raw_name) and not REVIEWED_SERVICES_PERSON_TAIL_RE.search(raw_name):
+        return "hyphenated_services"
+    return None
+
+
+def _is_reviewed_hangul_organization(fields: tuple[str, str, str]) -> bool:
+    """Match an organization-only Hangul source shape with no person token."""
+    hangul_tokens = fields[2].split()
+    all_tokens_are_organizational = all(
+        any(token.endswith(marker) for marker in REVIEWED_HANGUL_ORGANIZATION_SUFFIXES) for token in hangul_tokens
+    )
+    return bool(not fields[0] and not fields[1] and hangul_tokens and all_tokens_are_organizational)
+
 
 STRONG_CJK_NON_PERSON_MARKERS = (
     "大学",
@@ -41,6 +134,180 @@ STRONG_CJK_NON_PERSON_MARKERS = (
 
 STANDALONE_CJK_NON_PERSON_MARKERS = frozenset(STRONG_CJK_NON_PERSON_MARKERS)
 CJK_NON_PERSON_SUFFIX_MARKERS = STRONG_CJK_NON_PERSON_MARKERS
+
+REVIEWED_CREDENTIAL_ONLY_TOKENS = frozenset(
+    {
+        "BEng",
+        "BSc",
+        "CTRS",
+        "DNP",
+        "Dr.-Ing",
+        "Dr.-Ing.",
+        "FACS",
+        "FEBS",
+        "FRACP",
+        "M.Si",
+        "M.Si.",
+        "MBA",
+        "MBBS",
+        "MEng",
+        "MPH",
+        "MSc",
+        "Ph.D",
+        "Ph.D.",
+        "PhD",
+        "PhD.",
+        "ScD",
+    },
+)
+REVIEWED_EDUCATION_CONNECTORS = frozenset(
+    {
+        "adalah",
+        "dan",
+        "dalam",
+        "dengan",
+        "di",
+        "ke",
+        "melalui",
+        "oleh",
+        "pada",
+        "sebagai",
+        "terhadap",
+        "untuk",
+        "yang",
+    },
+)
+REVIEWED_RESEARCH_SCHOLAR_PREFIXES = frozenset(
+    {
+        "",
+        "associate professor head ph d",
+        "asstt",
+        "d phil",
+        "dr",
+        "dr ph d",
+        "fulltime",
+        "head ph d",
+        "m e",
+        "m ed",
+        "m phil",
+        "m sc",
+        "m tech",
+        "mphil",
+        "msc",
+        "mtech",
+        "p g",
+        "p hd",
+        "pg",
+        "pg m phil",
+        "ph d",
+        "phd",
+        "professor ph d",
+        "professor postdoc",
+        "professor2",
+        "research scholar",
+        "retd ph d",
+        "scholar m e",
+        "time ph d",
+    },
+)
+
+
+def reviewed_non_person_source_pattern(  # noqa: C901 - one branch per reviewed source grammar.
+    first_name: str | None,
+    middle_names: str | None,
+    last_name: str | None,
+    suffix: str | None = None,
+) -> str | None:
+    """Return the reviewed semantic pattern proving one source row is not a person.
+
+    The predicates are the zero-counterexample subtypes from the complete
+    691-million-row source census. They inspect the original structured fields
+    and are deliberately separate from parser failure, which can still occur
+    for real people.
+    """
+    fields = tuple((value or "").strip() for value in (first_name, middle_names, last_name))
+    if (suffix or "").strip():
+        return None
+    nonempty_fields = tuple(field for field in fields if field)
+    if nonempty_fields and all(field in REVIEWED_CREDENTIAL_ONLY_TOKENS for field in nonempty_fields):
+        return "credential_only"
+
+    if _is_reviewed_hangul_organization(fields):
+        return "hangul_organization_marker"
+
+    raw_name = " ".join(" ".join(value.split()) for value in fields if value)
+    literal_pattern = reviewed_non_person_text_pattern(raw_name)
+    if literal_pattern is not None:
+        return literal_pattern
+    folded = raw_name.lower()
+    if not (
+        any(marker in folded for marker in ("stadt", "undang", "pendidikan", "reformation"))
+        or ("research" in folded and "scholar" in folded)
+    ):
+        return None
+
+    ascii_words = ASCII_ALNUM_WORD_RE.findall(folded)
+    first_key = " ".join(ASCII_ALNUM_WORD_RE.findall(fields[0].lower()))
+    pattern = None
+    if first_key == "stadt" and len(ascii_words) >= MIN_REVIEWED_METADATA_TOKENS:
+        pattern = "municipal_text"
+    elif first_key == "undang undang" and len(ascii_words) >= MIN_REVIEWED_LEGAL_TOKENS:
+        pattern = "legal_text"
+    elif first_key == "pendidikan" and len(ascii_words) >= MIN_REVIEWED_METADATA_TOKENS and _reviewed_education_text(raw_name):
+        pattern = "education_text"
+    elif _reviewed_research_scholar_metadata(raw_name):
+        pattern = "research_scholar_metadata"
+    elif (
+        MIN_REVIEWED_METADATA_TOKENS <= len(ascii_words) <= MAX_REVIEWED_REFORMATION_TOKENS
+        and "reformation" in ascii_words
+        and raw_name.upper() == raw_name
+        and raw_name.lower() != raw_name
+    ):
+        pattern = "reformation_fragment"
+    return pattern
+
+
+def _reviewed_education_text(raw_name: str) -> bool:
+    """Match the reviewed-safe casing and connector union for education text."""
+    if raw_name.upper() == raw_name and raw_name.lower() != raw_name:
+        return True
+    if _prefix_has_lowercase_continuation(raw_name, "pendidikan ") or _prefix_has_lowercase_continuation(
+        raw_name,
+        "Pendidikan ",
+    ):
+        return True
+    title_prefix = "Pendidikan "
+    if not raw_name.startswith(title_prefix):
+        return False
+    remainder = raw_name[len(title_prefix) :]
+    if remainder.upper() == remainder and remainder.lower() != remainder:
+        return True
+    return bool(set(_metadata_words(remainder).split()) & REVIEWED_EDUCATION_CONNECTORS)
+
+
+def _reviewed_research_scholar_metadata(raw_name: str) -> bool:
+    """Match a closed degree/status grammar followed by ``Research Scholar``."""
+    words = _metadata_words(raw_name)
+    suffix = "research scholar"
+    if words == suffix:
+        return True
+    if not words.endswith(f" {suffix}"):
+        return False
+    return words[: -len(suffix)].strip() in REVIEWED_RESEARCH_SCHOLAR_PREFIXES
+
+
+def _prefix_has_lowercase_continuation(raw_name: str, prefix: str) -> bool:
+    """Return whether an exact prefix is followed by a lowercase letter."""
+    if not raw_name.startswith(prefix):
+        return False
+    first_letter = next((character for character in raw_name[len(prefix) :] if character.isalpha()), "")
+    return bool(first_letter and first_letter.islower())
+
+
+def _metadata_words(value: str) -> str:
+    """Normalize punctuation and case for the closed metadata grammars."""
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return " ".join(re.sub(r"[^\w]+", " ", normalized, flags=re.UNICODE).split())
 
 
 class NonPersonInputDetectionService:

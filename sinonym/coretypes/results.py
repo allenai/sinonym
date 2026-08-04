@@ -60,7 +60,7 @@ class ParsedName:
 
     `order` is a positional label sequence, not a set: a role may legitimately
     repeat. For example `parsed_original_order` for "J. Ming K. Zhang" is
-    ["middle", "given", "middle", "surname"] with middle_tokens ["J", "K"] — the
+    ["middle", "given", "middle", "surname"] with middle_tokens ["J.", "K."] — the
     two "middle" entries flank the given name. Consumers rebuilding the token
     stream must walk `order` in sequence and draw from each role's token list
     (surname_tokens/given_tokens/middle_tokens) in order, never assuming a role

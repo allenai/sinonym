@@ -24,6 +24,12 @@ from sinonym.utils.string_manipulation import StringManipulationUtils
 if TYPE_CHECKING:
     from sinonym.services.normalization import CompoundMetadata
 
+REVIEWED_UNBOUNDED_PREFIX_GIVEN_FORMS = frozenset({"alei"})
+
+# The only Mandarin syllables spelled with a single Roman letter. A lone "a"/"e"
+# may therefore be a real syllable rather than an initial.
+SINGLE_LETTER_PINYIN_SYLLABLES = frozenset({"a", "e"})
+
 
 class NameFormattingService:
     """Service for formatting Chinese names into standardized output."""
@@ -42,7 +48,7 @@ class NameFormattingService:
             self._data = data
         self._surname_resolver = SurnameResolver(self._data, self._normalizer)
 
-    def format_name_output(
+    def format_name_output_with_tokens(  # noqa: PLR0913 - formatter inputs are independent policy evidence
         self,
         surname_tokens: list[str],
         given_tokens: list[str],
@@ -50,210 +56,52 @@ class NameFormattingService:
         compound_metadata: dict[str, CompoundMetadata] | None = None,
         *,
         allow_surname_like_given_split: bool = True,
-    ) -> str:
-        """
-        Format parsed name components into final output string.
-
-        Responsibilities:
-        - Context-aware given name splitting using full database (after parsing)
-        - Proper capitalization and formatting of all name parts
-        - Compound surname formatting using metadata from CompoundDetector
-        - NO structural/pattern-based splitting (that belongs in TextPreprocessor)
-        """
-        # First validate that given tokens could plausibly be Chinese
-        compact_initial = self._accepts_compact_initial(surname_tokens, given_tokens)
-        alias_given_parts = self._reviewed_alias_compact_given_parts(surname_tokens, given_tokens)
-        wade_giles_single_given = self._accepts_wade_giles_single_given(surname_tokens, given_tokens)
-        if (
-            not self._normalizer.validate_given_tokens(given_tokens, normalized_cache)
-            and not compact_initial
-            and not alias_given_parts
-            and not wade_giles_single_given
-        ):
-            msg = "given name tokens are not plausibly Chinese"
-            raise ValueError(msg)
-
-        # Process given name tokens: context-aware splitting using full database
-        parts = []
-        for token in given_tokens:
-            # Check if token is already a valid given name (no splitting needed)
-            if normalized_cache and token in normalized_cache:
-                normalized_token = normalized_cache[token]
-            else:
-                normalized_token = self._normalizer.norm(token)
-
-            if self._data.is_given_name(normalized_token):
-                parts.append(token)
-                continue
-
-            if compact_initial and len(given_tokens) == 1 and token == given_tokens[0]:
-                parts.append(token)
-                continue
-
-            if alias_given_parts and len(given_tokens) == 1 and token == given_tokens[0]:
-                parts.extend(alias_given_parts)
-                continue
-
-            if wade_giles_single_given and len(given_tokens) == 1 and token == given_tokens[0]:
-                parts.append(token)
-                continue
-
-            # Check if token is already a valid Chinese syllable (no splitting needed)
-            if self._normalizer.is_valid_chinese_phonetics(token):
-                parts.append(token)
-                continue
-
-            # Context-aware splitting: use full database for intelligent given name splitting
-            split = StringManipulationUtils.split_concatenated_name(
-                token,
-                normalized_cache,
-                self._data,
-                self._normalizer,
-                self._config,
-            )
-            if not split and allow_surname_like_given_split:
-                split = StringManipulationUtils.split_surname_like_given_name(
-                    token,
-                    normalized_cache,
-                    self._data,
-                    self._normalizer,
-                    self._config,
-                )
-            if split:
-                parts.extend(split)
-            # Final validation: accept if it's a valid Chinese token
-            elif self._normalizer.is_valid_given_name_token(token, normalized_cache):
-                parts.append(token)
-            else:
-                msg = f"given name token '{token}' is not valid Chinese"
-                raise ValueError(msg)
-
-        if not parts:
-            msg = "given name invalid"
-            raise ValueError(msg)
-
-        # Capitalize each part properly, handling hyphens within parts
-        formatted_parts = []
-        for part in parts:
-            # Clean up any leading/trailing hyphens that may have come from tokenization
-            clean_part = StringManipulationUtils.clean_hyphen_boundaries(part)
-            if not clean_part:  # Skip empty parts after stripping hyphens
-                continue
-
-            if "-" in clean_part:
-                sub_parts = StringManipulationUtils.split_and_clean_hyphens(clean_part)
-                capitalized_parts = [StringManipulationUtils.capitalize_name_part(sub) for sub in sub_parts]
-                formatted_part = StringManipulationUtils.join_with_hyphens(capitalized_parts)
-                formatted_parts.append(formatted_part)
-            else:
-                formatted_parts.append(StringManipulationUtils.capitalize_name_part(clean_part))
-
-        # Determine separator based on part lengths
-        # Use spaces when we have mixed-length parts (some single chars, some multi-char)
-        if len(formatted_parts) > 1:
-            part_lengths = [len(part.replace("-", "")) for part in formatted_parts]  # Count chars, ignoring internal hyphens
-            has_single_char = any(length == 1 for length in part_lengths)
-            has_multi_char = any(length > 1 for length in part_lengths)
-
-            # Special-case: one or more trailing single-letter initials
-            trailing_count = 0
-            for length in reversed(part_lengths):
-                if length == 1:
-                    trailing_count += 1
-                else:
-                    break
-
-            if trailing_count > 0 and any(l > 1 for l in part_lengths[:-trailing_count]):
-                primary_parts = formatted_parts[:-trailing_count]
-                middle_parts = formatted_parts[-trailing_count:]
-
-                # Join primary parts using mixed-length rule
-                if len(primary_parts) > 1:
-                    p_lengths = [len(p.replace("-", "")) for p in primary_parts]
-                    p_has_single = any(l == 1 for l in p_lengths)
-                    p_has_multi = any(l > 1 for l in p_lengths)
-                    if p_has_single and p_has_multi:
-                        primary_given_str = StringManipulationUtils.join_with_spaces(primary_parts)
-                    else:
-                        primary_given_str = StringManipulationUtils.join_with_hyphens(primary_parts)
-                else:
-                    primary_given_str = primary_parts[0]
-
-                middle_str = StringManipulationUtils.join_with_spaces(middle_parts)
-                given_str = f"{primary_given_str} {middle_str}".strip()
-            elif has_single_char and has_multi_char:
-                # Mixed lengths: use spaces (e.g., "Bin B" not "Bin-B")
-                given_str = StringManipulationUtils.join_with_spaces(formatted_parts)
-            else:
-                # All same length category: use hyphens (e.g., "Yu-Ming" or "A-B")
-                given_str = StringManipulationUtils.join_with_hyphens(formatted_parts)
-        else:
-            given_str = formatted_parts[0] if formatted_parts else ""
-
-        # Handle compound surnames using centralized metadata
-        if len(surname_tokens) > 1:
-            # CompoundDetector should always provide metadata - trust it as the single authority
-            if compound_metadata:
-                surname_str = self._format_compound_with_metadata(surname_tokens, compound_metadata)
-            else:
-                # This should rarely happen if CompoundDetector is working correctly
-                # Log a warning and use default behavior
-                # TODO: Add logging: "Missing compound metadata for multi-token surname"
-                capitalized_tokens = [StringManipulationUtils.capitalize_name_part(t) for t in surname_tokens]
-                surname_str = StringManipulationUtils.join_with_hyphens(capitalized_tokens)
-        # Single token surname - check if it's a compact compound
-        elif compound_metadata:
-            surname_str = self._format_single_token_with_metadata(surname_tokens[0], compound_metadata)
-        else:
-            surname_str = StringManipulationUtils.capitalize_name_part(surname_tokens[0])
-
-        return f"{given_str} {surname_str}"
-
-    def format_name_output_with_tokens(
-        self,
-        surname_tokens: list[str],
-        given_tokens: list[str],
-        normalized_cache: dict[str, str] | None = None,
-        compound_metadata: dict[str, CompoundMetadata] | None = None,
-        *,
-        allow_surname_like_given_split: bool = True,
+        syllabic_single_letter_tokens: frozenset[str] | None = None,
     ) -> tuple[str, list[str], list[str], str, str, list[str]]:
         """
         Format parsed name components and also return the individual tokens.
 
         Returns:
-            (full_formatted_name, given_tokens_final, surname_tokens_final, surname_str, given_str)
+            A tuple containing the formatted name, final given tokens, final
+            surname tokens, surname string, given string, and middle tokens.
 
         - given_tokens_final: individual given name tokens after splitting and capitalization
         - surname_tokens_final: individual surname tokens (capitalized)
         - surname_str / given_str: component strings as used in full_formatted_name
+        - middle_tokens_final: canonical standalone initials outside the Chinese given span
         """
         # Validate given name tokens first
         compact_initial = self._accepts_compact_initial(surname_tokens, given_tokens)
         alias_given_parts = self._reviewed_alias_compact_given_parts(surname_tokens, given_tokens)
         wade_giles_single_given = self._accepts_wade_giles_single_given(surname_tokens, given_tokens)
+        unbounded_syllabic_prefix = bool(
+            len(given_tokens) == 1
+            and self._accepts_unbounded_syllabic_prefix(surname_tokens, given_tokens, given_tokens[0]),
+        )
         if (
             not self._normalizer.validate_given_tokens(given_tokens, normalized_cache)
             and not compact_initial
             and not alias_given_parts
             and not wade_giles_single_given
+            and not unbounded_syllabic_prefix
         ):
             msg = "given name tokens are not plausibly Chinese"
             raise ValueError(msg)
 
         # Process given tokens with splitting
         parts: list[str] = []
+        syllabic_keys = {token.casefold().rstrip(".") for token in syllabic_single_letter_tokens or ()}
         for token in given_tokens:
             if normalized_cache and token in normalized_cache:
                 normalized_token = normalized_cache[token]
             else:
                 normalized_token = self._normalizer.norm(token)
 
-            if self._data.is_given_name(normalized_token):
-                parts.append(token)
+            if compact_initial and len(given_tokens) == 1 and token == given_tokens[0]:
+                parts.extend(token)
                 continue
 
-            if compact_initial and len(given_tokens) == 1 and token == given_tokens[0]:
+            if self._data.is_given_name(normalized_token):
                 parts.append(token)
                 continue
 
@@ -262,6 +110,10 @@ class NameFormattingService:
                 continue
 
             if wade_giles_single_given and len(given_tokens) == 1 and token == given_tokens[0]:
+                parts.append(token)
+                continue
+
+            if unbounded_syllabic_prefix:
                 parts.append(token)
                 continue
 
@@ -285,7 +137,11 @@ class NameFormattingService:
                     self._config,
                 )
             if split:
-                parts.extend(split)
+                trailing = split[-1].casefold().rstrip(".")
+                if len(split) > 1 and len(split[-1]) == 1 and trailing not in syllabic_keys:
+                    parts.append(token)
+                else:
+                    parts.extend(split)
             elif self._normalizer.is_valid_given_name_token(token, normalized_cache):
                 parts.append(token)
             else:
@@ -295,85 +151,58 @@ class NameFormattingService:
         if not parts:
             raise ValueError("given name invalid")
 
-        # Build tokens and formatted parts
+        # Build formatter parts while preserving whether each source component
+        # is a standalone initial. Native-script alignment can explicitly mark
+        # a one-letter Roman token as a complete syllable instead.
         formatted_parts: list[str] = []
-        given_tokens_final: list[str] = []
+        formatted_part_tokens: list[list[str]] = []
+        initial_parts: list[bool] = []
         for part in parts:
             clean_part = StringManipulationUtils.clean_hyphen_boundaries(part)
             if not clean_part:
                 continue
             if "-" in clean_part:
                 sub_parts = StringManipulationUtils.split_and_clean_hyphens(clean_part)
-                capitalized_parts = [StringManipulationUtils.capitalize_name_part(sub) for sub in sub_parts]
-                given_tokens_final.extend(capitalized_parts)
-                formatted_parts.append(StringManipulationUtils.join_with_hyphens(capitalized_parts))
-            else:
-                cap = StringManipulationUtils.capitalize_name_part(clean_part)
-                formatted_parts.append(cap)
-                given_tokens_final.append(cap)
-
-        # Determine given separator (mirror format_name_output)
-        # Also peel leading/trailing single-letter initials into middle tokens when appropriate
-        middle_tokens_final: list[str] = []
-        if len(formatted_parts) > 1:
-            part_lengths = [len(part.replace("-", "")) for part in formatted_parts]
-            has_single_char = any(length == 1 for length in part_lengths)
-            has_multi_char = any(length > 1 for length in part_lengths)
-
-            # leading run of single-letter initials → middle tokens (only if followed by any multi-char part)
-            leading_count = 0
-            for length in part_lengths:
-                if length == 1:
-                    leading_count += 1
-                else:
-                    break
-
-            if leading_count > 0 and any(l > 1 for l in part_lengths[leading_count:]):
-                middle_tokens_final.extend(formatted_parts[:leading_count])
-                formatted_parts = formatted_parts[leading_count:]
-                part_lengths = part_lengths[leading_count:]
-                if len(given_tokens_final) >= leading_count:
-                    given_tokens_final = given_tokens_final[leading_count:]
-
-            # trailing run of single-letter initials → middle tokens (only if preceded by any multi-char part)
-            trailing_count = 0
-            for length in reversed(part_lengths):
-                if length == 1:
-                    trailing_count += 1
-                else:
-                    break
-
-            if trailing_count > 0 and any(l > 1 for l in part_lengths[:-trailing_count]):
-                middle_tokens_final.extend(formatted_parts[-trailing_count:])
-                primary_parts = formatted_parts[:-trailing_count]
-
-                if len(primary_parts) > 1:
-                    p_lengths = [len(p.replace("-", "")) for p in primary_parts]
-                    p_has_single = any(l == 1 for l in p_lengths)
-                    p_has_multi = any(l > 1 for l in p_lengths)
-                    if p_has_single and p_has_multi:
-                        given_str = StringManipulationUtils.join_with_spaces(primary_parts)
+                all_initial_parts = bool(sub_parts) and all(self._initial_letter(sub) is not None for sub in sub_parts)
+                capitalized_parts: list[str] = []
+                for sub in sub_parts:
+                    letter = self._initial_letter(sub)
+                    key = sub.casefold().rstrip(".")
+                    is_syllable = key in syllabic_keys or (
+                        not all_initial_parts and key in SINGLE_LETTER_PINYIN_SYLLABLES and "." not in sub
+                    )
+                    if letter is not None and not is_syllable:
+                        capitalized_parts.append(f"{letter}.")
                     else:
-                        given_str = StringManipulationUtils.join_with_hyphens(primary_parts)
-                else:
-                    given_str = primary_parts[0] if primary_parts else ""
-
-                # Remove the trailing middle initials from the given token list
-                if trailing_count > 0 and len(given_tokens_final) >= trailing_count:
-                    given_tokens_final = given_tokens_final[:-trailing_count]
-            elif len(formatted_parts) > 1:
-                # Mixed lengths remain in given – choose separator
-                part_lengths = [len(part.replace("-", "")) for part in formatted_parts]
-                has_single_char = any(length == 1 for length in part_lengths)
-                has_multi_char = any(length > 1 for length in part_lengths)
-                if has_single_char and has_multi_char:
-                    given_str = StringManipulationUtils.join_with_spaces(formatted_parts)
-                else:
-                    given_str = StringManipulationUtils.join_with_hyphens(formatted_parts)
+                        capitalized_parts.append(StringManipulationUtils.capitalize_name_part(sub))
+                formatted_part_tokens.append(capitalized_parts)
+                formatted_parts.append(StringManipulationUtils.join_with_hyphens(capitalized_parts))
+                # An explicit hyphen binds every subpart into the first name.
+                initial_parts.append(False)
             else:
-                given_str = formatted_parts[0] if formatted_parts else ""
-        else:
-            given_str = formatted_parts[0] if formatted_parts else ""
+                letter = self._initial_letter(clean_part)
+                is_syllable = clean_part.casefold().rstrip(".") in syllabic_keys
+                cap = (
+                    f"{letter}."
+                    if letter is not None and not is_syllable
+                    else StringManipulationUtils.capitalize_name_part(clean_part)
+                )
+                formatted_parts.append(cap)
+                formatted_part_tokens.append([cap])
+                initial_parts.append(letter is not None and not is_syllable)
+
+        if not formatted_parts:
+            raise ValueError("given name invalid")
+
+        # Chinese all-initial spans are one compound first name. In mixed
+        # spans, spelled/source-bound components form the hyphenated first name
+        # and all standalone initials occupy the operational middle field.
+        all_initials = all(initial_parts)
+        primary_indices = [index for index, is_initial in enumerate(initial_parts) if all_initials or not is_initial]
+        middle_indices = [] if all_initials else [index for index, is_initial in enumerate(initial_parts) if is_initial]
+        given_str = StringManipulationUtils.join_with_hyphens([formatted_parts[index] for index in primary_indices])
+        given_tokens_final = [token for index in primary_indices for token in formatted_part_tokens[index]]
+        middle_tokens_final = [formatted_part_tokens[index][0] for index in middle_indices]
 
         # Surname formatting
         if len(surname_tokens) > 1:
@@ -402,12 +231,43 @@ class NameFormattingService:
         if len(surname_tokens) != 1 or len(given_tokens) != 1:
             return False
         abbreviation = given_tokens[0]
+        folded_abbreviation = self._normalizer.norm_light(abbreviation)
         surname_key = self._normalizer.norm_light(surname_tokens[0])
         return bool(
             self._data.get_surname_freq_as_written(surname_key) >= DOMINANT_CHINESE_SURNAME_FREQ_MIN
             and abbreviation.isalpha()
             and 2 <= len(abbreviation) <= 3  # noqa: PLR2004
-            and not any(character.lower() in "aeiou" for character in abbreviation),
+            and not any(character in "aeiou" for character in folded_abbreviation),
+        )
+
+    @staticmethod
+    def _initial_letter(token: str) -> str | None:
+        """Return the canonical letter for one optional-period initial."""
+        stripped = token.strip()
+        letters = [character for character in stripped if character.isalpha()]
+        if len(letters) != 1 or any(not (character.isalpha() or character == ".") for character in stripped):
+            return None
+        return letters[0].upper()
+
+    def _accepts_unbounded_syllabic_prefix(
+        self,
+        surname_tokens: list[str],
+        given_tokens: list[str],
+        token: str,
+    ) -> bool:
+        """Preserve an A/E-prefixed given behind an identified Chinese surname."""
+        return bool(
+            len(surname_tokens) == 1
+            and len(given_tokens) == 1
+            and token.isalpha()
+            and len(token) > 2  # noqa: PLR2004
+            and self._normalizer.norm_light(token) in REVIEWED_UNBOUNDED_PREFIX_GIVEN_FORMS
+            and token[0].casefold() in SINGLE_LETTER_PINYIN_SYLLABLES
+            and (
+                self._data.is_given_name(self._normalizer.norm(token[1:]))
+                or self._normalizer.is_valid_chinese_phonetics(token[1:])
+            )
+            and self._surname_resolver.evidence_is_surname(surname_tokens[0]),
         )
 
     def _accepts_wade_giles_single_given(
