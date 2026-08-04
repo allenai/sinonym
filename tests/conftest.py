@@ -19,6 +19,7 @@ import os
 import pytest
 
 from sinonym import ChineseNameDetector
+from sinonym.timo.interface import PredictorConfig, RoutingPredictorV3
 
 
 @pytest.fixture(scope="session")
@@ -55,6 +56,16 @@ def detector():
         weights = [float(x) for x in parsed]
 
     return ChineseNameDetector(weights=weights)
+
+
+@pytest.fixture(scope="session")
+def routing_predictor_v3() -> RoutingPredictorV3:
+    """Session-scoped deterministic in-process routed V3 predictor.
+
+    The predictor is stateless after initialization; sharing one instance
+    avoids repeating detector initialization in every V3 test module.
+    """
+    return RoutingPredictorV3(PredictorConfig(parallel="never"), ".")
 
 
 @pytest.fixture(scope="session")

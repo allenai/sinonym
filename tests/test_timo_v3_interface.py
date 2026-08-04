@@ -1,0 +1,362 @@
+"""Compact end-to-end contract tests for the routed V3 interface."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from sinonym.coretypes import CanonicalName, NameComponents, ParseResult
+from sinonym.coretypes.routing_resolution import (
+    ResolutionAction,
+    ResolutionProvenance,
+    ResolutionReason,
+)
+from sinonym.services.batch_analysis import RelatedBatchParseResult
+from sinonym.timo.interface import PredictorConfig, RoutingPredictorV3
+from sinonym.timo.routing_v3 import RoutingInstanceV3, SourceAuthorFields
+
+
+@pytest.fixture
+def predictor(routing_predictor_v3: RoutingPredictorV3) -> RoutingPredictorV3:
+    """Alias the shared session predictor under this module's name."""
+    return routing_predictor_v3
+
+
+def _route(
+    predictor: RoutingPredictorV3,
+    authors: list[SourceAuthorFields],
+    *,
+    vys_other_names: list[str] | None = None,
+):
+    (paper,) = predictor.predict_batch(
+        [RoutingInstanceV3(pp_authors=authors, vys_other_names=vys_other_names)],
+    )
+    return paper.authors
+
+
+def test_duplicate_names_remain_positionally_aligned(
+    predictor: RoutingPredictorV3,
+) -> None:
+    first = SourceAuthorFields(first_name="UW", last_name="University")
+    second = SourceAuthorFields(middle_names="UW", last_name="University")
+    assert first.full_name() == second.full_name()
+
+    results = _route(predictor, [first, second])
+
+    assert [result.resolved_fields.first_name for result in results] == ["UW", ""]
+    assert [result.resolved_fields.middle_names for result in results] == ["", "UW"]
+    assert all(result.resolved_fields.resolution_reason is ResolutionReason.NON_PERSON_SOURCE_PASSTHROUGH for result in results)
+
+
+def test_reviewed_non_person_pattern_is_a_terminal_writer_decision(
+    predictor: RoutingPredictorV3,
+) -> None:
+    source = SourceAuthorFields(first_name="STADT", last_name="NÜRNBERG")
+
+    (result,) = _route(predictor, [source])
+
+    resolved = result.resolved_fields
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("STADT", "", "NÜRNBERG")
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.SUPPRESS
+    assert resolved.resolution_reason is ResolutionReason.REVIEWED_NON_PERSON_PATTERN
+
+
+def test_router_not_person_still_allows_a_real_person_scalar_parse(
+    predictor: RoutingPredictorV3,
+) -> None:
+    (result,) = _route(predictor, [SourceAuthorFields(first_name="Babak", last_name="Esmaeili")])
+
+    resolved = result.resolved_fields
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("Babak", "", "Esmaeili")
+    assert resolved.resolution_action is ResolutionAction.ASSIGN
+    assert resolved.resolution_reason is ResolutionReason.SCALAR_BASELINE
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (SourceAuthorFields(first_name="BEng", last_name="Robert McManus"), ("Robert", "", "McManus")),
+        (
+            SourceAuthorFields(first_name="Dr.-Ing.", middle_names="Thomas", last_name="Schmidt"),
+            ("Thomas", "", "Schmidt"),
+        ),
+    ],
+)
+def test_exact_case_credential_cleanup_reaches_v3_scalar_output(
+    predictor: RoutingPredictorV3,
+    source: SourceAuthorFields,
+    expected: tuple[str, str, str],
+) -> None:
+    (result,) = _route(predictor, [source])
+
+    resolved = result.resolved_fields
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == expected
+    assert resolved.resolution_action is ResolutionAction.ASSIGN
+    assert resolved.resolution_reason is ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT
+
+
+def test_suffix_precedence_and_missingness(predictor: RoutingPredictorV3) -> None:
+    results = _route(
+        predictor,
+        [
+            SourceAuthorFields(first_name="Steve", last_name="Blando IV", suffix="Jr."),
+            SourceAuthorFields(first_name="Steve", last_name="Blando IV", suffix=""),
+            SourceAuthorFields(first_name="Michael", last_name="Johnson", suffix=None),
+            SourceAuthorFields(first_name="Michael", last_name="Johnson", suffix=""),
+        ],
+    )
+
+    assert [result.resolved_fields.suffix for result in results] == ["Jr.", "IV", None, ""]
+
+
+@pytest.mark.parametrize(
+    "source_text",
+    [
+        pytest.param("A 𠮷", id="supplementary-han-u20bb7"),
+        pytest.param("É 﨑", id="non-ascii-latin"),
+    ],
+)
+def test_mixed_script_safety_covers_unicode_han_and_latin(
+    predictor: RoutingPredictorV3,
+    source_text: str,
+) -> None:
+    source = SourceAuthorFields(first_name=source_text)
+
+    (result,) = _route(predictor, [source])
+
+    resolved = result.resolved_fields
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == (source_text, "", "")
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.PRESERVE_INPUT
+    assert resolved.resolution_reason is ResolutionReason.MIXED_SCRIPT_SAFETY_SUPPRESSION
+
+
+def test_atomic_korean_token_repair_does_not_change_a_longer_hyphenated_name(
+    predictor: RoutingPredictorV3,
+) -> None:
+    (result,) = _route(
+        predictor,
+        [SourceAuthorFields(first_name="Hana", last_name="Ha-Nam")],
+    )
+
+    assert (result.resolved_fields.first_name, result.resolved_fields.last_name) == ("Hana", "Ha-Nam")
+
+
+def test_pp_only_abstain_is_a_terminal_input_order_decision(
+    predictor: RoutingPredictorV3,
+) -> None:
+    (result,) = _route(
+        predictor,
+        [SourceAuthorFields(first_name="Wei", last_name="Wang")],
+    )
+    resolved = result.resolved_fields
+
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("Wei", "", "Wang")
+    assert resolved.resolution_provenance is ResolutionProvenance.PP
+    assert resolved.resolution_action is ResolutionAction.PRESERVE_INPUT
+    assert resolved.resolution_reason is ResolutionReason.PP_ONLY_ABSTAIN_INPUT
+
+
+def test_reorder_veto_does_not_use_vys_tail_as_paper_context(predictor: RoutingPredictorV3) -> None:
+    (result,) = _route(
+        predictor,
+        [SourceAuthorFields(first_name="Mai", last_name="Hata")],
+        vys_other_names=["Akira Suzuki"],
+    )
+
+    assert (result.resolved_fields.first_name, result.resolved_fields.last_name) == ("Ha-Ta", "Mai")
+    assert result.resolved_fields.resolution_reason is ResolutionReason.PP_SELECTED
+
+
+def test_failed_pp_vys_abstain_cannot_fall_through_to_scalar_reorder(
+    predictor: RoutingPredictorV3,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = SourceAuthorFields(first_name="Wei", last_name="Zhang", suffix="")
+    scalar_components = NameComponents(given_name="Zhang", surname="Wei")
+    monkeypatch.setattr(
+        predictor._detector,  # noqa: SLF001
+        "routing_scalar_resolution",
+        lambda _raw_name: CanonicalName(
+            source_text="Wei Zhang",
+            text="Zhang Wei",
+            source=scalar_components,
+            normalized=scalar_components,
+        ),
+    )
+
+    resolved = predictor._resolver.resolve_pp_vys_author(  # noqa: SLF001
+        source=source,
+        paper_authors=[source],
+        raw_name=source.full_name(),
+        paper_names=[source.full_name()],
+        focal_index=0,
+        row={"router_prediction": "abstain", "input_order_candidate": "pp"},
+        pp_result=ParseResult.failure("synthetic PP failure"),
+        vys_result=ParseResult.failure("synthetic VYS failure"),
+    )
+
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name, resolved.suffix) == ("Wei", "", "Zhang", "")
+    assert (resolved.resolution_provenance, resolved.resolution_action, resolved.resolution_reason) == (
+        ResolutionProvenance.SOURCE,
+        ResolutionAction.PRESERVE_INPUT,
+        ResolutionReason.BATCH_ABSTAIN_MATERIALIZATION_FAILED,
+    )
+
+
+def test_v3_runs_one_scalar_evidence_pass_per_focal_author(
+    predictor: RoutingPredictorV3,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = predictor._detector._east_asian_name_order  # noqa: SLF001
+    original = service.infer_resolution
+    calls: list[str] = []
+
+    def counted(raw_name: str, *, japanese_probability):
+        calls.append(raw_name)
+        return original(raw_name, japanese_probability=japanese_probability)
+
+    monkeypatch.setattr(service, "infer_resolution", counted)
+    _route(
+        predictor,
+        [SourceAuthorFields(first_name="\u4f50\u3005\u6728", last_name="\u514b\u5178")],
+        vys_other_names=["Jane Doe"],
+    )
+
+    assert calls == ["\u4f50\u3005\u6728 \u514b\u5178"]
+
+
+def test_batch_programming_errors_propagate(monkeypatch: pytest.MonkeyPatch) -> None:
+    predictor = RoutingPredictorV3(PredictorConfig(parallel="never"), ".")
+    predictor._detector._ensure_initialized()  # noqa: SLF001
+    service = predictor._detector._batch_analysis_service  # noqa: SLF001
+    assert service is not None
+
+    def programming_error(*_args, **_kwargs):
+        message = "synthetic batch programming error"
+        raise RuntimeError(message)
+
+    monkeypatch.setattr(service, "analyze_related_name_batches", programming_error)
+
+    with pytest.raises(RuntimeError, match="synthetic batch programming error"):
+        _route(predictor, [SourceAuthorFields(first_name="Michael", last_name="Johnson")])
+
+
+def test_reordered_pp_result_is_an_invariant_failure(
+    predictor: RoutingPredictorV3,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sources = [
+        SourceAuthorFields(first_name="Michael", last_name="Johnson"),
+        SourceAuthorFields(first_name="Steve", last_name="Blando"),
+    ]
+    names = [source.full_name() for source in sources]
+    batch = predictor._detector._analyze_name_batch_strict(names)  # noqa: SLF001
+    reordered = replace(
+        batch,
+        names=list(reversed(batch.names)),
+        results=list(reversed(batch.results)),
+        individual_analyses=list(reversed(batch.individual_analyses)),
+        name_order_evidence=list(reversed(batch.name_order_evidence)),
+    )
+    monkeypatch.setattr(
+        predictor._detector,  # noqa: SLF001
+        "_analyze_related_batch_requests_strict",
+        lambda *_args, **_kwargs: [RelatedBatchParseResult(reordered, None, None)],
+    )
+
+    with pytest.raises(RuntimeError, match="names/order do not match"):
+        _route(predictor, sources)
+
+
+def test_reordered_vys_context_is_an_invariant_failure(
+    predictor: RoutingPredictorV3,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = SourceAuthorFields(first_name="Michael", last_name="Johnson")
+    pp_names = [source.full_name()]
+    pool_names = [*pp_names, "Jane Doe"]
+    related = predictor._detector._analyze_related_name_batches_strict(  # noqa: SLF001
+        pp_names,
+        pool_names,
+    )
+    reordered = replace(related, vys_context_names=tuple(reversed(pool_names)))
+    monkeypatch.setattr(
+        predictor._detector,  # noqa: SLF001
+        "_analyze_related_batch_requests_strict",
+        lambda *_args, **_kwargs: [reordered],
+    )
+
+    with pytest.raises(RuntimeError, match="batch result 1 names/order do not match"):
+        _route(predictor, [source], vys_other_names=["Jane Doe"])
+
+
+@pytest.mark.parametrize("returned_count", [0, 2])
+def test_missing_or_extra_related_result_is_an_invariant_failure(
+    predictor: RoutingPredictorV3,
+    monkeypatch: pytest.MonkeyPatch,
+    returned_count: int,
+) -> None:
+    source = SourceAuthorFields(first_name="Michael", last_name="Johnson")
+    related = predictor._detector._analyze_related_name_batches_strict(  # noqa: SLF001
+        [source.full_name()],
+        None,
+    )
+    monkeypatch.setattr(
+        predictor._detector,  # noqa: SLF001
+        "_analyze_related_batch_requests_strict",
+        lambda *_args, **_kwargs: [related] * returned_count,
+    )
+
+    with pytest.raises(RuntimeError, match="wrong number of batches"):
+        _route(predictor, [source])
+
+
+def test_misaligned_fields_are_an_invariant_failure(
+    predictor: RoutingPredictorV3,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = SourceAuthorFields(first_name="Michael", last_name="Johnson")
+    related = predictor._detector._analyze_related_name_batches_strict(  # noqa: SLF001
+        [source.full_name()],
+        None,
+    )
+    misaligned = replace(related, pp_batch=replace(related.pp_batch, results=[]))
+    monkeypatch.setattr(
+        predictor._detector,  # noqa: SLF001
+        "_analyze_related_batch_requests_strict",
+        lambda *_args, **_kwargs: [misaligned],
+    )
+
+    with pytest.raises(RuntimeError, match="misaligned fields"):
+        _route(predictor, [source])
+
+
+def test_present_empty_vys_cannot_change_pp_only_semantic_result(
+    predictor: RoutingPredictorV3,
+) -> None:
+    source = SourceAuthorFields(first_name="Zhang", middle_names="Wei", last_name="Q.")
+
+    (pp_only,) = _route(predictor, [source])
+    (present_vys,) = _route(predictor, [source], vys_other_names=[])
+
+    assert set(pp_only.dict()) == {"resolved_fields"}
+    assert (
+        pp_only.resolved_fields.first_name,
+        pp_only.resolved_fields.middle_names,
+        pp_only.resolved_fields.last_name,
+    ) == ("Zhang", "Wei", "Q.")
+    assert pp_only.resolved_fields == present_vys.resolved_fields
+
+
+def test_timo_config_registers_v3_without_replacing_v2() -> None:
+    config = (Path(__file__).parents[1] / "sinonym" / "timo" / "config.yaml").read_text(encoding="utf-8")
+
+    assert "sinonym_routing_v2:" in config
+    assert "sinonym_routing_v3:" in config
+    assert "instance: sinonym.timo.interface.RoutingInstanceV3" in config
+    assert "prediction: sinonym.timo.interface.RoutedPaperPredictionV3" in config
+    assert "predictor: sinonym.timo.interface.RoutingPredictorV3" in config

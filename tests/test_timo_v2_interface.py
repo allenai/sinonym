@@ -69,6 +69,17 @@ def _assert_steve_marsh(prediction: PredictionV2) -> None:
     assert prediction.canonical_name.normalized.suffix == ""
 
 
+def _apply_routed_fields(result, raw_name: str) -> tuple[str, str, str]:
+    """Mirror Scholar's routed -> canonical -> source apply precedence."""
+    if result.success and result.surname:
+        return result.given_name or "", result.middle_name or "", result.surname
+    if result.canonical_name is not None and result.canonical_name.normalized.surname:
+        normalized = result.canonical_name.normalized
+        return normalized.given_name or "", normalized.middle_name or "", normalized.surname
+    tokens = raw_name.split()
+    return (" ".join(tokens[:-1]), "", tokens[-1]) if tokens else ("", "", "")
+
+
 def test_v1_schema_fingerprints_match_main_before_v2() -> None:
     """Adding v2 types must not mutate any existing TIMO response schema."""
     models = (Prediction, BatchPrediction, BatchSummary, RoutedPrediction, PPRoutedPrediction, RoutedPaperPrediction)
@@ -166,6 +177,55 @@ def test_v2_pp_vys_routing_retains_canonical_without_changing_decision(
     assert v2[0].vys.canonical_name is not None
 
 
+@pytest.mark.parametrize(
+    ("raw_name", "expected", "reason"),
+    [
+        ("佐々木克典", ("克典", "", "佐々木"), "japanese_iteration_mark_canonical_override"),
+        ("克典 佐々木", ("克典", "", "佐々木"), "japanese_iteration_mark_canonical_override"),
+        ("純 野々崎", ("純", "", "野々崎"), "japanese_iteration_mark_canonical_override"),
+        ("Kim Stene-Larsen", ("Kim", "", "Stene-Larsen"), "korean_western_suffix_conflict"),
+    ],
+)
+def test_v2_canonical_override_controls_final_pp_and_pp_vys_output(
+    raw_name: str,
+    expected: tuple[str, str, str],
+    reason: str,
+) -> None:
+    predictor = RoutingPredictorV2(config=PredictorConfig(parallel="never"), artifacts_dir=".")
+    pool = [raw_name, "Li Xiaoming", "Chen Jianguo", "Zhao Yuting", "Sun Haoran"]
+    pp_only_paper, pooled_paper = predictor.predict_batch(
+        [
+            RoutingInstance(pp_names=[raw_name]),
+            RoutingInstance(pp_names=[raw_name], vys_pool_names=pool),
+        ],
+    )
+    pp_only = pp_only_paper.authors[0]
+    pooled = pooled_paper.authors[0]
+
+    for result in (pp_only, pooled):
+        assert result.router_prediction.value == "abstain"
+        assert result.router_reason == reason
+        assert not result.success
+        assert (result.given_name, result.middle_name, result.surname) == (None, None, None)
+        assert result.canonical_name is not None
+        normalized = result.canonical_name.normalized
+        assert (normalized.given_name, normalized.middle_name, normalized.surname) == expected
+        assert _apply_routed_fields(result, raw_name) == expected
+    assert pooled.input_order_candidate.value == "unknown"
+
+
+@pytest.mark.parametrize("raw_name", ["三谷 奈々", "Kim Hŭisŏn", "Hồ Anderson", "Cho Arison"])
+def test_v2_canonical_override_leaves_counterexamples_on_existing_route(raw_name: str) -> None:
+    predictor = RoutingPredictorV2(config=PredictorConfig(parallel="never"), artifacts_dir=".")
+
+    result = predictor.route_pp([raw_name])[0]
+
+    assert result.router_reason not in {
+        "japanese_iteration_mark_canonical_override",
+        "korean_western_suffix_conflict",
+    }
+
+
 def test_v2_pp_only_abstain_without_input_order_drops_canonical(predictor_v2: PredictorV2) -> None:
     # These end in a middle initial, so the as-typed reading cannot be materialized and the
     # abstain surfaces as a failure. The PP parse pins the surname to the first token either
@@ -178,6 +238,7 @@ def test_v2_pp_only_abstain_without_input_order_drops_canonical(predictor_v2: Pr
         assert result.canonical_name is None
         # The candidate object keeps its own canonical: `pp` is not the routed answer.
         assert result.pp.canonical_name is not None
+        assert result.pp.canonical_name.normalized.middle_name == "Q."
 
 
 def test_routing_predictor_v2_drops_canonical_for_declined_abstain_but_keeps_pooled_answer() -> None:
@@ -197,10 +258,10 @@ def test_routing_predictor_v2_drops_canonical_for_declined_abstain_but_keeps_poo
     # A venue pool supplies the evidence PP-only lacks, so the same name still normalizes.
     (routed,) = pooled.authors
     assert routed.success
-    assert (routed.given_name, routed.middle_name, routed.surname) == ("Wei", "Q", "Zhang")
+    assert (routed.given_name, routed.middle_name, routed.surname) == ("Wei", "Q.", "Zhang")
     assert routed.canonical_name is not None
     assert routed.canonical_name.normalized.given_name == "Wei"
-    assert routed.canonical_name.normalized.middle_name == "Q"
+    assert routed.canonical_name.normalized.middle_name == "Q."
     assert routed.canonical_name.normalized.surname == "Zhang"
 
 
@@ -215,7 +276,7 @@ def test_v2_routing_keeps_generic_canonical_for_non_chinese_rows(predictor_v2: P
     assert results[2].canonical_name is None
 
 
-def test_v2_routing_never_exposes_canonical_for_a_declined_parse(predictor_v2: PredictorV2) -> None:
+def test_v2_routing_suppresses_unproven_canonical_for_a_declined_parse(predictor_v2: PredictorV2) -> None:
     pp_names = ["Zhang Wei Q.", "Wang Lin A.", "Zhang Wei", "Michael Johnson", "UW University"]
     pool = [*pp_names, "Li Xiaoming", "Chen Jianguo", "Zhao Yuting", "Sun Haoran"]
 
