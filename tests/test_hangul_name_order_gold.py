@@ -45,7 +45,7 @@ BOUNDARY = {"one": 1, "two": 2}
 
 @pytest.fixture(scope="module")
 def gold() -> dict:
-    return json.loads(GOLD_PATH.read_text())
+    return json.loads(GOLD_PATH.read_text(encoding="utf-8"))
 
 
 def test_gold_fixture_is_wellformed(gold: dict) -> None:
@@ -131,13 +131,13 @@ def test_compound_surnames_are_never_split_after_one_syllable(
 
 # One name per mechanism, so a regression names itself rather than only moving a floor.
 KNOWN_GOOD = (
-    ("남궁원", "남궁"),   # compound surname, the defect this fixture was built for
+    ("남궁원", "남궁"),  # compound surname, the defect this fixture was built for
     ("황보관", "황보"),
     ("독고석", "독고"),
-    ("김민수", "김"),     # ordinary single-syllable surname, unchanged
+    ("김민수", "김"),  # ordinary single-syllable surname, unchanged
     ("이상훈", "이"),
-    ("강원실", "강"),     # compound-looking head (강원 is a province) but 강 is the surname
-    ("남기웅", "남"),     # 남 alone, not the compound 남궁
+    ("강원실", "강"),  # compound-looking head (강원 is a province) but 강 is the surname
+    ("남기웅", "남"),  # 남 alone, not the compound 남궁
 )
 
 # Judged wrong today and pinned so the defect cannot move silently. 샤오젠 is Xiao Jian: the Chinese

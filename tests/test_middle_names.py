@@ -20,63 +20,63 @@ MIDDLE_NAME_INDIVIDUAL_CASES = [
     (
         "Chi-Ying F. Huang",
         {
-            "formatted": "Chi-Ying F Huang",
+            "formatted": "Chi-Ying F. Huang",
             "given_tokens": ["Chi", "Ying"],
-            "middle_tokens": ["F"],
+            "middle_tokens": ["F."],
             "surname": "Huang",
         },
     ),
     (
         "Chung C. Wang",
         {
-            "formatted": "Chung C Wang",
+            "formatted": "Chung C. Wang",
             "given_tokens": ["Chung"],
-            "middle_tokens": ["C"],
+            "middle_tokens": ["C."],
             "surname": "Wang",
         },
     ),
     (
         "Chung F. Wong",
         {
-            "formatted": "Chung F Wong",
+            "formatted": "Chung F. Wong",
             "given_tokens": ["Chung"],
-            "middle_tokens": ["F"],
+            "middle_tokens": ["F."],
             "surname": "Wong",
         },
     ),
     (
         "Chung-Chieng A. Lai",
         {
-            "formatted": "Chung-Chieng A Lai",
+            "formatted": "Chung-Chieng A. Lai",
             "given_tokens": ["Chung", "Chieng"],
-            "middle_tokens": ["A"],
+            "middle_tokens": ["A."],
             "surname": "Lai",
         },
     ),
     (
         "Gui-Qiang G. Chen",
         {
-            "formatted": "Gui-Qiang G Chen",
+            "formatted": "Gui-Qiang G. Chen",
             "given_tokens": ["Gui", "Qiang"],
-            "middle_tokens": ["G"],
+            "middle_tokens": ["G."],
             "surname": "Chen",
         },
     ),
     (
         "Chi-Ying F. K. Huang",
         {
-            "formatted": "Chi-Ying F K Huang",
+            "formatted": "Chi-Ying F. K. Huang",
             "given_tokens": ["Chi", "Ying"],
-            "middle_tokens": ["F", "K"],
+            "middle_tokens": ["F.", "K."],
             "surname": "Huang",
         },
     ),
     (
         "Chung-Chieng A. B. Lai",
         {
-            "formatted": "Chung-Chieng A B Lai",
+            "formatted": "Chung-Chieng A. B. Lai",
             "given_tokens": ["Chung", "Chieng"],
-            "middle_tokens": ["A", "B"],
+            "middle_tokens": ["A.", "B."],
             "surname": "Lai",
         },
     ),
@@ -107,54 +107,54 @@ MIDDLE_NAME_MIXED_CASES = [
     (
         "李 伟 F.",
         {
-            "formatted": "Wei F Li",
+            "formatted": "Wei F. Li",
             "given_tokens": ["Wei"],
-            "middle_tokens": ["F"],
+            "middle_tokens": ["F."],
             "surname": "Li",
         },
     ),
     (
         "李 小明 G.",
         {
-            "formatted": "Xiao-Ming G Li",
+            "formatted": "Xiao-Ming G. Li",
             "given_tokens": ["Xiao", "Ming"],
-            "middle_tokens": ["G"],
+            "middle_tokens": ["G."],
             "surname": "Li",
         },
     ),
     (
         "Zhang 伟 F.",
         {
-            "formatted": "Zhang F Wei",
+            "formatted": "Zhang F. Wei",
             "given_tokens": ["Zhang"],
-            "middle_tokens": ["F"],
+            "middle_tokens": ["F."],
             "surname": "Wei",
         },
     ),
     (
         "Li 小明 H.",
         {
-            "formatted": "Ming-Li H Xiao",
+            "formatted": "Ming-Li H. Xiao",
             "given_tokens": ["Ming", "Li"],
-            "middle_tokens": ["H"],
+            "middle_tokens": ["H."],
             "surname": "Xiao",
         },
     ),
     (
         "李 小明 H. K.",
         {
-            "formatted": "Xiao-Ming H K Li",
+            "formatted": "Xiao-Ming H. K. Li",
             "given_tokens": ["Xiao", "Ming"],
-            "middle_tokens": ["H", "K"],
+            "middle_tokens": ["H.", "K."],
             "surname": "Li",
         },
     ),
     (
         "Zhang 伟 F. G.",
         {
-            "formatted": "Zhang F G Wei",
+            "formatted": "Zhang F. G. Wei",
             "given_tokens": ["Zhang"],
-            "middle_tokens": ["F", "G"],
+            "middle_tokens": ["F.", "G."],
             "surname": "Wei",
         },
     ),
@@ -188,12 +188,12 @@ def test_middle_initial_leading_between_surname_and_given(detector):
     assert res.success, f"Expected success, got error: {res.error_message}"
 
     # Final formatting should place middle initial between given and surname
-    assert res.result == "Wei A Li"
+    assert res.result == "Wei A. Li"
 
     # Parsed normalized output order
     assert res.parsed is not None
     assert res.parsed.given_tokens == ["Wei"]
-    assert res.parsed.middle_tokens == ["A"]
+    assert res.parsed.middle_tokens == ["A."]
     assert res.parsed.surname == "Li"
 
     # Original-order view: preserves component labels and annotates original sequence
@@ -202,7 +202,7 @@ def test_middle_initial_leading_between_surname_and_given(detector):
     assert por.order == ["surname", "middle", "given"]
     assert por.given_name == "Wei"
     assert por.surname == "Li"
-    assert por.middle_tokens == ["A"]
+    assert por.middle_tokens == ["A."]
 
 
 def test_middle_initial_trailing_after_given_preserves_original_order(detector):
@@ -210,7 +210,7 @@ def test_middle_initial_trailing_after_given_preserves_original_order(detector):
     res = detector.normalize_name(raw)
 
     assert res.success, f"Expected success, got error: {res.error_message}"
-    assert res.result == "Wei A Li"
+    assert res.result == "Wei A. Li"
     assert res.parsed_original_order is not None
     assert res.parsed_original_order.order == ["surname", "given", "middle"]
 
@@ -239,7 +239,7 @@ def test_middle_initial_trailing_batch_preserves_original_order(detector):
     names = ["Li Wei A.", "Zhang Ming F."]
     batch = detector.analyze_name_batch(names)
 
-    assert [result.result for result in batch.results] == ["Wei A Li", "Ming F Zhang"]
+    assert [result.result for result in batch.results] == ["Wei A. Li", "Ming F. Zhang"]
     assert [result.parsed_original_order.order for result in batch.results] == [
         ["surname", "given", "middle"],
         ["surname", "given", "middle"],
@@ -253,7 +253,7 @@ def test_middle_initial_trailing_batch_preserves_original_order(detector):
         # corpus rows (王阿川 WANG A-chuan, 曹阿秀 CAO A-xiu) confirm the surname is the other token.
         ("A-wei Zhang", "A-Wei Zhang", ["given", "surname"], []),
         ("Wei-A Zhang", "Wei-A Zhang", ["given", "surname"], []),
-        ("A Wei Zhang", "Wei A Zhang", ["middle", "given", "surname"], ["A"]),
+        ("A Wei Zhang", "Wei A. Zhang", ["middle", "given", "surname"], ["A."]),
         ("Wei Zhang", "Wei Zhang", ["given", "surname"], []),
     ],
 )
@@ -278,8 +278,8 @@ def test_hyphenated_initial_middle_order_batch_preserves_source_position(detecto
     names = ["A-wei Zhang", "A Wei Zhang"]
     batch = detector.analyze_name_batch(names)
 
-    assert [result.result for result in batch.results] == ["A-Wei Zhang", "Wei A Zhang"]
-    assert [result.parsed_original_order.middle_tokens for result in batch.results] == [[], ["A"]]
+    assert [result.result for result in batch.results] == ["A-Wei Zhang", "Wei A. Zhang"]
+    assert [result.parsed_original_order.middle_tokens for result in batch.results] == [[], ["A."]]
     assert [result.parsed_original_order.order for result in batch.results] == [
         ["given", "surname"],
         ["middle", "given", "surname"],

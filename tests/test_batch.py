@@ -7,6 +7,8 @@ of the Chinese name detection system.
 All tests refactored to use session-scoped detector fixture for optimal performance.
 """
 
+import pickle
+
 import pytest
 
 from sinonym.coretypes import (
@@ -128,6 +130,71 @@ def test_small_batch_fallback(detector):
     assert batch_result.name_order_evidence[0].batch_participant is True
     assert len(batch_result.results) == len(names)
     assert len(batch_result.improvements) == 0
+
+
+@pytest.mark.parametrize(
+    ("name", "no_bonus_hex", "guarded_hex"),
+    [
+        (
+            "Bian Li",
+            ["-0x1.87d2f56c0441ep+2", "-0x1.c4b65c1c29d8ap+2"],
+            ["-0x1.55336027f1635p+1", "-0x1.87d2f56c0441ep+2"],
+        ),
+        (
+            "Cen Zhang",
+            ["-0x1.9368e896d3962p+2", "-0x1.b8a3a45e98030p+2"],
+            ["-0x1.3d0df0accdb80p+1", "-0x1.9368e896d3962p+2"],
+        ),
+    ],
+)
+def test_prepared_score_views_preserve_exact_float_order(detector, name, no_bonus_hex, guarded_hex):
+    service = detector._batch_analysis_service  # noqa: SLF001
+    assert service is not None
+    normalized = detector._normalizer.apply(name)  # noqa: SLF001
+
+    format_view, individual_view, _failure = service._prepare_candidate_views(  # noqa: SLF001
+        name,
+        normalized,
+        need_individual=True,
+    )
+    no_bonus = [candidate.materialize() for candidate in format_view]
+    guarded = [candidate.materialize() for candidate in individual_view]
+
+    assert [candidate.score.hex() for candidate in no_bonus] == no_bonus_hex
+    assert [candidate.score.hex() for candidate in guarded] == guarded_hex
+
+
+def test_threshold_fallback_reuses_exact_ethnicity_failures(detector):
+    names = ["Kim Min-jun", "John Smith"]
+    expected = [detector._normalize_chinese_name(name).error_message for name in names]  # noqa: SLF001
+
+    batch = detector._analyze_name_batch_strict(names, format_threshold=1.0)  # noqa: SLF001
+
+    assert not batch.format_pattern.threshold_met
+    assert [result.error_message for result in batch.results] == expected
+
+
+def test_related_batch_preparation_keeps_tail_votes_without_aliasing(detector):
+    pp_names = ["Bian Li", "Bian Li"]
+    pool_names = [*pp_names, "Cen Zhang"]
+
+    related = detector._analyze_related_name_batches_strict(pp_names, pool_names)  # noqa: SLF001
+
+    assert related.vys_batch is not None
+    assert related.vys_context_names == tuple(pool_names)
+    assert related.vys_batch.names == pp_names
+    assert related.vys_batch.format_pattern.total_count == len(pool_names)
+    assert pickle.loads(pickle.dumps(related)) == related  # noqa: S301 - round-trip trusted test data.
+
+    first = related.pp_batch.individual_analyses[0].candidates[0]
+    duplicate = related.pp_batch.individual_analyses[1].candidates[0]
+    vys = related.vys_batch.individual_analyses[0].candidates[0]
+    assert first is not duplicate
+    assert first is not vys
+    assert first.surname_tokens is not duplicate.surname_tokens
+    first.surname_tokens.append("mutation")
+    assert "mutation" not in duplicate.surname_tokens
+    assert "mutation" not in vys.surname_tokens
 
 
 def test_batch_format_pattern_preserves_explicit_zero_decision_confidence():
@@ -319,13 +386,11 @@ def test_batch_tie_break_uses_parser_policy_surname_frequency(detector):
             dummy_candidate,
             {},
             LATIN_ONLY_REPRESENTATION,
+            raw_tokens=("Chong", "Chien"),
         ),
     ]
 
-    dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(  # noqa: SLF001
-        name_candidates,
-        detector._normalizer,  # noqa: SLF001
-    )
+    dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(name_candidates)  # noqa: SLF001
 
     assert dominant == NameFormat.SURNAME_FIRST
     assert detector._surname_resolver.evidence_frequency("Chong") < detector._surname_resolver.evidence_frequency(  # noqa: SLF001
@@ -349,12 +414,18 @@ def test_name_order_evidence_exposes_all_caps_cue(detector):
 
 def test_name_order_evidence_does_not_normalize_rejected_input():
     """Rejected inputs keep evidence aligned without re-running normalization."""
+    failure = ParseResult(
+        success=False,
+        result="sentinel",
+        error_message=None,
+        original_compound_surname="kept",
+    )
     service = BatchAnalysisService(
         parsing_service=None,
         dependencies=BatchAnalysisDependencies(
             min_tokens_required=2,
             individual_parser=lambda _name: ParseResult.failure("unexpected individual parse"),
-            input_failure=lambda _name: ParseResult.failure("invalid input length"),
+            input_failure=lambda _name: failure,
         ),
     )
 
@@ -364,14 +435,14 @@ def test_name_order_evidence_does_not_normalize_rejected_input():
 
     rejected_name = "A" * 101
     result = service.analyze_name_batch(
-        [rejected_name],
+        [rejected_name, rejected_name],
         NormalizerThatMustNotRun(),
         formatting_service=None,
         options=BatchAnalysisOptions(minimum_batch_size=1),
     )
 
-    assert result.results[0].success is False
-    assert result.results[0].error_message == "invalid input length"
+    # ParseResult is frozen, so sharing the callback's instance across slots is safe.
+    assert result.results == [failure, failure]
     evidence = result.name_order_evidence[0]
     assert evidence.raw_name == rejected_name
     assert evidence.raw_tokens == []

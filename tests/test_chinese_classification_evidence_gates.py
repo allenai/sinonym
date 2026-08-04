@@ -17,7 +17,7 @@ def detector() -> ChineseNameDetector:
     [
         ("Jun-Fun Horng", "Jun-Fun Horng"),
         ("Shugi Hsien", "Shu-Gi Hsien"),
-        ("Zhou Df", "Df Zhou"),
+        ("Zhou Df", "D.-F. Zhou"),
     ],
 )
 def test_reviewed_surname_alias_and_compact_initial_evidence_accepts_chinese(

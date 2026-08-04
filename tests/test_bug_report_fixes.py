@@ -1,5 +1,4 @@
-# ruff: noqa: RUF012, EM101, PLC0415, SLF001, SIM117, TRY003
-import logging
+# ruff: noqa: RUF001, RUF002, RUF012, EM101, PLC0415, SLF001, TRY003
 
 import numpy as np
 import pytest
@@ -123,7 +122,7 @@ def test_mixed_cjk_trailing_initial_is_not_rejected_as_non_person(detector):
     embedded = detector.normalize_name("\u7f57\u4f2f\u7279\u00b7M\u00b7\u5a01\u6069\u65af\u5766")
 
     assert accepted.success
-    assert accepted.result == "Xiao-Ming J Wang"
+    assert accepted.result == "Xiao-Ming J. Wang"
     assert not rejected.success
     assert rejected.error_message == "not a personal name"
     assert not embedded.success
@@ -347,8 +346,8 @@ def test_route_pp_abstain_preserves_compact_compound_token_when_flipping_to_inpu
 
     assert routed.router_prediction.value == "abstain"
     assert routed.router_reason == "weak_zero_batch"
-    assert (routed.given_name, routed.middle_name, routed.surname) == ("Ouyang", "K", "Wei")
-    assert (routed.pp.given_name, routed.pp.middle_name, routed.pp.surname) == ("Wei", "K", "Ouyang")
+    assert (routed.given_name, routed.middle_name, routed.surname) == ("Ouyang", "K.", "Wei")
+    assert (routed.pp.given_name, routed.pp.middle_name, routed.pp.surname) == ("Wei", "K.", "Ouyang")
 
 
 def test_pp_vys_accepts_mixed_selected_format_as_unknown_input_order():
@@ -379,7 +378,7 @@ def test_input_order_display_preserves_repeated_middle_initials(detector):
 
     assert result.success
     assert result.parsed_original_order.order == ["middle", "middle", "given", "middle", "surname"]
-    assert " ".join(token for _role, token in _input_order_display(result.parsed_original_order)) == "J K Ming L Zhang"
+    assert " ".join(token for _role, token in _input_order_display(result.parsed_original_order)) == "J. K. Ming L. Zhang"
 
 
 class BrokenJapaneseProbabilityModel:
@@ -392,22 +391,18 @@ class BrokenJapaneseProbabilityModel:
         return ["jp"]
 
 
-def test_japanese_probability_raises_when_loaded_model_errors(caplog):
+def test_japanese_probability_propagates_loaded_model_errors():
     from sinonym.services import ethnicity
 
     classifier = ethnicity._MLJapaneseClassifier(confidence_threshold=0.8)
     classifier._available = True
     classifier._model = BrokenJapaneseProbabilityModel()
 
-    with caplog.at_level(logging.WARNING, logger=ethnicity.__name__):
-        with pytest.raises(RuntimeError, match="probability failed"):
-            classifier.japanese_probability("\u5c71\u7530")
-
-    assert "ML Japanese classifier probability error" in caplog.text
-    assert any(record.exc_info for record in caplog.records)
+    with pytest.raises(RuntimeError, match="boom"):
+        classifier.japanese_probability("\u5c71\u7530")
 
 
-def test_ml_classifier_runtime_failure_surfaces_in_detector():
+def test_ml_classifier_programming_failure_propagates_through_detector():
     detector = Predictor(PredictorConfig(parallel="never"), "")._detector
     service = detector._ethnicity_service
     service._ml_classifier._available = True
@@ -417,10 +412,8 @@ def test_ml_classifier_runtime_failure_surfaces_in_detector():
         "ML Japanese classifier failed",
     )
 
-    result = detector.normalize_name("\u738b\u4f1f")
-
-    assert not result.success
-    assert result.error_message == "ML Japanese classifier failed"
+    with pytest.raises(AttributeError, match="predict_proba"):
+        detector.normalize_name("\u738b\u4f1f")
 
 
 class FlakyJapaneseClassifierModel:
@@ -463,13 +456,30 @@ def test_batch_format_requires_real_voter_share():
     mixed = ParseCandidate(["Unknown"], ["Name"], 1.0, NameFormat.MIXED)
     entries = [
         *[
-            BatchCandidateEntry(f"sf-{index}", [surname_first], surname_first, {}, LATIN_ONLY_REPRESENTATION)
+            BatchCandidateEntry(
+                f"sf-{index}",
+                [surname_first],
+                surname_first,
+                {},
+                LATIN_ONLY_REPRESENTATION,
+                raw_tokens=("Li", "Wei"),
+            )
             for index in range(2)
         ],
-        *[BatchCandidateEntry(f"mixed-{index}", [mixed], mixed, {}, LATIN_ONLY_REPRESENTATION) for index in range(8)],
+        *[
+            BatchCandidateEntry(
+                f"mixed-{index}",
+                [mixed],
+                mixed,
+                {},
+                LATIN_ONLY_REPRESENTATION,
+                raw_tokens=("Unknown", "Name"),
+            )
+            for index in range(8)
+        ],
     ]
 
-    pattern = service._detect_format_pattern(entries, predictor._detector._normalizer, 0.55)
+    pattern = service._detect_format_pattern(entries, 0.55)
 
     assert pattern.surname_first_count == 2
     assert pattern.voting_count == 2

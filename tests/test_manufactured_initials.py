@@ -1,3 +1,5 @@
+# ruff: noqa: RUF001
+
 """A split must never invent a single-letter component that the input did not contain.
 
 Cases below are real corpus names. The bilingual rows are ground truth: the Han text names the
@@ -90,9 +92,9 @@ def test_leading_letter_stays_in_the_token(detector, raw, given, middle, surname
 @pytest.mark.parametrize(
     ("raw", "expected", "middle"),
     [
-        ("Wei Q. Zhang", "Wei Q Zhang", ["Q"]),  # standalone initial token: still a middle initial
-        ("Wei Q Zhang", "Wei Q Zhang", ["Q"]),
-        ("Li Wei A.", "Wei A Li", ["A"]),
+        ("Wei Q. Zhang", "Wei Q. Zhang", ["Q."]),  # standalone initial token: still a middle initial
+        ("Wei Q Zhang", "Wei Q. Zhang", ["Q."]),
+        ("Li Wei A.", "Wei A. Li", ["A."]),
         ("Li Xiaoming", "Xiao-Ming Li", []),
         ("Li Guo-er", "Guo-Er Li", []),
         ("Ka-Fai Chan", "Ka-Fai Chan", []),
@@ -119,7 +121,7 @@ def test_surname_first_concatenated_forms_keep_their_surname(detector, raw, expe
     given-first and the surname lands in the wrong field. 阿 is a prefix, so `Alei` has no
     boundary to split at and no positional evidence to admit one. The trailing shape
     (`Zhao Liane`) keeps its surname — see
-    test_bare_trailing_letter_is_reported_as_a_middle_initial.
+    test_bare_trailing_letter_is_not_manufactured_as_an_initial.
     """
     person = detector.normalize_person_name(raw)
 
@@ -129,19 +131,17 @@ def test_surname_first_concatenated_forms_keep_their_surname(detector, raw, expe
 @pytest.mark.parametrize(
     ("raw", "given", "middle", "surname"),
     [
-        # Bilingual rows are ground truth: the Han text names the surname. Refusing a trailing
-        # split strands these on the all-person path, which has no Han handling and reports the
-        # Han string itself as a component (`Xiaoe 小娥 LI 李` -> given `Xiaoe`, middle `小娥 LI`,
-        # surname `李`). Taking the split keeps them on the Chinese path, where the Han resolves.
-        ("Xiaoe 小娥 LI 李", "Xiao", ["E"], "Li"),
-        ("Yuee 月娥 Xie 谢", "Yue", ["E"], "Xie"),
-        ("朱慧娥 Zhu Huie", "Hui", ["E"], "Zhu"),
-        ("李梅娥 Li Meie", "Mei", ["E"], "Li"),
-        ("王美娥 WANG Meie", "Mei", ["E"], "Wang"),
-        ("罗月娥 LUO Yuee", "Yue", ["E"], "Luo"),
-        ("赵培娥 Zhao Peie", "Pei", ["E"], "Zhao"),
-        ("鲁秀娥 LU Xiue", "Xiu", ["E"], "Lu"),
-        # An author-supplied boundary reaches the same place without the invented initial.
+        # The aligned Han character proves that the final letter is a full syllable, not an
+        # initial. Both Roman-first and Han-first layouts therefore bind it into the given name.
+        ("Xiaoe 小娥 LI 李", "Xiao-E", [], "Li"),
+        ("Yuee 月娥 Xie 谢", "Yue-E", [], "Xie"),
+        ("朱慧娥 Zhu Huie", "Hui-E", [], "Zhu"),
+        ("李梅娥 Li Meie", "Mei-E", [], "Li"),
+        ("王美娥 WANG Meie", "Mei-E", [], "Wang"),
+        ("罗月娥 LUO Yuee", "Yue-E", [], "Luo"),
+        ("赵培娥 Zhao Peie", "Pei-E", [], "Zhao"),
+        ("鲁秀娥 LU Xiue", "Xiu-E", [], "Lu"),
+        # An author-supplied boundary reaches the same binding without native inference.
         ("Cui-E 翠娥 Hu 胡", "Cui-E", [], "Hu"),
         ("Lian-E 连娥 Lu 芦", "Lian-E", [], "Lu"),
         ("Zhi-E 志娥 Liu 刘", "Zhi-E", [], "Liu"),
@@ -165,16 +165,14 @@ def test_mixed_script_rows_resolve_to_the_han_surname(detector, raw, given, midd
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        # Expected failures, in the check_test_status baseline. Leading 阿/鄂 has no boundary to
-        # split at, so these stay on the all-person path, which has no Han handling: the Han
-        # string itself lands in a component. The Han text names the correct surname.
-        ("Alei 阿蕾 Li 李", "Alei Li"),
-        ("Axin 阿鑫 Guo 郭", "Axin Guo"),
-        ("侯阿慧 Hou Ahui", "Ahui Hou"),
-        ("张阿龙 ZHANG Along", "Along Zhang"),
-        ("樊阿馨 Fan Axin", "Axin Fan"),
-        ("杨阿坤 Yang Akun", "Akun Yang"),
-        ("Eyou Wang 王鄂友", "Eyou Wang"),
+        # Native alignment proves the leading A/E is a complete given-name syllable.
+        ("Alei 阿蕾 Li 李", "A-Lei Li"),
+        ("Axin 阿鑫 Guo 郭", "A-Xin Guo"),
+        ("侯阿慧 Hou Ahui", "A-Hui Hou"),
+        ("张阿龙 ZHANG Along", "A-Long Zhang"),
+        ("樊阿馨 Fan Axin", "A-Xin Fan"),
+        ("杨阿坤 Yang Akun", "A-Kun Yang"),
+        ("Eyou Wang 王鄂友", "E-You Wang"),
     ],
 )
 def test_leading_letter_bilingual_rows_resolve_to_the_han_surname(detector, raw, expected):
@@ -191,42 +189,105 @@ def _cohorts():
 COHORTS = _cohorts()
 
 
+_BOUND_GIVEN_EXPECTATIONS = {
+    "Bao'e Yang": "Bao-E",
+    "Cai'E Cui": "Cai-E",
+    "Cui'e Wang": "Cui-E",
+    "Cui'e Wei": "Cui-E",
+    "Cui'e Wu": "Cui-E",
+    "Hua'e Xu": "Hua-E",
+    "Long'e Dai": "Long-E",
+    "Qiu'e Yao": "Qiu-E",
+    "ShuE Ji": "Shu-E",
+    "Tian'e Zhou": "Tian-E",
+    "WeiE Wang": "Wei-E",
+    "XiuE Yan": "Xiu-E",
+    "You'e He": "You-E",
+    "Yue'e Fang": "Yue-E",
+    "Yue'e Liu": "Yue-E",
+    "Yue‐e Ma": "Yue-E",
+}
+
+_RECOVERED_COMPONENT_EXPECTATIONS = {
+    "Alei 阿蕾 Li 李": ("A-Lei", "", "Li"),
+    "Ali 阿理 Luo 罗": ("A-Li", "", "Luo"),
+    "Aming 啊鸣 Lin 林": ("A-Ming", "", "Lin"),
+    "Axin 阿新 Xie 谢": ("A-Xin", "", "Xie"),
+    "Axin 阿鑫 Guo 郭": ("A-Xin", "", "Guo"),
+    "Ejun Peng 彭鄂军": ("E-Jun", "", "Peng"),
+    "Eyou Wang 王鄂友": ("E-You", "", "Wang"),
+    "Xiaoe 小娥 LI 李": ("Xiao-E", "", "Li"),
+    "Yuee 月娥 Xie 谢": ("Yue-E", "", "Xie"),
+    "侯阿慧 Hou Ahui": ("A-Hui", "", "Hou"),
+    "孙阿辉 Sun Ahui": ("A-Hui", "", "Sun"),
+    "屈阿雪 Qu Axue": ("A-Xue", "", "Qu"),
+    "张阿娟 ZHANG Ajuan": ("A-Juan", "", "Zhang"),
+    "张阿龙 ZHANG Along": ("A-Long", "", "Zhang"),
+    "杜阿朋 Du A'peng": ("A-Peng", "", "Du"),
+    "樊阿馨 Fan Axin": ("A-Xin", "", "Fan"),
+    "杨阿坤 Yang Akun": ("A-Kun", "", "Yang"),
+    "陈阿君 Chen Ajun": ("A-Jun", "", "Chen"),
+}
+
+
+def _expected_initial_punctuation(value: str) -> str:
+    """Add canonical punctuation only to an expected standalone initial."""
+    return f"{value.upper()}." if len(value) == 1 and value.isalpha() else value
+
+
 @pytest.mark.parametrize("case", COHORTS["given_first_preserved"], ids=lambda c: c["raw"])
 def test_given_first_names_keep_correct_components_without_the_split(detector, case):
-    """Corpus names that lose Chinese detection and keep source token order.
+    """Corpus names must not acquire manufactured initial components.
 
-    `case["was"]` is the discarded parse, which reached its surname only via the invented initial
-    (`Ajun Wan` -> given `Jun`, middle `A`). Order preservation is not correctness: it is right
-    where only the trailing token is a known surname, and wrong for surname-first input, which
-    needs a judge pass rather than a lexicon test to adjudicate.
+    Explicit apostrophe/camel boundaries canonicalize as Chinese given-name hyphens. Unbound
+    names retain source token order, and genuine standalone initials receive periods.
     """
     result = detector.normalize_person_name(case["raw"])
 
     assert result is not None
-    assert result.normalized.given_name == case["given"]
-    assert result.normalized.middle_name == case["middle"]
-    assert result.normalized.surname == case["surname"]
+    expected = {
+        "Liang Alei": ("Alei", "", "Liang"),
+    }.get(
+        case["raw"],
+        (
+            _BOUND_GIVEN_EXPECTATIONS.get(
+                case["raw"],
+                _expected_initial_punctuation(case["given"]),
+            ),
+            _expected_initial_punctuation(case["middle"]),
+            case["surname"],
+        ),
+    )
+    assert (
+        result.normalized.given_name,
+        result.normalized.middle_name,
+        result.normalized.surname,
+    ) == expected
 
 
 @pytest.mark.parametrize("case", COHORTS["components_not_recovered"], ids=lambda c: c["raw"])
 def test_components_after_a_refused_split_are_recorded(detector, case):
-    """Names whose components are not recovered in source order after the split is refused.
+    """Retain reviewed components while applying the canonical initial/native policy.
 
-    Three kinds, all recorded rather than fixed:
-    - bilingual Han+Latin rows (`张阿龙 ZHANG Along`, `樊阿馨 Fan Axin`): wrong either way — splitting
-      read the given syllable as the surname, the person path keeps the Han text as a component.
-    - trailing academic credentials (`CHAE WOO MA`, `Alam Hannan MA`, `Tzee Luai MENG`): the person
-      path strips `MA`/`MEng`, so the real surname is lost — a person-path weakness these rows
-      reach only because the Chinese parse is refused.
-    - genuine order misreads (`Chae Bin Lee` -> surname `Bin Lee`).
-    Several entries are improvements (`Asai Ren`, `Kai Etsuo` are correct Japanese readings here).
+    Aligned bilingual rows now recover the native-bound given name. Other historical rows retain
+    their reviewed assignment, with standalone initials canonically dotted.
     """
     result = detector.normalize_person_name(case["raw"])
 
     assert result is not None
-    assert result.normalized.given_name == case["given"]
-    assert result.normalized.middle_name == case["middle"]
-    assert result.normalized.surname == case["surname"]
+    expected = _RECOVERED_COMPONENT_EXPECTATIONS.get(
+        case["raw"],
+        (
+            _expected_initial_punctuation(case["given"]),
+            _expected_initial_punctuation(case["middle"]),
+            case["surname"],
+        ),
+    )
+    assert (
+        result.normalized.given_name,
+        result.normalized.middle_name,
+        result.normalized.surname,
+    ) == expected
 
 
 @pytest.mark.parametrize(
@@ -254,32 +315,34 @@ def test_leading_letter_does_not_fall_through_to_a_weaker_boundary(detector, raw
 
 
 @pytest.mark.parametrize(
-    ("raw", "given", "middle", "surname"),
+    ("raw", "given", "surname"),
     [
-        # No author-supplied boundary, so the reading is undecidable — `Yuee` is 月娥 and `Duane`
-        # is not, and nothing in the token says which. The split is taken and the letter reported
-        # as a middle initial: wrong on the 娥 names, but the SURNAME is right in every row and
-        # the given name keeps its first initial, so the cluster block key is unaffected.
-        # Refusing the split moves the surname into the wrong field for surname-first input
-        # (`Chen Meie` -> surname `Meie`); admitting the letter as a syllable invents
-        # `Duan-E`/`Gai-A` on names that are not Chinese at all.
-        ("Duane Lee", "Duan", "E", "Lee"),
-        ("Gaia Wang", "Gai", "A", "Wang"),
-        ("Maia Wu", "Mai", "A", "Wu"),
-        ("Rana Li", "Ran", "A", "Li"),
-        ("Yuee Dai", "Yue", "E", "Dai"),
-        ("Cuie Wen", "Cui", "E", "Wen"),
-        ("Chen Meie", "Mei", "E", "Chen"),
-        ("Liang Weia", "Wei", "A", "Liang"),
+        # With no standalone token, author boundary, or native alignment, a final letter cannot
+        # be called either an initial or a Chinese syllable. Preserve the whole given token.
+        ("Duane Lee", "Duane", "Lee"),
+        ("Gaia Wang", "Gaia", "Wang"),
+        ("Maia Wu", "Maia", "Wu"),
+        ("Rana Li", "Rana", "Li"),
+        ("Yuee Dai", "Yuee", "Dai"),
+        ("Cuie Wen", "Cuie", "Wen"),
+        ("Chen Meie", "Meie", "Chen"),
+        ("Liang Weia", "Weia", "Liang"),
     ],
 )
-def test_bare_trailing_letter_is_reported_as_a_middle_initial(detector, raw, given, middle, surname):
-    result = detector.normalize_name(raw)
+def test_bare_trailing_letter_is_not_manufactured_as_an_initial(detector, raw, given, surname):
+    person = detector.normalize_person_name(raw)
 
-    assert result.success, f"expected a Chinese parse, got {result.error_message}"
-    assert result.parsed.given_name == given
-    assert result.parsed.middle_tokens == [middle]
-    assert result.parsed.surname == surname
+    assert person is not None
+    assert person.normalized.given_name == given
+    assert person.normalized.middle_name == ""
+    assert person.normalized.surname == surname
+
+    chinese = detector.normalize_name(raw)
+    if chinese.success:
+        assert chinese.parsed is not None
+        assert chinese.parsed.given_name == given
+        assert chinese.parsed.middle_tokens == []
+        assert chinese.parsed.surname == surname
 
 
 @pytest.mark.parametrize(
@@ -336,10 +399,15 @@ def test_apostrophe_handling_is_scoped_to_a_trailing_lone_letter(detector, raw, 
 def test_split_decision_does_not_depend_on_a_previously_seen_lowercase_token(detector):
     """The unsplittable cache is keyed on the lowercased token, but this decision depends on case.
 
-    Processing `weia` first must not poison `WeiA`, whose camelCase boundary makes the trailing
-    letter a syllable rather than the middle initial the bare form reports.
+    The unbound lowercase form remains whole. Processing it first must not poison `WeiA`, whose
+    camelCase boundary proves that the trailing letter is a syllable.
     """
-    assert detector.normalize_name("weia Zhang").result == "Wei A Zhang"
+    lower = detector.normalize_person_name("weia Zhang")
+
+    assert lower is not None
+    assert lower.normalized.given_name == "Weia"
+    assert lower.normalized.middle_name == ""
+    assert lower.normalized.surname == "Zhang"
 
     result = detector.normalize_name("WeiA Zhang")
 

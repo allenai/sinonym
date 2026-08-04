@@ -63,7 +63,7 @@ OCC_WEIGHTED_FLOOR = 0.95
 
 @pytest.fixture(scope="module")
 def gold() -> dict:
-    return json.loads(GOLD_PATH.read_text())
+    return json.loads(GOLD_PATH.read_text(encoding="utf-8"))
 
 
 def test_gold_fixture_is_wellformed(gold: dict) -> None:
@@ -114,6 +114,18 @@ def test_router_matches_the_blind_labels(detector: ChineseNameDetector, gold: di
         failures.append(f"overall: {overall:.3f} < floor {OVERALL_FLOOR}")
 
     assert not failures, "\n".join([*failures, "", *wrong[:20]])
+
+
+def test_iteration_mark_given_names_are_not_promoted_as_surnames(
+    detector: ChineseNameDetector,
+    gold: dict,
+) -> None:
+    """Guard the marked-given slice whose aggregate class floor is deliberately zero."""
+    marked_items = [item for item in gold["items"] if "々" in item["name"]]
+
+    assert len(marked_items) == 13
+    for item in marked_items:
+        assert detector._canonical_name_from_iteration_mark(item["name"]) is None, item["name"]  # noqa: SLF001
 
 
 def test_occ_weighted_accuracy_holds(detector: ChineseNameDetector, gold: dict) -> None:

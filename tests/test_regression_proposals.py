@@ -1,10 +1,9 @@
-# ruff: noqa: SIM117, SLF001
+# ruff: noqa: SLF001
 """Regression tests that implement the proposals tracked in TEST_PROPOSAL.md."""
 
 from __future__ import annotations
 
 import inspect
-import logging
 import math
 import re
 import unicodedata
@@ -154,7 +153,7 @@ def test_compound_surname_formatter_uses_token_linked_metadata(detector):
         "Ka": CompoundMetadata(is_compound=True, format_type="spaced", compound_target="ka ming"),
         "Ming": CompoundMetadata(is_compound=True, format_type="spaced", compound_target="ka ming"),
     }
-    formatted = detector._formatting_service.format_name_output(
+    formatted, *_ = detector._formatting_service.format_name_output_with_tokens(
         ["Au", "Yeung"],
         ["Ka", "Ming"],
         {},
@@ -168,7 +167,7 @@ def test_compound_surname_formatter_uses_token_linked_metadata(detector):
         "Ka": CompoundMetadata(is_compound=True, format_type="spaced", compound_target="ka ming"),
         "Ming": CompoundMetadata(is_compound=True, format_type="spaced", compound_target="ka ming"),
     }
-    fallback = detector._formatting_service.format_name_output(
+    fallback, *_ = detector._formatting_service.format_name_output_with_tokens(
         ["Au", "Yeung"],
         ["Ka", "Ming"],
         {},
@@ -275,7 +274,7 @@ def test_batch_preserves_homogeneous_given_context_gold_splits(detector):
 def test_given_context_gold_split_is_used_by_string_formatter(detector):
     normalized = detector._normalizer.apply("Junjie Fang")
 
-    formatted = detector._formatting_service.format_name_output(
+    formatted, *_ = detector._formatting_service.format_name_output_with_tokens(
         ["Fang"],
         ["Junjie"],
         normalized.norm_map,
@@ -512,6 +511,7 @@ def test_batch_format_votes_downweight_weak_candidate_gaps_and_count_duplicate_r
             weak_surname_first,
             None,
             LATIN_ONLY_REPRESENTATION,
+            raw_tokens=("Li", "Wei"),
         ),
         BatchCandidateEntry(
             "Ming Zhang",
@@ -519,6 +519,7 @@ def test_batch_format_votes_downweight_weak_candidate_gaps_and_count_duplicate_r
             strong_given_first,
             None,
             LATIN_ONLY_REPRESENTATION,
+            raw_tokens=("Ming", "Zhang"),
         ),
         BatchCandidateEntry(
             "ming zhang",
@@ -526,6 +527,7 @@ def test_batch_format_votes_downweight_weak_candidate_gaps_and_count_duplicate_r
             strong_given_first,
             None,
             LATIN_ONLY_REPRESENTATION,
+            raw_tokens=("ming", "zhang"),
         ),
         BatchCandidateEntry(
             "Yan Wang",
@@ -533,6 +535,7 @@ def test_batch_format_votes_downweight_weak_candidate_gaps_and_count_duplicate_r
             strong_given_first,
             None,
             LATIN_ONLY_REPRESENTATION,
+            raw_tokens=("Yan", "Wang"),
         ),
     ]
 
@@ -575,7 +578,7 @@ def test_strong_given_first_batch_still_overrides_ambiguous_name(detector):
     [
         (["Li Yang Hsu", "Hanwei Cao"], ["Li-Yang Hsu", "Han-Wei Cao"]),
         (["Yunbo Hu", "Fei Yu"], ["Yun-Bo Hu", "Fei Yu"]),
-        (["J. Liu", "Jing Wan"], ["J Liu", "Jing Wan"]),
+        (["J. Liu", "Jing Wan"], ["J. Liu", "Jing Wan"]),
         (["Qinggong Ping", "Hao Fei"], ["Qing-Gong Ping", "Hao Fei"]),
     ],
 )
@@ -713,10 +716,11 @@ def test_aligned_bilingual_middle_initial_preserves_original_order(detector):
     result = detector.normalize_name("Zhang \u5f20 Wei \u4f1f A \u963f")
 
     assert result.success
-    assert result.result == "Wei A Zhang"
-    assert result.parsed.middle_tokens == ["A"]
-    assert result.parsed_original_order.middle_tokens == ["A"]
-    assert result.parsed_original_order.order == ["surname", "given", "middle"]
+    assert result.result == "Wei-A Zhang"
+    assert result.parsed.given_tokens == ["Wei", "A"]
+    assert result.parsed.middle_tokens == []
+    assert result.parsed_original_order.middle_tokens == []
+    assert result.parsed_original_order.order == ["surname", "given"]
 
 
 def test_ambiguous_aligned_single_char_pairs_do_not_force_frequency_flip(detector):
@@ -807,9 +811,9 @@ def test_compact_han_roman_transliteration_uses_han_order(detector, raw_name, ex
 @pytest.mark.parametrize(
     ("raw_name", "expected"),
     [
-        ("Haoran wang \u6d69\u7136\u738b", "Haoran Wang"),
-        ("\u6d69\u7136\u738b Haoran Wang", "Haoran Wang"),
-        ("\u738b\u6d69\u7136 Wang Haoran", "Haoran Wang"),
+        ("Haoran wang \u6d69\u7136\u738b", "Hao-Ran Wang"),
+        ("\u6d69\u7136\u738b Haoran Wang", "Hao-Ran Wang"),
+        ("\u738b\u6d69\u7136 Wang Haoran", "Hao-Ran Wang"),
     ],
 )
 def test_compact_han_roman_transliteration_uses_stronger_endpoint_surname(detector, raw_name, expected):
@@ -818,7 +822,7 @@ def test_compact_han_roman_transliteration_uses_stronger_endpoint_surname(detect
     assert result.success
     assert result.result == expected
     assert result.parsed.surname == "Wang"
-    assert result.parsed.given_name == "Haoran"
+    assert result.parsed.given_name == "Hao-Ran"
 
 
 @pytest.mark.parametrize(
@@ -890,17 +894,13 @@ class BrokenJapaneseProbabilityModel:
         return ["jp"]
 
 
-def test_japanese_probability_raises_when_loaded_model_errors(caplog):
+def test_japanese_probability_propagates_loaded_model_errors():
     classifier = ethnicity._MLJapaneseClassifier(confidence_threshold=0.8)
     classifier._available = True
     classifier._model = BrokenJapaneseProbabilityModel()
 
-    with caplog.at_level(logging.WARNING, logger=ethnicity.__name__):
-        with pytest.raises(RuntimeError, match="probability failed"):
-            classifier.japanese_probability("\u5c71\u7530")
-
-    assert "ML Japanese classifier probability error" in caplog.text
-    assert any(record.exc_info for record in caplog.records)
+    with pytest.raises(RuntimeError, match="boom"):
+        classifier.japanese_probability("\u5c71\u7530")
 
 
 def test_non_person_inputs_are_rejected_before_parsing(detector):
@@ -963,12 +963,12 @@ def test_short_cjk_non_person_marker_gate_preserves_person_names(detector, raw_n
     [
         ("Kai \u51ef Xi \u4e60", "Kai Xi"),
         ("Hongqing \u7ea2\u5e86 Dai \u4ee3", "Hong-Qing Dai"),
-        ("Zhang \u5f20 Wei \u4f1f A \u963f", "Wei A Zhang"),
+        ("Zhang \u5f20 Wei \u4f1f A \u963f", "Wei-A Zhang"),
         # Genuine Chinese names carrying a trailing Latin middle initial: the initial
         # is space-separated from the Han tokens (no dot bridges the two scripts), so
         # the mixed-initial transliteration gate must not reject them.
-        ("\u674e \u5c0f\u660e G.", "Xiao-Ming G Li"),
-        ("\u674e \u5c0f\u660e H. K.", "Xiao-Ming H K Li"),
+        ("\u674e \u5c0f\u660e G.", "Xiao-Ming G. Li"),
+        ("\u674e \u5c0f\u660e H. K.", "Xiao-Ming H. K. Li"),
     ],
 )
 def test_mixed_initial_transliteration_gate_preserves_bilingual_names(detector, raw_name, expected):
@@ -1132,7 +1132,7 @@ def test_korean_specific_token_signal_is_capped(detector):
     assert three_token_score == 2.0
 
 
-def test_batch_tie_break_heuristics_use_normalized_tokenization(detector):
+def test_batch_tie_break_heuristics_use_prepared_normalized_tokens(detector):
     dummy_candidate = ParseCandidate(
         surname_tokens=["li"],
         given_tokens=["wei"],
@@ -1141,15 +1141,21 @@ def test_batch_tie_break_heuristics_use_normalized_tokenization(detector):
         original_compound_format=None,
     )
     names = ["XinLiu", "YangLi", "WeiLi"]
+    normalized_tokens = [("Xin", "Liu"), ("Yang", "Li"), ("Wei", "Li")]
     name_candidates = [
-        BatchCandidateEntry(name, [dummy_candidate], dummy_candidate, None, LATIN_ONLY_REPRESENTATION) for name in names
+        BatchCandidateEntry(
+            name,
+            [dummy_candidate],
+            dummy_candidate,
+            None,
+            LATIN_ONLY_REPRESENTATION,
+            raw_tokens=tokens,
+        )
+        for name, tokens in zip(names, normalized_tokens, strict=True)
     ]
 
     assert all(len(name.split()) == 1 for name in names)
-    dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(
-        name_candidates,
-        detector._normalizer,
-    )
+    dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(name_candidates)
     assert dominant == NameFormat.GIVEN_FIRST
 
 

@@ -974,6 +974,16 @@ def test_input_order_parsed_hyphenates_multi_token_given():
     assert as_typed.given_tokens == ["Huang", "Yu"]
 
 
+@pytest.mark.parametrize("raw_name", ["Ren Bai-li", "XU Dong-fang"])
+def test_input_order_parsed_does_not_generalize_compound_surname_lineage(
+    detector,
+    raw_name: str,
+) -> None:
+    result = detector.analyze_name_batch([raw_name]).results[0]
+
+    assert input_order_parsed(result) is not result.parsed
+
+
 def test_pp_abstain_parsed_keeps_spaced_han_pp_parse():
     result = _parse_result("Liu", ["Wen", "Rong"], ["surname", "given"])
 

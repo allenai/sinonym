@@ -227,7 +227,7 @@ def test_terminal_transliteration_apostrophe_is_preserved(
 
     assert result.outcome is PersonNameOutcome.PERSON
     assert result.canonical_name is not None
-    assert result.canonical_name.text == "P V Bigar'"
+    assert result.canonical_name.text == "P. V. Bigar'"
 
 
 @pytest.mark.parametrize(
@@ -261,7 +261,7 @@ def test_source_particles_and_mixed_ocr_case_are_normalized(
     [
         ("H.-J. Pompino", "H.-J. Pompino"),
         ("Safiye ŞAHİN", "Safiye Şahin"),
-        ("Mihajlo (Michael) B Jakovljevic", "Mihajlo (Michael) B Jakovljevic"),
+        ("Mihajlo (Michael) B Jakovljevic", "Mihajlo (Michael) B. Jakovljevic"),
     ],
 )
 def test_compound_initial_unicode_case_and_parenthetical_name_are_preserved(
@@ -555,7 +555,7 @@ def test_hyphenated_initials_are_kept_not_dropped_as_credential(
 ) -> None:
     # "M-A"/"M.-A."/"J-D" are compound given-name initials (a hyphen -> initials, never a
     # degree), so they are kept even though the bare "MA"/"JD" degree would drop.
-    for raw, given, surname in [("M-A Le Pogam", "M-A", "Le Pogam"), ("J-D Fournier", "J-D", "Fournier")]:
+    for raw, given, surname in [("M-A Le Pogam", "M.-A.", "Le Pogam"), ("J-D Fournier", "J.-D.", "Fournier")]:
         result = normalizer.normalize_text(raw)
         assert result.outcome is PersonNameOutcome.PERSON
         assert result.canonical_name is not None
@@ -681,6 +681,73 @@ def test_affiliation_digits_are_dropped_without_losing_name_token(
     ]
 
 
+@pytest.mark.parametrize("marker", ["*", "**", "\u00a7", "\u2020", "\u2021"])
+def test_terminal_footnote_marker_is_dropped_with_lineage(
+    normalizer: PersonNameNormalizationService,
+    marker: str,
+) -> None:
+    result = normalizer.normalize_text(f"Hilary Bradley{marker}")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "Hilary Bradley"
+    assert [(token.text, token.source_role, token.reason) for token in result.dropped_tokens] == [
+        (marker, "surname", DropReason.AFFILIATION),
+    ]
+
+
+@pytest.mark.parametrize("raw_name", ["S TucikeÅ¡iÄ‡", "Burak KÄ±lanÃ§", "Mojibake\u0421‡"])
+def test_terminal_mojibake_is_not_stripped_as_a_footnote(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert all(token.text not in {"§", "‡"} for token in result.dropped_tokens)
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("Yu.E. Makarov", "Yu.E. Makarov"),
+        ("Yu.V. Bulii", "Yu.V. Bulii"),
+        ("L NoW.", "L. Now."),
+        ("Dr.R.HARILAL Dr.R.HARILAL", "R.harilal Dr.r.harilal"),
+    ],
+)
+def test_only_reviewed_dotted_initial_sequences_bypass_ocr_casing(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text", "expected_suffix"),
+    [
+        ("Sidnei Pressinate-Jr.", "Sidnei Pressinate Jr.", "Jr."),
+        ("Chen Tsung-Jr", "Chen Tsung-Jr", ""),
+    ],
+)
+def test_only_exact_attached_terminal_jr_is_split(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+    expected_suffix: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert result.canonical_name.normalized.suffix == expected_suffix
+
+
 @pytest.mark.parametrize(
     ("raw_name", "expected_outcome"),
     [
@@ -781,7 +848,7 @@ def test_family_particles_preserve_credible_source_case(
 @pytest.mark.parametrize(
     ("raw_name", "expected"),
     [
-        ("E V Usol'tseva", "E V Usol'tseva"),
+        ("E V Usol'tseva", "E. V. Usol'tseva"),
         ("Wa\u2019el Tuqan", "Wa'el Tuqan"),
         ("sean o \u2019 connor", "Sean O'Connor"),
         ("Michael F. O''Rourke", "Michael F. O'Rourke"),
@@ -832,7 +899,100 @@ def test_additional_boundary_credentials_and_credential_like_surnames(
     assert spaced_md.canonical_name is not None
     assert spaced_md.canonical_name.text == "William A. Horwitz"
     assert surname.canonical_name is not None
-    assert surname.canonical_name.text == "E C Mba"
+    assert surname.canonical_name.text == "E. C. Mba"
+
+
+@pytest.mark.parametrize(
+    ("components", "expected_text", "credential"),
+    [
+        ({"first_name": "BEng", "last_name": "Robert McManus"}, "Robert McManus", "BEng"),
+        ({"first_name": "DNP", "last_name": "Sarah Strauss"}, "Sarah Strauss", "DNP"),
+        ({"first_name": "MBBS", "last_name": "Shahana ishfaque"}, "Shahana Ishfaque", "MBBS"),
+        (
+            {"first_name": "Dr.-Ing.", "middle_name": "Thomas", "last_name": "Schmidt"},
+            "Thomas Schmidt",
+            "Dr.-Ing.",
+        ),
+    ],
+)
+def test_exact_case_leading_credentials_are_removed_from_structured_names(
+    normalizer: PersonNameNormalizationService,
+    components: dict[str, str],
+    expected_text: str,
+    credential: str,
+) -> None:
+    result = normalizer.normalize_components(**components)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert [(token.text, token.reason) for token in result.dropped_tokens] == [(credential, DropReason.CREDENTIAL)]
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text"),
+    [
+        ("Robert McManus, BEng", "Robert McManus"),
+        ("Rebecca J. Boone APRN", "Rebecca J. Boone"),
+        ("Jane Doe AGPCNP-BC", "Jane Doe"),
+        ("Jane Doe AOCNP", "Jane Doe"),
+    ],
+)
+def test_exact_case_trailing_credentials_are_removed(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert any(token.reason is DropReason.CREDENTIAL for token in result.dropped_tokens)
+
+
+@pytest.mark.parametrize("raw_name", ["Beng Tan", "Meng Wang", "Md Zaved Hossain Khan"])
+def test_exact_case_credential_cleanup_preserves_name_collisions(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == raw_name
+    assert not result.dropped_tokens
+
+
+def test_reviewed_exact_credentials_do_not_cross_unreviewed_positions(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    leading_aprn = normalizer.normalize_components(first_name="APRN", last_name="Jane Williams")
+    trailing_dring = normalizer.normalize_components(first_name="Thomas", last_name="Schmidt", suffix="Dr.-Ing.")
+
+    assert leading_aprn.canonical_name is not None
+    assert leading_aprn.canonical_name.text == "Aprn Jane Williams"
+    assert not leading_aprn.dropped_tokens
+    assert trailing_dring.canonical_name is not None
+    assert trailing_dring.canonical_name.normalized.suffix == "Dr.-Ing"
+    assert not trailing_dring.dropped_tokens
+
+
+@pytest.mark.parametrize(
+    "components",
+    [
+        {"first_name": "Dr.-Ing", "last_name": "Vorstandsmitglied FiT"},
+        {"first_name": "Dr.-Ing.", "middle_name": "Fraunhofer IOSB", "last_name": "Florian Patzer"},
+        {"first_name": "DNP", "middle_name": "APRN", "last_name": "FNP-BC"},
+    ],
+)
+def test_leading_credential_cleanup_declines_reviewed_bad_remainders(
+    normalizer: PersonNameNormalizationService,
+    components: dict[str, str],
+) -> None:
+    result = normalizer.normalize_components(**components)
+
+    assert not any(token.reason is DropReason.CREDENTIAL for token in result.dropped_tokens)
 
 
 @pytest.mark.parametrize("credential", ["Ph. D.", "M. Sc."])
@@ -914,9 +1074,9 @@ def test_uppercase_initial_clusters_remain_uppercase(
 @pytest.mark.parametrize(
     ("raw_name", "expected"),
     [
-        ("N.p Sunil-Chandra", "N.P Sunil-Chandra"),
-        ("G.Y Minuk", "G.Y Minuk"),
-        ("K.D.D.I Kodithuwakku", "K.D.D.I Kodithuwakku"),
+        ("N.p Sunil-Chandra", "N. P. Sunil-Chandra"),
+        ("G.Y Minuk", "G. Y. Minuk"),
+        ("K.D.D.I Kodithuwakku", "K. D. D. I. Kodithuwakku"),
         ("Alekseeva M.Yu. Alekseeva", "Alekseeva M.Yu. Alekseeva"),
         ("P.Sh. Ibragimov", "P.Sh. Ibragimov"),
         ("MM. Cunningham", "MM. Cunningham"),
@@ -938,7 +1098,7 @@ def test_period_policy_distinguishes_initial_clusters_from_transliteration_abbre
     [
         ("Dr.Wenjun Zhang", "Wenjun Zhang"),
         ("Mrs.E. Sumathi", "E. Sumathi"),
-        ("Dr.AARCHA S S", "Aarcha S S"),
+        ("Dr.AARCHA S S", "Aarcha S. S"),
         ("PD Dr. M. Mengel", "M. Mengel"),
     ],
 )
@@ -970,7 +1130,7 @@ def test_period_context_preserves_md_given_abbreviation_and_ms_initials(
     assert md.canonical_name is not None
     assert md.canonical_name.text == "Md. Abu Bakar Siddiq"
     assert initials.canonical_name is not None
-    assert initials.canonical_name.text == "M.S. Crouse"
+    assert initials.canonical_name.text == "M. S. Crouse"
     assert credential.canonical_name is not None
     assert credential.canonical_name.text == "Jaume Bosch"
 
@@ -1008,7 +1168,7 @@ def test_uppercase_two_letter_surnames_and_particles_use_name_case(
 @pytest.mark.parametrize(
     ("raw_name", "expected_middle", "expected_surname"),
     [
-        ("Juan J Llibre Rodriguez", "J", "Llibre Rodriguez"),
+        ("Juan J Llibre Rodriguez", "J.", "Llibre Rodriguez"),
         ("Carlos A. Henríquez Q.", "A.", "Henríquez Q."),
         ("Landys A. Lopez Quezada", "A.", "Lopez Quezada"),
     ],
@@ -1064,8 +1224,8 @@ def test_structured_middle_drops_only_surname_copy_with_lowercase_marker(
     [
         ("Smith", "Smith", "Smith"),
         ("Luz Rojas Aire", "Rojas Aire", "Luz Rojas Aire"),
-        ("Luz Rojas Aire Z", "Rojas Aire", "Luz Rojas Aire Z"),
-        ("Luz Rojas Air z", "Rojas Aire", "Luz Rojas Air Z"),
+        ("Luz Rojas Aire Z", "Rojas Aire", "Luz Rojas Aire Z."),
+        ("Luz Rojas Air z", "Rojas Aire", "Luz Rojas Air Z."),
     ],
 )
 def test_structured_middle_does_not_broadly_deduplicate_surnames(
@@ -1636,8 +1796,8 @@ def test_name_without_entity_is_unaffected_by_decode(
         # Now the leading token is kept and the surname is restored.
         ("MS Islam", ("Islam",), "MS"),          # all-caps initials, kept all-caps (not the "Ms" honorific)
         ("MS Ali", ("Ali",), "MS"),
-        ("M-S. Barisits", ("Barisits",), "M-S."),
-        ("M-S Barisits", ("Barisits",), "M-S"),
+        ("M-S. Barisits", ("Barisits",), "M.-S."),
+        ("M-S Barisits", ("Barisits",), "M.-S."),
         ("Edd Gent", ("Gent",), "Edd"),           # "Edd" given, not the "EdD" degree
         ("Edd A. Blekkan", ("Blekkan",), "Edd"),
         ("Ma. Lucila Lapar", ("Lapar",), "Ma."),  # "Ma." = María, not the "MA" degree
@@ -2113,8 +2273,8 @@ def test_organization_hard_and_ambiguous_cases_characterization(
         # and duplicated ("M. van der Klis" -> "M. M. van der Klis"). Now the initial
         # stays the given and the surname starts at the particle.
         ("M. van der Klis", "M.", "", ("van", "der", "Klis")),
-        ("A.F.B. van der Poel", "A.F.B.", "", ("van", "der", "Poel")),
-        ("J.M.F. dos Santos", "J.M.F.", "", ("dos", "Santos")),
+        ("A.F.B. van der Poel", "A.", "F. B.", ("van", "der", "Poel")),
+        ("J.M.F. dos Santos", "J.", "M. F.", ("dos", "Santos")),
         ("G. van der Laan", "G.", "", ("van", "der", "Laan")),
         ("S. de la Torre", "S.", "", ("de", "la", "Torre")),
         ("H. von der Schmitt", "H.", "", ("von", "der", "Schmitt")),
@@ -2138,7 +2298,8 @@ def test_leading_initial_not_duplicated_into_particle_surname(
     assert n.given_name == given
     assert n.middle_name == middle
     assert n.surname_tokens == surname
-    assert result.canonical_name.text == raw_name  # no duplicated token
+    expected_text = " ".join(part for part in (given, middle, " ".join(surname)) if part)
+    assert result.canonical_name.text == expected_text  # no duplicated token
 
 
 @pytest.mark.parametrize(
