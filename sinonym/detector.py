@@ -168,7 +168,13 @@ import string
 from dataclasses import replace
 from typing import Literal
 
-from sinonym.chinese_names_data import COMPOUND_VARIANTS
+from sinonym.chinese_names_data import (
+    COMPOUND_VARIANTS,
+    HAN_SURNAME_POSITION_READINGS,
+    NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES,
+    OVERLAPPING_KOREAN_SURNAMES,
+    OVERLAPPING_VIETNAMESE_SURNAMES,
+)
 from sinonym.coretypes import (
     BatchFormatPattern,
     BatchParseResult,
@@ -179,6 +185,16 @@ from sinonym.coretypes import (
     NameOrderEvidence,
 )
 from sinonym.coretypes.results import ParsedName
+from sinonym.coretypes.routing_resolution import (
+    ApplyAssignment,
+    EastAsianEvidenceReason,
+    EvidenceFailure,
+    HardScalarConstraint,
+    HardScalarMaterializationFailure,
+    PreserveBaseline,
+    ResolutionReason,
+    east_asian_evidence_resolution_reason,
+)
 from sinonym.services import (
     BatchAnalysisDependencies,
     BatchAnalysisOptions,
@@ -198,10 +214,13 @@ from sinonym.services import (
     ServiceContext,
     SurnameResolver,
 )
+from sinonym.services.batch_analysis import RelatedBatchParseResult
 from sinonym.services.east_asian_name_order import (
     EastAsianNameOrderDecision,
+    EastAsianNameOrderPreservation,
     EastAsianNameOrderService,
 )
+from sinonym.services.formatting import REVIEWED_UNBOUNDED_PREFIX_GIVEN_FORMS, SINGLE_LETTER_PINYIN_SYLLABLES
 from sinonym.services.order_metadata import original_component_order
 from sinonym.services.person_name_normalization import (
     DropReason,
@@ -209,6 +228,7 @@ from sinonym.services.person_name_normalization import (
     PersonNameOutcome,
 )
 from sinonym.services.process_pool import PersistentMultiprocessNormalizer
+from sinonym.utils.string_manipulation import StringManipulationUtils
 
 LOGGER = logging.getLogger(__name__)
 
@@ -319,7 +339,10 @@ class ChineseNameDetector:
                 ethnicity_service=self._ethnicity_service,
                 dependencies=BatchAnalysisDependencies(
                     min_tokens_required=self._config.min_tokens_required,
-                    individual_parser=self.normalize_name,
+                    # Batch policy consumes only Chinese parse/evidence fields.
+                    # Public batch APIs attach canonical sidecars after batch
+                    # analysis; V3 performs its sole scalar resolution later.
+                    individual_parser=self._normalize_chinese_name,
                     input_failure=self._initial_input_failure,
                     surname_resolver=self._surname_resolver,
                 ),
@@ -399,6 +422,12 @@ class ChineseNameDetector:
         original_order: list[str],
     ) -> ParseResult:
         """Format parsed components and attach stable structured name fields."""
+        given_tokens = self._native_bound_given_tokens(normalized_input, given_tokens)
+        surname_tokens = self._han_surname_position_readings(
+            surname_tokens,
+            normalized_input,
+            original_order,
+        )
         formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
             self._formatting_service.format_name_output_with_tokens(
                 surname_tokens,
@@ -406,6 +435,10 @@ class ChineseNameDetector:
                 normalized_input.norm_map,
                 normalized_input.compound_metadata,
                 allow_surname_like_given_split=self._allows_surname_like_given_split(normalized_input),
+                syllabic_single_letter_tokens=self._native_single_letter_given_tokens(
+                    normalized_input,
+                    given_tokens,
+                ),
             )
         )
         parsed = ParsedName(
@@ -436,9 +469,109 @@ class ChineseNameDetector:
             parsed_original_order=parsed_original_order,
         )
 
+    def _han_surname_position_readings(
+        self,
+        surname_tokens: list[str],
+        normalized_input: NormalizedInput,
+        original_order: list[str],
+    ) -> list[str]:
+        """Correct a pypinyin reading only when its source Han is the assigned surname."""
+        if not any(token.lower() == "ceng" for token in surname_tokens):
+            return surname_tokens
+        if not all(
+            token and all(self._config.cjk_pattern.search(character) for character in token) for token in normalized_input.tokens
+        ):
+            return surname_tokens
+
+        han_characters = "".join(normalized_input.tokens)
+        surname_length = len(surname_tokens)
+        if original_order[0] == "surname":
+            surname_start = 0
+        elif original_order[-1] == "surname":
+            surname_start = len(han_characters) - surname_length
+        else:
+            return surname_tokens
+
+        surname_end = surname_start + surname_length
+        source_readings = normalized_input.roman_tokens[surname_start:surname_end]
+        if tuple(token.lower() for token in surname_tokens) != tuple(token.lower() for token in source_readings):
+            return surname_tokens
+
+        surname_characters = han_characters[surname_start:surname_end]
+        return [
+            HAN_SURNAME_POSITION_READINGS.get((character, token.lower()), token)
+            for character, token in zip(surname_characters, surname_tokens, strict=True)
+        ]
+
     def _allows_surname_like_given_split(self, normalized_input: NormalizedInput) -> bool:
         """Return whether surname-like fused given tokens may be gold-split."""
         return not any(self._config.cjk_pattern.search(char) for token in normalized_input.tokens for char in token)
+
+    def _native_single_letter_given_tokens(
+        self,
+        normalized_input: NormalizedInput,
+        given_tokens: list[str],
+    ) -> frozenset[str]:
+        """Return one-letter given syllables proven by aligned source script."""
+        given_keys = {self._normalizer.norm(token) for token in given_tokens}
+        given_light_keys = {self._normalizer.norm_light(token) for token in given_tokens}
+        syllables: set[str] = set()
+
+        pairs = self._normalizer.aligned_bilingual_pairs(normalized_input)
+        if pairs is not None:
+            for pair in pairs:
+                if self._normalizer.norm(pair.roman_token) not in given_keys:
+                    continue
+                if len(pair.roman_token) == 1 and pair.roman_token.isalpha():
+                    syllables.add(pair.roman_token)
+                syllables.update(part for part in pair.han_pinyin if len(part) == 1 and part.isalpha())
+
+        source_characters = self._normalizer.han_roman_source_characters(normalized_input)
+        if len(source_characters) == len(normalized_input.roman_tokens):
+            syllables.update(
+                token
+                for token, _source_character in zip(
+                    normalized_input.roman_tokens,
+                    source_characters,
+                    strict=True,
+                )
+                if len(token) == 1 and token.isalpha() and self._normalizer.norm(token) in given_keys
+            )
+        for han_pinyin in self._native_han_pinyin_sequences(normalized_input):
+            if "".join(self._normalizer.norm_light(part) for part in han_pinyin) in given_light_keys:
+                syllables.update(part for part in han_pinyin if len(part) == 1 and part.isalpha())
+        return frozenset(syllables)
+
+    def _native_bound_given_tokens(
+        self,
+        normalized_input: NormalizedInput,
+        given_tokens: list[str],
+    ) -> list[str]:
+        """Insert given-name boundaries proved by an aligned Han reading."""
+        sequences = self._native_han_pinyin_sequences(normalized_input)
+        if not sequences:
+            return given_tokens
+
+        bound_tokens: list[str] = []
+        for token in given_tokens:
+            target = self._normalizer.norm_light(token)
+            matches = {
+                "-".join(sequence[start:end])
+                for sequence in sequences
+                for start in range(len(sequence))
+                for end in range(start + 2, len(sequence) + 1)
+                if "".join(self._normalizer.norm_light(part) for part in sequence[start:end]) == target
+            }
+            bound_tokens.append(matches.pop() if len(matches) == 1 else token)
+        return bound_tokens
+
+    def _native_han_pinyin_sequences(self, normalized_input: NormalizedInput) -> tuple[tuple[str, ...], ...]:
+        """Return pinyin sequences for source tokens that are entirely Han."""
+        return tuple(
+            tuple(self._cache_service.han_to_pinyin_fast(token))
+            for token in normalized_input.tokens
+            if self._is_source_han_token(token)
+        )
 
     def _normalize_camel_case_pair(self, normalized_input: NormalizedInput) -> ParseResult | None:
         """Parse a whole-input camelCase pair using surname-first provenance."""
@@ -606,6 +739,18 @@ class ChineseNameDetector:
         if len(han_groups) == 1 and source_token_count == len(normalized_input.tokens) and roman_tokens:
             han_group = han_groups[0]
             han_pinyin = tuple(self._cache_service.han_to_pinyin_fast(han_group))
+            if len(han_pinyin) >= self._config.min_tokens_required:
+                surname_pinyin_length = self._han_surname_prefix_length(han_group, han_pinyin)
+                if 0 < surname_pinyin_length < len(han_pinyin):
+                    reversed_components = self._split_reversed_roman_tokens_for_han_prefix(
+                        roman_tokens,
+                        han_pinyin,
+                        surname_pinyin_length,
+                    )
+                    if reversed_components is not None:
+                        given_tokens, surname_tokens = reversed_components
+                        return surname_tokens, given_tokens, ["given", "surname"]
+
             if len(han_pinyin) >= self._config.min_tokens_required and self._roman_tokens_match_han_pinyin(
                 roman_tokens,
                 han_pinyin,
@@ -693,8 +838,8 @@ class ChineseNameDetector:
 
     def _roman_tokens_match_han_pinyin(self, roman_tokens: list[str], han_pinyin: tuple[str, ...]) -> bool:
         """Return whether Roman source tokens exactly transliterate the Han pinyin."""
-        roman_joined = "".join(self._normalizer.norm(token) for token in roman_tokens)
-        han_joined = "".join(self._normalizer.norm(token) for token in han_pinyin)
+        roman_joined = "".join(self._normalizer.norm_light(token) for token in roman_tokens)
+        han_joined = "".join(self._normalizer.norm_light(token) for token in han_pinyin)
         return roman_joined == han_joined
 
     def _han_surname_prefix_length(self, han_group: str, han_pinyin: tuple[str, ...]) -> int:
@@ -736,10 +881,10 @@ class ChineseNameDetector:
         prefix_length: int,
     ) -> tuple[list[str], list[str]] | None:
         """Split Roman tokens at the boundary matching a Han pinyin prefix."""
-        prefix_target = "".join(self._normalizer.norm(token) for token in han_pinyin[:prefix_length])
+        prefix_target = "".join(self._normalizer.norm_light(token) for token in han_pinyin[:prefix_length])
         current = ""
         for index, token in enumerate(roman_tokens, start=1):
-            current += self._normalizer.norm(token)
+            current += self._normalizer.norm_light(token)
             if current == prefix_target:
                 return roman_tokens[:index], roman_tokens[index:]
             if not prefix_target.startswith(current):
@@ -753,15 +898,54 @@ class ChineseNameDetector:
         suffix_length: int,
     ) -> tuple[list[str], list[str]] | None:
         """Split Roman tokens at the boundary matching a Han pinyin suffix."""
-        suffix_target = "".join(self._normalizer.norm(token) for token in han_pinyin[-suffix_length:])
+        suffix_target = "".join(self._normalizer.norm_light(token) for token in han_pinyin[-suffix_length:])
         current = ""
         for index in range(len(roman_tokens) - 1, -1, -1):
-            current = self._normalizer.norm(roman_tokens[index]) + current
+            current = self._normalizer.norm_light(roman_tokens[index]) + current
             if current == suffix_target:
                 return roman_tokens[:index], roman_tokens[index:]
             if not suffix_target.endswith(current):
                 return None
         return None
+
+    def _split_reversed_roman_tokens_for_han_prefix(
+        self,
+        roman_tokens: list[str],
+        han_pinyin: tuple[str, ...],
+        prefix_length: int,
+    ) -> tuple[list[str], list[str]] | None:
+        """Match given-first Roman components to surname-first compact Han."""
+        surname_target = "".join(self._normalizer.norm_light(token) for token in han_pinyin[:prefix_length])
+        given_target = "".join(self._normalizer.norm_light(token) for token in han_pinyin[prefix_length:])
+        for index in range(1, len(roman_tokens)):
+            roman_given = "".join(self._normalizer.norm_light(token) for token in roman_tokens[:index])
+            roman_surname = "".join(self._normalizer.norm_light(token) for token in roman_tokens[index:])
+            if roman_given == given_target and roman_surname == surname_target:
+                return roman_tokens[:index], roman_tokens[index:]
+        return None
+
+    def _normalize_surname_first_unbounded_prefix_given(
+        self,
+        normalized_input: NormalizedInput,
+    ) -> ParseResult | None:
+        """Keep an A/E-prefixed whole given token behind an evidenced surname."""
+        if len(normalized_input.tokens) != TWO_TOKEN_NAME_COUNT or not all(
+            self._is_source_roman_token(token) for token in normalized_input.tokens
+        ):
+            return None
+
+        surname, given = normalized_input.roman_tokens
+        if not self._require_surname_resolver().evidence_is_surname(surname):
+            return None
+        if self._normalizer.norm_light(given) not in REVIEWED_UNBOUNDED_PREFIX_GIVEN_FORMS:
+            return None
+        if not self._is_unbounded_single_letter_syllable_shape(given, leading_only=True):
+            return None
+
+        try:
+            return self._format_parse_result([surname], [given], normalized_input, ["surname", "given"])
+        except ValueError as error:
+            return ParseResult.failure(str(error))
 
     def _normalize_spaced_all_chinese_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
         """Parse all-Han names whose whitespace already separates name components."""
@@ -909,6 +1093,10 @@ class ChineseNameDetector:
         if compact_han_roman_result is not None:
             return compact_han_roman_result
 
+        surname_first_prefix_result = self._normalize_surname_first_unbounded_prefix_given(normalized_input)
+        if surname_first_prefix_result is not None:
+            return surname_first_prefix_result
+
         # Try parsing in both orders - for all-Chinese inputs, choose best scoring parse
 
         if self._has_only_cjk_token_groups(normalized_input):
@@ -936,55 +1124,9 @@ class ChineseNameDetector:
 
             if best_result:
                 surname_tokens, given_tokens = best_result
+                original_order = ["surname", "given"] if token1_is_surname else ["given", "surname"]
                 try:
-                    formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
-                        self._formatting_service.format_name_output_with_tokens(
-                            surname_tokens,
-                            given_tokens,
-                            normalized_input.norm_map,
-                            normalized_input.compound_metadata,
-                            allow_surname_like_given_split=self._allows_surname_like_given_split(normalized_input),
-                        )
-                    )
-                    parsed = ParsedName(
-                        surname=surname_str,
-                        given_name=given_str,
-                        surname_tokens=surname_final,
-                        given_tokens=given_final,
-                        middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                        middle_tokens=middle_tokens,
-                        order=["given", "middle", "surname"],
-                    )
-                    # Determine original input order and assign components accordingly
-                    if token1_is_surname:
-                        # Original: surname-first → preserve component labels and annotate order
-                        order_list = ["surname", "given"]
-                        parsed_original_order = ParsedName(
-                            surname=surname_str,
-                            given_name=given_str,
-                            surname_tokens=surname_final,
-                            given_tokens=given_final,
-                            middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                            middle_tokens=middle_tokens,
-                            order=order_list,
-                        )
-                    else:
-                        # Original: given-first (or token2 surname) → keep labels
-                        order_list = ["given", "surname"]
-                        parsed_original_order = ParsedName(
-                            surname=surname_str,
-                            given_name=given_str,
-                            surname_tokens=surname_final,
-                            given_tokens=given_final,
-                            middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                            middle_tokens=middle_tokens,
-                            order=order_list,
-                        )
-                    return ParseResult.success_with_name(
-                        formatted_name,
-                        parsed=parsed,
-                        parsed_original_order=parsed_original_order,
-                    )
+                    return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
                 except ValueError as e:
                     return ParseResult.failure(str(e))
         elif is_all_chinese and len(normalized_input.roman_tokens) == THREE_CHARACTER_ALL_CHINESE_TOKEN_COUNT:
@@ -1012,41 +1154,9 @@ class ChineseNameDetector:
 
             if best_result:
                 surname_tokens, given_tokens = best_result
+                # For 3-character all-Chinese, original order is surname-first.
                 try:
-                    formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
-                        self._formatting_service.format_name_output_with_tokens(
-                            surname_tokens,
-                            given_tokens,
-                            normalized_input.norm_map,
-                            normalized_input.compound_metadata,
-                            allow_surname_like_given_split=self._allows_surname_like_given_split(normalized_input),
-                        )
-                    )
-                    parsed = ParsedName(
-                        surname=surname_str,
-                        given_name=given_str,
-                        surname_tokens=surname_final,
-                        given_tokens=given_final,
-                        middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                        middle_tokens=middle_tokens,
-                        order=["given", "middle", "surname"],
-                    )
-                    # For 3-character all-Chinese, original order is surname-first
-                    # Preserve component labels and annotate only the order.
-                    parsed_original_order = ParsedName(
-                        surname=surname_str,
-                        given_name=given_str,
-                        surname_tokens=surname_final,
-                        given_tokens=given_final,
-                        middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                        middle_tokens=middle_tokens,
-                        order=["surname", "given"],
-                    )
-                    return ParseResult.success_with_name(
-                        formatted_name,
-                        parsed=parsed,
-                        parsed_original_order=parsed_original_order,
-                    )
+                    return self._format_parse_result(surname_tokens, given_tokens, normalized_input, ["surname", "given"])
                 except ValueError as e:
                     return ParseResult.failure(str(e))
         else:
@@ -1125,58 +1235,24 @@ class ChineseNameDetector:
                 given_tokens = best_candidate["given_tokens"]
                 order_tokens = best_candidate["order_tokens"]
                 used_original = best_candidate["used_original"]
+                # Determine original input order relative to detected parse.
+                k = len(surname_tokens)
+                is_surname_first_in_this_order = list(order_tokens[:k]) == surname_tokens
+                is_surname_last_in_this_order = list(order_tokens[-k:]) == surname_tokens
+
+                # Compound surname fallback: surname_tokens may be sub-tokens
+                # of a single original token (e.g. ['Ou','yang'] from 'Ouyang')
+                if not is_surname_first_in_this_order and not is_surname_last_in_this_order:
+                    joined_surname = "".join(surname_tokens).lower()
+                    if order_tokens[0].lower() == joined_surname:
+                        is_surname_first_in_this_order = True
+                    elif order_tokens[-1].lower() == joined_surname:
+                        is_surname_last_in_this_order = True
+
+                original_is_given_first = is_surname_last_in_this_order if used_original else is_surname_first_in_this_order
+                original_order = ["given", "surname"] if original_is_given_first else ["surname", "given"]
                 try:
-                    formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
-                        self._formatting_service.format_name_output_with_tokens(
-                            surname_tokens,
-                            given_tokens,
-                            normalized_input.norm_map,
-                            normalized_input.compound_metadata,
-                            allow_surname_like_given_split=self._allows_surname_like_given_split(normalized_input),
-                        )
-                    )
-                    parsed = ParsedName(
-                        surname=surname_str,
-                        given_name=given_str,
-                        surname_tokens=surname_final,
-                        given_tokens=given_final,
-                        middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                        middle_tokens=middle_tokens,
-                        order=["given", "middle", "surname"],
-                    )
-                    # Determine original input order relative to detected parse
-                    k = len(surname_tokens)
-                    is_surname_first_in_this_order = list(order_tokens[:k]) == surname_tokens
-                    is_surname_last_in_this_order = list(order_tokens[-k:]) == surname_tokens
-
-                    # Compound surname fallback: surname_tokens may be sub-tokens
-                    # of a single original token (e.g. ['Ou','yang'] from 'Ouyang')
-                    if not is_surname_first_in_this_order and not is_surname_last_in_this_order:
-                        joined_surname = "".join(surname_tokens).lower()
-                        if order_tokens[0].lower() == joined_surname:
-                            is_surname_first_in_this_order = True
-                        elif order_tokens[-1].lower() == joined_surname:
-                            is_surname_last_in_this_order = True
-
-                    original_is_given_first = is_surname_last_in_this_order if used_original else is_surname_first_in_this_order
-
-                    original_format = NameFormat.GIVEN_FIRST if original_is_given_first else NameFormat.SURNAME_FIRST
-                    order_list = original_component_order(original_format, given_tokens, middle_tokens)
-                    parsed_original_order = ParsedName(
-                        surname=surname_str,
-                        given_name=given_str,
-                        surname_tokens=surname_final,
-                        given_tokens=given_final,
-                        middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                        middle_tokens=middle_tokens,
-                        order=order_list,
-                    )
-
-                    return ParseResult.success_with_name(
-                        formatted_name,
-                        parsed=parsed,
-                        parsed_original_order=parsed_original_order,
-                    )
+                    return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
                 except ValueError as e:
                     return ParseResult.failure(str(e))
 
@@ -1377,8 +1453,10 @@ class ChineseNameDetector:
     def normalize_person_name(self, raw_name: str) -> CanonicalName | None:
         """Return a canonical name for one person-like raw string.
 
-        This method is independent of Chinese recognition and returns ``None``
-        for invalid or obvious non-person inputs.
+        The result applies hard identity evidence, affirmative Chinese
+        formatting, and conservative East Asian order routing without
+        requiring the legacy Chinese recognizer to succeed. Invalid or obvious
+        non-person inputs return ``None``.
         """
         if not raw_name or len(raw_name) > self._config.max_name_length:
             return None
@@ -1392,32 +1470,311 @@ class ChineseNameDetector:
         normalized = self._person_name_normalizer.normalize_text(raw_name)
         if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
             return None
-        routed = self._canonical_name_from_east_asian_order(raw_name, normalized.canonical_name)
-        return routed or normalized.canonical_name
+        return self._canonical_person_name_from_baseline(raw_name, normalized.canonical_name)
 
-    def _canonical_name_from_east_asian_order(
+    def _canonical_person_name_from_baseline(
         self,
         raw_name: str,
         baseline: CanonicalName,
+    ) -> CanonicalName:
+        """Apply hard identity evidence, then Chinese and soft order policy."""
+        decision = self._infer_east_asian_name_order_decision(raw_name)
+        if decision is not None and east_asian_evidence_resolution_reason(decision.reason) in {
+            ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT,
+            ResolutionReason.IDENTITY_BACKED_EXACT_ASSIGNMENT,
+        }:
+            routed = self._canonical_name_from_order_decision(baseline, decision)
+            if routed is not None:
+                return routed
+
+        chinese = self._canonical_chinese_name_with_source(raw_name, baseline.source)
+        if chinese is not None:
+            return chinese
+        if decision is None:
+            return baseline
+        return self._canonical_name_from_order_decision(baseline, decision) or baseline
+
+    def _canonical_chinese_name_with_source(
+        self,
+        raw_name: str,
+        source: NameComponents,
     ) -> CanonicalName | None:
-        """Return a conservatively family-first canonical name or abstain."""
+        """Return affirmative Chinese normalization with caller-owned lineage."""
+        result = self._normalize_chinese_name(raw_name)
+        if not self._is_affirmative_chinese_canonical_input(raw_name, result):
+            return None
+        canonical = self._canonical_name_from_chinese_result(raw_name, result)
+        if canonical is None:
+            return None
+        return replace(canonical, source=source)
+
+    def _is_affirmative_chinese_canonical_input(
+        self,
+        raw_name: str,
+        result: ParseResult,
+    ) -> bool:
+        """Require source-level Chinese evidence for a canonical override."""
+        if not result.success or result.parsed is None:
+            return False
+        if self._config.cjk_pattern.search(raw_name):
+            return True
+        normalized_input = self._normalizer.apply(raw_name)
+        surname_key = self._normalizer.norm_light(result.parsed.surname)
+        ambiguous_surnames = (
+            NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES | OVERLAPPING_KOREAN_SURNAMES | OVERLAPPING_VIETNAMESE_SURNAMES
+        )
+        given_source_tokens = self._source_given_tokens_for_chinese_result(normalized_input, result.parsed)
+        compact_initial_bundle = bool(
+            len(given_source_tokens) == 1
+            and len(result.parsed.given_tokens) >= 2  # noqa: PLR2004
+            and all(
+                len("".join(character for character in token if character.isalpha())) == 1
+                for token in result.parsed.given_tokens
+            )
+            and self._normalizer.norm(given_source_tokens[0])
+            == "".join(self._normalizer.norm(token.rstrip(".")) for token in result.parsed.given_tokens),
+        )
+        if compact_initial_bundle:
+            return True
+        if surname_key in ambiguous_surnames:
+            return bool(given_source_tokens) and any(len(token) > 1 for token in given_source_tokens) and all(
+                self._is_direct_chinese_given_source_token(token) for token in given_source_tokens
+            )
+        source_order = result.parsed_original_order
+        preserves_one_unbounded_token = bool(
+            source_order is not None
+            and source_order.order
+            and source_order.order[0] == "surname"
+            and not result.parsed.middle_tokens
+            and len(given_source_tokens) == 1
+            and len(result.parsed.given_tokens) == 1
+            and self._normalizer.norm(given_source_tokens[0]) == self._normalizer.norm(result.parsed.given_tokens[0])
+            and self._is_unbounded_single_letter_syllable_shape(given_source_tokens[0]),
+        )
+        if preserves_one_unbounded_token:
+            return True
+        return bool(given_source_tokens) and all(
+            self._is_affirmative_chinese_given_source_token(token) for token in given_source_tokens
+        )
+
+    def _source_given_tokens_for_chinese_result(
+        self,
+        normalized_input: NormalizedInput,
+        parsed: ParsedName,
+    ) -> list[str]:
+        """Remove the selected surname edge from the source Roman tokens."""
+        tokens = list(normalized_input.roman_tokens)
+        surname_key = "".join(self._normalizer.norm(token) for token in parsed.surname_tokens)
+        for size in range(1, len(tokens)):
+            if "".join(self._normalizer.norm(token) for token in tokens[:size]) == surname_key:
+                return tokens[size:]
+            if "".join(self._normalizer.norm(token) for token in tokens[-size:]) == surname_key:
+                return tokens[:-size]
+        return []
+
+    def _is_affirmative_chinese_given_source_token(self, token: str) -> bool:
+        """Reject only speculative fused splits that manufacture a lone letter."""
+        if self._is_direct_chinese_given_source_token(token):
+            return True
+
+        explicit_parts = [part for part in token.replace("\u2019", "-").replace("'", "-").split("-") if part]
+        if len(explicit_parts) > 1:
+            return all(
+                (len(part) == 1 and part.isalpha())
+                or self._data.is_given_name(self._normalizer.norm(part))
+                or self._normalizer.is_valid_chinese_phonetics(part)
+                for part in explicit_parts
+            )
+
+        camel_parts = self._config.camel_case_pattern.findall(token)
+        if len(camel_parts) > 1 and "".join(camel_parts) == token:
+            return all(
+                (len(part) == 1 and part.isalpha())
+                or self._data.is_given_name(self._normalizer.norm(part))
+                or self._normalizer.is_valid_chinese_phonetics(part)
+                for part in camel_parts
+            )
+
+        split = StringManipulationUtils.split_concatenated_name(
+            token,
+            None,
+            self._data,
+            self._normalizer,
+            self._config,
+        )
+        return bool(split) and all(len(part) > 1 for part in split)
+
+    def _is_direct_chinese_given_source_token(self, token: str) -> bool:
+        """Return whether one supplied token is itself a syllable or initial."""
+        if len(token) == 1 and token.isalpha():
+            return True
+        normalized = self._normalizer.norm(token)
+        return self._data.is_given_name(normalized) or self._normalizer.is_valid_chinese_phonetics(token)
+
+    def _is_unbounded_single_letter_syllable_shape(
+        self,
+        token: str,
+        *,
+        leading_only: bool = False,
+    ) -> bool:
+        """Return whether A/E plus a full syllable occurs without a boundary."""
+        if len(token) <= 2 or not token.isalpha():  # noqa: PLR2004
+            return False
+        candidates = [token[1:]] if token[0].casefold() in SINGLE_LETTER_PINYIN_SYLLABLES else []
+        if not leading_only and token[-1].casefold() in SINGLE_LETTER_PINYIN_SYLLABLES:
+            candidates.append(token[:-1])
+        return any(
+            self._data.is_given_name(self._normalizer.norm(candidate))
+            or self._normalizer.is_valid_chinese_phonetics(candidate)
+            for candidate in candidates
+        )
+
+    def _routing_input_baseline(self, raw_name: str) -> CanonicalName | None:
+        """Return V3's policy-neutral cleaned result in flattened input order."""
+        if not raw_name or len(raw_name) > self._config.max_name_length:
+            return None
+        if all(character in string.punctuation + string.whitespace for character in raw_name):
+            return None
+        self._ensure_initialized()
+        if self._non_person_input_service is not None:
+            non_person_reason = self._non_person_input_service.failure_reason(raw_name)
+            if non_person_reason is not None:
+                return None
+        normalized = self._person_name_normalizer.normalize_text(raw_name)
+        if normalized.outcome is not PersonNameOutcome.PERSON:
+            return None
+        return normalized.canonical_name
+
+    def _routing_input_order_components(self, raw_name: str) -> NameComponents | None:
+        """Clean a flattened input while mechanically retaining endpoint order.
+
+        This is an operational fallback, not a semantic inference: the first
+        surviving token is emitted as given, the last as surname, and any
+        interior tokens as middle. It is used only after a selected candidate
+        has been proven to reverse those endpoints.
+        """
+        baseline = self._routing_input_baseline(raw_name)
+        if baseline is None:
+            return None
+        normalized = baseline.normalized
+        ordered = self._ordered_component_tokens(normalized)
+        name_tokens = [token for role, token in zip(normalized.order, ordered, strict=True) if role != "suffix"]
+        if len(name_tokens) < 2:  # noqa: PLR2004 - an endpoint reversal requires two surviving endpoints
+            return None
+        given_tokens = (name_tokens[0],)
+        middle_tokens = tuple(name_tokens[1:-1])
+        surname_tokens = (name_tokens[-1],)
+        return NameComponents(
+            given_name=given_tokens[0],
+            middle_name=" ".join(middle_tokens),
+            surname=surname_tokens[0],
+            suffix=normalized.suffix,
+            given_tokens=given_tokens,
+            middle_tokens=middle_tokens,
+            surname_tokens=surname_tokens,
+            suffix_tokens=normalized.suffix_tokens,
+            order=("given", *("middle" for _ in middle_tokens), "surname", *("suffix" for _ in normalized.suffix_tokens)),
+        )
+
+    def routing_scalar_resolution(
+        self,
+        raw_name: str,
+    ) -> CanonicalName | HardScalarConstraint | None:
+        """Resolve V3's scalar candidate and its optional hard constraint.
+
+        This deliberately consumes the flattened raw name rather than source
+        component labels.  Unlike the public compatibility API, an evidence
+        service failure is typed and propagated so the V3 terminal resolver can
+        record an explicit source-preservation outcome.  Ordinary
+        non-applicability remains ``None``.
+        """
+        baseline = self._routing_input_baseline(raw_name)
+        if baseline is None:
+            return None
+        if self._ethnicity_service is None:
+            return baseline
+
+        resolution = self._east_asian_name_order.infer_resolution(
+            raw_name,
+            japanese_probability=self._ethnicity_service.japanese_probability,
+        )
+
+        if isinstance(resolution, EastAsianNameOrderPreservation):
+            return PreserveBaseline(canonical_name=baseline, evidence_reason=resolution.reason)
+
+        decision = resolution
+        if self._korean_compact_split_yields_to_chinese(raw_name, decision):
+            decision = None
+
+        if decision is not None:
+            routed = self._canonical_name_from_order_decision(baseline, decision)
+            if east_asian_evidence_resolution_reason(decision.reason) is not None:
+                if routed is None:
+                    message = f"hard scalar assignment could not be materialized for {raw_name!r}"
+                    raise HardScalarMaterializationFailure(message)
+                return ApplyAssignment(canonical_name=routed, evidence_reason=decision.reason)
+            return routed or baseline
+
+        return baseline
+
+    def routing_reorder_veto(
+        self,
+        raw_name: str,
+        selected: NameComponents,
+        *,
+        paper_names: list[str],
+        focal_index: int,
+    ) -> tuple[NameComponents, ResolutionReason | None]:
+        """Apply candidate-aware reorder vetoes to selected components."""
+        reason = self._east_asian_name_order.reorder_conflict_reason(
+            raw_name,
+            selected,
+            paper_names=paper_names,
+            focal_index=focal_index,
+        )
+        if reason is None:
+            return selected, None
+        cleaned_input = self._routing_input_order_components(raw_name)
+        if cleaned_input is None:
+            message = f"reorder veto could not materialize cleaned input order for {raw_name!r}"
+            raise RuntimeError(message)
+        return cleaned_input, reason
+
+    def _infer_east_asian_name_order_decision(
+        self,
+        raw_name: str,
+    ) -> EastAsianNameOrderDecision | None:
+        """Return one canonical order decision while surfacing evidence failure."""
         if self._ethnicity_service is None:
             return None
         try:
-            decision = self._east_asian_name_order.infer(
+            resolution = self._east_asian_name_order.infer_resolution(
                 raw_name,
                 japanese_probability=self._ethnicity_service.japanese_probability,
             )
-        except RuntimeError as error:
+        except EvidenceFailure as error:
             LOGGER.warning(
                 "East Asian name-order routing abstained after classifier failure for %r: %s",
                 raw_name,
                 error,
             )
             return None
-        if decision is None:
+        decision = resolution if isinstance(resolution, EastAsianNameOrderDecision) else None
+        if decision is None or self._korean_compact_split_yields_to_chinese(raw_name, decision):
             return None
-        return self._canonical_name_from_order_decision(baseline, decision)
+        return decision
+
+    def _korean_compact_split_yields_to_chinese(
+        self,
+        raw_name: str,
+        decision: EastAsianNameOrderDecision | None,
+    ) -> bool:
+        """A unique Korean compact split yields to a successful Chinese parse."""
+        return (
+            decision is not None
+            and decision.reason is EastAsianEvidenceReason.KOREAN_COMPACT_GIVEN_UNIQUE_SPLIT
+            and self._normalize_chinese_name(raw_name).success
+        )
 
     def _canonical_name_from_order_decision(
         self,
@@ -1468,21 +1825,77 @@ class ChineseNameDetector:
         if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
             return None
         baseline = normalized.canonical_name
-        routed = self._canonical_name_from_east_asian_order(baseline.source_text, baseline)
-        if routed is None:
-            return baseline
-        return replace(routed, source=baseline.source)
+        selected = self._canonical_person_name_from_baseline(baseline.source_text, baseline)
+        return replace(selected, source=baseline.source)
+
+    def _canonical_name_from_iteration_mark(
+        self,
+        raw_name: str,
+    ) -> CanonicalName | None:
+        """Return a source-script canonical name for one proven marked surname."""
+        if self._ethnicity_service is None:
+            return None
+        try:
+            decision = self._east_asian_name_order.infer_iteration_mark(
+                raw_name,
+                japanese_probability=self._ethnicity_service.japanese_probability,
+            )
+        except EvidenceFailure as error:
+            LOGGER.warning(
+                "Japanese iteration-mark routing abstained after classifier failure for %r: %s",
+                raw_name,
+                error,
+            )
+            return None
+        if decision is None:
+            return None
+        if self._non_person_input_service is not None and self._non_person_input_service.failure_reason(raw_name) is not None:
+            return None
+        normalized = self._person_name_normalizer.normalize_text(raw_name)
+        if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
+            return None
+        return self._canonical_name_from_order_decision(
+            normalized.canonical_name,
+            decision,
+        )
+
+    def routing_canonical_override(self, raw_name: str) -> tuple[CanonicalName, str] | None:
+        """Return a proven canonical that must replace a routed batch parse."""
+        iteration_mark = self._canonical_name_from_iteration_mark(raw_name)
+        if iteration_mark is not None:
+            return iteration_mark, "japanese_iteration_mark_canonical_override"
+
+        conflict_reason = self._east_asian_name_order.family_first_conflict_reason(raw_name)
+        if conflict_reason is None:
+            return None
+        source_order = self.normalize_person_name(raw_name)
+        if source_order is None:
+            return None
+        return source_order, conflict_reason.value
 
     def _attach_canonical_name(self, raw_name: str, result: ParseResult) -> ParseResult:
         """Attach canonical metadata without changing legacy recognition fields."""
         if result.canonical_name is not None:
             return result
-        canonical_name = self._canonical_name_from_chinese_result(raw_name, result)
-        if canonical_name is None:
-            canonical_name = self.normalize_person_name(raw_name)
+        canonical_name = self._canonical_name_for_result(raw_name, result)
         if canonical_name is None:
             return result
         return replace(result, canonical_name=canonical_name)
+
+    def _canonical_name_for_result(
+        self,
+        raw_name: str,
+        result: ParseResult,
+    ) -> CanonicalName | None:
+        """Return the canonical sidecar used by scalar normalization."""
+        if result.canonical_name is not None:
+            return result.canonical_name
+        canonical_name = self._canonical_name_from_iteration_mark(raw_name)
+        if canonical_name is None:
+            canonical_name = self._canonical_name_from_chinese_result(raw_name, result)
+        if canonical_name is None:
+            canonical_name = self.normalize_person_name(raw_name)
+        return canonical_name
 
     def normalize_name(self, raw_name: str) -> ParseResult:
         """Detect/normalize Chinese names and surface canonical data for people.
@@ -1526,21 +1939,15 @@ class ChineseNameDetector:
             # "Bei Yu" will be correctly parsed as "Bei Yu" due to batch context
         """
         self._ensure_initialized()
-
         if self._batch_analysis_service is None:
-            # Fallback to individual processing if batch service not available
             individual_results = [self._guarded_normalize_name(name) for name in names]
             return self._create_fallback_batch_result(names, individual_results)
 
         try:
-            batch_result = self._batch_analysis_service.analyze_name_batch(
+            batch_result = self._analyze_name_batch_core(
                 names,
-                self._normalizer,
-                self._formatting_service,
-                BatchAnalysisOptions(
-                    minimum_batch_size=minimum_batch_size,
-                    format_threshold=format_threshold,
-                ),
+                format_threshold=format_threshold,
+                minimum_batch_size=minimum_batch_size,
             )
         except Exception:
             LOGGER.exception("batch analysis crashed; degrading to guarded per-name processing")
@@ -1554,6 +1961,66 @@ class ChineseNameDetector:
         ]
         return replace(batch_result, results=canonical_results)
 
+    def _analyze_name_batch_core(
+        self,
+        names: list[str],
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+    ) -> BatchParseResult:
+        """Analyze one batch and propagate service or programming failures."""
+        if self._batch_analysis_service is None:
+            individual_results = [self._normalize_chinese_name(name) for name in names]
+            return self._create_fallback_batch_result(names, individual_results)
+
+        return self._batch_analysis_service.analyze_name_batch(
+            names,
+            self._normalizer,
+            self._formatting_service,
+            BatchAnalysisOptions(
+                minimum_batch_size=minimum_batch_size,
+                format_threshold=format_threshold,
+            ),
+        )
+
+    def _analyze_name_batch_strict(
+        self,
+        names: list[str],
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+    ) -> BatchParseResult:
+        """Analyze one V3 batch without converting exceptions into fallback rows."""
+        self._ensure_initialized()
+        return self._analyze_name_batch_core(
+            names,
+            format_threshold=format_threshold,
+            minimum_batch_size=minimum_batch_size,
+        )
+
+    def _analyze_related_name_batches_strict(
+        self,
+        pp_names: list[str],
+        vys_pool_names: list[str] | None,
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+        prepared_cache=None,
+    ) -> RelatedBatchParseResult:
+        """Analyze one related PP/VYS work item without duplicating focal preparation."""
+        self._ensure_initialized()
+        if self._batch_analysis_service is None:
+            message = "batch analysis service is not initialized"
+            raise RuntimeError(message)
+        return self._batch_analysis_service.analyze_related_name_batches(
+            pp_names,
+            vys_pool_names,
+            self._normalizer,
+            self._formatting_service,
+            BatchAnalysisOptions(
+                minimum_batch_size=minimum_batch_size,
+                format_threshold=format_threshold,
+            ),
+            prepared_cache,
+        )
+
     def _guarded_normalize_name(self, raw_name: str) -> ParseResult:
         try:
             return self.normalize_name(raw_name)
@@ -1566,7 +2033,8 @@ class ChineseNameDetector:
             return self._attach_canonical_name(name, result)
         except Exception:
             LOGGER.exception(
-                "canonical-name attachment crashed for %r; keeping base result", name
+                "canonical-name attachment crashed for %r; keeping base result",
+                name,
             )
             return result
 
@@ -1699,6 +2167,101 @@ class ChineseNameDetector:
         small batch lists run in-process and large batch lists use a persistent
         process pool. Output order matches the submitted batch order.
         """
+        return self._analyze_name_batches_core(
+            batches,
+            strict=False,
+            parallel=parallel,
+            min_parallel_batches=min_parallel_batches,
+            format_threshold=format_threshold,
+            minimum_batch_size=minimum_batch_size,
+            max_workers=max_workers,
+            chunk_size=chunk_size,
+            mp_start_method=mp_start_method,
+        )
+
+    def analyze_name_batches_strict(
+        self,
+        batches: list[list[str]],
+        *,
+        parallel: ParallelMode = "auto",
+        min_parallel_batches: int | None = None,
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+        max_workers: int | None = None,
+        chunk_size: int = 64,
+        mp_start_method: str = "auto",
+    ) -> list[BatchParseResult]:
+        """Analyze V3 batches while propagating invariant and programming failures."""
+        return self._analyze_name_batches_core(
+            batches,
+            strict=True,
+            parallel=parallel,
+            min_parallel_batches=min_parallel_batches,
+            format_threshold=format_threshold,
+            minimum_batch_size=minimum_batch_size,
+            max_workers=max_workers,
+            chunk_size=chunk_size,
+            mp_start_method=mp_start_method,
+        )
+
+    def _analyze_related_batch_requests_strict(
+        self,
+        requests: list[tuple[list[str], list[str] | None]],
+        *,
+        parallel: ParallelMode = "auto",
+        min_parallel_batches: int | None = None,
+        format_threshold: float = 0.55,
+        minimum_batch_size: int = 2,
+        max_workers: int | None = None,
+        chunk_size: int = 64,
+        mp_start_method: str = "auto",
+    ) -> list[RelatedBatchParseResult]:
+        """Analyze PP/VYS pairs as related worker units while preserving request order."""
+        self._ensure_initialized()
+        if _should_use_multiprocessing(
+            item_count=len(requests),
+            parallel=parallel,
+            auto_threshold=min_parallel_batches,
+            default_auto_threshold=AUTO_MULTIPROCESS_MIN_BATCHES,
+            linux_auto_threshold=LINUX_AUTO_MULTIPROCESS_MIN_BATCHES,
+            max_workers=max_workers,
+        ):
+            with self.create_persistent_multiprocess_pool(
+                max_workers=max_workers,
+                chunk_size=chunk_size,
+                mp_start_method=_auto_start_method(mp_start_method),
+            ) as pool:
+                return pool._analyze_related_batch_requests_strict(
+                    requests,
+                    format_threshold=format_threshold,
+                    minimum_batch_size=minimum_batch_size,
+                )
+        prepared_cache = {}
+        return [
+            self._analyze_related_name_batches_strict(
+                pp_names,
+                vys_pool_names,
+                format_threshold=format_threshold,
+                minimum_batch_size=minimum_batch_size,
+                prepared_cache=prepared_cache,
+            )
+            for pp_names, vys_pool_names in requests
+        ]
+
+    def _analyze_name_batches_core(
+        self,
+        batches: list[list[str]],
+        *,
+        strict: bool,
+        parallel: ParallelMode,
+        min_parallel_batches: int | None,
+        format_threshold: float,
+        minimum_batch_size: int,
+        max_workers: int | None,
+        chunk_size: int,
+        mp_start_method: str,
+    ) -> list[BatchParseResult]:
+        """Run the shared batch scheduler with one explicit failure policy."""
         self._ensure_initialized()
         if _should_use_multiprocessing(
             item_count=len(batches),
@@ -1713,13 +2276,15 @@ class ChineseNameDetector:
                 chunk_size=chunk_size,
                 mp_start_method=_auto_start_method(mp_start_method),
             ) as pool:
-                return pool.analyze_name_batches(
+                analyze = pool.analyze_name_batches_strict if strict else pool.analyze_name_batches
+                return analyze(
                     batches,
                     format_threshold=format_threshold,
                     minimum_batch_size=minimum_batch_size,
                 )
+        analyze = self._analyze_name_batch_strict if strict else self.analyze_name_batch
         return [
-            self.analyze_name_batch(
+            analyze(
                 batch,
                 format_threshold=format_threshold,
                 minimum_batch_size=minimum_batch_size,
