@@ -1,4 +1,4 @@
-# ruff: noqa: RUF001, RUF002, RUF012, EM101, PLC0415, SLF001, TRY003
+# ruff: noqa: RUF001, RUF002, EM101, PLC0415, SLF001, TRY003
 
 import numpy as np
 import pytest
@@ -381,22 +381,17 @@ def test_input_order_display_preserves_repeated_middle_initials(detector):
     assert " ".join(token for _role, token in _input_order_display(result.parsed_original_order)) == "J. K. Ming L. Zhang"
 
 
-class BrokenJapaneseProbabilityModel:
-    classes_ = ["cn", "jp"]
-
-    def predict_proba(self, names):
+class BrokenJapaneseProbabilityScorer:
+    def japanese_probability(self, name):
         raise RuntimeError("boom")
 
-    def predict(self, names):
-        return ["jp"]
 
-
-def test_japanese_probability_propagates_loaded_model_errors():
+def test_japanese_probability_propagates_loaded_scorer_errors():
     from sinonym.services import ethnicity
 
     classifier = ethnicity._MLJapaneseClassifier(confidence_threshold=0.8)
     classifier._available = True
-    classifier._model = BrokenJapaneseProbabilityModel()
+    classifier._scorer = BrokenJapaneseProbabilityScorer()
 
     with pytest.raises(RuntimeError, match="boom"):
         classifier.japanese_probability("\u5c71\u7530")
@@ -406,39 +401,34 @@ def test_ml_classifier_programming_failure_propagates_through_detector():
     detector = Predictor(PredictorConfig(parallel="never"), "")._detector
     service = detector._ethnicity_service
     service._ml_classifier._available = True
-    service._ml_classifier._model = object()
+    service._ml_classifier._scorer = object()
     service._ml_classifier.is_available = lambda: True
     service._ml_classifier.classify_all_chinese_name = lambda _name: ParseResult.failure(
         "ML Japanese classifier failed",
     )
 
-    with pytest.raises(AttributeError, match="predict_proba"):
+    with pytest.raises(AttributeError, match="japanese_probability"):
         detector.normalize_name("\u738b\u4f1f")
 
 
-class FlakyJapaneseClassifierModel:
-    classes_ = ["cn", "jp"]
-
+class FlakyJapaneseClassifierScorer:
     def __init__(self):
-        self.predict_calls = 0
+        self.calls = 0
 
-    def predict(self, _names):
-        self.predict_calls += 1
-        if self.predict_calls == 1:
-            raise RuntimeError("transient model error")
-        return ["cn"]
-
-    def predict_proba(self, _names):
-        return [[0.99, 0.01]]
+    def japanese_probability(self, _name):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("transient scorer error")
+        return 0.01
 
 
 def test_ml_classifier_runtime_failure_is_not_cached():
     from sinonym.services import ethnicity
 
     classifier = ethnicity._MLJapaneseClassifier(confidence_threshold=0.8)
-    model = FlakyJapaneseClassifierModel()
+    scorer = FlakyJapaneseClassifierScorer()
     classifier._available = True
-    classifier._model = model
+    classifier._scorer = scorer
 
     first = classifier.classify_all_chinese_name("\u738b\u4f1f")
     second = classifier.classify_all_chinese_name("\u738b\u4f1f")
@@ -446,7 +436,7 @@ def test_ml_classifier_runtime_failure_is_not_cached():
     assert not first.success
     assert first.error_message == "ML Japanese classifier failed"
     assert second.success
-    assert model.predict_calls == 2
+    assert scorer.calls == 2
 
 
 def test_batch_format_requires_real_voter_share():

@@ -4,7 +4,7 @@ Resource loading helpers for package data files.
 This module provides utilities to access data files included with the sinonym package
 using importlib.resources, ensuring compatibility across all installation methods.
 
-Includes helpers to load ML artifacts persisted with joblib or skops.
+Includes a helper to load ML artifacts persisted with skops.
 """
 
 from __future__ import annotations
@@ -36,14 +36,6 @@ def read_bytes(name: str) -> bytes:
 def read_json(name: str, encoding: str = "utf-8") -> Any:
     """Read and parse a JSON file from package resources."""
     return json.loads(read_text(name, encoding=encoding))
-
-
-def load_joblib(name: str):
-    """Load a joblib model from package resources."""
-    import joblib
-
-    with open_resource_path(name) as path:
-        return joblib.load(path)
 
 
 def load_skops(name: str, trusted: list[str] | None = None):

@@ -10,7 +10,6 @@ import unicodedata
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import ClassVar
 
 import pytest
 
@@ -881,23 +880,18 @@ def test_han_compound_surname_suppresses_japanese_ml_rejection(detector, raw_nam
     assert result.parsed_original_order.order == ["surname", "given"]
 
 
-class BrokenJapaneseProbabilityModel:
-    """Model stub whose probability API fails after reporting availability."""
+class BrokenJapaneseProbabilityScorer:
+    """Scorer stub whose probability API fails after reporting availability."""
 
-    classes_: ClassVar[list[str]] = ["cn", "jp"]
-
-    def predict_proba(self, names):
+    def japanese_probability(self, name):
         message = "boom"
         raise RuntimeError(message)
 
-    def predict(self, names):
-        return ["jp"]
 
-
-def test_japanese_probability_propagates_loaded_model_errors():
+def test_japanese_probability_propagates_loaded_scorer_errors():
     classifier = ethnicity._MLJapaneseClassifier(confidence_threshold=0.8)
     classifier._available = True
-    classifier._model = BrokenJapaneseProbabilityModel()
+    classifier._scorer = BrokenJapaneseProbabilityScorer()
 
     with pytest.raises(RuntimeError, match="boom"):
         classifier.japanese_probability("\u5c71\u7530")

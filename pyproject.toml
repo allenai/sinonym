@@ -102,6 +102,7 @@ ignore = ["S101", "T201"]  # Allow assert statements and print statements
 "sinonym/__init__.py" = ["BLE001", "EM102", "PLC0415", "PTH100", "PTH109", "PTH120", "S110", "TRY003"]
 "sinonym/chinese_names_data.py" = ["ERA001"]
 "sinonym/coretypes/config.py" = ["E501", "RUF001", "RUF003"]
+"sinonym/ml_fast_scorer.py" = ["PLR0913", "PLR2004"]
 "sinonym/ml_model_components.py" = ["ARG002", "N803", "PLR2004", "UP038"]
 "sinonym/patterns/regex_builders.py" = ["N806", "PLR2004", "RUF001"]
 "sinonym/resources.py" = ["PLC0415", "TC003"]

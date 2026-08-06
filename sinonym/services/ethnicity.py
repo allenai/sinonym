@@ -55,15 +55,6 @@ AMBIGUOUS_INITIAL_ONLY_SURNAMES = frozenset(
     | OVERLAPPING_VIETNAMESE_SURNAMES,
 )
 
-# Optional ML Japanese classifier imports - consolidated from separate service
-try:
-    # Ensure custom model components are importable when deserializing
-    import sinonym.ml_model_components  # noqa: F401
-
-    ML_AVAILABLE = True
-except ImportError:
-    ML_AVAILABLE = False
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -72,31 +63,23 @@ class _MLJapaneseClassifier:
 
     def __init__(self, confidence_threshold: float = 0.8):
         self._confidence_threshold = confidence_threshold
-        self._model = None
-        self._available = ML_AVAILABLE
+        self._scorer = None
+        self._available = True
         # Thread-local cache for ML classification results
         self._cache = ThreadLocalCache()
 
-        if ML_AVAILABLE:
-            try:
-                # Prefer skops artifact; fall back to legacy joblib if needed
-                from sinonym.resources import load_joblib, load_skops  # noqa: PLC0415
+        try:
+            from sinonym.ml_fast_scorer import FastJapaneseScorer  # noqa: PLC0415
+            from sinonym.resources import read_bytes  # noqa: PLC0415
 
-                try:
-                    self._model = load_skops("chinese_japanese_classifier.skops")
-                except Exception as skops_err:  # noqa: BLE001 - skops may raise several deserialization errors.
-                    LOGGER.info(
-                        "SKOPS model not available or failed to load (%s); falling back to legacy joblib artifact.",
-                        skops_err,
-                    )
-                    self._model = load_joblib("chinese_japanese_classifier.joblib")
-            except Exception as e:  # noqa: BLE001 - optional classifier load failure disables the ML path.
-                LOGGER.warning("Failed to load ML Japanese classifier: %s", e)
-                self._available = False
+            self._scorer = FastJapaneseScorer.from_skops_bytes(read_bytes("chinese_japanese_classifier.skops"))
+        except Exception as e:  # noqa: BLE001 - optional classifier load failure disables the ML path.
+            LOGGER.warning("Failed to load ML Japanese classifier: %s", e)
+            self._available = False
 
     def is_available(self) -> bool:
         """Check if ML classifier is available and loaded."""
-        return self._available and self._model is not None
+        return self._available and self._scorer is not None
 
     def classify_all_chinese_name(self, name: str) -> ParseResult:
         """Classify an all-Chinese character name as Chinese or Japanese."""
@@ -108,17 +91,14 @@ class _MLJapaneseClassifier:
             return cached
 
         try:
-            # Get prediction and confidence (same as original)
-            prediction = self._model.predict([name])[0]  # 'cn' or 'jp'
-            probabilities = self._model.predict_proba([name])[0]
-            confidence = max(probabilities)
+            jp_probability = self._scorer.japanese_probability(name)
 
             # Only reject as Japanese if we're very confident
-            if prediction == "jp" and confidence >= self._confidence_threshold:
+            if jp_probability > 0.5 and jp_probability >= self._confidence_threshold:
                 result = ParseResult.failure(JAPANESE_CLASSIFIER_REJECTION)
             else:
                 result = ParseResult.success_with_name("")
-        except Exception as e:  # noqa: BLE001 - model-backed classifiers may raise arbitrary runtime errors.
+        except Exception as e:  # noqa: BLE001 - scorer failures must surface without being cached.
             LOGGER.warning("ML Japanese classifier error for %r: %s", name, e, exc_info=True)
             return ParseResult.failure(JAPANESE_CLASSIFIER_RUNTIME_ERROR)
         else:
@@ -130,15 +110,7 @@ class _MLJapaneseClassifier:
         if not self.is_available():
             return 0.0
 
-        probabilities = self._model.predict_proba([name])[0]
-        classes = list(getattr(self._model, "classes_", ()))
-        if "jp" in classes:
-            return float(probabilities[classes.index("jp")])
-
-        prediction = self._model.predict([name])[0]
-        if prediction == "jp":
-            return float(max(probabilities))
-        return 0.0
+        return self._scorer.japanese_probability(name)
 
 
 class EthnicityClassificationService:
