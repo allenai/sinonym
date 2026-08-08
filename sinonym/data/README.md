@@ -6,8 +6,11 @@ This directory contains the data files and trained models used by the Sinonym li
 
 ### Conservative East Asian name-order lexicons
 
-- **`east_asian_roman_lexicons.json.gz`**: sorted Romanized Japanese surname
-  and given-name keys plus Korean and Vietnamese surname keys.
+- **`east_asian_roman_lexicons.json.gz`**: sorted Romanized Japanese directional
+  and possible-surname keys, reviewed exact given-first surfaces, Japanese
+  given-name keys, and Korean and Vietnamese surname keys. Possible surnames can
+  veto a selected flip but cannot initiate one; conflicting directional
+  evidence requires supporting paper context.
 - **`japanese_native_lexicons.json.gz`**: sorted Japanese native-script surname
   and given-name forms used to score compact-name boundaries.
 

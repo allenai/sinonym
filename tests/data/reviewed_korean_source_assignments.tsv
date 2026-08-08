@@ -1,0 +1,67 @@
+occurrence_ids	source_first_name	source_middle_names	source_last_name	decision	given_prefix_tokens	expected_given_name	expected_middle_name	expected_surname	confidence	evidence_basis
+203640543:0	Jae	Won	Chung	assign	1	Jae Won		Chung	high	audit_multi_review
+58474504:4	Sang	Hyub	Lee	assign	1	Sang Hyub		Lee	high	audit_multi_review
+256200776:4	Boo	Young	Ko	assign	1	Boo Young		Ko	high	audit_multi_review
+276062027:5	Jeong	Seon	Yeo	assign	1	Jeong Seon		Yeo	high	audit_multi_review
+186810591:1	Jae	moon	Lee	assign	1	Jae moon		Lee	high	audit_span_plus_source_case_policy
+272401123:0	Young	In	Shin	assign	1	Young In		Shin	high	audit_reviewed
+111818970:3	Byoung	Yoon	Kim	assign	1	Byoung Yoon		Kim	high	audit_multi_review
+72667664:0	Seok	Yong	Kang	assign	1	Seok Yong		Kang	high	audit_multi_review
+220919217:6	Su	Ja	Kim	assign	1	Su Ja		Kim	high	audit_multi_review
+273654640:0	Changwoo		Lee	assign	0	Changwoo		Lee	high	audit_reviewed
+138399997:2	Youn	Sik	Kim	assign	1	Youn Sik		Kim	high	audit_multi_review
+246508224:11	Woo	Sung	Jeon	assign	1	Woo Sung		Jeon	high	audit_multi_review
+67821604:4	Jong	Hak	Kim	assign	1	Jong Hak		Kim	high	audit_multi_review
+3658236:3	Soo	Ick	Cho	assign	1	Soo Ick		Cho	high	audit_multi_review
+77813991:4	Kang	Ju	Kim	assign	1	Kang Ju		Kim	high	audit_multi_review
+71593843:2	Sung	Ik	Lee	assign	1	Sung Ik		Lee	high	audit_reviewed
+44323088:7	Sang	Min	Yoon	assign	1	Sang Min		Yoon	high	audit_root_adjudicated
+80531007:3	Keum	Seok	Bae	assign	1	Keum Seok		Bae	high	audit_multi_review
+81967750:2	Ji	Woon	Ha	assign	1	Ji Woon		Ha	high	audit_multi_review
+267643405:0	Ji	Hyun	Moon	assign	1	Ji Hyun		Moon	high	audit_multi_review
+104108858:4	Jin	Cheul	Kim	assign	1	Jin Cheul		Kim	high	audit_root_adjudicated_plus_hangul_identity
+219763987:1	Yoon	Kyung	Choi	assign	1	Yoon Kyung		Choi	high	audit_multi_review
+210926301:0	Joon	Young	Choi	assign	1	Joon Young		Choi	high	audit_root_adjudicated
+275502513:5	Hoe	Joon	Kim	assign	1	Hoe Joon		Kim	high	policy_re_adjudication
+23770866:4	Kyeong	Ah	Kim	assign	1	Kyeong Ah		Kim	high	policy_re_adjudication
+138929533:4	Hyoung	Sub	Kim	assign	1	Hyoung Sub		Kim	high	policy_re_adjudication
+733469:5	Weon	Ju	Lee	assign	1	Weon Ju		Lee	high	policy_re_adjudication
+53228629:5	Su	Jin	Hwang	assign	1	Su Jin		Hwang	high	policy_re_adjudication
+186206412:1	Won	Hyung A.	Ryu	assign	1	Won Hyung	A.	Ryu	high	policy_re_adjudication_preserve_true_initial
+79262946:2	Eun	Kee	Jeong	assign	1	Eun Kee		Jeong	high	policy_re_adjudication
+73837933:0;273268899:6	Jong	Ho	Kim	assign	1	Jong Ho		Kim	high	policy_re_adjudication_two_agreeing_occurrences
+733469:0	Han	Jin	Jung	assign	1	Han Jin		Jung	high	korean_roster_manual_review
+3658236:2	Young	Hee	Choi	assign	1	Young Hee		Choi	high	korean_roster_manual_review
+23770866:1	Chang	Hee	Lee	assign	1	Chang Hee		Lee	high	korean_roster_manual_review
+53228629:4	Chang	Mo	Yang	assign	1	Chang Mo		Yang	high	korean_roster_manual_review
+58474504:6	Dong	Soo	Han	assign	1	Dong Soo		Han	high	korean_roster_manual_review
+71593843:1	Su	Jung	Choi	assign	1	Su Jung		Choi	high	korean_roster_manual_review
+77813991:3	Heung	Soo	Lee	assign	1	Heung Soo		Lee	high	korean_roster_manual_review
+78491032:4	Sung	Hoon	Chung	assign	1	Sung Hoon		Chung	high	korean_roster_manual_review
+79262946:4	Ji	Soo	Lee	assign	1	Ji Soo		Lee	high	korean_roster_manual_review
+104108858:0	Seung	Jun	Lee	assign	1	Seung Jun		Lee	high	korean_roster_plus_hangul_identity
+104108858:10	Jong	Soo	Woo	assign	1	Jong Soo		Woo	high	korean_roster_plus_hangul_identity
+137324648:2	Sang	Yong	Shin	assign	1	Sang Yong		Shin	high	korean_roster_manual_review
+137324648:4	Sunghak		Lee	assign	0	Sunghak		Lee	high	korean_roster_manual_review
+207094008:2	Yi	Ho	Lee	assign	1	Yi Ho		Lee	high	korean_roster_manual_review
+219763987:2	Sanghun		Lee	assign	0	Sanghun		Lee	high	korean_roster_manual_review
+219763987:3	Sang	Yun	Han	assign	1	Sang Yun		Han	high	korean_roster_manual_review
+225818647:1	Min	Young	Lee	assign	1	Min Young		Lee	high	korean_roster_manual_review
+225818647:3	Bong	Soo	Cha	assign	1	Bong Soo		Cha	high	korean_roster_manual_review
+246508224:7	Young	Mo	Sung	assign	1	Young Mo		Sung	high	korean_roster_manual_review
+248728732:1	Sang	Hoon	Han	assign	1	Sang Hoon		Han	high	korean_roster_manual_review
+248728732:2	Ye	Hun	Choi	assign	1	Ye Hun		Choi	high	korean_roster_manual_review
+255226198:1	Youme		Ko	assign	0	Youme		Ko	high	korean_roster_manual_review
+256048946:0	Sangji		Lee	assign	0	Sangji		Lee	high	korean_roster_manual_review
+256200776:3	Jong	Hoon	Kang	assign	1	Jong Hoon		Kang	high	korean_roster_manual_review
+264478039:0	Suji		Choi	assign	0	Suji		Choi	high	korean_roster_manual_review
+265060579:1	Yunjin		Lee	assign	0	Yunjin		Lee	high	korean_roster_manual_review
+273268899:4	Minwoo		Lee	assign	0	Minwoo		Lee	high	korean_roster_manual_review
+286894797:3	Sumin		Lee	assign	0	Sumin		Lee	high	korean_roster_manual_review
+4460979:0	Guanglei		Cheng	exclude					high	mixed_roster_chinese_candidate
+4460979:2	Shicheng		Lu	exclude					high	mixed_roster_chinese_candidate
+4460979:4	Mengchen		Huang	exclude					high	mixed_roster_chinese_candidate
+31916470:0	Daibin		Kuang	exclude					high	mixed_roster_chinese_candidate
+195771411:4	Xiang	Yun	Yin	exclude					high	mixed_roster_chinese_candidate
+256200776:0	Panha		Pok	abstain					medium	mixed_roster_non_korean_outside_policy
+276327921:1	Tiejun		Chen	exclude					high	mixed_roster_chinese_candidate

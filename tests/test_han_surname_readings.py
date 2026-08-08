@@ -83,3 +83,46 @@ def test_zeng_reading_does_not_change_japanese_rejection(detector):
 
     assert not result.success
     assert result.error_message == "Japanese name detected by ML classifier"
+
+
+def test_qiu_reading_is_used_for_assigned_han_surname(detector):
+    result = detector.normalize_name("仇洪冰")
+
+    assert result.success
+    assert result.result == "Hong-Bing Qiu"
+    assert result.parsed.surname == "Qiu"
+    assert result.canonical_name.normalized.surname == "Qiu"
+
+
+def test_qiu_reading_does_not_change_han_given_name(detector):
+    result = detector.normalize_name("陈仇明")
+
+    assert result.success
+    assert result.result == "Chou-Ming Chen"
+    assert result.parsed.given_name == "Chou-Ming"
+
+
+@pytest.mark.parametrize("raw_name", ["Chou Hongbing", "Hongbing Chou"])
+def test_qiu_reading_does_not_rewrite_explicit_roman_source(detector, raw_name):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == "Hong-Bing Chou"
+    assert result.parsed.surname == "Chou"
+
+
+def test_qiu_surname_reading_reaches_batch_results(detector):
+    batch = detector.analyze_name_batch(["仇洪冰", "李小明"])
+
+    assert batch.results[0].result == "Hong-Bing Qiu"
+    assert batch.results[0].parsed.surname == "Qiu"
+    assert batch.name_order_evidence[0].selected_surname_position == "first"
+
+
+def test_qiu_surname_reading_reaches_v3_fields(routing_predictor: RoutingPredictorV3):
+    source = SourceAuthorFields(last_name="仇洪冰")
+
+    (paper,) = routing_predictor.predict_batch([RoutingInstanceV3(pp_authors=[source])])
+    resolved = paper.authors[0].resolved_fields
+
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("Hong-Bing", "", "Qiu")

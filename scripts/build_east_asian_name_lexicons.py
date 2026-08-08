@@ -23,8 +23,19 @@ USER_AGENT = "sinonym-east-asian-lexicon-builder/1.0"
 MAX_ATTEMPTS = 4
 RETRYABLE_HTTP_CODES = frozenset({429, 502, 503, 504})
 MIN_GIVEN_FIELDS = 2
-ASSET_SCHEMA_VERSION = 2
+ASSET_SCHEMA_VERSION = 3
 TOP_VIETNAMESE_SURNAME_RANK = 4
+REVIEWED_SURFACE_TOKEN_COUNT = 2
+GZIP_OS_BYTE_OFFSET = 9
+GZIP_UNKNOWN_OS = 255
+REVIEWED_POSSIBLE_SURNAMES_PATH = Path(__file__).with_name("data") / "reviewed_japanese_possible_surnames.csv"
+REVIEWED_POSSIBLE_SURNAME_FIELDS = (
+    "surname_key",
+    "evidence_id",
+    "example_surface",
+    "evidence_url",
+    "given_first_exact_surface",
+)
 
 
 @dataclass(frozen=True)
@@ -157,6 +168,47 @@ def source_metadata() -> list[dict[str, str]]:
     ]
 
 
+def reviewed_possible_surnames() -> tuple[list[str], list[str], dict[str, str]]:
+    """Load reviewed ambiguity-only surnames and optional exact repairs."""
+    payload = REVIEWED_POSSIBLE_SURNAMES_PATH.read_bytes()
+    reader = csv.DictReader(io.StringIO(payload.decode("utf-8-sig")))
+    if tuple(reader.fieldnames or ()) != REVIEWED_POSSIBLE_SURNAME_FIELDS:
+        message = f"invalid reviewed possible surname columns in {REVIEWED_POSSIBLE_SURNAMES_PATH}"
+        raise ValueError(message)
+    rows = list(reader)
+    keys = [row["surname_key"].strip() for row in rows]
+    evidence_surfaces = [fold(row["example_surface"].strip()) for row in rows]
+    surfaces = [fold(row["given_first_exact_surface"].strip()) for row in rows if row["given_first_exact_surface"].strip()]
+    if not keys or any(key != fold(key) or not key.isalpha() for key in keys) or len(keys) != len(set(keys)):
+        message = f"invalid reviewed possible surname keys in {REVIEWED_POSSIBLE_SURNAMES_PATH}"
+        raise ValueError(message)
+    if any(
+        len(surface.split()) != REVIEWED_SURFACE_TOKEN_COUNT or key not in japanese_roman_keys(surface.split()[-1])
+        for key, surface in zip(keys, evidence_surfaces, strict=True)
+    ):
+        message = f"invalid reviewed surname evidence surfaces in {REVIEWED_POSSIBLE_SURNAMES_PATH}"
+        raise ValueError(message)
+    exact_rows = [row for row in rows if row["given_first_exact_surface"].strip()]
+    if any(
+        len(surface.split()) != REVIEWED_SURFACE_TOKEN_COUNT
+        or row["surname_key"].strip() not in japanese_roman_keys(surface.split()[-1])
+        for row, surface in zip(exact_rows, surfaces, strict=True)
+    ) or len(surfaces) != len(set(surfaces)):
+        message = f"invalid reviewed exact surfaces in {REVIEWED_POSSIBLE_SURNAMES_PATH}"
+        raise ValueError(message)
+    return (
+        sorted(keys),
+        sorted(surfaces),
+        {
+            "name": "reviewed_possible_japanese_surnames",
+            "url": "scripts/data/reviewed_japanese_possible_surnames.csv",
+            "sha256": hashlib.sha256(payload).hexdigest(),
+            "license": "MIT",
+            "repository": "https://github.com/allenai/sinonym",
+        },
+    )
+
+
 def encode(payload: dict[str, object]) -> bytes:
     """Return deterministic gzip-compressed JSON."""
     serialized = json.dumps(
@@ -165,7 +217,11 @@ def encode(payload: dict[str, object]) -> bytes:
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
-    return gzip.compress(serialized, compresslevel=9, mtime=0)
+    compressed = bytearray(gzip.compress(serialized, compresslevel=9, mtime=0))
+    # CPython 3.11-3.12 expose zlib's platform-specific OS byte when mtime=0,
+    # while 3.10 and 3.13+ write 255. Canonicalize it for cross-version builds.
+    compressed[GZIP_OS_BYTE_OFFSET] = GZIP_UNKNOWN_OS
+    return bytes(compressed)
 
 
 def main() -> None:
@@ -209,6 +265,19 @@ def main() -> None:
     japanese_given_native = sorted(
         {native.strip() for row in japanese_given_rows for native in row[2:] if native.strip()},
     )
+    japanese_country_surnames_roman = sorted(
+        {
+            key
+            for row in country_rows
+            if row["Country"] == "JP"
+            for romanized in slash_variants(row["Romanized Name"])
+            for key in japanese_roman_keys(romanized)
+        },
+    )
+    reviewed_surnames, reviewed_surfaces, reviewed_provenance = reviewed_possible_surnames()
+    japanese_possible_surnames_roman = sorted(
+        set(japanese_surnames_roman) | set(japanese_country_surnames_roman) | set(reviewed_surnames),
+    )
     korean_surnames_roman = sorted(
         {
             fold(romanized)
@@ -243,8 +312,10 @@ def main() -> None:
     provenance = source_metadata()
     roman_payload: dict[str, object] = {
         "schema_version": ASSET_SCHEMA_VERSION,
-        "sources": provenance,
+        "sources": [*provenance, reviewed_provenance],
         "japanese_surnames": japanese_surnames_roman,
+        "japanese_possible_surnames": japanese_possible_surnames_roman,
+        "japanese_given_first_exact_surfaces": reviewed_surfaces,
         "japanese_given_names": japanese_given_roman,
         "korean_surnames": korean_surnames_roman,
         "vietnamese_surnames": vietnamese_surnames_roman,
@@ -271,6 +342,9 @@ def main() -> None:
         }
     report["counts"] = {
         "japanese_surnames_roman": len(japanese_surnames_roman),
+        "japanese_country_surnames_roman": len(japanese_country_surnames_roman),
+        "japanese_possible_surnames_roman": len(japanese_possible_surnames_roman),
+        "japanese_given_first_exact_surfaces": len(reviewed_surfaces),
         "japanese_given_roman": len(japanese_given_roman),
         "japanese_surnames_native": len(japanese_surnames_native),
         "japanese_given_native": len(japanese_given_native),

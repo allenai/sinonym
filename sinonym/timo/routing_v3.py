@@ -309,7 +309,7 @@ REVIEWED_EXACT_SOURCE_ROLE_ASSIGNMENTS = {
     ): ("middle_names", "last_name", "first_name"),
 }
 # Reviewed tuples whose correct output needs literal text rather than source
-# field selectors. Their complete corpus occurrence sets agree on the roles.
+# field selectors.
 REVIEWED_EXACT_SOURCE_LITERAL_ASSIGNMENTS = {
     ("fernando", "del.", "pulgar"): NameComponents(
         given_name="Fernando",
@@ -357,6 +357,72 @@ REVIEWED_EXACT_SOURCE_LITERAL_ASSIGNMENTS = {
         surname="マンニング",
     ),
 }
+
+# Exact Korean tuples manually adjudicated from frozen audit and paper-roster
+# evidence. Each value is the count of leading source-middle tokens belonging
+# to the given name. Zero preserves a fused source given name. Assignments take
+# all spelling, case, and separators from the source.
+REVIEWED_EXACT_KOREAN_GIVEN_PREFIX_PACKS = {
+    ("bong", "soo", "cha"): 1,
+    ("boo", "young", "ko"): 1,
+    ("byoung", "yoon", "kim"): 1,
+    ("chang", "hee", "lee"): 1,
+    ("chang", "mo", "yang"): 1,
+    ("changwoo", "", "lee"): 0,
+    ("dong", "soo", "han"): 1,
+    ("eun", "kee", "jeong"): 1,
+    ("han", "jin", "jung"): 1,
+    ("heung", "soo", "lee"): 1,
+    ("hoe", "joon", "kim"): 1,
+    ("hyoung", "sub", "kim"): 1,
+    ("jae", "moon", "lee"): 1,
+    ("jae", "won", "chung"): 1,
+    ("jeong", "seon", "yeo"): 1,
+    ("ji", "hyun", "moon"): 1,
+    ("ji", "soo", "lee"): 1,
+    ("ji", "woon", "ha"): 1,
+    ("jin", "cheul", "kim"): 1,
+    ("jong", "hak", "kim"): 1,
+    ("jong", "ho", "kim"): 1,
+    ("jong", "hoon", "kang"): 1,
+    ("jong", "soo", "woo"): 1,
+    ("joon", "young", "choi"): 1,
+    ("kang", "ju", "kim"): 1,
+    ("keum", "seok", "bae"): 1,
+    ("kyeong", "ah", "kim"): 1,
+    ("min", "young", "lee"): 1,
+    ("minwoo", "", "lee"): 0,
+    ("sang", "hoon", "han"): 1,
+    ("sang", "hyub", "lee"): 1,
+    ("sang", "min", "yoon"): 1,
+    ("sang", "yong", "shin"): 1,
+    ("sang", "yun", "han"): 1,
+    ("sanghun", "", "lee"): 0,
+    ("sangji", "", "lee"): 0,
+    ("seok", "yong", "kang"): 1,
+    ("seung", "jun", "lee"): 1,
+    ("soo", "ick", "cho"): 1,
+    ("su", "ja", "kim"): 1,
+    ("su", "jin", "hwang"): 1,
+    ("su", "jung", "choi"): 1,
+    ("sumin", "", "lee"): 0,
+    ("sung", "hoon", "chung"): 1,
+    ("sung", "ik", "lee"): 1,
+    ("sunghak", "", "lee"): 0,
+    ("suji", "", "choi"): 0,
+    ("weon", "ju", "lee"): 1,
+    ("won", "hyung a.", "ryu"): 1,
+    ("woo", "sung", "jeon"): 1,
+    ("ye", "hun", "choi"): 1,
+    ("yi", "ho", "lee"): 1,
+    ("youme", "", "ko"): 0,
+    ("young", "hee", "choi"): 1,
+    ("young", "in", "shin"): 1,
+    ("young", "mo", "sung"): 1,
+    ("youn", "sik", "kim"): 1,
+    ("yoon", "kyung", "choi"): 1,
+    ("yunjin", "", "lee"): 0,
+}
 REVIEWED_EXACT_SOURCE_REORDER_VETOES = frozenset(
     {
         ("han", "w.", "tun"),
@@ -399,9 +465,7 @@ def reviewed_cleanup_surname_expansion_prefers_scalar(
     scalar_tokens = scalar.surname.split()
     if not scalar_tokens or len(cleanup_tokens) <= len(scalar_tokens):
         return False
-    if [_alnum_key(token) for token in cleanup_tokens[-len(scalar_tokens) :]] != [
-        _alnum_key(token) for token in scalar_tokens
-    ]:
+    if [_alnum_key(token) for token in cleanup_tokens[-len(scalar_tokens) :]] != [_alnum_key(token) for token in scalar_tokens]:
         return False
     return _has_reviewed_cleanup_surname_prefix(cleanup_tokens[: -len(scalar_tokens)])
 
@@ -537,11 +601,23 @@ def reviewed_fullwidth_katakana_alias_assignment(
 
 
 def reviewed_exact_source_assignment(source: SourceAuthorFields) -> NameComponents | None:
-    """Assign roles for a full source tuple whose every corpus occurrence agrees."""
+    """Apply one manually reviewed assignment keyed to normalized source fields."""
     source_key = _source_component_key(source)
     literal_assignment = REVIEWED_EXACT_SOURCE_LITERAL_ASSIGNMENTS.get(source_key)
     if literal_assignment is not None:
         return literal_assignment
+    korean_given_prefix_length = REVIEWED_EXACT_KOREAN_GIVEN_PREFIX_PACKS.get(source_key)
+    if korean_given_prefix_length is not None and not (source.suffix or "").strip():
+        source_first = " ".join((source.first_name or "").split())
+        source_middle_tokens = (source.middle_names or "").split()
+        given_name = " ".join((source_first, *source_middle_tokens[:korean_given_prefix_length]))
+        middle_name = " ".join(source_middle_tokens[korean_given_prefix_length:])
+        surname = " ".join((source.last_name or "").split())
+        return NameComponents(
+            given_name=given_name,
+            middle_name=middle_name,
+            surname=surname,
+        )
     if source_key in REVIEWED_EXACT_SOURCE_ENDPOINT_REORDERS:
         return NameComponents(
             given_name=source.last_name or "",
@@ -674,7 +750,7 @@ def restore_reviewed_atomic_korean_tokens(
     source: SourceAuthorFields,
     selected: NameComponents,
 ) -> NameComponents:
-    """Undo Chinese syllable boundaries invented inside reviewed Korean tokens."""
+    """Restore reviewed Korean tokens and their complete source given surface."""
     source_tokens = {token.casefold(): token for token in source.full_name().split()}
     replacements = {
         mutation: source_tokens[token]
@@ -714,6 +790,15 @@ def restore_reviewed_atomic_korean_tokens(
     given_name, given_tokens = repaired(selected.given_name, selected.given_tokens)
     middle_name, middle_tokens = repaired(selected.middle_name, selected.middle_tokens)
     surname, surname_tokens = repaired(selected.surname, selected.surname_tokens)
+
+    source_given = " ".join((source.first_name or "").split())
+    source_given_tokens = tuple(source_given.split())
+    has_reviewed_source_given_token = any(
+        token.casefold() in REVIEWED_ATOMIC_KOREAN_TOKEN_REPAIRS for token in source_given_tokens
+    )
+    if has_reviewed_source_given_token and _alnum_key(source_given) == _alnum_key(given_name):
+        given_name = source_given
+        given_tokens = source_given_tokens
 
     return replace(
         selected,
@@ -791,6 +876,46 @@ class SourceAuthorFields(RoutingV3Model):
     def full_name(self) -> str:
         """Derive the current scalar/PP input; suffix is intentionally excluded."""
         return " ".join(part for part in (self.first_name or "", self.middle_names or "", self.last_name or "") if part).strip()
+
+
+def _reviewed_leading_title_or_credential_assignment(
+    source: SourceAuthorFields,
+    normalizer: PersonNameNormalizationService,
+) -> NameComponents | None:
+    """Remove one exact reviewed prefix from a complete structured name."""
+    first, middle, last, suffix = (
+        (value or "").strip() for value in (source.first_name, source.middle_names, source.last_name, source.suffix)
+    )
+    if suffix:
+        return None
+
+    retained_first: str | None = None
+    retained_middle: str | None = None
+    if first in {"Er.", "M.Pd"} and len(middle.split()) == 1 and len(last.split()) == 1:
+        retained_first = middle
+    elif first.startswith("MUDr.") and first != "MUDr." and not middle and len(last.split()) == 1:
+        attached_name = first.removeprefix("MUDr.")
+        if len(attached_name.split()) != 1:
+            return None
+        retained_first = attached_name
+    elif first == "Assist" and len(last.split()) == 1:
+        match middle.split():
+            case [".Lect.", given_name, middle_name]:
+                retained_middle = f"{given_name} {middle_name}"
+            case _:
+                return None
+    else:
+        return None
+
+    atomic = normalizer.normalize_components(
+        first_name=retained_first,
+        middle_name=retained_middle,
+        last_name=last,
+    )
+    if atomic.outcome is not PersonNameOutcome.PERSON or atomic.canonical_name is None:
+        return None
+    selected = atomic.canonical_name.normalized
+    return selected if selected.given_name and selected.surname else None
 
 
 def _reviewed_closed_comma_credential_assignment(
@@ -901,8 +1026,8 @@ class ResolvedAuthorFields(RoutingV3Model):
     ``PRESERVE_INPUT`` means the selected policy did not flip the derived input
     order. ``SUPPRESS`` tells the writer not to emit the author while retaining
     this aligned diagnostic slot. ``SOURCE`` plus either action promises exact source fields;
-    ``SOURCE`` plus ``ASSIGN`` applies roles proven from reviewed source
-    structure or one exact source tuple.
+    ``SOURCE`` plus ``ASSIGN`` applies roles supported by reviewed source
+    structure or one exact reviewed source tuple.
     PP/VYS materialization may also assign source tokens to output fields. The
     suffix is already final, so an application must not merge it again.
     """
@@ -1000,10 +1125,7 @@ class RoutingV3Resolver:
         for value in (selected.given_name, selected.middle_name):
             for token in value.split():
                 parts = [part for part in re.split(r"[.-]+", token) if part]
-                if parts and all(
-                    len(part) == 1 and unicodedata.name(part, "").startswith("LATIN ")
-                    for part in parts
-                ):
+                if parts and all(len(part) == 1 and unicodedata.name(part, "").startswith("LATIN ") for part in parts):
                     return True
         return False
 
@@ -1078,6 +1200,47 @@ class RoutingV3Resolver:
             and folded(selected.surname.split()) == folded(surname[-1:])
         )
 
+    def _scalar_clean_source_surname_repartition_candidate(  # noqa: C901, PLR0911
+        self,
+        source: SourceAuthorFields,
+        selected: NameComponents,
+    ) -> NameComponents | None:
+        """Return a clean structured-surname alternative to a scalar repartition."""
+        if len((source.last_name or "").split()) < 2:  # noqa: PLR2004
+            return None
+        normalized = self._source_normalizer.normalize_components(
+            first_name=source.first_name,
+            middle_name=source.middle_names,
+            last_name=source.last_name,
+            suffix=source.suffix,
+        )
+        if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
+            return None
+        candidate = normalized.canonical_name.normalized
+
+        def folded(value: str) -> list[str]:
+            return [token.casefold() for token in value.split()]
+
+        selected_surname = selected.surname.split()
+        candidate_surname = candidate.surname.split()
+        if not selected_surname or len(selected_surname) >= len(candidate_surname):
+            return None
+        if folded(selected.surname) != [token.casefold() for token in candidate_surname[-len(selected_surname) :]]:
+            return None
+        peeled = candidate_surname[: -len(selected_surname)]
+        if folded(selected.given_name) != folded(candidate.given_name):
+            return None
+        if folded(selected.middle_name) != [*folded(candidate.middle_name), *[token.casefold() for token in peeled]]:
+            return None
+        if folded(selected.suffix) != folded(candidate.suffix):
+            return None
+        is_initial = PersonNameNormalizationService._is_initial  # noqa: SLF001
+        if any(is_initial(token) for token in (source.first_name or "").split()):
+            return None
+        if any(is_initial(token) for token in peeled):
+            return None
+        return candidate
+
     def _reviewed_source_rules_resolution(
         self,
         source: SourceAuthorFields,
@@ -1104,6 +1267,10 @@ class RoutingV3Resolver:
             return self._source_resolution(source, ResolutionReason.REVIEWED_NON_PERSON_PATTERN)
         assignment_rules: tuple[tuple[Callable[[], NameComponents | None], ResolutionReason], ...] = (
             (lambda: reviewed_exact_source_assignment(source), ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT),
+            (
+                lambda: _reviewed_leading_title_or_credential_assignment(source, self._source_normalizer),
+                pattern_reason,
+            ),
             (lambda: reviewed_cyrillic_surname_given_patronymic_assignment(source), pattern_reason),
             (lambda: reviewed_leading_jr_peer_assignment(source, paper_authors, focal_index), pattern_reason),
             (lambda: _reviewed_closed_comma_credential_assignment(source, self._source_normalizer), pattern_reason),
@@ -1262,6 +1429,16 @@ class RoutingV3Resolver:
                 return self._source_resolution(
                     source,
                     ResolutionReason.SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT,
+                )
+            source_surname_candidate = self._scalar_clean_source_surname_repartition_candidate(
+                source,
+                scalar_canonical.normalized,
+            )
+            if source_surname_candidate is not None:
+                return self._reviewed_source_assignment_resolution(
+                    source=source,
+                    selected=source_surname_candidate,
+                    reason=ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT,
                 )
             return self._materialize_selected_candidate(
                 source=source,

@@ -142,7 +142,7 @@ class StringManipulationUtils:
     @staticmethod
     def _is_valid_component_pair(norm_a: str, norm_b: str, data_context, orig_a: str = None, orig_b: str = None) -> bool:
         """Check if both parts are valid plausible components.
-        
+
         Tries both original and normalized forms to handle cases where
         normalization changes valid components (e.g., kun -> gun).
         """
@@ -213,12 +213,14 @@ class StringManipulationUtils:
 
         return (
             # Don't split known surnames
-            is_surname or
+            is_surname
+            or
             # Don't split HIGH_CONFIDENCE_ANCHORS - they should remain intact
-            tok_normalized in HIGH_CONFIDENCE_ANCHORS or
+            tok_normalized in HIGH_CONFIDENCE_ANCHORS
+            or
             # Don't split existing valid Chinese given name components
-            data_context.is_given_name(tok_normalized) or
-            data_context.is_given_name(original_lower)
+            data_context.is_given_name(tok_normalized)
+            or data_context.is_given_name(original_lower)
         )
 
     @staticmethod
@@ -345,17 +347,22 @@ class StringManipulationUtils:
             return None
 
         # Pattern A2: an apostrophe is the same author-supplied syllable boundary as a hyphen
-        # (`Cui'e` == `Cui-e`), but the test above reads the raw token while the translation table
-        # deletes apostrophes, so the apostrophe form never reached it. Scoped to a trailing lone
-        # letter so every other apostrophe name (`O'Neill`, `Ma'ruf`) keeps its existing path.
+        # (`Xiang'an` == `Xiang-an`). Honor that boundary when both sides are valid instead of
+        # deleting it and accepting an unrelated positional split such as `Xian` + `gan`.
         apostrophes = [index for index, char in enumerate(token) if char in APOSTROPHES]
         if len(apostrophes) == 1:
             a, b = token[: apostrophes[0]], token[apostrophes[0] + 1 :]
-            if a and b and _single_letter_side(a, b) == "trailing":
-                norm_a, norm_b = StringManipulationUtils._get_normalized_parts(a, b, normalized_cache, normalizer)
-                if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
-                    return _joined_given(a, b, "trailing")
-                return None
+            if a and b:
+                side = _single_letter_side(a, b)
+                if side != "leading":
+                    norm_a, norm_b = StringManipulationUtils._get_normalized_parts(a, b, normalized_cache, normalizer)
+                    if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
+                        return _joined_given(a, b, side)
+                    if side == "trailing":
+                        return None
+            # An apostrophe can instead be a Wade-Giles aspiration marker (`Ch'inghua`).
+            # Preserve the existing transliteration and positional-split path when the
+            # author-supplied location is not itself a valid boundary.
 
         # Pattern 1: Repeated syllable patterns (e.g., "huihui" → ["hui", "hui"]) — only when no hyphen present
         raw = token.translate(config.hyphens_apostrophes_tr)
@@ -686,8 +693,7 @@ class StringManipulationUtils:
         if "-" in part:
             sub_parts = part.split("-")
             capitalized_parts = [
-                StringManipulationUtils._normalize_and_capitalize_single_part(sub_part)
-                for sub_part in sub_parts
+                StringManipulationUtils._normalize_and_capitalize_single_part(sub_part) for sub_part in sub_parts
             ]
             return "-".join(capitalized_parts)
 

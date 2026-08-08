@@ -54,6 +54,10 @@ VIETNAMESE_GIVEN_FIRST_EXACT_SURFACES = frozenset({"tuan le"})
 # extends the same decision to singleton/PP-only use without changing that
 # production result.
 CROSS_CULTURAL_GIVEN_FIRST_EXACT_SURFACES = frozenset({"to keku"})
+# These two released exact surfaces also suppress an early Japanese
+# family-first inference. Newly censused surfaces are post-selection vetoes so
+# already-correct context-supported parses keep their existing public metadata.
+JAPANESE_PRESELECTION_GIVEN_FIRST_EXACT_SURFACES = frozenset({"kou hiroya", "takaya miwa"})
 # Exact lexical false friends whose reviewed PP/VYS flips are family-first when
 # another complete paper author supplies context. Token-level exclusions would
 # suppress verified Japanese names such as Ma Kai. Yuan Tai is deliberately
@@ -252,6 +256,8 @@ class EastAsianNameOrderPreservation:
 @dataclass(frozen=True)
 class _RomanLexicons:
     japanese_surnames: tuple[str, ...]
+    japanese_possible_surnames: tuple[str, ...]
+    japanese_given_first_exact_surfaces: tuple[str, ...]
     japanese_given_names: tuple[str, ...]
     korean_surnames: tuple[str, ...]
     vietnamese_surnames: tuple[str, ...]
@@ -267,7 +273,7 @@ class _NativeLexicons:
 def _load_payload(name: str) -> dict[str, Any]:
     """Load one strict gzip JSON package resource."""
     payload = json.loads(gzip.decompress(read_bytes(name)).decode("utf-8"))
-    if not isinstance(payload, dict) or payload.get("schema_version") != 2:  # noqa: PLR2004 - asset contract
+    if not isinstance(payload, dict) or payload.get("schema_version") != 3:  # noqa: PLR2004 - asset contract
         message = f"unsupported East Asian lexicon schema in {name}"
         raise ValueError(message)
     return payload
@@ -288,6 +294,11 @@ def _validated_values(payload: dict[str, Any], key: str, asset: str) -> tuple[st
 @lru_cache(maxsize=1)
 def _roman_lexicons() -> _RomanLexicons:
     payload = _load_payload(ROMAN_ASSET)
+    japanese_surnames = _validated_values(payload, "japanese_surnames", ROMAN_ASSET)
+    japanese_possible_surnames = _validated_values(payload, "japanese_possible_surnames", ROMAN_ASSET)
+    if not set(japanese_surnames).issubset(japanese_possible_surnames):
+        message = "japanese_surnames must be a subset of japanese_possible_surnames"
+        raise ValueError(message)
     external_korean = _validated_values(payload, "korean_surnames", ROMAN_ASSET)
     korean = sorted(
         set(external_korean) | NAME_ORDER_ROUTING_KOREAN_SURNAMES | KOREAN_ONLY_SURNAMES | OVERLAPPING_KOREAN_SURNAMES,
@@ -304,7 +315,13 @@ def _roman_lexicons() -> _RomanLexicons:
         raise ValueError(message)
     vietnamese = sorted(set(external_vietnamese) | {_fold(value) for value in VIETNAMESE_ONLY_SURNAMES})
     return _RomanLexicons(
-        japanese_surnames=_validated_values(payload, "japanese_surnames", ROMAN_ASSET),
+        japanese_surnames=japanese_surnames,
+        japanese_possible_surnames=japanese_possible_surnames,
+        japanese_given_first_exact_surfaces=_validated_values(
+            payload,
+            "japanese_given_first_exact_surfaces",
+            ROMAN_ASSET,
+        ),
         japanese_given_names=_validated_values(payload, "japanese_given_names", ROMAN_ASSET),
         korean_surnames=tuple(korean),
         vietnamese_surnames=tuple(vietnamese),
@@ -545,6 +562,18 @@ def _han_to_kana_boundary(value: str) -> int | None:
 class EastAsianNameOrderService:
     """Infer only the family-first cases supported by conservative evidence."""
 
+    @staticmethod
+    def _is_reviewed_japanese_given_first_exact_surface(raw_name: str) -> bool:
+        """Return whether reviewed identity evidence fixes this exact surface as given-first."""
+        surface = _normalized_surface(raw_name)
+        return bool(
+            surface
+            and _contains(
+                _roman_lexicons().japanese_given_first_exact_surfaces,
+                surface.casefold(),
+            ),
+        )
+
     def reorder_conflict_reason(
         self,
         raw_name: str,
@@ -582,13 +611,9 @@ class EastAsianNameOrderService:
         first = _fold(tokens[0])
         last = _fold(tokens[-1])
         lexicons = _roman_lexicons()
-        reviewed_family_first = (
-            surface.casefold() in JAPANESE_FAMILY_FIRST_CONFLICT_SURFACES
-            and self._has_surname_bearing_peer(paper_names, focal_index)
-        )
-        if not reviewed_family_first and (
-            surface in JAPANESE_GIVEN_FIRST_EXACT_SURFACES or self._japanese_order_vote(surface) == "given_first"
-        ):
+        reviewed_surface = surface.casefold() in JAPANESE_FAMILY_FIRST_CONFLICT_SURFACES
+        reviewed_family_first = reviewed_surface and self._has_surname_bearing_peer(paper_names, focal_index)
+        if not reviewed_family_first and self._japanese_given_first_veto_supported(surface, paper_names, focal_index):
             return ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
         exact_vietnamese = surface.casefold() in VIETNAMESE_GIVEN_FIRST_EXACT_SURFACES
         exact_cross_cultural = surface.casefold() in CROSS_CULTURAL_GIVEN_FIRST_EXACT_SURFACES
@@ -699,6 +724,41 @@ class EastAsianNameOrderService:
         if given_first == surname_first:
             return None
         return "given_first" if given_first else "surname_first"
+
+    @staticmethod
+    def _japanese_given_first_plausible(name: str) -> bool:
+        """Return whether broad surname evidence supports preserving input order."""
+        tokens = _normalized_surface(name).split(" ")
+        if len(tokens) != MIN_ROMANIZED_TOKENS:
+            return False
+        lexicons = _roman_lexicons()
+        return _contains_any(lexicons.japanese_given_names, _japanese_roman_keys(tokens[0])) and _contains_any(
+            lexicons.japanese_possible_surnames,
+            _japanese_roman_keys(tokens[-1]),
+        )
+
+    def _japanese_given_first_veto_supported(
+        self,
+        surface: str,
+        paper_names: list[str],
+        focal_index: int,
+    ) -> bool:
+        """Combine exact evidence with context-gated possible-surname evidence."""
+        lexicons = _roman_lexicons()
+        if surface in JAPANESE_GIVEN_FIRST_EXACT_SURFACES or _contains(
+            lexicons.japanese_given_first_exact_surfaces,
+            surface.casefold(),
+        ):
+            return True
+        if not self._japanese_given_first_plausible(surface):
+            return False
+        if self._japanese_order_vote(surface) != "surname_first":
+            return True
+        return self._has_given_first_context(
+            paper_names,
+            focal_index,
+            self._japanese_order_vote,
+        )
 
     @staticmethod
     def _reverses_endpoints(tokens: list[str], selected: NameComponents) -> bool:
@@ -1136,11 +1196,12 @@ class EastAsianNameOrderService:
             lexicons.japanese_given_names,
             last_keys,
         )
+        exact_given_first = _fold(" ".join(tokens)) in JAPANESE_PRESELECTION_GIVEN_FIRST_EXACT_SURFACES
         reverse_plausible = _contains_any(lexicons.japanese_given_names, first_keys) and _contains_any(
             lexicons.japanese_surnames,
             last_keys,
         )
-        if not surname_first or reverse_plausible:
+        if not surname_first or reverse_plausible or exact_given_first:
             return None
         return EastAsianNameOrderDecision(
             surface=" ".join(tokens),

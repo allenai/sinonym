@@ -706,6 +706,7 @@ PYPINYIN_FREQUENCY_ALIASES = [
 # Contextual readings that are valid only after a Han component is assigned as
 # the surname. Keys are ``(source_character, pypinyin_reading)``.
 HAN_SURNAME_POSITION_READINGS = {
+    ("\u4ec7", "chou"): "qiu",
     ("\u66fe", "ceng"): "zeng",
 }
 

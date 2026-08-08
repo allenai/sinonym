@@ -247,6 +247,7 @@ SPACED_HAN_PREFIX_SURNAME_RATIO_MIN = 5.0
 CAMEL_CASE_LAST_SURNAME_RATIO_MIN = 5.0
 LEADING_ET_AL_TOKEN_COUNT = 2
 CURATED_COMPOUND_SURNAME_FORMS = frozenset((*COMPOUND_VARIANTS.keys(), *COMPOUND_VARIANTS.values()))
+HAN_SURNAME_POSITION_SOURCE_READINGS = frozenset(source_reading for _character, source_reading in HAN_SURNAME_POSITION_READINGS)
 CompactHanRomanCandidate = tuple[list[str], list[str], list[str], float, bool]
 
 
@@ -476,7 +477,7 @@ class ChineseNameDetector:
         original_order: list[str],
     ) -> list[str]:
         """Correct a pypinyin reading only when its source Han is the assigned surname."""
-        if not any(token.lower() == "ceng" for token in surname_tokens):
+        if not any(token.lower() in HAN_SURNAME_POSITION_SOURCE_READINGS for token in surname_tokens):
             return surname_tokens
         if not all(
             token and all(self._config.cjk_pattern.search(character) for character in token) for token in normalized_input.tokens
@@ -1487,6 +1488,9 @@ class ChineseNameDetector:
             if routed is not None:
                 return routed
 
+        if self._east_asian_name_order._is_reviewed_japanese_given_first_exact_surface(raw_name):
+            return baseline
+
         chinese = self._canonical_chinese_name_with_source(raw_name, baseline.source)
         if chinese is not None:
             return chinese
@@ -1528,8 +1532,7 @@ class ChineseNameDetector:
             len(given_source_tokens) == 1
             and len(result.parsed.given_tokens) >= 2  # noqa: PLR2004
             and all(
-                len("".join(character for character in token if character.isalpha())) == 1
-                for token in result.parsed.given_tokens
+                len("".join(character for character in token if character.isalpha())) == 1 for token in result.parsed.given_tokens
             )
             and self._normalizer.norm(given_source_tokens[0])
             == "".join(self._normalizer.norm(token.rstrip(".")) for token in result.parsed.given_tokens),
@@ -1537,8 +1540,10 @@ class ChineseNameDetector:
         if compact_initial_bundle:
             return True
         if surname_key in ambiguous_surnames:
-            return bool(given_source_tokens) and any(len(token) > 1 for token in given_source_tokens) and all(
-                self._is_direct_chinese_given_source_token(token) for token in given_source_tokens
+            return (
+                bool(given_source_tokens)
+                and any(len(token) > 1 for token in given_source_tokens)
+                and all(self._is_direct_chinese_given_source_token(token) for token in given_source_tokens)
             )
         source_order = result.parsed_original_order
         preserves_one_unbounded_token = bool(
@@ -1624,8 +1629,7 @@ class ChineseNameDetector:
         if not leading_only and token[-1].casefold() in SINGLE_LETTER_PINYIN_SYLLABLES:
             candidates.append(token[:-1])
         return any(
-            self._data.is_given_name(self._normalizer.norm(candidate))
-            or self._normalizer.is_valid_chinese_phonetics(candidate)
+            self._data.is_given_name(self._normalizer.norm(candidate)) or self._normalizer.is_valid_chinese_phonetics(candidate)
             for candidate in candidates
         )
 

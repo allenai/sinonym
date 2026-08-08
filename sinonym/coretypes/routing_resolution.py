@@ -58,6 +58,7 @@ class ResolutionReason(str, Enum):
     HANDLED_EVIDENCE_FAILURE = "handled_evidence_failure"
     HARD_SCALAR_MATERIALIZATION_FAILED = "hard_scalar_materialization_failed"
     SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT = "scalar_known_compound_surname_preserve_input"
+    SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT = "scalar_clean_source_surname_repartition_assignment"
 
     JAPANESE_ITERATION_MARK_ASSIGNMENT = "japanese_iteration_mark_assignment"
     IDENTITY_BACKED_EXACT_ASSIGNMENT = "identity_backed_exact_assignment"
@@ -115,6 +116,10 @@ RESOLUTION_DECISION_TABLE = MappingProxyType(
         ResolutionReason.SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT: ResolutionDecisionSpec(
             ResolutionProvenance.SOURCE,
             ResolutionAction.PRESERVE_INPUT,
+        ),
+        ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT: ResolutionDecisionSpec(
+            ResolutionProvenance.SOURCE,
+            ResolutionAction.ASSIGN,
         ),
         ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT: ResolutionDecisionSpec(
             ResolutionProvenance.SCALAR,

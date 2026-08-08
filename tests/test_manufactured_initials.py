@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from sinonym.timo.routing_v3 import RoutingInstanceV3, SourceAuthorFields
 from tests._case_assertions import assert_person_normalized_name
 
 HAN = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
@@ -382,13 +383,57 @@ def test_all_caps_prefix_is_not_treated_as_a_camel_boundary(detector, raw, expec
 
 
 @pytest.mark.parametrize(
+    ("raw", "expected", "given_tokens"),
+    [
+        ("Xiang'an Yan", "Xiang-An Yan", ["Xiang", "An"]),
+        ("Xiang\u2018an Yan", "Xiang-An Yan", ["Xiang", "An"]),
+        ("Xiang\u2019an Yan", "Xiang-An Yan", ["Xiang", "An"]),
+        ("Xiang\u02bcan Yan", "Xiang-An Yan", ["Xiang", "An"]),
+        ("Xiang\uff07an Yan", "Xiang-An Yan", ["Xiang", "An"]),
+        ("Xian'gan Yan", "Xian-Gan Yan", ["Xian", "Gan"]),
+    ],
+)
+def test_apostrophe_preserves_explicit_multiletter_given_boundary(detector, raw, expected, given_tokens):
+    result = detector.normalize_name(raw)
+
+    assert result.success, f"expected a Chinese parse, got {result.error_message}"
+    assert result.result == expected
+    assert result.parsed is not None
+    assert result.parsed.given_tokens == given_tokens
+    assert result.parsed.middle_tokens == []
+    assert result.parsed.surname == "Yan"
+
+    person = detector.normalize_person_name(raw)
+    assert person is not None
+    assert person.text == expected
+
+
+def test_routed_v3_preserves_explicit_multiletter_given_boundary(routing_predictor_v3):
+    source = SourceAuthorFields(first_name="Xiang'an", last_name="Yan")
+
+    (paper,) = routing_predictor_v3.predict_batch([RoutingInstanceV3(pp_authors=[source])])
+    resolved = paper.authors[0].resolved_fields
+
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("Xiang-An", "", "Yan")
+
+
+def test_wade_giles_aspiration_apostrophe_is_not_forced_to_be_a_boundary(detector):
+    result = detector.normalize_name("Ch'inghua Wang")
+
+    assert result.success, f"expected a Chinese parse, got {result.error_message}"
+    assert result.result == "Ching-Hua Wang"
+    assert result.parsed is not None
+    assert result.parsed.given_tokens == ["Ching", "Hua"]
+
+
+@pytest.mark.parametrize(
     ("raw", "given", "surname"),
     [
         ("Ana-Maria O'Neill", "Ana-Maria", "O'Neill"),
         ("Mohd Ma'ruf", "Mohd", "Ma'ruf"),
     ],
 )
-def test_apostrophe_handling_is_scoped_to_a_trailing_lone_letter(detector, raw, given, surname):
+def test_apostrophe_given_boundary_does_not_reinterpret_person_surnames(detector, raw, given, surname):
     person = detector.normalize_person_name(raw)
 
     assert person is not None

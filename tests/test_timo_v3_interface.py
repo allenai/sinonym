@@ -76,6 +76,55 @@ def test_router_not_person_still_allows_a_real_person_scalar_parse(
 
 
 @pytest.mark.parametrize(
+    ("first_name", "last_name", "expected_action", "expected_reason"),
+    [
+        (
+            "Haruki",
+            "Kadono",
+            ResolutionAction.PRESERVE_INPUT,
+            ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT,
+        ),
+        ("Kou", "Hiroya", ResolutionAction.ASSIGN, ResolutionReason.SCALAR_BASELINE),
+        (
+            "Masaki",
+            "Takamoto",
+            ResolutionAction.PRESERVE_INPUT,
+            ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT,
+        ),
+        (
+            "Masaki",
+            "Tomonaga",
+            ResolutionAction.PRESERVE_INPUT,
+            ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT,
+        ),
+        (
+            "Shoji",
+            "Kagami",
+            ResolutionAction.PRESERVE_INPUT,
+            ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT,
+        ),
+        ("Takaya", "Miwa", ResolutionAction.ASSIGN, ResolutionReason.SCALAR_BASELINE),
+    ],
+)
+def test_reviewed_exact_japanese_surface_preserves_v3_input_order(
+    predictor: RoutingPredictorV3,
+    first_name: str,
+    last_name: str,
+    expected_action: ResolutionAction,
+    expected_reason: ResolutionReason,
+) -> None:
+    (result,) = _route(
+        predictor,
+        [SourceAuthorFields(first_name=first_name, last_name=last_name)],
+    )
+
+    resolved = result.resolved_fields
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == (first_name, "", last_name)
+    assert resolved.resolution_action is expected_action
+    assert resolved.resolution_reason is expected_reason
+
+
+@pytest.mark.parametrize(
     ("source", "expected"),
     [
         (SourceAuthorFields(first_name="BEng", last_name="Robert McManus"), ("Robert", "", "McManus")),
@@ -163,12 +212,24 @@ def test_pp_only_abstain_is_a_terminal_input_order_decision(
 def test_reorder_veto_does_not_use_vys_tail_as_paper_context(predictor: RoutingPredictorV3) -> None:
     (result,) = _route(
         predictor,
-        [SourceAuthorFields(first_name="Mai", last_name="Hata")],
+        [SourceAuthorFields(first_name="Satomi", last_name="Miwa")],
         vys_other_names=["Akira Suzuki"],
     )
 
-    assert (result.resolved_fields.first_name, result.resolved_fields.last_name) == ("Ha-Ta", "Mai")
-    assert result.resolved_fields.resolution_reason is ResolutionReason.PP_SELECTED
+    assert (result.resolved_fields.first_name, result.resolved_fields.last_name) == ("Miwa", "Satomi")
+    assert result.resolved_fields.resolution_reason is ResolutionReason.SCALAR_BASELINE
+
+
+def test_possible_japanese_surname_repairs_wrong_batch_reversal_without_vys_context(
+    predictor: RoutingPredictorV3,
+) -> None:
+    (result,) = _route(
+        predictor,
+        [SourceAuthorFields(first_name="Mai", last_name="Hata")],
+    )
+
+    assert (result.resolved_fields.first_name, result.resolved_fields.last_name) == ("Mai", "Hata")
+    assert result.resolved_fields.resolution_reason is ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
 
 
 def test_failed_pp_vys_abstain_cannot_fall_through_to_scalar_reorder(

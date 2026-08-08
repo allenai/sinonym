@@ -30,6 +30,8 @@ def test_roman_lexicon_rejects_non_four_top_vietnamese_surname_asset(
 ) -> None:
     payload = {
         "japanese_surnames": ["sato"],
+        "japanese_possible_surnames": ["sato"],
+        "japanese_given_first_exact_surfaces": [],
         "japanese_given_names": ["mai"],
         "korean_surnames": ["kim"],
         "vietnamese_surnames": ["le", "nguyen", "pham", "tran"],
@@ -44,44 +46,71 @@ def test_roman_lexicon_rejects_non_four_top_vietnamese_surname_asset(
         east_asian_name_order._roman_lexicons.cache_clear()  # noqa: SLF001
 
 
+def test_roman_lexicon_requires_directional_surnames_to_be_possible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "japanese_surnames": ["sato"],
+        "japanese_possible_surnames": ["abe"],
+        "japanese_given_first_exact_surfaces": [],
+        "japanese_given_names": ["mai"],
+        "korean_surnames": ["kim"],
+        "vietnamese_surnames": ["le", "nguyen", "pham", "tran"],
+        "vietnamese_top4_surnames": ["le", "nguyen", "pham", "tran"],
+    }
+    monkeypatch.setattr(east_asian_name_order, "_load_payload", lambda _name: payload)
+    east_asian_name_order._roman_lexicons.cache_clear()  # noqa: SLF001
+    try:
+        with pytest.raises(ValueError, match="must be a subset"):
+            east_asian_name_order._roman_lexicons()  # noqa: SLF001
+    finally:
+        east_asian_name_order._roman_lexicons.cache_clear()  # noqa: SLF001
+
+
 @pytest.mark.parametrize(
-    ("raw_name", "selected", "paper_names", "focal_index"),
+    ("raw_name", "selected", "paper_names", "focal_index", "expected_reason"),
     [
         (
             "Mai Hata",
             NameComponents(given_name="Ha-Ta", surname="Mai"),
             ["Akira Suzuki", "Mai Hata"],
             1,
+            ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT,
         ),
         (
             "To Keku",
             NameComponents(given_name="Ke-Ku", surname="To"),
             ["To Keku", "Yuki Tanaka"],
             0,
+            ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT,
         ),
         (
             "Nguyen Khanh Pham",
             NameComponents(given_name="Pham", middle_name="Khanh", surname="Nguyen"),
             ["Nguyen Khanh Pham", "Minh Nguyen"],
             0,
+            ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT,
         ),
         (
             "Nguyen Van Nhi Tran",
             NameComponents(given_name="Tran", middle_name="Van Nhi", surname="Nguyen"),
             ["Anh Pham", "Nguyen Van Nhi Tran"],
             1,
+            ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT,
         ),
         (
             "Tran Duc Le",
             NameComponents(given_name="Le", middle_name="Duc", surname="Tran"),
             ["Tran Duc Le", "Minh Nguyen", "Anh Pham", "Tran Minh"],
             0,
+            ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT,
         ),
         (
             "Bui Anh Tran",
             NameComponents(given_name="Tran", middle_name="Anh", surname="Bui"),
             ["Bui Anh Tran", "Minh Nguyen"],
             0,
+            ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT,
         ),
     ],
 )
@@ -90,6 +119,7 @@ def test_candidate_reorder_conflicts_are_typed(
     selected: NameComponents,
     paper_names: list[str],
     focal_index: int,
+    expected_reason: ResolutionReason,
 ) -> None:
     service = EastAsianNameOrderService()
 
@@ -100,7 +130,7 @@ def test_candidate_reorder_conflicts_are_typed(
             paper_names=paper_names,
             focal_index=focal_index,
         )
-        is ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT
+        is expected_reason
     )
 
 
@@ -128,6 +158,108 @@ def test_strict_japanese_given_first_reversal_veto_needs_no_paper_context(
         )
         is ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
     )
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "Haruki Kadono",
+        "Kou Hiroya",
+        "Masaki Takamoto",
+        "Masaki Tomonaga",
+        "Shoji Kagami",
+        "Takaya Miwa",
+    ],
+)
+def test_reviewed_exact_japanese_surface_vetoes_endpoint_reversal(raw_name: str) -> None:
+    service = EastAsianNameOrderService()
+    first, last = raw_name.split()
+
+    assert (
+        service.reorder_conflict_reason(
+            raw_name,
+            NameComponents(given_name=last, surname=first),
+            paper_names=[raw_name],
+            focal_index=0,
+        )
+        is ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
+    )
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "Haruki Kadono",
+        "Kou Hiroya",
+        "Masaki Takamoto",
+        "Masaki Tomonaga",
+        "Shoji Kagami",
+        "Takaya Miwa",
+    ],
+)
+def test_reviewed_exact_japanese_surface_materializes_input_order_at_detector_boundary(
+    detector: ChineseNameDetector,
+    raw_name: str,
+) -> None:
+    first, last = raw_name.split()
+
+    selected, reason = detector.routing_reorder_veto(
+        raw_name,
+        NameComponents(given_name=last, surname=first),
+        paper_names=[raw_name],
+        focal_index=0,
+    )
+
+    assert (selected.given_name, selected.middle_name, selected.surname) == (first, "", last)
+    assert reason is ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "Haruki Kadono",
+        "Masaki Takamoto",
+        "Masaki Tomonaga",
+        "Shoji Kagami",
+    ],
+)
+def test_reviewed_postselection_exact_surface_preserves_public_scalar_order(
+    detector: ChineseNameDetector,
+    raw_name: str,
+) -> None:
+    first, last = raw_name.split()
+
+    normalized = detector.normalize_person_name(raw_name)
+
+    assert normalized is not None
+    assert normalized.text == raw_name
+    assert (normalized.normalized.given_name, normalized.normalized.surname) == (first, last)
+    assert normalized.source.order == ("given", "surname")
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "Haruki Kadono",
+        "Masaki Takamoto",
+        "Masaki Tomonaga",
+        "Shoji Kagami",
+    ],
+)
+def test_reviewed_postselection_exact_surface_has_raw_structured_parity(
+    detector: ChineseNameDetector,
+    raw_name: str,
+) -> None:
+    first, last = raw_name.split()
+
+    raw = detector.normalize_person_name(raw_name)
+    structured = detector.normalize_person_name_components(first_name=first, last_name=last)
+
+    assert raw is not None
+    assert structured is not None
+    assert structured.text == raw.text == raw_name
+    assert structured.normalized == raw.normalized
+    assert structured.source.order == ("given", "surname")
 
 
 @pytest.mark.parametrize("raw_name", ["Gan Kai", "Mao Kai", "Shi Kai", "Yu Mi", "Yuan Tai"])
@@ -310,7 +442,6 @@ def test_lower_prior_vietnamese_context_veto_is_limited_to_bare_ascii(
 @pytest.mark.parametrize(
     ("raw_name", "selected", "context_name"),
     [
-        ("Mai Hata", NameComponents(given_name="Hata", surname="Mai"), "Sato Haruto"),
         ("Nguyen Khanh Pham", NameComponents(given_name="Pham", surname="Nguyen"), "Tran Minh"),
         ("Bui Anh Tran", NameComponents(given_name="Tran", surname="Bui"), "Tran Minh"),
     ],
@@ -684,6 +815,108 @@ def test_japanese_romanized_routes_only_unambiguous_dictionary_direction(
     assert ambiguous is not None
     assert ambiguous.text == "Motoki Kouzaki"
     assert ambiguous.source.order == ("given", "surname")
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    ["Kou Hiroya", "Takaya Miwa"],
+)
+def test_reviewed_exact_japanese_surface_makes_scalar_route_abstain(
+    detector: ChineseNameDetector,
+    raw_name: str,
+) -> None:
+    assert EastAsianNameOrderService().infer_resolution(raw_name, japanese_probability=lambda _name: 0.0) is None
+
+    normalized = detector.normalize_person_name(raw_name)
+
+    assert normalized is not None
+    assert normalized.text == raw_name
+    assert normalized.source.order == ("given", "surname")
+
+
+@pytest.mark.parametrize("raw_name", ["Hiroya Utsumi", "Hiroya Imao", "Miwa Uzuki"])
+def test_possible_japanese_surname_cannot_initiate_a_flip(
+    detector: ChineseNameDetector,
+    raw_name: str,
+) -> None:
+    normalized = detector.normalize_person_name(raw_name)
+
+    assert normalized is not None
+    assert normalized.text == raw_name
+
+
+def test_possible_japanese_surname_does_not_override_strong_family_first_evidence(
+    detector: ChineseNameDetector,
+) -> None:
+    normalized = detector.normalize_person_name("Satomi Miwa")
+
+    assert normalized is not None
+    assert normalized.text == "Miwa Satomi"
+
+
+def test_possible_japanese_surname_respects_strong_family_first_paper_context() -> None:
+    service = EastAsianNameOrderService()
+
+    reason = service.reorder_conflict_reason(
+        "Satomi Miwa",
+        NameComponents(given_name="Miwa", surname="Satomi"),
+        paper_names=["Kuwahara Tsuyoshi", "Satomi Miwa", "Kono Miyuki"],
+        focal_index=1,
+    )
+
+    assert reason is None
+
+
+def test_possible_japanese_surname_uses_given_first_paper_context_for_conflict() -> None:
+    service = EastAsianNameOrderService()
+
+    reason = service.reorder_conflict_reason(
+        "Satomi Miwa",
+        NameComponents(given_name="Miwa", surname="Satomi"),
+        paper_names=["Akira Suzuki", "Satomi Miwa", "Yuki Takeuchi"],
+        focal_index=1,
+    )
+
+    assert reason is ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    ["Daikou Shiota", "Shin Kadono", "Jun Hata", "Shin Haba"],
+)
+def test_reviewed_possible_surnames_veto_reversal_with_given_first_paper_context(raw_name: str) -> None:
+    first, last = raw_name.split()
+
+    reason = EastAsianNameOrderService().reorder_conflict_reason(
+        raw_name,
+        NameComponents(given_name=last, surname=first),
+        paper_names=["Akira Suzuki", raw_name, "Yuki Takeuchi"],
+        focal_index=1,
+    )
+
+    assert reason is ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
+
+
+def test_reviewed_possible_surname_does_not_overrule_surname_first_paper_context() -> None:
+    reason = EastAsianNameOrderService().reorder_conflict_reason(
+        "Daikou Shiota",
+        NameComponents(given_name="Shiota", surname="Daikou"),
+        paper_names=["Kuwahara Tsuyoshi", "Daikou Shiota", "Kono Miyuki"],
+        focal_index=1,
+    )
+
+    assert reason is None
+
+
+@pytest.mark.parametrize("raw_name", ["Shiota Daikou", "Hirano Taro"])
+def test_new_possible_surnames_cannot_initiate_scalar_reorder(
+    detector: ChineseNameDetector,
+    raw_name: str,
+) -> None:
+    normalized = detector.normalize_person_name(raw_name)
+
+    assert normalized is not None
+    assert normalized.text == raw_name
 
 
 def test_structured_japanese_romanized_matches_raw_directional_route(

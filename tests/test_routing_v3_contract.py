@@ -126,6 +126,10 @@ def test_every_resolution_reason_has_one_complete_decision_spec() -> None:
             ResolutionProvenance.SOURCE,
             ResolutionAction.PRESERVE_INPUT,
         ),
+        ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT: (
+            ResolutionProvenance.SOURCE,
+            ResolutionAction.ASSIGN,
+        ),
         ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT: (
             ResolutionProvenance.SCALAR,
             ResolutionAction.ASSIGN,
@@ -354,7 +358,7 @@ def test_atomic_korean_token_repair_matches_complete_hyphen_parts_and_updates_li
 
     repaired = restore_reviewed_atomic_korean_tokens(source, selected)
 
-    assert repaired.given_name == "So-Young"
+    assert repaired.given_name == "So Young"
     assert repaired.given_tokens == ("So", "Young")
     assert repaired.surname == "Kim"
     assert repaired.surname_tokens == ("Kim",)
@@ -372,6 +376,51 @@ def test_atomic_korean_token_repair_does_not_match_a_longer_hyphen_part() -> Non
     )
 
     assert restore_reviewed_atomic_korean_tokens(source, selected) == selected
+
+
+def test_atomic_korean_token_repair_does_not_restore_an_unreviewed_source_given() -> None:
+    source = SourceAuthorFields(first_name="Wei Ming", last_name="Young")
+    selected = NameComponents(
+        given_name="Wei-Ming",
+        surname="Young",
+        given_tokens=("Wei", "Ming"),
+        surname_tokens=("Young",),
+        order=("given", "surname"),
+    )
+
+    assert restore_reviewed_atomic_korean_tokens(source, selected) == selected
+
+
+def test_atomic_korean_token_repair_requires_whole_source_given_equivalence() -> None:
+    source = SourceAuthorFields(first_name="Young In", last_name="Shin")
+    selected = NameComponents(
+        given_name="You-Ng-Other",
+        surname="Shin",
+        given_tokens=("You", "Ng", "Other"),
+        surname_tokens=("Shin",),
+        order=("given", "surname"),
+    )
+
+    repaired = restore_reviewed_atomic_korean_tokens(source, selected)
+
+    assert repaired.given_name == "Young-Other"
+    assert repaired.given_tokens == ("Young", "Other")
+
+
+def test_atomic_korean_token_repair_restores_source_mixed_case_and_lineage() -> None:
+    source = SourceAuthorFields(first_name="SeungBo", last_name="Choi")
+    selected = NameComponents(
+        given_name="Seung-Bo",
+        surname="Choi",
+        given_tokens=("Seung", "Bo"),
+        surname_tokens=("Choi",),
+        order=("given", "surname"),
+    )
+
+    repaired = restore_reviewed_atomic_korean_tokens(source, selected)
+
+    assert repaired.given_name == "SeungBo"
+    assert repaired.given_tokens == ("SeungBo",)
 
 
 def test_evidence_failure_is_typed_outside_the_hard_constraint_union() -> None:
