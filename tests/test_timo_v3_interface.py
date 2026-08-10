@@ -13,9 +13,14 @@ from sinonym.coretypes.routing_resolution import (
     ResolutionProvenance,
     ResolutionReason,
 )
+from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
 from sinonym.services.batch_analysis import RelatedBatchParseResult
 from sinonym.timo.interface import PredictorConfig, RoutingPredictorV3
-from sinonym.timo.routing_v3 import RoutingInstanceV3, SourceAuthorFields
+from sinonym.timo.routing_v3 import (
+    RoutingInstanceV3,
+    SourceAuthorFields,
+    reviewed_initials_comma_reversal,
+)
 
 
 @pytest.fixture
@@ -71,6 +76,43 @@ def test_router_not_person_still_allows_a_real_person_scalar_parse(
 
     resolved = result.resolved_fields
     assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("Babak", "", "Esmaeili")
+    assert resolved.resolution_action is ResolutionAction.ASSIGN
+    assert resolved.resolution_reason is ResolutionReason.SCALAR_BASELINE
+
+
+def test_structured_credential_only_cleanup_is_a_typed_source_passthrough(
+    predictor: RoutingPredictorV3,
+) -> None:
+    source = SourceAuthorFields(last_name="MD, MRCP")
+
+    (result,) = _route(predictor, [source])
+
+    resolved = result.resolved_fields
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name, resolved.suffix) == (
+        "",
+        "",
+        "MD, MRCP",
+        None,
+    )
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.PRESERVE_INPUT
+    assert resolved.resolution_reason is ResolutionReason.NON_PERSON_SOURCE_PASSTHROUGH
+
+
+def test_packed_credential_with_compound_initial_mononym_preserves_source(
+    predictor: RoutingPredictorV3,
+) -> None:
+    source = SourceAuthorFields(first_name="BEng", last_name="J.-P.")
+
+    (result,) = _route(predictor, [source])
+
+    resolved = result.resolved_fields
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name, resolved.suffix) == (
+        "BEng",
+        "",
+        "J.-P.",
+        None,
+    )
     assert resolved.resolution_action is ResolutionAction.ASSIGN
     assert resolved.resolution_reason is ResolutionReason.SCALAR_BASELINE
 
@@ -207,6 +249,123 @@ def test_pp_only_abstain_is_a_terminal_input_order_decision(
     assert resolved.resolution_provenance is ResolutionProvenance.PP
     assert resolved.resolution_action is ResolutionAction.PRESERVE_INPUT
     assert resolved.resolution_reason is ResolutionReason.PP_ONLY_ABSTAIN_INPUT
+
+
+@pytest.mark.parametrize(
+    "hyphen",
+    sorted(ROMAN_HYPHEN_LIKE, key=ord),
+    ids=lambda character: f"U+{ord(character):04X}",
+)
+def test_pp_only_compound_surname_guard_matches_structural_roman_hyphens(
+    predictor: RoutingPredictorV3,
+    hyphen: str,
+) -> None:
+    source = SourceAuthorFields(first_name="Ka Ming", last_name=f"Au{hyphen}Yeung")
+
+    (result,) = _route(predictor, [source])
+
+    resolved = result.resolved_fields
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name, resolved.suffix) == (
+        "Ka Ming",
+        "",
+        source.last_name,
+        None,
+    )
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.PRESERVE_INPUT
+    assert resolved.resolution_reason is ResolutionReason.PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME
+
+
+@pytest.mark.parametrize(
+    ("leading", "trailing"),
+    [
+        pytest.param(" ", " ", id="ascii-space"),
+        pytest.param("\t", "\r\n", id="ascii-controls"),
+        pytest.param("\u2003", "\u2003", id="em-space"),
+    ],
+)
+def test_pp_only_compound_surname_guard_trims_only_outer_whitespace(
+    predictor: RoutingPredictorV3,
+    leading: str,
+    trailing: str,
+) -> None:
+    source = SourceAuthorFields(first_name="Ka Ming", last_name=f"{leading}AU\u2011YEUNG{trailing}")
+
+    (result,) = _route(predictor, [source])
+
+    resolved = result.resolved_fields
+    assert resolved.first_name == "Ka Ming"
+    assert resolved.last_name == source.last_name
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_reason is ResolutionReason.PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME
+
+
+@pytest.mark.parametrize(
+    "hyphen",
+    ["\u00ad", "\u2015", "\u2027", "\u208b", "\ufe58"],
+    ids=lambda character: f"U+{ord(character):04X}",
+)
+def test_pp_only_compound_surname_guard_excludes_validation_only_hyphens(
+    predictor: RoutingPredictorV3,
+    hyphen: str,
+) -> None:
+    source = SourceAuthorFields(first_name="Ka Ming", last_name=f"Au{hyphen}Yeung")
+
+    (result,) = _route(predictor, [source])
+
+    assert result.resolved_fields.resolution_reason is not ResolutionReason.PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME
+
+
+@pytest.mark.parametrize(
+    "last_name",
+    ["Au/Yeung", "Au \u2011 Yeung", "Au\u2011Yung", "Chan\u2011Yeung"],
+)
+def test_pp_only_compound_surname_guard_keeps_exact_reviewed_membership(
+    predictor: RoutingPredictorV3,
+    last_name: str,
+) -> None:
+    source = SourceAuthorFields(first_name="Ka Ming", last_name=last_name)
+
+    (result,) = _route(predictor, [source])
+
+    assert result.resolved_fields.resolution_reason is not ResolutionReason.PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME
+
+
+@pytest.mark.parametrize(
+    "middle_names",
+    [
+        pytest.param(None, id="missing"),
+        pytest.param("", id="empty"),
+        pytest.param(" ", id="ascii-space"),
+        pytest.param("\t\r\n", id="ascii-controls"),
+        pytest.param("\u2003", id="em-space"),
+    ],
+)
+def test_initials_comma_veto_treats_whitespace_only_middle_as_empty(
+    predictor: RoutingPredictorV3,
+    middle_names: str | None,
+) -> None:
+    source = SourceAuthorFields(first_name="A,", middle_names=middle_names, last_name="Smith")
+
+    (result,) = _route(predictor, [source])
+
+    resolved = result.resolved_fields
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == (
+        "A,",
+        middle_names or "",
+        "Smith",
+    )
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.PRESERVE_INPUT
+    assert resolved.resolution_reason is ResolutionReason.INITIALS_COMMA_REORDER_VETO_PRESERVE_INPUT
+
+
+@pytest.mark.parametrize("middle_names", ["M.", ".", " - "])
+def test_initials_comma_veto_keeps_populated_middle_negative(middle_names: str) -> None:
+    source = SourceAuthorFields(first_name="A,", middle_names=middle_names, last_name="Smith")
+    reversed_candidate = NameComponents(given_name="Smith", surname="A")
+
+    assert not reviewed_initials_comma_reversal(source, reversed_candidate)
 
 
 def test_reorder_veto_does_not_use_vys_tail_as_paper_context(predictor: RoutingPredictorV3) -> None:

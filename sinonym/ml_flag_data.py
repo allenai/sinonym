@@ -7,6 +7,29 @@ while the trained transformer (``sinonym.ml_model_components``) re-exports
 them for training and artifact deserialization.
 """
 
+HEURISTIC_FLAG_NAMES = (
+    "jp_iter_mark",
+    "jp_surname_chars",
+    "cn_surname_chars",
+    "jp_name_endings",
+    "cn_name_endings",
+    "jp_unique_chars",
+    "cn_simplified_chars",
+    "len_eq2",
+    "len_eq3",
+    "len_ge4",
+    "jp_frequent_chars",
+    "cn_frequent_chars",
+    "surname_jp_pattern",
+    "surname_cn_pattern",
+    "given_jp_pattern",
+    "given_cn_pattern",
+    "jp_ending_ratio",
+    "cn_ending_ratio",
+    "char_diversity",
+    "avg_char_strokes",
+)
+
 # fmt: off
 CN_SURNAME_CHARS = {
     "王", "李", "张", "刘", "陈", "杨", "黄", "赵", "周", "吴",

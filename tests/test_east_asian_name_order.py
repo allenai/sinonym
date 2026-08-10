@@ -189,6 +189,41 @@ def test_reviewed_exact_japanese_surface_vetoes_endpoint_reversal(raw_name: str)
 @pytest.mark.parametrize(
     "raw_name",
     [
+        "  KOU\tHIROYA ",
+        "\uff2b\uff4f\uff55\u3000\uff28\uff49\uff52\uff4f\uff59\uff41",
+    ],
+)
+def test_reviewed_exact_japanese_surface_normalizes_case_width_and_whitespace(raw_name: str) -> None:
+    assert EastAsianNameOrderService()._is_reviewed_japanese_given_first_exact_surface(raw_name)  # noqa: SLF001
+
+
+@pytest.mark.parametrize("raw_name", ["Kōu Hiroya", "Takayā Miwa", "Kou-Hiroya"])
+def test_reviewed_exact_japanese_surface_preserves_accents_and_punctuation(raw_name: str) -> None:
+    assert not EastAsianNameOrderService()._is_reviewed_japanese_given_first_exact_surface(raw_name)  # noqa: SLF001
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text"),
+    [
+        ("Kōu Hiroya", "Hiroya Kōu"),
+        ("Takayā Miwa", "Miwa Takayā"),
+    ],
+)
+def test_accent_variants_do_not_activate_ascii_exact_preselection(
+    detector: ChineseNameDetector,
+    raw_name: str,
+    expected_text: str,
+) -> None:
+    normalized = detector.normalize_person_name(raw_name)
+
+    assert normalized is not None
+    assert normalized.text == expected_text
+    assert normalized.source.order == ("surname", "given")
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
         "Haruki Kadono",
         "Kou Hiroya",
         "Masaki Takamoto",
@@ -696,6 +731,77 @@ def test_iteration_mark_resolver_requires_one_complete_dual_exclusive_assignment
     assert decision.surname_tokens == (expected_surname,)
     assert decision.source_order == expected_order
     assert decision.reason is EastAsianEvidenceReason.JAPANESE_ITERATION_MARK_DUAL_EXCLUSIVE
+
+
+@pytest.mark.parametrize("selector", ["\ufe00", "\ufe0f", "\U000e0100", "\U000e01ef"])
+@pytest.mark.parametrize(
+    ("raw_template", "surname_template", "expected_order"),
+    [
+        ("克典 佐{selector}々木", "佐{selector}々木", ("given", "surname")),
+        ("佐{selector}々木 克典", "佐{selector}々木", ("surname", "given")),
+        ("佐{selector}々木克典", "佐{selector}々木", ("surname", "given")),
+        ("佐々木{selector}克典", "佐々木{selector}", ("surname", "given")),
+    ],
+)
+def test_iteration_mark_variation_selectors_are_lookup_only(
+    selector: str,
+    raw_template: str,
+    surname_template: str,
+    expected_order: tuple[str, str],
+) -> None:
+    raw_name = raw_template.format(selector=selector)
+    classifier_inputs: list[str] = []
+
+    decision = EastAsianNameOrderService().infer_iteration_mark(
+        raw_name,
+        japanese_probability=lambda value: classifier_inputs.append(value) or 1.0,
+    )
+
+    assert classifier_inputs == [raw_name.replace(selector, "")]
+    assert decision is not None
+    assert decision.first_name == "克典"
+    assert decision.last_name == surname_template.format(selector=selector)
+    assert decision.source_order == expected_order
+    assert decision.reason is EastAsianEvidenceReason.JAPANESE_ITERATION_MARK_DUAL_EXCLUSIVE
+
+
+@pytest.mark.parametrize("selector", ["\ufe00", "\U000e0100"])
+def test_iteration_mark_variation_selector_canonical_preserves_authored_surname(
+    detector: ChineseNameDetector,
+    selector: str,
+) -> None:
+    raw_name = f"佐々木{selector}克典"
+
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == f"克典 佐々木{selector}"
+    assert result.canonical_name.normalized.given_name == "克典"
+    assert result.canonical_name.normalized.surname == f"佐々木{selector}"
+    assert result.canonical_name.source.order == ("surname", "given")
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_classifier_inputs"),
+    [
+        ("佐\ufe00々木 X", []),
+        ("三谷 奈\U000e0100々", ["三谷 奈々"]),
+    ],
+)
+def test_iteration_mark_variation_selectors_do_not_widen_role_evidence(
+    raw_name: str,
+    expected_classifier_inputs: list[str],
+) -> None:
+    classifier_inputs: list[str] = []
+
+    decision = EastAsianNameOrderService().infer_iteration_mark(
+        raw_name,
+        japanese_probability=lambda value: classifier_inputs.append(value) or 1.0,
+    )
+
+    assert decision is None
+    assert classifier_inputs == expected_classifier_inputs
 
 
 @pytest.mark.parametrize(

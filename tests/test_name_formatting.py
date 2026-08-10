@@ -120,3 +120,68 @@ CHINESE_NAME_TEST_CASES = [
 def test_name_formatting(detector, input_name, expected):
     """Test various name formatting patterns including hyphens, commas, periods."""
     assert_normalized_name(detector, input_name, expected)
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected", "expected_given_token"),
+    [
+        ("Dr Li", "Dr Li", "Dr"),
+        ("Li Dr", "Dr Li", "Dr"),
+        ("Ms Wang", "Ms Wang", "Ms"),
+        ("Wang Ms", "Ms Wang", "Ms"),
+        ("Sr Li", "Sr Li", "Sr"),
+        ("Li Sr", "Sr Li", "Sr"),
+        ("Jr Li", "Jr Li", "Jr"),
+        ("Li Jr", "Jr Li", "Jr"),
+        ("PhD Li", "Phd Li", "Phd"),
+        ("Li PhD", "Phd Li", "Phd"),
+        ("DNP Li", "Dnp Li", "Dnp"),
+    ],
+)
+def test_compact_initial_candidate_keeps_reviewed_person_boundary_atomic(
+    detector,
+    raw_name: str,
+    expected: str,
+    expected_given_token: str,
+) -> None:
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+    assert result.parsed is not None
+    assert result.parsed.given_tokens == [expected_given_token]
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected", "expected_tokens"),
+    [
+        ("MS Li", "M.-S. Li", ["M.", "S."]),
+        ("Li MS", "M.-S. Li", ["M.", "S."]),
+        ("Md Li", "M.-D. Li", ["M.", "D."]),
+        ("Li Md", "M.-D. Li", ["M.", "D."]),
+        ("BC Wang", "B.-C. Wang", ["B.", "C."]),
+        ("Wang BC", "B.-C. Wang", ["B.", "C."]),
+        ("Zhou Df", "D.-F. Zhou", ["D.", "F."]),
+    ],
+)
+def test_compact_initial_expansion_preserves_non_boundary_collisions(
+    detector,
+    raw_name: str,
+    expected: str,
+    expected_tokens: list[str],
+) -> None:
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+    assert result.parsed is not None
+    assert result.parsed.given_tokens == expected_tokens
+
+
+def test_compact_initial_boundary_policy_has_individual_batch_parity(detector) -> None:
+    names = ["Dr Li", "Ms Wang", "Li Sr", "Li PhD", "BC Wang", "Zhou Df"]
+
+    individual = [detector.normalize_name(name).result for name in names]
+    batch = detector.analyze_name_batch(names)
+
+    assert [result.result for result in batch.results] == individual

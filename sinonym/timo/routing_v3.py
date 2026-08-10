@@ -31,6 +31,7 @@ from sinonym.coretypes.routing_resolution import (
     ResolutionReason,
     resolution_decision_spec,
 )
+from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
 from sinonym.pipeline.name_order_routing import pp_abstain_parsed
 from sinonym.services.non_person import REVIEWED_HANGUL_ORGANIZATION_MARKERS, reviewed_non_person_source_pattern
 from sinonym.services.person_name_normalization import (
@@ -73,6 +74,7 @@ _KATAKANA_GENERATION_SUFFIXES = frozenset(
 )
 _CATALOG_SEPARATORS = frozenset({",", "\u3001", "\uff0c"})
 _REVIEWED_JR_FORMS = frozenset({"Jr", "Jr.", "jr", "jr."})
+_STRUCTURAL_ROMAN_HYPHEN_TRANSLATION = str.maketrans(dict.fromkeys(ROMAN_HYPHEN_LIKE, "-"))
 _REVIEWED_JR_ORGANIZATION_WORDS = frozenset(
     {
         "academy",
@@ -436,6 +438,16 @@ REVIEWED_EXACT_SOURCE_REORDER_VETOES = frozenset(
 )
 
 
+def _source_comparison_text(value: str | None) -> str:
+    """Trim source boundaries for comparisons without changing retained lineage."""
+    return (value or "").strip()
+
+
+def _structural_roman_hyphen_key(value: str | None) -> str:
+    """Build an exact-set key using only approved structural Roman hyphens."""
+    return _source_comparison_text(value).translate(_STRUCTURAL_ROMAN_HYPHEN_TRANSLATION).casefold()
+
+
 def _source_component_key(source: SourceAuthorFields) -> tuple[str, str, str]:
     """Normalize one source tuple exactly as the reviewed rule inventory does."""
     return tuple(" ".join((part or "").split()).casefold() for part in (source.first_name, source.middle_names, source.last_name))
@@ -538,10 +550,12 @@ def reviewed_leading_jr_peer_assignment(
     focal_index: int,
 ) -> NameComponents | None:
     """Copy one exact structured peer and move a reviewed leading Jr to suffix."""
-    if source.first_name not in _REVIEWED_JR_FORMS or source.suffix:
+    leading_jr = _source_comparison_text(source.first_name)
+    if leading_jr not in _REVIEWED_JR_FORMS or source.suffix:
         return None
     remainder = f"{source.middle_names or ''} {source.last_name or ''}".strip()
-    organization_words = {match.group().casefold() for match in _UNICODE_LETTER_WORD_RE.finditer(remainder)}
+    organization_surface = unicodedata.normalize("NFKC", remainder)
+    organization_words = {match.group().casefold() for match in _UNICODE_LETTER_WORD_RE.finditer(organization_surface)}
     if organization_words & _REVIEWED_JR_ORGANIZATION_WORDS:
         return None
 
@@ -565,7 +579,7 @@ def reviewed_leading_jr_peer_assignment(
         given_name=peer.first_name or "",
         middle_name=peer.middle_names or "",
         surname=peer.last_name or "",
-        suffix=source.first_name or "",
+        suffix=leading_jr,
     )
 
 
@@ -727,7 +741,7 @@ def reviewed_initials_comma_reversal(
     source_last = (source.last_name or "").strip()
     letter_runs = re.findall(r"[A-Za-z]+", source_first)
     if (
-        source.middle_names
+        _source_comparison_text(source.middle_names)
         or not source_first.isascii()
         or not source_first.endswith(",")
         or source_first.count(",") != 1
@@ -1590,7 +1604,7 @@ class RoutingV3Resolver:
             parsed = result.parsed if result.success else None
             batch_reason = ResolutionReason.PP_SELECTED
         elif decision == "abstain":
-            if source.last_name is not None and source.last_name.casefold() in REVIEWED_TRAILING_HYPHENATED_COMPOUND_SURNAMES:
+            if _structural_roman_hyphen_key(source.last_name) in REVIEWED_TRAILING_HYPHENATED_COMPOUND_SURNAMES:
                 parsed = None
                 batch_reason = ResolutionReason.PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME
             else:

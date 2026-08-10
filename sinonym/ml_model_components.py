@@ -6,7 +6,6 @@ pre-trained ML model with skops (training and parity tests). Runtime inference
 uses ``sinonym.ml_fast_scorer`` instead and never imports this module.
 """
 
-
 import numpy as np
 from scipy import sparse
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -16,6 +15,7 @@ from sinonym.ml_flag_data import (
     CN_NAME_ENDINGS,
     CN_SIMPLIFIED_CHARS,
     CN_SURNAME_CHARS,
+    HEURISTIC_FLAG_NAMES,
     ITERATION_MARK,
     JP_FREQUENT_CHARS,
     JP_NAME_ENDINGS,
@@ -28,6 +28,7 @@ __all__ = [
     "CN_NAME_ENDINGS",
     "CN_SIMPLIFIED_CHARS",
     "CN_SURNAME_CHARS",
+    "HEURISTIC_FLAG_NAMES",
     "ITERATION_MARK",
     "JP_FREQUENT_CHARS",
     "JP_NAME_ENDINGS",
@@ -41,31 +42,7 @@ class EnhancedHeuristicFlags(BaseEstimator, TransformerMixin):
     """Enhanced transformer with improved linguistic features for Chinese vs Japanese classification."""
 
     def __init__(self):
-        self.flag_names = [
-            # Original features
-            "jp_iter_mark",
-            "jp_surname_chars",
-            "cn_surname_chars",
-            "jp_name_endings",
-            "cn_name_endings",
-            "jp_unique_chars",
-            "cn_simplified_chars",
-            "len_eq2",
-            "len_eq3",
-            "len_ge4",
-
-            # Enhanced features
-            "jp_frequent_chars",
-            "cn_frequent_chars",
-            "surname_jp_pattern",
-            "surname_cn_pattern",
-            "given_jp_pattern",
-            "given_cn_pattern",
-            "jp_ending_ratio",
-            "cn_ending_ratio",
-            "char_diversity",
-            "avg_char_strokes",
-        ]
+        self.flag_names = list(HEURISTIC_FLAG_NAMES)
 
     def fit(self, X, y=None):
         """Fit method (no-op for this transformer)."""
@@ -97,7 +74,6 @@ class EnhancedHeuristicFlags(BaseEstimator, TransformerMixin):
                 len(name) == 2,
                 len(name) == 3,
                 len(name) >= 4,
-
                 # Enhanced features
                 sum(1 for c in chars if c in JP_FREQUENT_CHARS) > 0,
                 sum(1 for c in chars if c in CN_FREQUENT_CHARS) > 0,

@@ -2,7 +2,7 @@
 
 import pytest
 
-from sinonym.services.non_person import reviewed_non_person_source_pattern
+from sinonym.services.non_person import reviewed_non_person_source_pattern, reviewed_non_person_text_pattern
 
 
 @pytest.mark.parametrize(
@@ -57,3 +57,40 @@ def test_reviewed_non_person_patterns_match_the_complete_review_matrix(
     expected_pattern: str | None,
 ) -> None:
     assert reviewed_non_person_source_pattern(*source) == expected_pattern
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_pattern"),
+    [
+        (" Unknown Author ", "placeholder_literal"),
+        ("Unknown\t\nAuthor", "placeholder_literal"),
+        (" January-February ", "month_range"),
+        (" Anthony C. Laborte,  Marissa C. Hitalia* ", "non_person_literal"),
+    ],
+)
+def test_reviewed_non_person_text_patterns_ignore_incidental_whitespace(
+    raw_name: str,
+    expected_pattern: str,
+) -> None:
+    assert reviewed_non_person_text_pattern(raw_name) == expected_pattern
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "unknown author",
+        "Unknown-Author",
+        "Unknown Author Jr.",
+        "January / February",
+    ],
+)
+def test_reviewed_non_person_text_patterns_keep_lexical_matching_exact(raw_name: str) -> None:
+    assert reviewed_non_person_text_pattern(raw_name) is None
+
+
+def test_reviewed_non_person_raw_and_structured_whitespace_have_parity() -> None:
+    assert reviewed_non_person_text_pattern(" Unknown   Author ") == reviewed_non_person_source_pattern(
+        " Unknown ",
+        None,
+        " Author ",
+    )

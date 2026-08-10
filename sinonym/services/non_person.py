@@ -77,6 +77,11 @@ REVIEWED_SERVICES_PERSON_TAIL_RE = re.compile(
 )
 
 
+def _collapse_whitespace(value: str) -> str:
+    """Strip and collapse whitespace without changing lexical text."""
+    return " ".join(value.split())
+
+
 def _reviewed_literal_pattern(raw_name: str) -> str | None:
     """Return one exact reviewed placeholder or month-range pattern."""
     if raw_name in REVIEWED_PLACEHOLDER_PHRASES:
@@ -96,13 +101,14 @@ INITIAL_RE = re.compile(r"[^\W\d_]")
 
 def reviewed_non_person_text_pattern(raw_name: str) -> str | None:
     """Return one reviewed literal or organization pattern for a raw surface."""
-    literal_pattern = _reviewed_literal_pattern(raw_name)
+    surface = _collapse_whitespace(raw_name)
+    literal_pattern = _reviewed_literal_pattern(surface)
     if literal_pattern is not None:
         return literal_pattern
-    words = set(ASCII_ALNUM_WORD_RE.findall(raw_name.casefold()))
+    words = set(ASCII_ALNUM_WORD_RE.findall(surface.casefold()))
     if words & REVIEWED_ORGANIZATION_TOKENS:
         return "organization_token"
-    if REVIEWED_HYPHENATED_SERVICES_RE.search(raw_name) and not REVIEWED_SERVICES_PERSON_TAIL_RE.search(raw_name):
+    if REVIEWED_HYPHENATED_SERVICES_RE.search(surface) and not REVIEWED_SERVICES_PERSON_TAIL_RE.search(surface):
         return "hyphenated_services"
     return None
 
@@ -235,7 +241,7 @@ def reviewed_non_person_source_pattern(  # noqa: C901 - one branch per reviewed 
     if _is_reviewed_hangul_organization(fields):
         return "hangul_organization_marker"
 
-    raw_name = " ".join(" ".join(value.split()) for value in fields if value)
+    raw_name = " ".join(_collapse_whitespace(value) for value in fields if value)
     literal_pattern = reviewed_non_person_text_pattern(raw_name)
     if literal_pattern is not None:
         return literal_pattern

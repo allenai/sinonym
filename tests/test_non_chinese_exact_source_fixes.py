@@ -379,6 +379,32 @@ def test_reviewed_leading_jr_assignment_copies_the_exact_structured_peer(
     )
 
 
+@pytest.mark.parametrize(
+    ("first_name", "expected_suffix"),
+    [
+        pytest.param(" Jr ", "Jr", id="ascii-space"),
+        pytest.param("\tJr.\r\n", "Jr.", id="ascii-controls"),
+        pytest.param("\u2003jr.\u2003", "jr.", id="em-space"),
+    ],
+)
+def test_reviewed_leading_jr_assignment_trims_only_the_decision_surface(
+    first_name: str,
+    expected_suffix: str,
+) -> None:
+    source = SourceAuthorFields(first_name=first_name, middle_names="John B.", last_name="Cobb")
+    peer = SourceAuthorFields(first_name="John", middle_names="B", last_name="Cobb")
+
+    selected = reviewed_leading_jr_peer_assignment(source, [source, peer], 0)
+
+    assert selected == NameComponents(
+        given_name="John",
+        middle_name="B",
+        surname="Cobb",
+        suffix=expected_suffix,
+    )
+    assert source.first_name == first_name
+
+
 def test_reviewed_leading_jr_assignment_is_terminal(predictor: RoutingPredictorV3) -> None:
     source = SourceAuthorFields(first_name="Jr.", middle_names="John B.", last_name="Cobb")
     peer = SourceAuthorFields(first_name="John", middle_names="B", last_name="Cobb")
@@ -394,6 +420,50 @@ def test_reviewed_leading_jr_assignment_is_terminal(predictor: RoutingPredictorV
     assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
     assert resolved.resolution_action is ResolutionAction.ASSIGN
     assert resolved.resolution_reason is ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT
+
+
+def test_reviewed_leading_jr_assignment_with_outer_whitespace_is_terminal(
+    predictor: RoutingPredictorV3,
+) -> None:
+    source = SourceAuthorFields(first_name=" Jr. ", middle_names="John B.", last_name="Cobb")
+    peer = SourceAuthorFields(first_name="John", middle_names="B", last_name="Cobb")
+
+    resolved = _route_paper(predictor, [source, peer])[0]
+
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name, resolved.suffix) == (
+        "John",
+        "B.",
+        "Cobb",
+        "Jr.",
+    )
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.ASSIGN
+    assert resolved.resolution_reason is ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT
+    assert source.first_name == " Jr. "
+
+
+def test_reviewed_leading_jr_assignment_nfkc_normalizes_the_organization_guard(
+    predictor: RoutingPredictorV3,
+) -> None:
+    source = SourceAuthorFields(
+        first_name=" Jr. ",
+        middle_names="\uff35\uff4e\uff49\uff56\uff45\uff52\uff53\uff49\uff54\uff59",
+        last_name="\uff22\uff4f\uff41\uff52\uff44",
+    )
+    peer = SourceAuthorFields(first_name="University", last_name="Board")
+
+    assert reviewed_leading_jr_peer_assignment(source, [source, peer], 0) is None
+
+    resolved = _route_paper(predictor, [source, peer])[0]
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name, resolved.suffix) == (
+        source.first_name,
+        source.middle_names,
+        source.last_name,
+        None,
+    )
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.PRESERVE_INPUT
+    assert resolved.resolution_reason is ResolutionReason.NON_PERSON_SOURCE_PASSTHROUGH
 
 
 @pytest.mark.parametrize("case", _JR_PATTERN_ORACLE, ids=lambda row: row["stable_id"])
@@ -427,6 +497,11 @@ def test_all_reviewed_leading_jr_actions_match_the_frozen_oracle(case: dict[str,
             [(" Van ", " ", "Vaerenbergh", None)],
         ),
         (("Jr", "Ann A", "Smith", None), [("Anna", None, "Smith", None)]),
+        ((" JR. ", "John", "Cobb", None), [("John", None, "Cobb", None)]),
+        ((" \uff2a\uff52. ", "John", "Cobb", None), [("John", None, "Cobb", None)]),
+        ((" Junior ", "John", "Cobb", None), [("John", None, "Cobb", None)]),
+        ((" J r. ", "John", "Cobb", None), [("John", None, "Cobb", None)]),
+        ((" Jr. ", "John", "Cobb", " "), [("John", None, "Cobb", None)]),
     ],
 )
 def test_reviewed_leading_jr_assignment_excludes_nearby_controls(

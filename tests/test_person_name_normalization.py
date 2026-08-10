@@ -10,6 +10,7 @@ from sinonym.services.person_name_normalization import (
     DropReason,
     PersonNameNormalizationService,
     PersonNameOutcome,
+    is_reviewed_compact_initial_boundary,
 )
 
 
@@ -110,6 +111,25 @@ def test_simple_two_token_fast_path_abstains_on_policy_tokens(
     assert normalizer._normalize_simple_two_token_text(raw_name) is None  # noqa: SLF001
 
 
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [
+        ("Dr", True),
+        ("Ms", True),
+        ("Jr", True),
+        ("Sr", True),
+        ("PhD", True),
+        ("DNP", True),
+        ("MS", False),
+        ("Md", False),
+        ("BC", False),
+        ("Df", False),
+    ],
+)
+def test_compact_initial_boundary_policy_preserves_reviewed_collisions(token: str, expected: bool) -> None:
+    assert is_reviewed_compact_initial_boundary(token) is expected
+
+
 def test_normalize_text_strips_stacked_title_and_credentials_at_boundaries(
     normalizer: PersonNameNormalizationService,
 ) -> None:
@@ -170,6 +190,20 @@ def test_structured_reviewed_closed_comma_credential_tail_is_removed(
     assert result.canonical_name.text == expected_text
     assert result.dropped_tokens
     assert all(token.reason is DropReason.CREDENTIAL for token in result.dropped_tokens)
+
+
+def test_structured_credential_only_tail_returns_typed_invalid(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    result = normalizer.normalize_components(last_name="MD, MRCP")
+
+    assert result.outcome is PersonNameOutcome.INVALID
+    assert result.canonical_name is None
+    assert result.reason == "no personal-name tokens remain"
+    assert [(token.text, token.source_role, token.reason) for token in result.dropped_tokens] == [
+        ("MD", "surname", DropReason.CREDENTIAL),
+        ("MRCP", "surname", DropReason.CREDENTIAL),
+    ]
 
 
 def test_structured_reviewed_credential_tail_keeps_blocked_head(
@@ -248,6 +282,20 @@ def test_boundary_symbol_and_fused_initial_surname_are_repaired(
     assert result.canonical_name is not None
     assert result.canonical_name.text == "W. Tsujita"
     assert [(token.text, token.reason) for token in result.dropped_tokens] == [(marker, DropReason.CONNECTOR)]
+
+
+@pytest.mark.parametrize("first_name", [None, "*"])
+def test_compound_initial_mononym_is_not_split_as_fused_initial_surname(
+    normalizer: PersonNameNormalizationService,
+    first_name: str | None,
+) -> None:
+    result = normalizer.normalize_components(first_name=first_name, last_name="J.-P.")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "J.-P."
+    assert result.canonical_name.normalized.given_name == ""
+    assert result.canonical_name.normalized.surname == "J.-P."
 
 
 def test_last_only_particle_surname_is_not_split(
@@ -796,6 +844,8 @@ def test_only_exact_attached_terminal_jr_is_split(
         ("John Smith and Jane Doe", PersonNameOutcome.NON_PERSON),
         ("John Smith, Jane Doe", PersonNameOutcome.NON_PERSON),
         ("Stanford University", PersonNameOutcome.NON_PERSON),
+        (" Unknown   Author ", PersonNameOutcome.NON_PERSON),
+        ("\tJanuary-February\n", PersonNameOutcome.NON_PERSON),
     ],
 )
 def test_normalize_text_returns_typed_non_person_and_invalid_outcomes(
@@ -808,6 +858,22 @@ def test_normalize_text_returns_typed_non_person_and_invalid_outcomes(
     assert result.outcome is expected_outcome
     assert result.canonical_name is None
     assert result.reason
+
+
+def test_structured_non_person_literal_preserves_field_boundary_punctuation(
+    normalizer: PersonNameNormalizationService,
+    detector,
+) -> None:
+    components = {
+        "first_name": "Anthony C. Laborte,",
+        "last_name": "Marissa C. Hitalia*",
+    }
+
+    result = normalizer.normalize_components(**components)
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.canonical_name is None
+    assert detector.normalize_person_name_components(**components) is None
 
 
 def test_result_and_dropped_token_lineage_are_immutable(
@@ -976,6 +1042,7 @@ def test_additional_boundary_credentials_and_credential_like_surnames(
     ("components", "expected_text", "credential"),
     [
         ({"first_name": "BEng", "last_name": "Robert McManus"}, "Robert McManus", "BEng"),
+        ({"first_name": "BEng", "last_name": "J.-P. Smith"}, "J.-P. Smith", "BEng"),
         ({"first_name": "DNP", "last_name": "Sarah Strauss"}, "Sarah Strauss", "DNP"),
         ({"first_name": "MBBS", "last_name": "Shahana ishfaque"}, "Shahana Ishfaque", "MBBS"),
         (
@@ -997,6 +1064,81 @@ def test_exact_case_leading_credentials_are_removed_from_structured_names(
     assert result.canonical_name is not None
     assert result.canonical_name.text == expected_text
     assert [(token.text, token.reason) for token in result.dropped_tokens] == [(credential, DropReason.CREDENTIAL)]
+
+
+@pytest.mark.parametrize("last_name", ["J.-P.", "J. P."])
+def test_packed_leading_credential_requires_a_complete_name_remainder(
+    normalizer: PersonNameNormalizationService,
+    last_name: str,
+) -> None:
+    result = normalizer.normalize_components(first_name="BEng", last_name=last_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.given_name == "BEng"
+    assert result.canonical_name.normalized.surname == last_name
+    assert result.dropped_tokens == ()
+
+
+@pytest.mark.parametrize("last_name", ["John .", "John *", "John /", "John ()"])
+def test_packed_leading_credential_ignores_punctuation_only_components(
+    normalizer: PersonNameNormalizationService,
+    last_name: str,
+) -> None:
+    result = normalizer.normalize_components(first_name="BEng", last_name=last_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "BEng John"
+    assert all(token.text != "BEng" for token in result.dropped_tokens)
+
+
+@pytest.mark.parametrize("last_name", ["J. -P.", "J. (P.)"])
+def test_packed_leading_credential_keeps_separated_initial_fragments(
+    normalizer: PersonNameNormalizationService,
+    last_name: str,
+) -> None:
+    result = normalizer.normalize_components(first_name="BEng", last_name=last_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text.startswith("BEng ")
+    assert all(token.text != "BEng" for token in result.dropped_tokens)
+
+
+@pytest.mark.parametrize(
+    ("last_name", "expected_text"),
+    [
+        ("J.Smith", "J. Smith"),
+        ("J.P.Smith", "J. P. Smith"),
+    ],
+)
+def test_packed_leading_credential_accepts_fused_initial_surname_remainders(
+    normalizer: PersonNameNormalizationService,
+    last_name: str,
+    expected_text: str,
+) -> None:
+    result = normalizer.normalize_components(first_name="BEng", last_name=last_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert [(token.text, token.reason) for token in result.dropped_tokens] == [
+        ("BEng", DropReason.CREDENTIAL),
+    ]
+
+
+def test_packed_leading_credential_accepts_uncased_native_name_components(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    result = normalizer.normalize_components(first_name="BEng", last_name="\u4f1f \u738b")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "\u4f1f \u738b"
+    assert [(token.text, token.reason) for token in result.dropped_tokens] == [
+        ("BEng", DropReason.CREDENTIAL),
+    ]
 
 
 @pytest.mark.parametrize(

@@ -28,7 +28,11 @@ from sinonym.chinese_names_data import (
 from sinonym.coretypes import NameComponents
 from sinonym.coretypes.routing_resolution import EastAsianEvidenceReason, EvidenceFailure, ResolutionReason
 from sinonym.resources import read_bytes
-from sinonym.text_processing.text_normalizer import is_name_variation_selector, strip_name_variation_selectors
+from sinonym.text_processing.text_normalizer import (
+    exact_name_surface_key,
+    is_name_variation_selector,
+    strip_name_variation_selectors,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -579,12 +583,12 @@ class EastAsianNameOrderService:
     @staticmethod
     def _is_reviewed_japanese_given_first_exact_surface(raw_name: str) -> bool:
         """Return whether reviewed identity evidence fixes this exact surface as given-first."""
-        surface = _normalized_surface(raw_name)
+        surface_key = exact_name_surface_key(raw_name)
         return bool(
-            surface
+            surface_key
             and _contains(
                 _roman_lexicons().japanese_given_first_exact_surfaces,
-                surface.casefold(),
+                surface_key,
             ),
         )
 
@@ -625,12 +629,13 @@ class EastAsianNameOrderService:
         first = _fold(tokens[0])
         last = _fold(tokens[-1])
         lexicons = _roman_lexicons()
-        reviewed_surface = surface.casefold() in JAPANESE_FAMILY_FIRST_CONFLICT_SURFACES
+        surface_key = exact_name_surface_key(surface)
+        reviewed_surface = surface_key in JAPANESE_FAMILY_FIRST_CONFLICT_SURFACES
         reviewed_family_first = reviewed_surface and self._has_surname_bearing_peer(paper_names, focal_index)
         if not reviewed_family_first and self._japanese_given_first_veto_supported(surface, paper_names, focal_index):
             return ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
-        exact_vietnamese = surface.casefold() in VIETNAMESE_GIVEN_FIRST_EXACT_SURFACES
-        exact_cross_cultural = surface.casefold() in CROSS_CULTURAL_GIVEN_FIRST_EXACT_SURFACES
+        exact_vietnamese = surface_key in VIETNAMESE_GIVEN_FIRST_EXACT_SURFACES
+        exact_cross_cultural = surface_key in CROSS_CULTURAL_GIVEN_FIRST_EXACT_SURFACES
         if exact_vietnamese or exact_cross_cultural:
             return (
                 ResolutionReason.VIETNAMESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
@@ -759,9 +764,10 @@ class EastAsianNameOrderService:
     ) -> bool:
         """Combine exact evidence with context-gated possible-surname evidence."""
         lexicons = _roman_lexicons()
-        if surface in JAPANESE_GIVEN_FIRST_EXACT_SURFACES or _contains(
+        surface_key = exact_name_surface_key(surface)
+        if surface_key in JAPANESE_GIVEN_FIRST_EXACT_SURFACES or _contains(
             lexicons.japanese_given_first_exact_surfaces,
-            surface.casefold(),
+            surface_key,
         ):
             return True
         if not self._japanese_given_first_plausible(surface):
@@ -875,8 +881,10 @@ class EastAsianNameOrderService:
         """Resolve a marked surname from one unique complete source partition."""
         if JAPANESE_ITERATION_MARK not in surface:
             return None
+        lookup_surface = _native_lookup_text(surface)
         if not all(
-            character in {" ", JAPANESE_ITERATION_MARK} or _is_han(character) or _is_kana(character) for character in surface
+            character in {" ", JAPANESE_ITERATION_MARK} or _is_han(character) or _is_kana(character)
+            for character in lookup_surface
         ):
             return None
 
@@ -889,7 +897,9 @@ class EastAsianNameOrderService:
         if len(tokens) == MIN_ROMANIZED_TOKENS:
             partitions.append((tokens[0], tokens[1]))
         elif len(tokens) == 1:
-            partitions.extend((surface[:boundary], surface[boundary:]) for boundary in range(1, len(surface)))
+            for lookup_boundary in range(1, len(lookup_surface)):
+                source_boundary = _source_index_after_lookup_boundary(surface, lookup_boundary)
+                partitions.append((surface[:source_boundary], surface[source_boundary:]))
         else:
             return None
 
@@ -1043,8 +1053,8 @@ class EastAsianNameOrderService:
         tokens = surface.split()
         if not MIN_ROMANIZED_TOKENS <= len(tokens) <= MAX_ROMANIZED_TOKENS:
             return None
-        normalized_surface = unicodedata.normalize("NFKC", " ".join(tokens)).casefold()
-        exact_roles = IDENTITY_BACKED_EXACT_ROLES.get(normalized_surface)
+        surface_key = exact_name_surface_key(" ".join(tokens))
+        exact_roles = IDENTITY_BACKED_EXACT_ROLES.get(surface_key)
         if exact_roles is not None:
             return EastAsianNameOrderDecision(
                 surface=surface,
@@ -1076,8 +1086,8 @@ class EastAsianNameOrderService:
         if not _contains(lexicons.vietnamese_surnames, head):
             return None
         trailing = _fold(tokens[-1])
-        normalized_surface = unicodedata.normalize("NFKC", " ".join(tokens)).casefold()
-        if normalized_surface in VIETNAMESE_GIVEN_FIRST_CONFLICT_SURFACES:
+        surface_key = exact_name_surface_key(" ".join(tokens))
+        if surface_key in VIETNAMESE_GIVEN_FIRST_CONFLICT_SURFACES:
             middle_tokens = tuple(tokens[1:-1])
             return EastAsianNameOrderDecision(
                 surface=surface,
@@ -1211,7 +1221,7 @@ class EastAsianNameOrderService:
             lexicons.japanese_given_names,
             last_keys,
         )
-        exact_given_first = _fold(" ".join(tokens)) in JAPANESE_PRESELECTION_GIVEN_FIRST_EXACT_SURFACES
+        exact_given_first = exact_name_surface_key(" ".join(tokens)) in JAPANESE_PRESELECTION_GIVEN_FIRST_EXACT_SURFACES
         reverse_plausible = _contains_any(lexicons.japanese_given_names, first_keys) and _contains_any(
             lexicons.japanese_surnames,
             last_keys,

@@ -17,6 +17,8 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+from sinonym.text_processing.text_normalizer import exact_name_surface_key
+
 COUNTRY_COMMIT = "eb62e13d4d62dd96cdfae79d293a02066352205f"
 JAPANESE_COMMIT = "c5220278652e7bae05b06cfaf527f1b09a100de6"
 USER_AGENT = "sinonym-east-asian-lexicon-builder/1.0"
@@ -178,7 +180,9 @@ def reviewed_possible_surnames() -> tuple[list[str], list[str], dict[str, str]]:
     rows = list(reader)
     keys = [row["surname_key"].strip() for row in rows]
     evidence_surfaces = [fold(row["example_surface"].strip()) for row in rows]
-    surfaces = [fold(row["given_first_exact_surface"].strip()) for row in rows if row["given_first_exact_surface"].strip()]
+    surfaces = [
+        exact_name_surface_key(row["given_first_exact_surface"]) for row in rows if row["given_first_exact_surface"].strip()
+    ]
     if not keys or any(key != fold(key) or not key.isalpha() for key in keys) or len(keys) != len(set(keys)):
         message = f"invalid reviewed possible surname keys in {REVIEWED_POSSIBLE_SURNAMES_PATH}"
         raise ValueError(message)

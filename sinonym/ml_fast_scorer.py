@@ -31,6 +31,7 @@ from sinonym.ml_flag_data import (
     CN_NAME_ENDINGS,
     CN_SIMPLIFIED_CHARS,
     CN_SURNAME_CHARS,
+    HEURISTIC_FLAG_NAMES,
     ITERATION_MARK,
     JP_FREQUENT_CHARS,
     JP_NAME_ENDINGS,
@@ -58,8 +59,9 @@ _EXPECTED_TFIDF_SETTINGS = {
     "preprocessor": None,
 }
 
-# Width of the EnhancedHeuristicFlags feature block; must match _flag_values().
-_N_FLAGS = 20
+_EXPECTED_FEATURE_TRANSFORMER_ORDER = ("chars", "flags")
+_EXPECTED_PIPELINE_STEP_ORDER = ("features", "clf")
+_N_FLAGS = len(HEURISTIC_FLAG_NAMES)
 
 
 @dataclass(frozen=True)
@@ -92,22 +94,36 @@ class FastJapaneseScorer:
         """
         archive = zipfile.ZipFile(io.BytesIO(data))
         schema = json.loads(archive.read("schema.json"))
-        steps = {_json_value(step["content"][0]): step["content"][1] for step in schema["content"]["content"]["steps"]["content"]}
-        transformers = {
-            _json_value(item["content"][0]): item["content"][1]
-            for item in steps["features"]["content"]["content"]["transformer_list"]["content"]
-        }
+        step_items = [
+            (_json_value(step["content"][0]), step["content"][1]) for step in schema["content"]["content"]["steps"]["content"]
+        ]
+        steps = _validated_named_items(
+            step_items,
+            expected=_EXPECTED_PIPELINE_STEP_ORDER,
+            label="Pipeline",
+        )
+        feature_data = steps["features"]["content"]["content"]
+        transformer_items = [
+            (_json_value(item["content"][0]), item["content"][1]) for item in feature_data["transformer_list"]["content"]
+        ]
+        transformers = _validated_feature_transformers(transformer_items)
         tfidf = transformers["chars"]["content"]["content"]
+        flags = transformers["flags"]["content"]["content"]
         clf = steps["clf"]["content"]["content"]
+
+        if _json_value(feature_data["transformer_weights"]) is not None:
+            msg = "FeatureUnion transformer_weights are not supported"
+            raise ValueError(msg)
+        _validate_flag_names(tuple(_json_value(node) for node in flags["flag_names"]["content"]))
 
         return cls._from_params(
             settings={key: _json_value(tfidf[key]) for key in _EXPECTED_TFIDF_SETTINGS},
             ngram_range=tuple(_json_value(n) for n in tfidf["ngram_range"]["content"]),
             vocabulary={ngram: int(_ndarray(archive, node)) for ngram, node in tfidf["vocabulary_"]["content"].items()},
             idf=_ndarray(archive, tfidf["_tfidf"]["content"]["content"]["idf_"]),
-            coef=_ndarray(archive, clf["coef_"])[0],
-            intercept=float(_ndarray(archive, clf["intercept_"])[0]),
-            classes=[str(c) for c in _ndarray(archive, clf["classes_"])],
+            coef=_ndarray(archive, clf["coef_"]),
+            intercept=_ndarray(archive, clf["intercept_"]),
+            classes=_ndarray(archive, clf["classes_"]),
         )
 
     @classmethod
@@ -120,9 +136,14 @@ class FastJapaneseScorer:
         """
         from sinonym.ml_model_components import EnhancedHeuristicFlags  # noqa: PLC0415 - keeps sklearn off the runtime path
 
-        features = pipeline.named_steps["features"]
-        clf = pipeline.named_steps["clf"]
-        transformers = dict(features.transformer_list)
+        steps = _validated_named_items(
+            pipeline.steps,
+            expected=_EXPECTED_PIPELINE_STEP_ORDER,
+            label="Pipeline",
+        )
+        features = steps["features"]
+        clf = steps["clf"]
+        transformers = _validated_feature_transformers(features.transformer_list)
         tfidf = transformers["chars"]
         flags = transformers["flags"]
 
@@ -132,18 +153,16 @@ class FastJapaneseScorer:
         if not isinstance(flags, EnhancedHeuristicFlags):
             msg = f"unexpected flags transformer: {type(flags).__name__}"
             raise TypeError(msg)
-        if len(flags.flag_names) != _N_FLAGS:
-            msg = f"expected {_N_FLAGS} flags, model has {len(flags.flag_names)}"
-            raise ValueError(msg)
+        _validate_flag_names(tuple(flags.flag_names))
 
         return cls._from_params(
             settings={key: getattr(tfidf, key) for key in _EXPECTED_TFIDF_SETTINGS},
             ngram_range=tuple(tfidf.ngram_range),
             vocabulary={ngram: int(col) for ngram, col in tfidf.vocabulary_.items()},
             idf=tfidf.idf_,
-            coef=clf.coef_[0],
-            intercept=float(clf.intercept_[0]),
-            classes=[str(c) for c in clf.classes_],
+            coef=clf.coef_,
+            intercept=clf.intercept_,
+            classes=clf.classes_,
         )
 
     @classmethod
@@ -155,27 +174,43 @@ class FastJapaneseScorer:
         vocabulary: dict[str, int],
         idf: np.ndarray,
         coef: np.ndarray,
-        intercept: float,
-        classes: list[str],
+        intercept: np.ndarray,
+        classes: np.ndarray,
     ) -> FastJapaneseScorer:
         """Validate extracted parameters and construct the scorer."""
         if settings != _EXPECTED_TFIDF_SETTINGS:
             msg = f"unsupported tf-idf settings: {settings}"
             raise ValueError(msg)
-        if classes != ["cn", "jp"]:
-            msg = f"unexpected classes: {classes!r}"
+        if idf.ndim != 1:
+            msg = f"expected one-dimensional idf values, got shape {idf.shape}"
             raise ValueError(msg)
         n_tfidf = len(idf)
-        if len(vocabulary) != n_tfidf or len(coef) != n_tfidf + _N_FLAGS:
-            msg = f"layout mismatch: {len(coef)} coefficients, {n_tfidf} tf-idf features, {len(vocabulary)} vocabulary entries"
+        expected_coef_shape = (1, n_tfidf + _N_FLAGS)
+        if coef.shape != expected_coef_shape:
+            msg = f"expected coefficient shape {expected_coef_shape}, got {coef.shape}"
             raise ValueError(msg)
+        if intercept.shape != (1,):
+            msg = f"expected intercept shape (1,), got {intercept.shape}"
+            raise ValueError(msg)
+        if classes.shape != (2,) or tuple(str(value) for value in classes) != ("cn", "jp"):
+            msg = f"unexpected classes: shape={classes.shape}, values={classes.tolist()!r}"
+            raise ValueError(msg)
+        if len(vocabulary) != n_tfidf or set(vocabulary.values()) != set(range(n_tfidf)):
+            msg = f"vocabulary columns must be a bijection over [0, {n_tfidf})"
+            raise ValueError(msg)
+        for label, values in (("idf", idf), ("coefficient", coef), ("intercept", intercept)):
+            real_numeric = np.issubdtype(values.dtype, np.integer) or np.issubdtype(values.dtype, np.floating)
+            if not real_numeric or not np.isfinite(values).all():
+                msg = f"{label} values must be finite real numbers"
+                raise ValueError(msg)
 
         min_n, max_n = ngram_range
+        coef_row = coef[0]
         return cls(
-            _ngram_weights={ngram: (float(idf[col]), float(idf[col] * coef[col])) for ngram, col in vocabulary.items()},
+            _ngram_weights={ngram: (float(idf[col]), float(idf[col] * coef_row[col])) for ngram, col in vocabulary.items()},
             _ngram_sizes=tuple(range(min_n, max_n + 1)),
-            _flag_weights=tuple(float(w) for w in coef[n_tfidf:]),
-            _intercept=float(intercept),
+            _flag_weights=tuple(float(weight) for weight in coef_row[n_tfidf:]),
+            _intercept=float(intercept[0]),
         )
 
     def japanese_probability(self, name: str) -> float:
@@ -221,6 +256,36 @@ def _json_value(node: dict[str, Any]) -> Any:
         msg = f"expected JsonNode, got {node.get('__loader__')!r}"
         raise ValueError(msg)
     return json.loads(node["content"])
+
+
+def _validated_named_items(
+    items: list[tuple[str, Any]],
+    *,
+    expected: tuple[str, ...],
+    label: str,
+) -> dict[str, Any]:
+    """Return named objects only when their order exactly matches a supported layout."""
+    actual = tuple(name for name, _value in items)
+    if actual != expected:
+        msg = f"unsupported {label} order: expected {expected!r}, got {actual!r}"
+        raise ValueError(msg)
+    return dict(items)
+
+
+def _validated_feature_transformers(items: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Return transformers only when their serialized feature order is supported."""
+    return _validated_named_items(
+        items,
+        expected=_EXPECTED_FEATURE_TRANSFORMER_ORDER,
+        label="FeatureUnion",
+    )
+
+
+def _validate_flag_names(names: tuple[str, ...]) -> None:
+    """Reject a heuristic block whose columns do not match the scalar implementation."""
+    if names != HEURISTIC_FLAG_NAMES:
+        msg = f"unsupported heuristic flag order: expected {HEURISTIC_FLAG_NAMES!r}, got {names!r}"
+        raise ValueError(msg)
 
 
 def _ndarray(archive: zipfile.ZipFile, node: dict[str, Any]) -> np.ndarray:

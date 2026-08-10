@@ -92,7 +92,10 @@ _COMPOUND_INITIAL_RE = re.compile(r"[^\W\d_]\.-[^\W\d_]\.", re.UNICODE)
 # "M-S." — but not "MA"/"JD"): a hyphen distinguishes compound initials from a credential.
 _HYPHEN_INITIAL_RE = re.compile(r"[^\W\d_]\.?(?:-[^\W\d_]\.?)+", re.UNICODE)
 _LEADING_HYPHEN_INITIAL_RE = re.compile(r"^-([^\W\d_])\.$", re.UNICODE)
-_FUSED_INITIAL_SURNAME_RE = re.compile(r"^([^\W\d_])\.(.+)$", re.UNICODE)
+_FUSED_INITIAL_SURNAME_RE = re.compile(
+    r"^(?P<initial>[^\W\d_])\.(?P<surname>[^\W\d_].+)$",
+    re.UNICODE,
+)
 _FUSED_INITIAL_SEQUENCE_SURNAME_RE = re.compile(
     r"^(?P<initials>(?:[^\W\d_]\.){2,})(?P<surname>[^\W\d_].+)$",
     re.UNICODE,
@@ -492,6 +495,68 @@ def _has_usable_array_remainder(middle: str, last: str) -> bool:
     )
 
 
+def _compact_policy_key(token: str) -> str:
+    """Return the punctuation-insensitive key used by boundary policies."""
+    if token.isalnum():
+        return token.casefold()
+    return "".join(character.casefold() for character in token if character.isalnum())
+
+
+def _is_credential_boundary_surface(token: str, *, explicit_context: bool = False) -> bool:
+    """Return whether one token matches the canonical credential policy."""
+    if token.strip(",") in _EXACT_CASE_BOUNDARY_CREDENTIALS:
+        return True
+    key = _compact_policy_key(token)
+    if key not in _CREDENTIAL_KEYS:
+        return False
+    if key not in _AMBIGUOUS_CREDENTIAL_KEYS or explicit_context:
+        return True
+    letters = "".join(character for character in token if character.isalpha())
+    return "." in token or letters.isupper() or token.strip(".,") == _MIXED_CASE_CREDENTIALS.get(key)
+
+
+def _canonical_suffix_surface(token: str, *, explicit: bool) -> str:
+    """Return the canonical suffix represented by one source token."""
+    stripped = token.strip(".,")
+    key = stripped.casefold()
+    standard = _STANDARD_SUFFIXES.get(key)
+    if standard is not None:
+        return standard
+    roman = stripped.upper()
+    supported = _EXPLICIT_ROMAN_SUFFIXES if explicit else _RAW_ROMAN_SUFFIXES
+    if roman in supported and (explicit or stripped == roman or roman in _CASE_INSENSITIVE_ROMAN_SUFFIXES):
+        return roman
+    return ""
+
+
+def is_reviewed_compact_initial_boundary(token: str) -> bool:
+    """Return whether a compact-initial candidate is reviewed name metadata.
+
+    The two-token name policy preserves ambiguous all-caps credential collisions
+    as initials (for example ``MS``) and mixed-case name collisions such as
+    ``Md``. Title-case titles, unambiguous credentials, and supported suffixes
+    remain boundary metadata and must not be expanded into invented initials.
+    """
+    surface = token.strip()
+    if not surface:
+        return False
+    key = _compact_policy_key(surface)
+    ambiguous_initial = key in _AMBIGUOUS_CREDENTIAL_KEYS and surface.isupper()
+    title = surface in _EXACT_CASE_LEADING_TITLES or (key in _TITLE_KEYS and not ambiguous_initial)
+    credential = (
+        surface.strip(",") in _EXACT_CASE_TRAILING_CREDENTIALS or _is_credential_boundary_surface(surface)
+    ) and not ambiguous_initial
+    return bool(title or credential or _canonical_suffix_surface(surface, explicit=False))
+
+
+def _has_complete_packed_name_remainder(value: str) -> bool:
+    """Return whether a packed field contains a semantic multi-token name."""
+    words = _LETTER_WORD_RE.findall(value)
+    return bool(
+        len(words) >= _TWO_COMPONENTS and any(len(word) > 1 or word.lower() == word.upper() for word in words),
+    )
+
+
 def reviewed_leading_credential_source_pattern(
     first_name: str | None,
     middle_name: str | None,
@@ -502,7 +567,7 @@ def reviewed_leading_credential_source_pattern(
     first, middle, last = ((value or "").strip() for value in (first_name, middle_name, last_name))
     if (suffix or "").strip():
         return None
-    if first in _PACKED_LEADING_CREDENTIALS and not middle and len(_LETTER_WORD_RE.findall(last)) >= _TWO_COMPONENTS:
+    if first in _PACKED_LEADING_CREDENTIALS and not middle and _has_complete_packed_name_remainder(last):
         return first
     if (
         first in _STRUCTURED_LEADING_CREDENTIALS
@@ -734,6 +799,9 @@ class PersonNameNormalizationService:
         }
         if any(value is not None and not isinstance(value, str) for value in values.values()):
             return self._invalid("name components must be strings or null")
+        source_surface = " ".join(value for value in (first_name, middle_name, last_name) if value)
+        if not (suffix or "").strip() and reviewed_non_person_text_pattern(source_surface) is not None:
+            return self._non_person("reviewed non-person input")
 
         stripped_values: dict[str, str] = {}
         leading_markers_by_role: dict[str, str] = {}
@@ -849,6 +917,8 @@ class PersonNameNormalizationService:
         invalid_reason = self._invalid_token_reason(name_tokens)
         if invalid_reason is not None:
             return self._invalid(invalid_reason, dropped)
+        if not name_tokens:
+            return self._invalid("no personal-name tokens remain", dropped)
 
         if retained_last == "":
             given, middle, surname = self._infer_regular_roles(name_tokens)
@@ -1120,9 +1190,7 @@ class PersonNameNormalizationService:
 
     @staticmethod
     def _compact_key(token: str) -> str:
-        if token.isalnum():
-            return token.casefold()
-        return "".join(character.casefold() for character in token if character.isalnum())
+        return _compact_policy_key(token)
 
     def _strip_leading_titles(
         self,
@@ -1882,8 +1950,9 @@ class PersonNameNormalizationService:
                         ],
                     )
                 fused = _FUSED_INITIAL_SURNAME_RE.fullmatch(surname[0].text)
-                if fused is not None and all(self._allowed_name_character(character) for character in fused.group(2)):
-                    initial, family = fused.groups()
+                if fused is not None and self._is_full_name_token(fused.group("surname")):
+                    initial = fused.group("initial")
+                    family = fused.group("surname")
                     return (
                         [replace(surname[0], text=f"{initial}.", source_role="given")],
                         [],
@@ -2060,16 +2129,7 @@ class PersonNameNormalizationService:
         return token.strip(".").casefold()
 
     def _canonical_suffix(self, token: str, *, explicit: bool) -> str:
-        stripped = token.strip(".,")
-        key = stripped.casefold()
-        standard = _STANDARD_SUFFIXES.get(key)
-        if standard is not None:
-            return standard
-        roman = stripped.upper()
-        supported = _EXPLICIT_ROMAN_SUFFIXES if explicit else _RAW_ROMAN_SUFFIXES
-        if roman in supported and (explicit or stripped == roman or roman in _CASE_INSENSITIVE_ROMAN_SUFFIXES):
-            return roman
-        return ""
+        return _canonical_suffix_surface(token, explicit=explicit)
 
     def _is_trailing_credential(self, token: str, *, explicit_context: bool = False) -> bool:
         """Match a credential at a reviewed trailing boundary."""
@@ -2079,15 +2139,7 @@ class PersonNameNormalizationService:
         )
 
     def _is_credential(self, token: str, *, explicit_context: bool = False) -> bool:
-        if token.strip(",") in _EXACT_CASE_BOUNDARY_CREDENTIALS:
-            return True
-        key = self._compact_key(token)
-        if key not in _CREDENTIAL_KEYS:
-            return False
-        if key not in _AMBIGUOUS_CREDENTIAL_KEYS or explicit_context:
-            return True
-        letters = "".join(character for character in token if character.isalpha())
-        return "." in token or letters.isupper() or token.strip(".,") == _MIXED_CASE_CREDENTIALS.get(key)
+        return _is_credential_boundary_surface(token, explicit_context=explicit_context)
 
     def _is_ambiguous_credential(self, token: str) -> bool:
         return self._compact_key(token) in _AMBIGUOUS_CREDENTIAL_KEYS

@@ -47,6 +47,23 @@ def test_reviewed_possible_surname_exact_surface_is_opt_in(
     assert metadata["sha256"]
 
 
+def test_reviewed_exact_surface_key_preserves_accents_and_punctuation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "reviewed.csv"
+    _write_reviewed_csv(
+        source,
+        "kagami,record:1,Shoji Kagami,https://example.test,SHO\u0304JI-KEN   KAGAMI\n",
+    )
+    monkeypatch.setattr(builder, "REVIEWED_POSSIBLE_SURNAMES_PATH", source)
+
+    _surnames, exact_surfaces, _metadata = builder.reviewed_possible_surnames()
+
+    assert exact_surfaces == ["shōji-ken kagami"]
+    assert exact_surfaces != ["shoji-ken kagami"]
+
+
 def test_reviewed_possible_surname_evidence_must_end_in_that_surname(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

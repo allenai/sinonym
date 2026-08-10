@@ -37,6 +37,12 @@ def strip_name_variation_selectors(text: str) -> str:
     return "".join(character for character in text if not is_name_variation_selector(character))
 
 
+def exact_name_surface_key(value: str) -> str:
+    """Return an exact-match key while preserving accents and punctuation."""
+    normalized = unicodedata.normalize("NFKC", value)
+    return " ".join(normalized.split()).casefold()
+
+
 class TextNormalizer:
     """Pure text normalization utilities for Chinese name processing."""
 

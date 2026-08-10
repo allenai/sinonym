@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES
 from sinonym.services.name_lookup import DOMINANT_CHINESE_SURNAME_FREQ_MIN, SurnameResolver
+from sinonym.services.person_name_normalization import is_reviewed_compact_initial_boundary
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
@@ -77,6 +78,7 @@ class NameFormattingService:
         }
         # Validate given name tokens first
         compact_initial = self._accepts_compact_initial(surname_tokens, given_tokens)
+        expand_compact_initial = compact_initial and not is_reviewed_compact_initial_boundary(given_tokens[0])
         alias_given_parts = self._reviewed_alias_compact_given_parts(surname_tokens, given_tokens)
         wade_giles_single_given = self._accepts_wade_giles_single_given(surname_tokens, given_tokens)
         unbounded_syllabic_prefix = bool(
@@ -108,7 +110,10 @@ class NameFormattingService:
                 normalized_token = self._normalizer.norm(token)
 
             if compact_initial and len(given_tokens) == 1 and token == given_tokens[0]:
-                parts.extend(token)
+                if expand_compact_initial:
+                    parts.extend(token)
+                else:
+                    parts.append(token)
                 continue
 
             if self._data.is_given_name(normalized_token):
