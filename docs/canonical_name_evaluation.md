@@ -94,10 +94,12 @@ unchanged. Exact match requires the person outcome, canonical text, first,
 middle, last, and suffix to all agree with the manual record.
 
 The table above records the policy at commit
-`595c79303c0d1d62eb69679d5b8e655ed202cb58`. When the ignored source/review
-artifacts are present, the following commands rebuild the gold packet and
-evaluate the policy in the checked-out revision. Run them at that commit to
-reproduce the historical result; on a newer revision they perform a
+`595c79303c0d1d62eb69679d5b8e655ed202cb58`. The complete
+`scratch/canonical_names` workflow and review artifacts are intentionally
+ignored and are not contained in that commit, so retain or obtain them before
+checking it out. With those artifacts present, the following commands rebuild
+the gold packet and evaluate the checked-out policy. Run them at the pinned
+commit to reproduce the historical result; on a newer revision they perform a
 current-policy reevaluation and are expected to differ.
 
 ```powershell

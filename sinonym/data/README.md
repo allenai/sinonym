@@ -67,7 +67,7 @@ Attribution: the 120W corpus is from [wainshine/Chinese-Names-Corpus](https://gi
   - Unique character indicators
   - Name length patterns
   - Character frequency patterns
-s
+
 **Training Date**: 2025-07-30
 
 ## Model Integration
