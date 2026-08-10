@@ -2,6 +2,17 @@
 
 from __future__ import annotations
 
+from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
+
+
+def test_token_lookup_normalization_removes_all_reviewed_roman_hyphens(detector):
+    baseline = "jiae"
+
+    for hyphen in ROMAN_HYPHEN_LIKE:
+        token = f"Ji{hyphen}Ae"
+        assert detector._normalizer.norm(token) == baseline  # noqa: SLF001
+        assert detector._normalizer.norm_light(token) == baseline  # noqa: SLF001
+
 
 def test_non_chinese_result_surfaces_canonical_name_without_legacy_success(detector):
     result = detector.normalize_name("Dr. Steve Marsh PhD")

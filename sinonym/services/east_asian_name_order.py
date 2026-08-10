@@ -28,6 +28,7 @@ from sinonym.chinese_names_data import (
 from sinonym.coretypes import NameComponents
 from sinonym.coretypes.routing_resolution import EastAsianEvidenceReason, EvidenceFailure, ResolutionReason
 from sinonym.resources import read_bytes
+from sinonym.text_processing.text_normalizer import is_name_variation_selector, strip_name_variation_selectors
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -348,7 +349,7 @@ def _iteration_surname_only(
     lexicons: _NativeLexicons,
 ) -> bool:
     """Return whether a marked source span is exclusively a known surname."""
-    key = _fold_compatibility_ideographs(value)
+    key = _native_lookup_text(value)
     return (
         JAPANESE_ITERATION_MARK in value
         and _contains(lexicons.japanese_surnames, key)
@@ -362,15 +363,15 @@ def _one_sided_iteration_surname_evidence(
     lexicons: _NativeLexicons,
 ) -> bool:
     """Return whether one positive role plus two negative vetoes prove the marked surname."""
+    marked_key = _native_lookup_text(marked)
+    complement_key = _native_lookup_text(complement)
     if (
-        len(marked) != JAPANESE_MARKED_SURNAME_LENGTH
-        or not MIN_JAPANESE_ITERATION_COMPLEMENT_LENGTH <= len(complement) <= MAX_JAPANESE_ITERATION_COMPLEMENT_LENGTH
-        or not all(any(_is_han(character) or _is_kana(character) for character in span) for span in (marked, complement))
+        len(marked_key) != JAPANESE_MARKED_SURNAME_LENGTH
+        or not MIN_JAPANESE_ITERATION_COMPLEMENT_LENGTH <= len(complement_key) <= MAX_JAPANESE_ITERATION_COMPLEMENT_LENGTH
+        or not all(any(_is_han(character) or _is_kana(character) for character in span) for span in (marked_key, complement_key))
     ):
         return False
 
-    marked_key = _fold_compatibility_ideographs(marked)
-    complement_key = _fold_compatibility_ideographs(complement)
     marked_is_surname = _contains(lexicons.japanese_surnames, marked_key)
     marked_is_given = _contains(lexicons.japanese_given_names, marked_key)
     complement_is_surname = _contains(lexicons.japanese_surnames, complement_key)
@@ -424,7 +425,7 @@ def _japanese_given_only(
     lexicons: _NativeLexicons,
 ) -> bool:
     """Return whether a source span is exclusively a known given name."""
-    key = _fold_compatibility_ideographs(value)
+    key = _native_lookup_text(value)
     return _contains(
         lexicons.japanese_given_names,
         key,
@@ -434,13 +435,9 @@ def _japanese_given_only(
 _COMPATIBILITY_FOLD_TABLE = str.maketrans(COMPATIBILITY_IDEOGRAPH_FOLDS)
 
 
-def _fold_compatibility_ideographs(value: str) -> str:
-    """Fold compatibility ideographs for lexicon and ML lookups; emitted tokens keep the original.
-
-    Length-preserving by construction, so boundary indices computed on the folded text slice the
-    original correctly.
-    """
-    return value.translate(_COMPATIBILITY_FOLD_TABLE)
+def _native_lookup_text(value: str) -> str:
+    """Return selector-free, compatibility-folded native lookup text."""
+    return strip_name_variation_selectors(value.translate(_COMPATIBILITY_FOLD_TABLE))
 
 
 def _fold(value: str) -> str:
@@ -533,7 +530,24 @@ def _is_hangul(value: str) -> bool:
 
 
 def _is_compact_japanese(value: str) -> bool:
-    return bool(value) and " " not in value and all(_is_han(character) or _is_kana(character) for character in value)
+    lookup = _native_lookup_text(value)
+    return bool(lookup) and " " not in lookup and all(_is_han(character) or _is_kana(character) for character in lookup)
+
+
+def _source_index_after_lookup_boundary(surface: str, lookup_boundary: int) -> int:
+    """Map a selector-free character boundary back onto the authored surface."""
+    lookup_characters = 0
+    for index, character in enumerate(surface):
+        if is_name_variation_selector(character):
+            continue
+        lookup_characters += 1
+        if lookup_characters == lookup_boundary:
+            source_index = index + 1
+            while source_index < len(surface) and is_name_variation_selector(surface[source_index]):
+                source_index += 1
+            return source_index
+    message = f"lookup boundary {lookup_boundary} exceeds source surface {surface!r}"
+    raise ValueError(message)
 
 
 def _clears_japanese_classifier(
@@ -542,7 +556,7 @@ def _clears_japanese_classifier(
 ) -> bool:
     """Validate one classifier response and apply the frozen Japanese gate."""
     probability = japanese_probability(
-        _fold_compatibility_ideographs(surface),
+        _native_lookup_text(surface),
     )
     if not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
         message = f"Japanese classifier returned invalid probability {probability!r}"
@@ -934,10 +948,11 @@ class EastAsianNameOrderService:
             )
         if not _is_compact_japanese(surface):
             return self._infer_spaced_japanese_native(surface, japanese_probability)
-        lookup_surface = _fold_compatibility_ideographs(surface)
+        lookup_surface = _native_lookup_text(surface)
         if not _clears_japanese_classifier(surface, japanese_probability):
             return None
-        boundary = self._japanese_native_boundary(lookup_surface)
+        lookup_boundary = self._japanese_native_boundary(lookup_surface)
+        boundary = _source_index_after_lookup_boundary(surface, lookup_boundary)
         return EastAsianNameOrderDecision(
             surface=surface,
             given_tokens=(surface[boundary:],),
@@ -984,7 +999,7 @@ class EastAsianNameOrderService:
             return None
         lexicons = _native_lexicons()
         first, last = tokens
-        first_key, last_key = (_fold_compatibility_ideographs(token) for token in tokens)
+        first_key, last_key = (_native_lookup_text(token) for token in tokens)
         first_surname = _contains(lexicons.japanese_surnames, first_key)
         first_given = _contains(lexicons.japanese_given_names, first_key)
         last_surname = _contains(lexicons.japanese_surnames, last_key)

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from sinonym.chinese_names_data import COMPOUND_VARIANTS, KOREAN_GIVEN_PATTERNS, OVERLAPPING_KOREAN_SURNAMES
 from sinonym.coretypes import ParseResult
 from sinonym.services.name_lookup import SurnameResolver
+from sinonym.services.normalization import SpacedCompoundSpan
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
@@ -88,12 +89,13 @@ class NameParsingService:
         order: list[str],
         normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...] | None = None,
     ) -> ParseResult:
         """Parse and return ParseResult for compatibility with external callers."""
         if len(order) < self._config.min_tokens_required:
             return ParseResult.failure(f"needs at least {self._config.min_tokens_required} tokens")
 
-        parsed = self.parse_name_order_tokens(order, normalized_cache, compound_metadata)
+        parsed = self.parse_name_order_tokens(order, normalized_cache, compound_metadata, spaced_compound_spans)
         if parsed is None:
             return ParseResult.failure("surname not recognised")
 
@@ -105,13 +107,14 @@ class NameParsingService:
         order: list[str],
         normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...] | None = None,
     ) -> tuple[list[str], list[str], str | None] | None:
         """Fast internal parse path that avoids ParseResult object construction."""
         if len(order) < self._config.min_tokens_required:
             return None
 
         # Try probabilistic parsing first
-        best_parse = self._best_parse_tokens(order, normalized_cache, compound_metadata)
+        best_parse = self._best_parse_tokens(order, normalized_cache, compound_metadata, spaced_compound_spans)
         if best_parse is not None:
             return best_parse
 
@@ -133,9 +136,15 @@ class NameParsingService:
         tokens: list[str],
         normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...] | None = None,
     ) -> list[tuple[list[str], list[str], str | None]]:
         """Return possible surname/given parses for batch-level scoring."""
-        return self._generate_all_parses_with_format(tokens, normalized_cache, compound_metadata)
+        return self._generate_all_parses_with_format(
+            tokens,
+            normalized_cache,
+            compound_metadata,
+            spaced_compound_spans,
+        )
 
     def _try_fallback_parse(
         self,
@@ -232,6 +241,7 @@ class NameParsingService:
         tokens: list[str],
         normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...] | None = None,
     ) -> ParseResult:
         """Find the best parse using probabilistic scoring."""
         if len(tokens) < self._config.min_tokens_required:
@@ -241,6 +251,7 @@ class NameParsingService:
             tokens,
             normalized_cache,
             compound_metadata,
+            spaced_compound_spans,
         )
         parses = [(surname, given) for surname, given, _ in parses_with_format]
         if not parses:
@@ -341,6 +352,7 @@ class NameParsingService:
         tokens: list[str],
         normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...] | None = None,
     ) -> tuple[list[str], list[str], str | None] | None:
         """Token-only best-parse path for internal hot loops."""
         if len(tokens) < self._config.min_tokens_required:
@@ -350,6 +362,7 @@ class NameParsingService:
             tokens,
             normalized_cache,
             compound_metadata,
+            spaced_compound_spans,
         )
         if not parses_with_format:
             return None
@@ -443,41 +456,32 @@ class NameParsingService:
         tokens: list[str],
         _normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...] | None,
     ) -> list[tuple[list[str], list[str], str | None]]:
         """Generate all possible (surname, given_name) parses for the tokens."""
         if len(tokens) < 2:
             return []
 
+        if spaced_compound_spans is None:
+            spaced_compound_spans = self._legacy_spaced_compound_spans(tokens, compound_metadata)
+
         parses = []
         # 1. Check compound surnames using centralized metadata
         if len(tokens) >= 3:
-            # Check first two tokens for compound
-            first_meta = compound_metadata.get(tokens[0])
-            second_meta = compound_metadata.get(tokens[1])
-            if (
-                first_meta
-                and first_meta.is_compound
-                and second_meta
-                and second_meta.is_compound
-                and first_meta.compound_target == second_meta.compound_target
-            ):
+            # Spaced compounds are occurrence facts, not token-text facts.  A
+            # repeated value elsewhere in the name must not inherit this span.
+            first_span = self._spaced_compound_span(spaced_compound_spans, 0, 2)
+            if first_span is not None:
                 # This is a multi-token compound at the beginning
-                original_format = self._get_compound_original_format(first_meta, tokens[0:2])
+                original_format = StringManipulationUtils.lowercase_join_with_spaces(tokens[0:2])
                 parses.append((tokens[0:2], tokens[2:], original_format))
 
             # Check second and third tokens for compound (surname in middle)
             if len(tokens) >= 3:
-                second_meta = compound_metadata.get(tokens[1])
-                third_meta = compound_metadata.get(tokens[2])
-                if (
-                    second_meta
-                    and second_meta.is_compound
-                    and third_meta
-                    and third_meta.is_compound
-                    and second_meta.compound_target == third_meta.compound_target
-                ):
+                second_span = self._spaced_compound_span(spaced_compound_spans, 1, 3)
+                if second_span is not None:
                     # This is a multi-token compound in the middle
-                    original_format = self._get_compound_original_format(second_meta, tokens[1:3])
+                    original_format = StringManipulationUtils.lowercase_join_with_spaces(tokens[1:3])
                     parses.append((tokens[1:3], [tokens[0], *tokens[3:]], original_format))
 
         # 2. Single-token surnames - only at beginning or end (contiguous sequences only)
@@ -538,6 +542,49 @@ class NameParsingService:
                     parses.append((compound_parts, tokens[:-1], original_format))
 
         return parses
+
+    @staticmethod
+    def _legacy_spaced_compound_spans(
+        tokens: list[str],
+        compound_metadata: dict[str, CompoundMetadata],
+    ) -> tuple[SpacedCompoundSpan, ...]:
+        """Recover pre-span behavior for metadata-only compatibility callers.
+
+        New normalization paths pass an explicit occurrence tuple, including
+        an empty tuple when no spaced compounds exist. Only callers that omit
+        the new argument receive token-keyed legacy inference.
+        """
+        spans: list[SpacedCompoundSpan] = []
+        index = 0
+        while index < len(tokens) - 1:
+            first = compound_metadata.get(tokens[index])
+            second = compound_metadata.get(tokens[index + 1])
+            if (
+                first
+                and second
+                and first.is_compound
+                and second.is_compound
+                and first.format_type == second.format_type == "spaced"
+                and first.compound_target
+                and first.compound_target == second.compound_target
+            ):
+                spans.append(SpacedCompoundSpan(index, index + 2, first.compound_target))
+                index += 2
+            else:
+                index += 1
+        return tuple(spans)
+
+    @staticmethod
+    def _spaced_compound_span(
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...],
+        start: int,
+        end: int,
+    ) -> SpacedCompoundSpan | None:
+        """Return exact spaced-compound metadata for one source occurrence."""
+        for span in spaced_compound_spans:
+            if span.start == start and span.end == end:
+                return span
+        return None
 
     def _get_compound_original_format(self, compound_meta: CompoundMetadata, tokens: list[str]) -> str | None:
         """Get the original format for a compound surname from centralized metadata."""

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Literal
 from sinonym.chinese_names_data import VALID_CHINESE_RIMES
 from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
 from sinonym.text_processing import CompoundDetector, TextNormalizer, TextPreprocessor
+from sinonym.text_processing.text_normalizer import strip_name_variation_selectors
 from sinonym.utils.string_manipulation import StringManipulationUtils
 from sinonym.utils.thread_cache import ThreadLocalCache
 
@@ -70,6 +71,28 @@ class LazyNormalizationMap:
 
 
 @dataclass(frozen=True)
+class SpacedCompoundSpan:
+    """One occurrence of a space-delimited compound surname.
+
+    ``start`` is inclusive and ``end`` is exclusive in the normalized Roman
+    token sequence.  Keeping source positions here prevents repeated token
+    values from making unrelated occurrences look like compound parts.
+    """
+
+    start: int
+    end: int
+    compound_target: str
+
+    def reversed(self, token_count: int) -> SpacedCompoundSpan:
+        """Return this span re-indexed for the reversed token sequence."""
+        return SpacedCompoundSpan(
+            start=token_count - self.end,
+            end=token_count - self.start,
+            compound_target=self.compound_target,
+        )
+
+
+@dataclass(frozen=True)
 class CompoundMetadata:
     """Metadata for compound surname detection and formatting."""
 
@@ -90,6 +113,7 @@ class NormalizedInput:
     compound_metadata: dict[str, CompoundMetadata]  # token → compound info
     from_camel_case_pair: bool = False
     surname_first_parenthetical_hint: bool = False
+    spaced_compound_spans: tuple[SpacedCompoundSpan, ...] = ()
 
     @classmethod
     def empty(cls, raw: str = "") -> NormalizedInput:
@@ -161,23 +185,28 @@ class NormalizationService:
         if not raw_name or not raw_name.strip():
             return NormalizedInput.empty(raw_name)
 
-        simple_tokens = self.simple_latin_tokens(raw_name)
+        semantic_name = strip_name_variation_selectors(raw_name)
+        simple_tokens = self.simple_latin_tokens(semantic_name)
         if simple_tokens is not None:
             norm_map = {token: self._text_normalizer.normalize_token(token) for token in simple_tokens}
-            compound_metadata = self._compound_detector.generate_compound_metadata(simple_tokens, self._data)
+            compound_metadata, spaced_compound_spans = self._compound_detector.generate_compound_analysis(
+                simple_tokens,
+                self._data,
+            )
             return NormalizedInput(
                 raw=raw_name,
-                cleaned=raw_name,
+                cleaned=semantic_name,
                 tokens=simple_tokens,
                 roman_tokens=simple_tokens,
                 norm_map=norm_map,
                 compound_metadata=compound_metadata,
+                spaced_compound_spans=spaced_compound_spans,
             )
 
         # Phase 1: Give Unicode hyphens the same structural treatment as ASCII
         # before camel-case and concatenated-surname decisions run. Apostrophes
         # retain their existing later fold point.
-        structural_name = raw_name if raw_name.isascii() else raw_name.translate(self._structural_hyphen_tr)
+        structural_name = semantic_name if semantic_name.isascii() else semantic_name.translate(self._structural_hyphen_tr)
         cleaned, from_camel_case_pair, surname_first_parenthetical_hint = self._text_preprocessor.preprocess_input(
             structural_name,
             self._data,
@@ -210,7 +239,10 @@ class NormalizationService:
         norm_map = {token: self._text_normalizer.normalize_token(token) for token in roman_tokens}
 
         # Phase 7: Generate compound metadata for each token (centralized detection)
-        compound_metadata = self._compound_detector.generate_compound_metadata(roman_tokens, self._data)
+        compound_metadata, spaced_compound_spans = self._compound_detector.generate_compound_analysis(
+            roman_tokens,
+            self._data,
+        )
 
         return NormalizedInput(
             raw=raw_name,
@@ -221,6 +253,7 @@ class NormalizationService:
             compound_metadata=compound_metadata,
             from_camel_case_pair=from_camel_case_pair,
             surname_first_parenthetical_hint=surname_first_parenthetical_hint,
+            spaced_compound_spans=spaced_compound_spans,
         )
 
     @staticmethod

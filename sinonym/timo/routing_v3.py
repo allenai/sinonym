@@ -925,43 +925,19 @@ def _reviewed_closed_comma_credential_assignment(
     normalizer: PersonNameNormalizationService,
 ) -> NameComponents | None:
     """Normalize one full-corpus-reviewed closed credential tail atomically."""
-    retained_last = reviewed_closed_comma_credential_tail_head(source.last_name, source.suffix)
-    if retained_last is None:
+    if reviewed_closed_comma_credential_tail_head(source.last_name, source.suffix) is None:
         return None
-    if retained_last:
-        atomic = normalizer.normalize_components(
-            first_name=source.first_name,
-            middle_name=source.middle_names,
-            last_name=retained_last,
-        )
-    else:
-        atomic = normalizer.normalize_text(
-            " ".join(value for value in (source.first_name, source.middle_names) if value),
-        )
-    if atomic.outcome is not PersonNameOutcome.PERSON or atomic.canonical_name is None:
-        return None
-
-    selected = atomic.canonical_name.normalized
-    if not selected.given_name or not selected.surname:
-        return None
-    current = normalizer.normalize_components(
+    normalized = normalizer.normalize_components(
         first_name=source.first_name,
         middle_name=source.middle_names,
         last_name=source.last_name,
+        suffix=source.suffix,
     )
-    current_selected = current.canonical_name.normalized if current.canonical_name is not None else None
-    selected_fields = (selected.given_name, selected.middle_name, selected.surname, selected.suffix)
-    current_fields = (
-        (
-            current_selected.given_name,
-            current_selected.middle_name,
-            current_selected.surname,
-            current_selected.suffix,
-        )
-        if current_selected is not None
-        else None
-    )
-    return selected if selected_fields != current_fields else None
+    if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
+        return None
+
+    selected = normalized.canonical_name.normalized
+    return selected if selected.given_name and selected.surname else None
 
 
 class RoutingInstanceV3(RoutingV3Model):

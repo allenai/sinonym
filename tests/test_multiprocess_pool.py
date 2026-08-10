@@ -178,6 +178,18 @@ def test_persistent_multiprocess_pool_analyzes_batches_with_batch_evidence(detec
     )
 
 
+def test_persistent_pool_preserves_occurrence_based_compound_votes(detector):
+    """Occurrence spans and frozen configuration must survive worker pickling."""
+    names = ["Au Au Yeung", "Ming Au Yeung", "Li Jin"]
+    expected = detector.analyze_name_batch(names)
+
+    with detector.create_persistent_multiprocess_pool(max_workers=1, chunk_size=1) as pool:
+        (actual,) = pool.analyze_name_batches([names])
+
+    assert actual.format_pattern == expected.format_pattern
+    assert _decision_signatures(actual.results) == _decision_signatures(expected.results)
+
+
 def test_persistent_pool_strict_analysis_matches_local_strict_analysis(detector):
     """The pool dispatcher must preserve strict V3 batch results exactly."""
     batches = [

@@ -77,6 +77,7 @@ class BatchCandidateEntry:
     representation: str
     vote_eligible: bool = True
     raw_tokens: tuple[str, ...] = field(kw_only=True)
+    spaced_compound_spans: tuple[SpacedCompoundSpan, ...] = field(default=(), kw_only=True)
     input_failure: ParseResult | None = None
     individual_failure: ParseResult | None = None
 
@@ -118,6 +119,7 @@ class _PreparedName:
     vote_eligible: bool
     raw_tokens: tuple[str, ...]
     compound_metadata: tuple[tuple[str, object], ...]
+    spaced_compound_spans: tuple[SpacedCompoundSpan, ...]
     format_candidates: tuple[_PreparedCandidate, ...]
     individual_candidates: tuple[_PreparedCandidate, ...]
     input_failure: ParseResult | None = None
@@ -180,6 +182,7 @@ class BatchVoteStats:
 if TYPE_CHECKING:
     from sinonym.services.ethnicity import EthnicityClassificationService
     from sinonym.services.name_lookup import SurnameResolver
+    from sinonym.services.normalization import SpacedCompoundSpan
     from sinonym.services.parsing import NameParsingService
 
 
@@ -339,6 +342,7 @@ class BatchAnalysisService:
                 vote_eligible=False,
                 raw_tokens=(),
                 compound_metadata=(),
+                spaced_compound_spans=(),
                 format_candidates=(),
                 individual_candidates=(),
                 input_failure=input_failure,
@@ -352,6 +356,7 @@ class BatchAnalysisService:
             "vote_eligible": self._batch_vote_eligible(normalized_input),
             "raw_tokens": tuple(normalized_input.roman_tokens),
             "compound_metadata": tuple(normalized_input.compound_metadata.items()),
+            "spaced_compound_spans": normalized_input.spaced_compound_spans,
         }
         if not self._is_batch_format_participant(representation):
             return _PreparedName(format_candidates=(), individual_candidates=(), **common)
@@ -393,6 +398,7 @@ class BatchAnalysisService:
             tokens,
             normalized_input.norm_map,
             normalized_input.compound_metadata,
+            normalized_input.spaced_compound_spans,
         )
         format_candidates: list[_PreparedCandidate] = []
         scored_parses: list[tuple[list[str], list[str], _PreparedCandidate]] = []
@@ -483,6 +489,7 @@ class BatchAnalysisService:
                 "representation": prepared.representation,
                 "vote_eligible": prepared.vote_eligible,
                 "raw_tokens": prepared.raw_tokens,
+                "spaced_compound_spans": prepared.spaced_compound_spans,
             }
             format_entries.append(
                 BatchCandidateEntry(
@@ -723,22 +730,27 @@ class BatchAnalysisService:
         if not surname_tokens or not original_tokens:
             return NameFormat.SURNAME_FIRST
 
-        # Check if surname is at the beginning (surname-first) or end (given-first)
-        if surname_tokens[0] == original_tokens[0]:
+        # Compare the complete surname slice so repeated endpoint text cannot
+        # transfer lineage from another occurrence (for example,
+        # ``Au Au Yeung``).  Expanded compact/hyphenated surnames deliberately
+        # fall through to their narrower representation-specific handling.
+        surname_first = surname_tokens == original_tokens[: len(surname_tokens)]
+        given_first = surname_tokens == original_tokens[-len(surname_tokens) :]
+        if surname_first and not given_first:
             return NameFormat.SURNAME_FIRST
-        if surname_tokens[-1] == original_tokens[-1]:
+        if given_first and not surname_first:
             return NameFormat.GIVEN_FIRST
 
-        # Compound surname: surname_tokens may be sub-tokens of a single
-        # original token (e.g. ['Ou','yang'] from 'Ouyang').
-        # Reconstruct and check against original tokens.
+        # Compact compound surname: parsed surname tokens may be sub-tokens of a
+        # single original token (e.g. ['Ou', 'yang'] from 'Ouyang').
         joined_surname = "".join(surname_tokens).lower()
         if original_tokens[0].lower() == joined_surname:
             return NameFormat.SURNAME_FIRST
         if original_tokens[-1].lower() == joined_surname:
             return NameFormat.GIVEN_FIRST
 
-        # Default to surname-first for unclear cases
+        # Preserve the existing surname-first default for genuinely ambiguous,
+        # internal, or non-lineage-preserving expanded parses.
         return NameFormat.SURNAME_FIRST
 
     def _detect_format_pattern(
@@ -1071,10 +1083,12 @@ class BatchAnalysisService:
             if entry.raw_tokens:
                 raw_tokens = list(entry.raw_tokens)
                 compound_metadata = entry.compound_metadata or {}
+                spaced_compound_spans = entry.spaced_compound_spans
             else:
                 normalized_input = normalizer.apply(entry.name)
                 raw_tokens = list(normalized_input.roman_tokens)
                 compound_metadata = normalized_input.compound_metadata
+                spaced_compound_spans = normalized_input.spaced_compound_spans
 
             if surname_resolver is None:
                 surname_resolver = self._require_surname_resolver()
@@ -1097,6 +1111,7 @@ class BatchAnalysisService:
                 normalized_span_tokens,
                 surname_resolver,
                 compound_metadata,
+                spaced_compound_spans,
             )
             selected_position = selected_span.position if selected_span is not None else "unknown"
             selected_token_count = selected_span.width if selected_span is not None else 0
@@ -1106,6 +1121,7 @@ class BatchAnalysisService:
                 normalized_span_tokens,
                 compound_metadata,
                 surname_resolver,
+                spaced_compound_spans,
             )
             all_caps_tokens = self._all_caps_tokens(raw_tokens)
             batch_participant = self._candidate_entry_participates(entry)
@@ -1154,13 +1170,14 @@ class BatchAnalysisService:
             return NameFormat.GIVEN_FIRST
         return NameFormat.MIXED
 
-    def _selected_surname_span(
+    def _selected_surname_span(  # noqa: PLR0913 - raw and normalized span evidence are independent inputs
         self,
         result: ParseResult,
         raw_tokens: list[str],
         normalized_raw_tokens: list[str],
         surname_resolver: SurnameResolver,
         compound_metadata,
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...],
     ) -> SurnameEndpointSpan | None:
         """Return the selected surname's matched span in the normalized input."""
         if not result.success or result.parsed_original_order is None:
@@ -1176,12 +1193,14 @@ class BatchAnalysisService:
             surname_tokens,
             raw_tokens,
             compound_metadata,
+            spaced_compound_spans,
         ) or self._selected_surname_lookup_key(
             normalized_surname_tokens,
             raw_tokens,
             0,
             None,
             compound_metadata,
+            spaced_compound_spans,
         )
         selected_format = self._format_from_parse_result(result)
         if selected_surname and selected_format == NameFormat.SURNAME_FIRST:
@@ -1192,6 +1211,7 @@ class BatchAnalysisService:
                     0,
                     end,
                     compound_metadata,
+                    spaced_compound_spans,
                 )
                 if "".join(normalized_raw_tokens[:end]) == selected_surname or lookup_key == selected_surname_key:
                     return SurnameEndpointSpan("first", 0, end, lookup_key)
@@ -1204,6 +1224,7 @@ class BatchAnalysisService:
                     start,
                     len(raw_tokens),
                     compound_metadata,
+                    spaced_compound_spans,
                 )
                 if "".join(normalized_raw_tokens[start:]) == selected_surname or lookup_key == selected_surname_key:
                     return SurnameEndpointSpan(
@@ -1222,6 +1243,7 @@ class BatchAnalysisService:
                 start,
                 end,
                 compound_metadata,
+                spaced_compound_spans,
             )
             return SurnameEndpointSpan(
                 position="internal",
@@ -1240,12 +1262,13 @@ class BatchAnalysisService:
         ]
 
     @staticmethod
-    def _selected_surname_lookup_key(
+    def _selected_surname_lookup_key(  # noqa: PLR0913 - selected and source span evidence are independent inputs
         normalized_surname_tokens: list[str],
         raw_tokens: list[str],
         start: int,
         end: int | None,
         compound_metadata,
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...],
     ) -> str:
         """Return a surname lookup key for the selected parsed surname."""
         if end is not None:
@@ -1254,6 +1277,7 @@ class BatchAnalysisService:
                 start,
                 end,
                 compound_metadata,
+                spaced_compound_spans,
             )
             if compound_target is not None:
                 return compound_target
@@ -1266,6 +1290,7 @@ class BatchAnalysisService:
         surname_tokens: list[str],
         raw_tokens: list[str],
         compound_metadata,
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...],
     ) -> str | None:
         """Return the source compound key when formatter-preserved tokens match it."""
         if compound_metadata is None:
@@ -1279,6 +1304,7 @@ class BatchAnalysisService:
                     start,
                     end,
                     compound_metadata,
+                    spaced_compound_spans,
                 )
                 if compound_target is None:
                     continue
@@ -1319,37 +1345,27 @@ class BatchAnalysisService:
         return None
 
     @staticmethod
-    def _compound_target_for_span(raw_tokens: list[str], start: int, end: int, compound_metadata) -> str | None:
-        """Return the shared compound target for a raw span when metadata identifies one."""
+    def _compound_target_for_span(
+        raw_tokens: list[str],
+        start: int,
+        end: int,
+        compound_metadata,
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...],
+    ) -> str | None:
+        """Return the compound target for one exact raw-token occurrence."""
         if compound_metadata is None or not (0 <= start < end <= len(raw_tokens)):
             return None
 
-        target: str | None = None
-        has_spaced_compound_part = False
-        for token in raw_tokens[start:end]:
-            meta = compound_metadata.get(token)
-            if not meta or not meta.is_compound or not meta.compound_target:
-                return None
-            has_spaced_compound_part = has_spaced_compound_part or meta.format_type == "spaced"
-            if target is None:
-                target = meta.compound_target
-            elif target != meta.compound_target:
-                return None
-
-        if target is None:
+        if end - start > 1:
+            for span in spaced_compound_spans:
+                if span.start == start and span.end == end:
+                    return span.compound_target
             return None
-        if has_spaced_compound_part:
-            for index, token in enumerate(raw_tokens):
-                meta = compound_metadata.get(token)
-                if (
-                    meta
-                    and meta.is_compound
-                    and meta.format_type == "spaced"
-                    and meta.compound_target == target
-                    and not (start <= index < end)
-                ):
-                    return None
-        return target
+
+        metadata = compound_metadata.get(raw_tokens[start])
+        if metadata and metadata.is_compound and metadata.format_type != "spaced" and metadata.compound_target:
+            return metadata.compound_target
+        return None
 
     @staticmethod
     def _endpoint_surname_frequencies(
@@ -1369,13 +1385,14 @@ class BatchAnalysisService:
         """Return the evidence key for batch span matching only."""
         return surname_resolver.evidence_span_key(token)
 
-    def _selected_endpoint_frequency_evidence(
+    def _selected_endpoint_frequency_evidence(  # noqa: PLR0913 - endpoint evidence inputs remain explicit
         self,
         selected_span: SurnameEndpointSpan | None,
         raw_tokens: list[str],
         normalized_raw_tokens: list[str],
         compound_metadata,
         surname_resolver: SurnameResolver,
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...] = (),
     ) -> tuple[float | None, float | None, float | None]:
         """Return selected endpoint frequency, alternate frequency, and selected/alternate ratio."""
         if selected_span is None or selected_span.position not in {"first", "last"}:
@@ -1387,6 +1404,7 @@ class BatchAnalysisService:
             raw_tokens,
             normalized_raw_tokens,
             compound_metadata,
+            spaced_compound_spans,
         )
         alternate_freq = None
         if alternate_span is not None:
@@ -1402,6 +1420,7 @@ class BatchAnalysisService:
         raw_tokens: list[str],
         normalized_raw_tokens: list[str],
         compound_metadata,
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...],
     ) -> SurnameEndpointSpan | None:
         """Return the opposite endpoint span using the selected raw span width."""
         if selected_span.width <= 0 or selected_span.width > len(raw_tokens):
@@ -1424,16 +1443,18 @@ class BatchAnalysisService:
             start,
             end,
             compound_metadata,
+            spaced_compound_spans,
         )
         return SurnameEndpointSpan(position, start, end, lookup_key)
 
     @staticmethod
-    def _raw_surname_span_lookup_key(
+    def _raw_surname_span_lookup_key(  # noqa: PLR0913 - raw and normalized span evidence are independent inputs
         raw_tokens: list[str],
         normalized_raw_tokens: list[str],
         start: int,
         end: int,
         compound_metadata,
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...],
     ) -> str:
         """Return a surname lookup key for a raw endpoint span."""
         compound_target = BatchAnalysisService._compound_target_for_span(
@@ -1441,6 +1462,7 @@ class BatchAnalysisService:
             start,
             end,
             compound_metadata,
+            spaced_compound_spans,
         )
         if compound_target is not None:
             return compound_target

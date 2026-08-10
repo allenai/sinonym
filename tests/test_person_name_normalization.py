@@ -4,6 +4,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from sinonym.coretypes import NameComponents
 from sinonym.services import person_name_normalization
 from sinonym.services.person_name_normalization import (
     DropReason,
@@ -16,6 +17,17 @@ from sinonym.services.person_name_normalization import (
 def normalizer() -> PersonNameNormalizationService:
     """Return the dependency-free canonical name normalizer."""
     return PersonNameNormalizationService()
+
+
+def _ordered_component_tokens(components: NameComponents) -> tuple[str, ...]:
+    """Reconstruct one component token stream from its role order."""
+    queues = {
+        "given": iter(components.given_tokens),
+        "middle": iter(components.middle_tokens),
+        "surname": iter(components.surname_tokens),
+        "suffix": iter(components.suffix_tokens),
+    }
+    return tuple(next(queues[role]) for role in components.order)
 
 
 @pytest.mark.parametrize(
@@ -114,6 +126,60 @@ def test_normalize_text_strips_stacked_title_and_credentials_at_boundaries(
         ("Ph.D.", "suffix", DropReason.CREDENTIAL),
         ("M.S.", "suffix", DropReason.CREDENTIAL),
     ]
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text", "expected_drops"),
+    [
+        ("John Smith, FRCS", "John Smith", ["FRCS"]),
+        ("John Bamford, MD, MRCP", "John Bamford", ["MD", "MRCP"]),
+    ],
+)
+def test_raw_reviewed_closed_comma_credential_tail_is_removed(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_text: str,
+    expected_drops: list[str],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert [token.text for token in result.dropped_tokens] == expected_drops
+    assert all(token.reason is DropReason.CREDENTIAL for token in result.dropped_tokens)
+
+
+@pytest.mark.parametrize(
+    ("components", "expected_text"),
+    [
+        ({"first_name": "John", "last_name": "Smith, FRCS"}, "John Smith"),
+        ({"first_name": "John", "middle_name": "Bamford", "last_name": "MD, MRCP"}, "John Bamford"),
+        ({"first_name": "Vivek", "middle_name": "Pravin Dave", "last_name": "MD,FRCS"}, "Vivek Pravin Dave"),
+    ],
+)
+def test_structured_reviewed_closed_comma_credential_tail_is_removed(
+    normalizer: PersonNameNormalizationService,
+    components: dict[str, str],
+    expected_text: str,
+) -> None:
+    result = normalizer.normalize_components(**components)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert result.dropped_tokens
+    assert all(token.reason is DropReason.CREDENTIAL for token in result.dropped_tokens)
+
+
+def test_structured_reviewed_credential_tail_keeps_blocked_head(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    result = normalizer.normalize_components(first_name="John", last_name="Burn DM, MRCP")
+
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.surname == "Burn Dm Mrcp"
+    assert result.dropped_tokens == ()
 
 
 @pytest.mark.parametrize(
@@ -785,6 +851,36 @@ def test_component_orders_contain_exactly_one_role_per_token(
             )
         )
         assert len(components.order) == token_count
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_order", "expected_tokens"),
+    [
+        ("MD Jane Smith", ("suffix", "given", "surname"), ("MD", "Jane", "Smith")),
+        (
+            "Dr. Steve Marsh Blando, Ph.D., M.S.",
+            ("given", "given", "middle", "surname", "suffix", "suffix"),
+            ("Dr.", "Steve", "Marsh", "Blando", "Ph.D.", "M.S."),
+        ),
+        (
+            "Carvalho da Silva Roberto Jose",
+            ("surname", "surname", "surname", "given", "middle"),
+            ("Carvalho", "da", "Silva", "Roberto", "Jose"),
+        ),
+    ],
+)
+def test_source_lineage_uses_each_occurrence_once_in_display_order(
+    normalizer: PersonNameNormalizationService,
+    raw_name: str,
+    expected_order: tuple[str, ...],
+    expected_tokens: tuple[str, ...],
+) -> None:
+    result = normalizer.normalize_text(raw_name)
+
+    assert result.canonical_name is not None
+    source = result.canonical_name.source
+    assert source.order == expected_order
+    assert _ordered_component_tokens(source) == expected_tokens
 
 
 def test_structured_non_person_and_invalid_results_have_no_canonical_name(
@@ -1683,15 +1779,15 @@ def test_titlecase_medial_van_is_compound_surname(
     [
         # HTML entities were previously left as literal tokens, so every one of these
         # real people was REJECTED (canonical_name=None). Decoding recovers them.
-        ("Martin G&#x00F6;tz", "Martin Götz"),          # hex numeric char ref -> ö
+        ("Martin G&#x00F6;tz", "Martin Götz"),  # hex numeric char ref -> ö
         ("Benjamin I&#x00F1;iguez", "Benjamin Iñiguez"),
-        ("G. Kope&#263;", "G. Kopeć"),                    # decimal numeric char ref -> ć
+        ("G. Kope&#263;", "G. Kopeć"),  # decimal numeric char ref -> ć
         ("A. Doboszy&#324;ska", "A. Doboszyńska"),
-        ("Mitch D&#39;Arcy", "Mitch D'Arcy"),            # named-ish decimal ref -> apostrophe
+        ("Mitch D&#39;Arcy", "Mitch D'Arcy"),  # named-ish decimal ref -> apostrophe
         ("Fr&#x00E9;d&#x00E9;ric Sirois", "Frédéric Sirois"),  # multiple entities in one name
         ("Jos&#x00E9; Rodr&#x00ED;guez", "José Rodríguez"),
-        ("Jos&eacute; Silva", "José Silva"),             # named entity -> é
-        ("Andr&eacute; M&uuml;ller", "André Müller"),    # two named entities
+        ("Jos&eacute; Silva", "José Silva"),  # named entity -> é
+        ("Andr&eacute; M&uuml;ller", "André Müller"),  # two named entities
     ],
 )
 def test_html_entities_decoded_and_name_recovered(
@@ -1733,10 +1829,7 @@ def test_html_entity_decoded_in_long_multi_token_string(
     # A long author-list blob with an embedded entity: decoding must still apply
     # (no "&#..." remnant, "Agnès" recovered). Whether such a blob is ultimately a
     # person is a separate over-acceptance concern, orthogonal to entity decoding.
-    raw = (
-        "Gilles Julien Diego Anne Agn&#xe8;s Jacques Anne Florent  "
-        "Blancho Branchereau Cantarovich Cesbron Chapelet D"
-    )
+    raw = "Gilles Julien Diego Anne Agn&#xe8;s Jacques Anne Florent  Blancho Branchereau Cantarovich Cesbron Chapelet D"
     result = normalizer.normalize_text(raw)
 
     assert result.canonical_name is not None
@@ -1761,11 +1854,11 @@ def test_name_without_entity_is_unaffected_by_decode(
         # Leading given/initials that collide with a credential/title acronym were
         # dropped, collapsing the name (surname left EMPTY: "MS Islam" -> given "Islam").
         # Now the leading token is kept and the surname is restored.
-        ("MS Islam", ("Islam",), "MS"),          # all-caps initials, kept all-caps (not the "Ms" honorific)
+        ("MS Islam", ("Islam",), "MS"),  # all-caps initials, kept all-caps (not the "Ms" honorific)
         ("MS Ali", ("Ali",), "MS"),
         ("M-S. Barisits", ("Barisits",), "M.-S."),
         ("M-S Barisits", ("Barisits",), "M.-S."),
-        ("Edd Gent", ("Gent",), "Edd"),           # "Edd" given, not the "EdD" degree
+        ("Edd Gent", ("Gent",), "Edd"),  # "Edd" given, not the "EdD" degree
         ("Edd A. Blekkan", ("Blekkan",), "Edd"),
         ("Ma. Lucila Lapar", ("Lapar",), "Ma."),  # "Ma." = María, not the "MA" degree
         ("Ma. Mercedes T. Rodrigo", ("Rodrigo",), "Ma."),
@@ -1814,8 +1907,8 @@ def test_titlecase_honorific_still_dropped(
         # Trailing credentials (and the dotted "M.A." degree convention) still drop.
         ("John Smith PhD", "John Smith", "PhD"),
         ("Robert Jones MD", "Robert Jones", "MD"),
-        ("Jane Doe EdD", "Jane Doe", "EdD"),      # mixed-case degree dropped...
-        ("Jane Doe EDD", "Jane Doe", "EDD"),      # ...and its all-caps form
+        ("Jane Doe EdD", "Jane Doe", "EdD"),  # mixed-case degree dropped...
+        ("Jane Doe EDD", "Jane Doe", "EDD"),  # ...and its all-caps form
     ],
 )
 def test_trailing_and_dotted_credentials_still_dropped(
@@ -1931,6 +2024,7 @@ def test_portuguese_agnomes_demote_to_suffix(
     assert junior.canonical_name is not None
     assert junior.canonical_name.normalized.suffix == "Jr."
 
+
 def test_agnome_kept_when_it_is_the_only_surname(
     normalizer: PersonNameNormalizationService,
 ) -> None:
@@ -1978,6 +2072,7 @@ def test_agnome_kept_when_it_is_the_only_surname(
     assert senior.canonical_name is not None
     assert senior.canonical_name.normalized.surname == "Senior"
 
+
 def test_agnome_demotion_keeps_particles_and_ignores_case(
     normalizer: PersonNameNormalizationService,
 ) -> None:
@@ -2005,6 +2100,7 @@ def test_agnome_demotion_keeps_particles_and_ignores_case(
         result = normalizer.normalize_text(raw)
         assert result.canonical_name is not None, raw
         assert result.canonical_name.normalized.surname == "Filho", raw
+
 
 def test_agnome_demotion_matches_on_the_structured_path(
     normalizer: PersonNameNormalizationService,
@@ -2120,7 +2216,7 @@ def test_suffix_senior_junior_hard_and_ambiguous_cases_characterization(
         "Editorial Office",
         "Proceedings of SPIE",
         "Journal of Healthcare Engineering",
-        "Institut Agama",                       # German/Indonesian "Institut" (no trailing e)
+        "Institut Agama",  # German/Indonesian "Institut" (no trailing e)
         "Universitat Politecnica de Valencia",  # Catalan "Universitat"
         "Faculty Senate",
         "Proteomics Initiative",
@@ -2153,13 +2249,13 @@ def test_null_literal_and_function_word_only_rejected(
     [
         # Real people whose surname collides with an org word must NOT be rejected.
         # These surnames are deliberately EXCLUDED from the org lexicon.
-        "Philip G. Board",       # Board (excluded: many real "* Board" people)
+        "Philip G. Board",  # Board (excluded: many real "* Board" people)
         "Johnathan Board",
-        "Frank Press",           # Press (William H. Press, Frank Press the geophysicist)
+        "Frank Press",  # Press (William H. Press, Frank Press the geophysicist)
         "William H. Press",
-        "Christophe Bureau",     # Bureau (common French surname)
+        "Christophe Bureau",  # Bureau (common French surname)
         "Martin Bureau",
-        "Gary Null",             # Null is a real surname; "null" rejects only whole-name
+        "Gary Null",  # Null is a real surname; "null" rejects only whole-name
         "Cynthia H. Null",
         "Linda M. Null",
         # Org word only as a SUBSTRING of a real name (whole-token matching keeps these).
@@ -2168,7 +2264,7 @@ def test_null_literal_and_function_word_only_rejected(
         "Luigi Canullo",
         "Amanullah",
         # Org word inside a hyphenated compound surname (not split into its own token).
-        "M. Huertas-Company",    # Marc Huertas-Company, astronomer
+        "M. Huertas-Company",  # Marc Huertas-Company, astronomer
         "J. G. Beebe-Center",
     ],
 )
@@ -2211,7 +2307,7 @@ def test_organization_hard_and_ambiguous_cases_characterization(
     for org_glued in (
         "Rachel Webster University of New South Wales",
         "L. D. Landau Institute for Theoretical Physics",  # org named after a person
-        "C. W. Chu Department of Physics",                 # real researcher + affiliation
+        "C. W. Chu Department of Physics",  # real researcher + affiliation
     ):
         assert normalizer.normalize_text(org_glued).outcome is PersonNameOutcome.NON_PERSON
 
@@ -2320,10 +2416,10 @@ def test_hyphenated_org_word_rejected(
         # Real hyphenated compound surnames whose second element is an org-ish word are
         # KEPT — those words (company/hospital/bureau/press/center/board) are deliberately
         # NOT in the hyphen-split set because they are genuine surnames.
-        "Victor Torres-Company",     # Catalan "Company"
+        "Victor Torres-Company",  # Catalan "Company"
         "Marc Huertas-Company",
         "Joan Antoni Gómez-Hospital",
-        "Geneviève Plu-Bureau",      # French "Bureau"
+        "Geneviève Plu-Bureau",  # French "Bureau"
         "Lubomira Broniarz-Press",
         "J. G. Beebe-Center",
     ],
@@ -2369,7 +2465,7 @@ def test_additional_org_section_nouns_rejected(
     [
         # Words deliberately EXCLUDED from the org lexicon because they are real
         # surnames — the people must be kept (verified against the corpus).
-        "Anne Cathrine Staff",   # "Staff" is a real surname
+        "Anne Cathrine Staff",  # "Staff" is a real surname
         "Jeremy Staff",
         "Ilene Staff",
     ],
@@ -2389,17 +2485,17 @@ def test_excluded_org_words_that_are_real_surnames_kept(
     [
         # Real high-occurrence organization strings from the corpus (occ in comments) —
         # every one was previously ACCEPTED as a person; all now rejected.
-        "Proceedings of SPIE",                          # 2645
-        "Proteomics Initiative",                        # 1747
-        "journals Iosr",                                # 1353
-        "Journal of Healthcare Engineering",            # 973
-        "Faculty Senate",                               # 955
-        "Editorial Board",                              # 721
-        "Institut Agama",                               # 650
+        "Proceedings of SPIE",  # 2645
+        "Proteomics Initiative",  # 1747
+        "journals Iosr",  # 1353
+        "Journal of Healthcare Engineering",  # 973
+        "Faculty Senate",  # 955
+        "Editorial Board",  # 721
+        "Institut Agama",  # 650
         "Editors Archiv für katholisches Kirchenrech",  # 3843
-        "Ludwig-Maximilians-Universität München",       # 505
-        "Kapteyn Astronomical Institute",               # 239
-        "Robert Koch-Institut",                         # 1693
+        "Ludwig-Maximilians-Universität München",  # 505
+        "Kapteyn Astronomical Institute",  # 239
+        "Robert Koch-Institut",  # 1693
     ],
 )
 def test_real_corpus_organization_strings_rejected(
@@ -2418,19 +2514,19 @@ def test_real_corpus_organization_strings_rejected(
         # Non-English org-only nouns (FR/ES/IT/PT/NL/DE). The English-centric org
         # lexicon let these through as "persons"; all are real corpus strings (occ in
         # comments) previously ACCEPTED, now rejected. Sized at ~30k names / 103k occ.
-        "Ministerio de Educación",                    # 419  ES
-        "ministère du Travail",                       # 330  FR
+        "Ministerio de Educación",  # 419  ES
+        "ministère du Travail",  # 330  FR
         "Sächsische Akademie der Wissenschaften zu Leipzig",  # 13  DE
-        "Société des Auxiliaires des Missions",       # 12  FR
-        "Gesellschaft der Musikfreunde in Wien",      # 10  DE
+        "Société des Auxiliaires des Missions",  # 12  FR
+        "Gesellschaft der Musikfreunde in Wien",  # 10  DE
         "Sociedade Brasileira de Comportamento Motor",  # 5  PT
-        "Universidad Autonoma Metropolitana",         # 1  ES
-        "Istituto di Cosmogeofisica",                 # 1  IT
-        "Freudenthal Instituut",                      # 3  NL
-        "Stichting Nedeco",                           # 1  NL
-        "Federación Internacional Farmacéutica",      # 1  ES
-        "Ministerie van Onderwijs",                   # 1  NL
-        "Associazione Euratom-Enea",                  # 1  IT
+        "Universidad Autonoma Metropolitana",  # 1  ES
+        "Istituto di Cosmogeofisica",  # 1  IT
+        "Freudenthal Instituut",  # 3  NL
+        "Stichting Nedeco",  # 1  NL
+        "Federación Internacional Farmacéutica",  # 1  ES
+        "Ministerie van Onderwijs",  # 1  NL
+        "Associazione Euratom-Enea",  # 1  IT
     ],
 )
 def test_non_english_org_strings_rejected(
@@ -2451,7 +2547,7 @@ def test_non_english_org_strings_rejected(
         "Bundesministerium für Bildung und Forschung",  # compound noun caught only via "für"
         "Zentrum für Orthopädie",
         "Institut für Physik",
-        "Voor Numismatiek",                             # NL, leading "voor"
+        "Voor Numismatiek",  # NL, leading "voor"
         "Vereniging voor Natuurwetenschappen",
     ],
 )
@@ -2472,16 +2568,16 @@ def test_org_preposition_nonfinal_rejected(
         # "Für" (Hungarian) / "Voor" (Estonian/Dutch) are genuine surnames and must be kept.
         # The positional rule (org only when NOT final) preserves these; a bare-token
         # reject would have lost ~72 "Voor" + ~104 "Für" real people from the corpus.
-        "Gabriella Für",         # Hungarian surname Für
+        "Gabriella Für",  # Hungarian surname Für
         "Csilla Sepsey Für",
-        "Michael J. Voor",       # highest-occ real "Voor" author
+        "Michael J. Voor",  # highest-occ real "Voor" author
         "Tiia Voor",
         "Ivo Voor",
         # Contamination guards: "para"/"pour"/"und" are deliberately NOT org markers —
         # they collide with real givens and noble compound surnames.
-        "Per Andersson",         # "Per" is a Scandinavian given name, not "per"
-        "Para Chandrasoma",      # leading "Para" is a real given name
-        "O. von Bohlen und Halbach",   # noble compound surname with "und"
+        "Per Andersson",  # "Per" is a Scandinavian given name, not "per"
+        "Para Chandrasoma",  # leading "Para" is a real given name
+        "O. von Bohlen und Halbach",  # noble compound surname with "und"
         "Marco von Strauss und Torney",
     ],
 )
@@ -2500,7 +2596,7 @@ def test_org_preposition_final_and_guards_kept(
     [
         # Real people from the corpus whose compound surname ends in an org-ish word —
         # these are exactly why company/hospital/bureau/press/center are NOT hyphen-split.
-        "Marc Huertas-Company",       # astronomer
+        "Marc Huertas-Company",  # astronomer
         "Victor Torres-Company",
         "Jaime Company-Quiroga",
         "Joan Antoni Gómez-Hospital",

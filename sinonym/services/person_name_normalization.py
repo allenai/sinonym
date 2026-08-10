@@ -537,16 +537,14 @@ def reviewed_closed_comma_credential_tail_head(
         not tail_tokens
         or not any(token in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS for token in tail_tokens)
         or not all(
-            token in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS or _is_explicit_credential_surface(token)
-            for token in tail_tokens
+            token in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS or _is_explicit_credential_surface(token) for token in tail_tokens
         )
     ):
         return None
 
     head_tokens = head.split()
     while head_tokens and (
-        head_tokens[-1] in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS
-        or _is_explicit_credential_surface(head_tokens[-1])
+        head_tokens[-1] in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS or _is_explicit_credential_surface(head_tokens[-1])
     ):
         head_tokens.pop()
     if any(token in _REVIEWED_CLOSED_COMMA_HEAD_BLOCKERS for token in head_tokens):
@@ -589,7 +587,10 @@ def reviewed_source_cleanup_pattern(  # noqa: PLR0911 - one return per closed re
 class PersonNameNormalizationService:
     """Normalize raw or structured personal names without Chinese routing."""
 
-    def normalize_text(self, raw_name: str | None) -> PersonNameNormalizationResult:  # noqa: C901, PLR0911, PLR0912
+    def normalize_text(  # noqa: C901, PLR0911, PLR0912, PLR0915
+        self,
+        raw_name: str | None,
+    ) -> PersonNameNormalizationResult:
         """Normalize one raw name string into semantic canonical components."""
         if not isinstance(raw_name, str):
             return self._invalid("name must be a string")
@@ -620,6 +621,21 @@ class PersonNameNormalizationService:
         if leading_markers:
             dropped.append(_DroppedToken(_Token(leading_markers, "", 0), DropReason.AFFILIATION))
         surface = self._collapse_parenthetical_duplicate_surface(surface)
+
+        retained_head = reviewed_closed_comma_credential_tail_head(surface)
+        if retained_head is not None:
+            retained_tokens, credential_drops = self._reviewed_credential_tail_tokens(
+                surface,
+                retained_head,
+                source_role="",
+            )
+            dropped.extend(credential_drops)
+            if not retained_tokens:
+                return self._invalid("no personal-name tokens remain", dropped)
+            if leading_markers:
+                first = retained_tokens[0]
+                retained_tokens[0] = replace(first, source_text=f"{leading_markers}{first.text}")
+            return self._normalize_regular_name(source_text, retained_tokens, "", None, dropped)
 
         segment_matches = list(re.finditer(r"[^,]+", surface))
         segments = [self._tokens(match.group(), "", match.start()) for match in segment_matches]
@@ -701,7 +717,7 @@ class PersonNameNormalizationService:
         source = self._components(given, [], surname, [])
         return self._person(raw_name, source, given, [], surname, "", [])
 
-    def normalize_components(  # noqa: C901, PLR0911, PLR0912
+    def normalize_components(  # noqa: C901, PLR0911, PLR0912, PLR0915
         self,
         *,
         first_name: str | None = None,
@@ -740,8 +756,10 @@ class PersonNameNormalizationService:
             return self._non_person(non_person_reason)
 
         position = 0
+        role_offsets: dict[str, int] = {}
         source_by_role: dict[str, list[_Token]] = {}
         for role in ("given", "middle", "surname", "suffix"):
+            role_offsets[role] = position
             source_by_role[role] = self._tokens(surfaces[role], role, position)
             if leading_markers_by_role[role] and source_by_role[role]:
                 first = source_by_role[role][0]
@@ -755,7 +773,6 @@ class PersonNameNormalizationService:
             source_by_role["middle"],
             source_by_role["surname"],
             source_by_role["suffix"],
-            order=self._structured_source_order(source_by_role),
         )
 
         dropped = [
@@ -766,22 +783,36 @@ class PersonNameNormalizationService:
             for role, markers in leading_markers_by_role.items()
             if markers and source_by_role[role]
         ]
+        working_surname = source_by_role["surname"]
+        retained_last_source = reviewed_closed_comma_credential_tail_head(
+            stripped_values["surname"],
+            stripped_values["suffix"],
+        )
+        retained_last = self._normalize_surface(retained_last_source) if retained_last_source is not None else None
+        if retained_last is not None:
+            working_surname, credential_drops = self._reviewed_credential_tail_tokens(
+                surfaces["surname"],
+                retained_last,
+                source_role="surname",
+                offset=role_offsets["surname"],
+            )
+            dropped.extend(credential_drops)
         middle_tokens = self._strip_structured_middle_surname_artifact(
             source_by_role["middle"],
-            source_by_role["surname"],
+            working_surname,
             dropped,
         )
         middle_tokens, structured_middle_suffix = self._strip_reviewed_structured_middle(
             middle_tokens,
             middle_surface=surfaces["middle"],
-            has_name_endpoints=bool(source_by_role["given"] and source_by_role["surname"]),
+            has_name_endpoints=bool(source_by_role["given"] and working_surname),
             has_explicit_suffix=bool(source_by_role["suffix"]),
             dropped=dropped,
         )
         name_tokens = [
             *source_by_role["given"],
             *middle_tokens,
-            *source_by_role["surname"],
+            *working_surname,
         ]
         name_tokens = self._repair_leading_marker_initial(name_tokens, dropped)
         name_tokens = self._join_separated_compound_initials(name_tokens)
@@ -819,10 +850,13 @@ class PersonNameNormalizationService:
         if invalid_reason is not None:
             return self._invalid(invalid_reason, dropped)
 
-        cleaned_by_role = {
-            role: [token for token in name_tokens if token.source_role == role] for role in ("given", "middle", "surname")
-        }
-        given, middle, surname = self._repair_structured_roles(cleaned_by_role)
+        if retained_last == "":
+            given, middle, surname = self._infer_regular_roles(name_tokens)
+        else:
+            cleaned_by_role = {
+                role: [token for token in name_tokens if token.source_role == role] for role in ("given", "middle", "surname")
+            }
+            given, middle, surname = self._repair_structured_roles(cleaned_by_role)
         given, middle, surname = self._apply_unbound_initial_policy(given, middle, surname)
         if not given and not middle and not surname:
             return self._invalid("no personal-name tokens remain", dropped)
@@ -862,16 +896,16 @@ class PersonNameNormalizationService:
         tokens = self._split_fused_initial_sequence_surname(tokens)
         source_given, source_middle, source_surname = self._infer_regular_roles(tokens)
         assigned = [*source_given, *source_middle, *source_surname]
-        assigned_by_position = {token.position: token for token in assigned}
-        prefix_source = self._regular_prefix_source(
-            original_tokens,
-            assigned_by_position,
-            tokens[0],
-            dropped,
-        )
         credential_source = [
             replace(item.token, source_role="suffix") for item in dropped if item.reason is DropReason.CREDENTIAL
         ]
+        represented_positions = {token.position for token in [*assigned, *credential_source]}
+        prefix_source = self._regular_prefix_source(
+            original_tokens,
+            represented_positions,
+            tokens[0],
+            dropped,
+        )
         source_suffix = [*([suffix_token] if suffix_token is not None else []), *credential_source]
         source = self._components(
             [*prefix_source, *source_given],
@@ -890,14 +924,14 @@ class PersonNameNormalizationService:
     @staticmethod
     def _regular_prefix_source(
         original_tokens: list[_Token],
-        assigned_by_position: dict[int, _Token],
+        represented_positions: set[int],
         first_survivor: _Token,
         dropped: list[_DroppedToken],
     ) -> list[_Token]:
-        """Rebuild raw prefix lineage without duplicating an attached-title remainder."""
+        """Rebuild raw prefix lineage without duplicating represented occurrences."""
         prefix: list[_Token] = []
         for token in original_tokens:
-            if token.position >= first_survivor.position or token.position in assigned_by_position:
+            if token.position >= first_survivor.position or token.position in represented_positions:
                 continue
             if token.position + len(token.text) <= first_survivor.position:
                 prefix.append(replace(token, source_role="given"))
@@ -959,7 +993,6 @@ class PersonNameNormalizationService:
             middle,
             surname,
             source_suffix,
-            order=tuple(["surname"] * len(surname) + ["given"] + ["middle"] * len(middle) + ["suffix"] * len(source_suffix)),
         )
         given, middle, surname = self._apply_unbound_initial_policy(given, middle, surname)
         return self._person(source_text, source, given, middle, surname, suffix, dropped)
@@ -1069,6 +1102,21 @@ class PersonNameNormalizationService:
     @staticmethod
     def _tokens(value: str, source_role: str, offset: int) -> list[_Token]:
         return [_Token(match.group(), source_role, offset + match.start()) for match in _TOKEN_RE.finditer(value.strip())]
+
+    @staticmethod
+    def _reviewed_credential_tail_tokens(
+        value: str,
+        retained_head: str,
+        *,
+        source_role: str,
+        offset: int = 0,
+    ) -> tuple[list[_Token], list[_DroppedToken]]:
+        """Split one reviewed credential tail into retained and dropped tokens."""
+        tokens = [_Token(match.group(), source_role, offset + match.start()) for match in _COMMA_TAIL_TOKEN_RE.finditer(value)]
+        retained_end = offset + len(retained_head)
+        retained = [token for token in tokens if token.position < retained_end]
+        dropped = [_DroppedToken(token, DropReason.CREDENTIAL) for token in tokens if token.position >= retained_end]
+        return retained, dropped
 
     @staticmethod
     def _compact_key(token: str) -> str:
@@ -1519,9 +1567,7 @@ class PersonNameNormalizationService:
         name tokens, not initials merely because they contain one code point.
         """
         return bool(
-            len(character) == 1
-            and character.isalpha()
-            and character.lower() != character.upper(),
+            len(character) == 1 and character.isalpha() and character.lower() != character.upper(),
         )
 
     @staticmethod
@@ -1545,10 +1591,7 @@ class PersonNameNormalizationService:
         dotted = _INITIAL_RE.fullmatch(cleaned)
         return bool(
             PersonNameNormalizationService._is_initial_letter(cleaned)
-            or (
-                dotted is not None
-                and PersonNameNormalizationService._is_initial_letter(dotted.group(1))
-            ),
+            or (dotted is not None and PersonNameNormalizationService._is_initial_letter(dotted.group(1))),
         )
 
     def _expand_packed_initials(self, token: _Token, role: str) -> list[_Token]:
@@ -1746,11 +1789,7 @@ class PersonNameNormalizationService:
             index for index, token in enumerate(tokens[1:-1], start=1) if self._particle_key(token.text) in _FAMILY_PARTICLES
         ]:
             surname_start = particle_positions[0]
-        elif (
-            len(tokens) == _FOUR_COMPONENTS
-            and self._is_initial(tokens[1].text)
-            and not self._is_initial(tokens[2].text)
-        ):
+        elif len(tokens) == _FOUR_COMPONENTS and self._is_initial(tokens[1].text) and not self._is_initial(tokens[2].text):
             surname_start = 2
         elif initial_surname_start := self._two_token_surname_after_initial_run(tokens):
             surname_start = initial_surname_start
@@ -2073,32 +2112,36 @@ class PersonNameNormalizationService:
         middle: list[_Token],
         surname: list[_Token],
         suffix: list[_Token],
-        *,
-        order: tuple[str, ...] | None = None,
     ) -> NameComponents:
-        if order is None:
-            order = tuple(
-                ["given"] * len(given) + ["middle"] * len(middle) + ["surname"] * len(surname) + ["suffix"] * len(suffix),
+        """Build source components with display order derived from token positions."""
+        by_role = {
+            "given": sorted(given, key=lambda token: token.position),
+            "middle": sorted(middle, key=lambda token: token.position),
+            "surname": sorted(surname, key=lambda token: token.position),
+            "suffix": sorted(suffix, key=lambda token: token.position),
+        }
+        order = tuple(
+            role
+            for role, _token in sorted(
+                ((role, token) for role, tokens in by_role.items() for token in tokens),
+                key=lambda item: item[1].position,
             )
+        )
 
         def source_text(token: _Token) -> str:
             return token.source_text or token.text
 
         return NameComponents(
-            given_name=" ".join(source_text(token) for token in given),
-            middle_name=" ".join(source_text(token) for token in middle),
-            surname=" ".join(source_text(token) for token in surname),
-            suffix=" ".join(source_text(token) for token in suffix),
-            given_tokens=tuple(source_text(token) for token in given),
-            middle_tokens=tuple(source_text(token) for token in middle),
-            surname_tokens=tuple(source_text(token) for token in surname),
-            suffix_tokens=tuple(source_text(token) for token in suffix),
+            given_name=" ".join(source_text(token) for token in by_role["given"]),
+            middle_name=" ".join(source_text(token) for token in by_role["middle"]),
+            surname=" ".join(source_text(token) for token in by_role["surname"]),
+            suffix=" ".join(source_text(token) for token in by_role["suffix"]),
+            given_tokens=tuple(source_text(token) for token in by_role["given"]),
+            middle_tokens=tuple(source_text(token) for token in by_role["middle"]),
+            surname_tokens=tuple(source_text(token) for token in by_role["surname"]),
+            suffix_tokens=tuple(source_text(token) for token in by_role["suffix"]),
             order=order,
         )
-
-    @staticmethod
-    def _structured_source_order(by_role: dict[str, list[_Token]]) -> tuple[str, ...]:
-        return tuple(role for role in ("given", "middle", "surname", "suffix") for _token in by_role[role])
 
     def _looks_like_two_complete_names(self, left: list[_Token], right: list[_Token]) -> bool:
         if len(left) < _TWO_COMPONENTS or len(right) < _TWO_COMPONENTS:

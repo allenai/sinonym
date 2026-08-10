@@ -20,7 +20,7 @@ from sinonym.chinese_names_data import COMPOUND_VARIANTS
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
-    from sinonym.services.normalization import CompoundMetadata
+    from sinonym.services.normalization import CompoundMetadata, SpacedCompoundSpan
 
 
 class CompoundDetector:
@@ -37,15 +37,23 @@ class CompoundDetector:
         self._config = config
 
     def generate_compound_metadata(self, roman_tokens: tuple[str, ...], data_context=None) -> dict[str, CompoundMetadata]:
-        """
-        Generate compound surname metadata for all tokens (centralized detection).
+        """Generate token-keyed compound metadata for compatibility callers."""
+        compound_metadata, _spaced_spans = self.generate_compound_analysis(roman_tokens, data_context)
+        return compound_metadata
+
+    def generate_compound_analysis(
+        self,
+        roman_tokens: tuple[str, ...],
+        data_context=None,
+    ) -> tuple[dict[str, CompoundMetadata], tuple[SpacedCompoundSpan, ...]]:
+        """Generate token metadata and occurrence-level spaced compound spans.
 
         Args:
             roman_tokens: The roman tokens to analyze
             data_context: Optional data context for validation
 
         Returns:
-            Dictionary mapping each token to its compound metadata
+            Token-keyed display metadata and exact spaced-compound occurrences.
         """
         # Import here to avoid circular imports
 
@@ -56,10 +64,13 @@ class CompoundDetector:
             metadata = self._detect_compound_for_token(token, data_context)
             compound_metadata[token] = metadata
 
-        # Second, detect multi-token compounds
-        self._detect_multi_token_compounds(roman_tokens, compound_metadata, data_context)
+        # Second, detect multi-token compounds.  Detection finishes before the
+        # token-keyed display summary is updated so one occurrence cannot hide
+        # a later repeated occurrence with the same token text.
+        spaced_spans = self._detect_multi_token_compounds(roman_tokens, compound_metadata, data_context)
+        self._attach_spaced_compound_summaries(roman_tokens, compound_metadata, spaced_spans)
 
-        return compound_metadata
+        return compound_metadata, spaced_spans
 
     def _detect_compound_for_token(self, token: str, data_context=None) -> CompoundMetadata:
         """
@@ -98,7 +109,11 @@ class CompoundDetector:
                 )
 
         # 3. Check if token is already a compound in standard form
-        if data_context and hasattr(data_context, "compound_surnames_normalized") and token_lower in data_context.compound_surnames_normalized:
+        if (
+            data_context
+            and hasattr(data_context, "compound_surnames_normalized")
+            and token_lower in data_context.compound_surnames_normalized
+        ):
             return CompoundMetadata(
                 is_compound=True,
                 format_type="spaced",
@@ -131,24 +146,25 @@ class CompoundDetector:
             return "camelCase"
         return "compact"
 
-
     def _detect_multi_token_compounds(
         self,
         roman_tokens: tuple[str, ...],
         compound_metadata: dict[str, CompoundMetadata],
         data_context=None,
-    ) -> None:
+    ) -> tuple[SpacedCompoundSpan, ...]:
         """
         Detect multi-token compound surnames (like "au yeung").
 
         Args:
             roman_tokens: The roman tokens to analyze
-            compound_metadata: The metadata dict to update (modified in place)
+            compound_metadata: Single-token metadata used to avoid overlapping
+                compact or hyphenated compounds.
             data_context: Optional data context for validation
         """
         # Import here to avoid circular imports
-        from sinonym.services.normalization import CompoundMetadata
+        from sinonym.services.normalization import SpacedCompoundSpan
 
+        spans: list[SpacedCompoundSpan] = []
         i = 0
         while i < len(roman_tokens) - 1:
             token1 = roman_tokens[i]
@@ -177,16 +193,42 @@ class CompoundDetector:
                 target_compound = pair_lower
 
             if is_compound_pair:
-                compound_metadata[token1] = CompoundMetadata(
-                    is_compound=True,
-                    format_type="spaced",
-                    compound_target=target_compound,
-                )
-                compound_metadata[token2] = CompoundMetadata(
-                    is_compound=True,
-                    format_type="spaced",
-                    compound_target=target_compound,
+                spans.append(
+                    SpacedCompoundSpan(
+                        start=i,
+                        end=i + 2,
+                        compound_target=target_compound,
+                    ),
                 )
                 i += 2  # Skip the next token as it's part of this compound
             else:
                 i += 1
+
+        return tuple(spans)
+
+    @staticmethod
+    def _attach_spaced_compound_summaries(
+        roman_tokens: tuple[str, ...],
+        compound_metadata: dict[str, CompoundMetadata],
+        spans: tuple[SpacedCompoundSpan, ...],
+    ) -> None:
+        """Attach formatting summaries while retaining exact occurrence spans."""
+        if not spans:
+            return
+
+        # Import here to avoid the normalization/compound-detector import cycle.
+        from sinonym.services.normalization import CompoundMetadata
+
+        target_by_token: dict[str, str] = {}
+        for span in spans:
+            for token in set(roman_tokens[span.start : span.end]):
+                target_by_token.setdefault(token, span.compound_target)
+
+        for token, target in target_by_token.items():
+            # The token-keyed value is only a display summary. Positional
+            # consumers use the separately returned occurrence tuple.
+            compound_metadata[token] = CompoundMetadata(
+                is_compound=True,
+                format_type="spaced",
+                compound_target=target,
+            )

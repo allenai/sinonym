@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from sinonym.coretypes import NameComponents
+from sinonym.coretypes import CanonicalName, NameComponents
 from sinonym.coretypes.routing_resolution import EastAsianEvidenceReason, EvidenceFailure, ResolutionReason
 from sinonym.services import east_asian_name_order
 from sinonym.services.east_asian_name_order import (
@@ -966,6 +966,64 @@ def test_japanese_native_uses_classifier_then_component_boundary() -> None:
     assert decision.source_order == ("surname", "given")
 
 
+@pytest.mark.parametrize("selector", ["\ufe00", "\ufe0f", "\U000e0100", "\U000e01ef"])
+def test_japanese_native_variation_selectors_are_lookup_only(selector: str) -> None:
+    classifier_inputs: list[str] = []
+    raw_name = f"\u5c71\u7530{selector}\u592a\u90ce"
+
+    decision = EastAsianNameOrderService().infer_resolution(
+        raw_name,
+        japanese_probability=lambda value: classifier_inputs.append(value) or 1.0,
+    )
+
+    assert classifier_inputs == ["\u5c71\u7530\u592a\u90ce"]
+    assert isinstance(decision, EastAsianNameOrderDecision)
+    assert decision.first_name == "\u592a\u90ce"
+    assert decision.last_name == f"\u5c71\u7530{selector}"
+    assert decision.source_order == ("surname", "given")
+
+
+@pytest.mark.parametrize("selector", ["\ufe00", "\ufe0f", "\U000e0100", "\U000e01ef"])
+def test_variation_selector_japanese_matches_base_classification(
+    detector: ChineseNameDetector,
+    selector: str,
+) -> None:
+    raw_name = f"\u5c71\u7530{selector}\u592a\u90ce"
+    base = detector.normalize_name("\u5c71\u7530\u592a\u90ce")
+    variant = detector.normalize_name(raw_name)
+
+    assert not base.success
+    assert variant.success is base.success
+    assert variant.error_message == base.error_message == "Japanese name detected by ML classifier"
+    assert variant.canonical_name is not None
+    assert variant.canonical_name.source_text == raw_name
+    assert variant.canonical_name.text == f"\u592a\u90ce \u5c71\u7530{selector}"
+    assert variant.canonical_name.normalized.given_name == "\u592a\u90ce"
+    assert variant.canonical_name.normalized.surname == f"\u5c71\u7530{selector}"
+
+
+@pytest.mark.parametrize("selector", ["\ufe00", "\ufe0f", "\U000e0100", "\U000e01ef"])
+@pytest.mark.parametrize("base_name", ["\u738b\u4f1f", "\u738b\u5c0f\u660e", "\u6b27\u9633\u4f1f"])
+def test_variation_selector_chinese_matches_base_semantics(
+    detector: ChineseNameDetector,
+    selector: str,
+    base_name: str,
+) -> None:
+    raw_name = f"{base_name[0]}{selector}{base_name[1:]}"
+    base = detector.normalize_name(base_name)
+    variant = detector.normalize_name(raw_name)
+
+    assert base.success
+    assert variant.success
+    assert variant.result == base.result
+    assert variant.parsed == base.parsed
+    assert variant.parsed_original_order == base.parsed_original_order
+    assert variant.canonical_name is not None
+    assert base.canonical_name is not None
+    assert variant.canonical_name.source_text == raw_name
+    assert variant.canonical_name.normalized == base.canonical_name.normalized
+
+
 def test_japanese_native_preserves_when_classifier_abstains() -> None:
     decision = EastAsianNameOrderService().infer_resolution(
         "中田英寿",
@@ -999,6 +1057,104 @@ def test_korean_routes_strict_shapes_and_preserves_ambiguous_romanization(
     assert native is not None
     assert native.text == "민수 김"
     assert native.source.order == ("surname", "given")
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "clean_name"),
+    [
+        ("Kim Min\u2010Jun", "Kim Min-Jun"),
+        ("Dr. Kim Min-Jun", "Kim Min-Jun"),
+        ("Kim Min-Jun, MD", "Kim Min-Jun"),
+        ("Nguy\u1ec5n V\u0103n An MD", "Nguy\u1ec5n V\u0103n An"),
+    ],
+)
+def test_east_asian_routing_uses_cleaned_person_tokens(
+    detector: ChineseNameDetector,
+    raw_name: str,
+    clean_name: str,
+) -> None:
+    expected = detector.normalize_person_name(clean_name)
+    actual = detector.normalize_person_name(raw_name)
+    scalar = detector.routing_scalar_resolution(raw_name)
+
+    assert expected is not None
+    assert actual is not None
+    assert actual.source_text == raw_name
+    assert actual.text == expected.text
+    assert actual.normalized == expected.normalized
+    assert isinstance(scalar, CanonicalName)
+    assert scalar.text == expected.text
+    assert scalar.normalized == expected.normalized
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text", "expected_source_order"),
+    [
+        ("Dr. Kim Min-Jun", "Min-Jun Kim", ("given", "surname", "given")),
+        ("MD Kim Min-Jun", "Min-Jun Kim", ("suffix", "surname", "given")),
+        ("Dr. Kim Min-Jun IV", "Min-Jun Kim IV", ("given", "surname", "given", "suffix")),
+    ],
+)
+def test_routed_source_relabels_only_cleaned_name_occurrences(
+    detector: ChineseNameDetector,
+    raw_name: str,
+    expected_text: str,
+    expected_source_order: tuple[str, ...],
+) -> None:
+    canonical = detector.normalize_person_name(raw_name)
+
+    assert canonical is not None
+    assert canonical.source_text == raw_name
+    assert canonical.text == expected_text
+    assert detector._ordered_component_tokens(canonical.source) == raw_name.split()  # noqa: SLF001
+    assert canonical.source.order == expected_source_order
+    assert canonical.source.surname_tokens == ("Kim",)
+    assert canonical.source.given_tokens[-1] == "Min-Jun"
+
+
+def test_routed_source_splits_compact_native_occurrence_without_dropping_title(
+    detector: ChineseNameDetector,
+) -> None:
+    raw_name = "Dr. \u5c71\u7530\u592a\u90ce"
+
+    canonical = detector.normalize_person_name(raw_name)
+
+    assert canonical is not None
+    assert canonical.source_text == raw_name
+    assert canonical.text == "\u592a\u90ce \u5c71\u7530"
+    assert detector._ordered_component_tokens(canonical.source) == ["Dr.", "\u5c71\u7530", "\u592a\u90ce"]  # noqa: SLF001
+    assert canonical.source.order == ("given", "surname", "given")
+    assert canonical.source.given_tokens == ("Dr.", "\u592a\u90ce")
+    assert canonical.source.surname_tokens == ("\u5c71\u7530",)
+
+
+def test_east_asian_routing_preserves_normalized_and_source_suffixes(
+    detector: ChineseNameDetector,
+) -> None:
+    raw = detector.normalize_person_name("Kim Min-Jun IV")
+    scalar = detector.routing_scalar_resolution("Kim Min-Jun IV")
+    structured = detector.normalize_person_name_components(
+        first_name="Kim",
+        last_name="Min-Jun",
+        suffix="IV",
+    )
+
+    assert raw is not None
+    assert raw.text == "Min-Jun Kim IV"
+    assert (raw.normalized.given_name, raw.normalized.surname, raw.normalized.suffix) == (
+        "Min-Jun",
+        "Kim",
+        "IV",
+    )
+    assert raw.source.suffix == "IV"
+    assert raw.source.suffix_tokens == ("IV",)
+    assert raw.source.order == ("surname", "given", "suffix")
+    assert isinstance(scalar, CanonicalName)
+    assert scalar == raw
+    assert structured is not None
+    assert structured.text == raw.text
+    assert structured.normalized == raw.normalized
+    assert structured.source.order == ("given", "surname", "suffix")
 
 
 def test_vietnamese_requires_unicode_evidence_and_preserves_given_span(

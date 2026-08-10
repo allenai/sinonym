@@ -112,6 +112,21 @@ def test_low_gap_majority_votes_are_not_dropped(detector):
     assert [result.result for result in batch.results] == ["Wen Bo", "Min Hao", "Wen Jun", "Han Yu"]
 
 
+def test_duplicate_compound_token_uses_full_source_slice_for_batch_order(detector):
+    """A repeated endpoint token must not turn a given-first compound vote around."""
+    names = ["Au Au Yeung", "Ming Au Yeung", "Li Jin"]
+
+    batch = detector.analyze_name_batch(names)
+
+    assert batch.format_pattern.dominant_format == NameFormat.GIVEN_FIRST
+    assert batch.format_pattern.surname_first_count == 1
+    assert batch.format_pattern.given_first_count == 2
+    assert batch.format_pattern.total_count == 3
+    assert batch.format_pattern.threshold_met
+    assert [result.result for result in batch.results] == ["Au Au Yeung", "Ming Au Yeung", "Li Jin"]
+    assert batch.results[0].parsed_original_order.order == ["given", "surname"]
+
+
 def test_small_batch_fallback(detector):
     """Test that small batches fall back correctly."""
     names = ["Mai Li", "Li Wang"]

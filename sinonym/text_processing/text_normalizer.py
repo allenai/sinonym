@@ -25,6 +25,18 @@ from sinonym.patterns import (
 )
 
 
+def is_name_variation_selector(character: str) -> bool:
+    """Return whether a character is a standardized glyph variation selector."""
+    return "\ufe00" <= character <= "\ufe0f" or "\U000e0100" <= character <= "\U000e01ef"
+
+
+def strip_name_variation_selectors(text: str) -> str:
+    """Remove glyph selectors from semantic name lookup text."""
+    if text.isascii():
+        return text
+    return "".join(character for character in text if not is_name_variation_selector(character))
+
+
 class TextNormalizer:
     """Pure text normalization utilities for Chinese name processing."""
 
@@ -162,5 +174,5 @@ class TextNormalizer:
     _COMPATIBILITY_IDEOGRAPH_FOLDS = str.maketrans(COMPATIBILITY_IDEOGRAPH_FOLDS)
 
     def fold_compatibility_ideographs(self, text: str) -> str:
-        """Fold compatibility ideographs to their unified forms for classification input."""
-        return text.translate(self._COMPATIBILITY_IDEOGRAPH_FOLDS)
+        """Project Han classification text to unified, selector-free lookup forms."""
+        return strip_name_variation_selectors(text).translate(self._COMPATIBILITY_IDEOGRAPH_FOLDS)

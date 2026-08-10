@@ -1091,7 +1091,9 @@ class ChineseNameDetector:
             return ParseResult.failure(f"needs at least {self._config.min_tokens_required} Roman tokens")
 
         # Check if this is an all-Chinese input first
-        is_all_chinese = not raw_name.isascii() and self._normalizer._text_preprocessor.is_all_chinese_input(raw_name)
+        is_all_chinese = not normalized_input.cleaned.isascii() and self._normalizer._text_preprocessor.is_all_chinese_input(
+            normalized_input.cleaned,
+        )
 
         # Exact alternating Roman/Han alignment is stronger evidence than the
         # Roman-only ethnicity gate, especially for polyphonic Han surnames.
@@ -1164,6 +1166,7 @@ class ChineseNameDetector:
                 tokens,
                 normalized_input.norm_map,
                 normalized_input.compound_metadata,
+                normalized_input.spaced_compound_spans,
             )
 
             if (
@@ -1202,6 +1205,7 @@ class ChineseNameDetector:
                     original_tokens,
                     normalized_input.norm_map,
                     normalized_input.compound_metadata,
+                    normalized_input.spaced_compound_spans,
                 )
                 if direct_parse is not None:
                     surname_tokens, given_tokens, _original_compound_surname = direct_parse
@@ -1216,10 +1220,15 @@ class ChineseNameDetector:
             if best_candidate is None:
                 for order in (normalized_input.roman_tokens, normalized_input.roman_tokens[::-1]):
                     order_tokens = list(order)
+                    spaced_compound_spans = normalized_input.spaced_compound_spans
+                    if order_tokens != original_tokens:
+                        token_count = len(order_tokens)
+                        spaced_compound_spans = tuple(span.reversed(token_count) for span in spaced_compound_spans)
                     parse_result = self._parsing_service.parse_name_order_tokens(
                         order_tokens,
                         normalized_input.norm_map,
                         normalized_input.compound_metadata,
+                        spaced_compound_spans,
                     )
                     if parse_result is None:
                         continue
@@ -1389,6 +1398,22 @@ class ChineseNameDetector:
         }
         return [next(queues[role]) for role in components.order]
 
+    def _routing_name_tokens(self, baseline: CanonicalName) -> tuple[str, ...]:
+        """Return cleaned baseline tokens that carry personal-name semantics."""
+        components = baseline.normalized
+        ordered = self._ordered_component_tokens(components)
+        return tuple(token for role, token in zip(components.order, ordered, strict=True) if role != "suffix")
+
+    def _east_asian_routing_surface(self, raw_name: str, baseline: CanonicalName) -> str:
+        """Return cleaned routing text while retaining comma-order authority."""
+        if "," in raw_name:
+            source_name_order = tuple(role for role in baseline.source.order if role != "suffix")
+            if source_name_order and source_name_order[0] == "surname" and "given" in source_name_order:
+                normalized = baseline.normalized
+                given_span = " ".join(part for part in (normalized.given_name, normalized.middle_name) if part)
+                return f"{normalized.surname}, {given_span}"
+        return " ".join(self._routing_name_tokens(baseline))
+
     def _canonical_source_components(
         self,
         raw_name: str,
@@ -1503,7 +1528,11 @@ class ChineseNameDetector:
         baseline: CanonicalName,
     ) -> CanonicalName:
         """Apply hard identity evidence, then Chinese and soft order policy."""
-        decision = self._infer_east_asian_name_order_decision(raw_name)
+        routing_surface = self._east_asian_routing_surface(raw_name, baseline)
+        decision = self._infer_east_asian_name_order_decision(
+            routing_surface,
+            legacy_raw_name=raw_name,
+        )
         if decision is not None and east_asian_evidence_resolution_reason(decision.reason) in {
             ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT,
             ResolutionReason.IDENTITY_BACKED_EXACT_ASSIGNMENT,
@@ -1512,7 +1541,7 @@ class ChineseNameDetector:
             if routed is not None:
                 return routed
 
-        if self._east_asian_name_order._is_reviewed_japanese_given_first_exact_surface(raw_name):
+        if self._east_asian_name_order._is_reviewed_japanese_given_first_exact_surface(routing_surface):
             return baseline
 
         chinese = self._canonical_chinese_name_with_source(raw_name, baseline.source)
@@ -1685,8 +1714,7 @@ class ChineseNameDetector:
         if baseline is None:
             return None
         normalized = baseline.normalized
-        ordered = self._ordered_component_tokens(normalized)
-        name_tokens = [token for role, token in zip(normalized.order, ordered, strict=True) if role != "suffix"]
+        name_tokens = list(self._routing_name_tokens(baseline))
         if len(name_tokens) < 2:  # noqa: PLR2004 - an endpoint reversal requires two surviving endpoints
             return None
         given_tokens = (name_tokens[0],)
@@ -1710,10 +1738,10 @@ class ChineseNameDetector:
     ) -> CanonicalName | HardScalarConstraint | None:
         """Resolve V3's scalar candidate and its optional hard constraint.
 
-        This deliberately consumes the flattened raw name rather than source
-        component labels.  Unlike the public compatibility API, an evidence
-        service failure is typed and propagated so the V3 terminal resolver can
-        record an explicit source-preservation outcome.  Ordinary
+        This deliberately consumes the cleaned flattened name rather than
+        source component labels. Unlike the public compatibility API, an
+        evidence service failure is typed and propagated so the V3 terminal
+        resolver can record an explicit source-preservation outcome. Ordinary
         non-applicability remains ``None``.
         """
         baseline = self._routing_input_baseline(raw_name)
@@ -1722,8 +1750,9 @@ class ChineseNameDetector:
         if self._ethnicity_service is None:
             return baseline
 
+        routing_surface = self._east_asian_routing_surface(raw_name, baseline)
         resolution = self._east_asian_name_order.infer_resolution(
-            raw_name,
+            routing_surface,
             japanese_probability=self._ethnicity_service.japanese_probability,
         )
 
@@ -1770,25 +1799,27 @@ class ChineseNameDetector:
 
     def _infer_east_asian_name_order_decision(
         self,
-        raw_name: str,
+        routing_surface: str,
+        *,
+        legacy_raw_name: str,
     ) -> EastAsianNameOrderDecision | None:
         """Return one canonical order decision while surfacing evidence failure."""
         if self._ethnicity_service is None:
             return None
         try:
             resolution = self._east_asian_name_order.infer_resolution(
-                raw_name,
+                routing_surface,
                 japanese_probability=self._ethnicity_service.japanese_probability,
             )
         except EvidenceFailure as error:
             LOGGER.warning(
                 "East Asian name-order routing abstained after classifier failure for %r: %s",
-                raw_name,
+                legacy_raw_name,
                 error,
             )
             return None
         decision = resolution if isinstance(resolution, EastAsianNameOrderDecision) else None
-        if decision is None or self._korean_compact_split_yields_to_chinese(raw_name, decision):
+        if decision is None or self._korean_compact_split_yields_to_chinese(legacy_raw_name, decision):
             return None
         return decision
 
@@ -1804,6 +1835,74 @@ class ChineseNameDetector:
             and self._normalize_chinese_name(raw_name).success
         )
 
+    def _routed_source_components(
+        self,
+        baseline: CanonicalName,
+        decision: EastAsianNameOrderDecision,
+    ) -> NameComponents:
+        """Relabel or split matched routing occurrences while preserving source lineage."""
+        decision_source = decision.source_components()
+        fallback = replace(
+            decision_source,
+            suffix=baseline.source.suffix,
+            suffix_tokens=baseline.source.suffix_tokens,
+            order=decision_source.order + ("suffix",) * len(baseline.source.suffix_tokens),
+        )
+
+        routing_tokens = self._routing_name_tokens(baseline)
+        decision_tokens = self._ordered_component_tokens(decision_source)
+        decision_occurrences = list(zip(decision_source.order, decision_tokens, strict=True))
+        routed_groups: list[tuple[tuple[str, str], ...]] = []
+        decision_index = 0
+        for routing_token in routing_tokens:
+            routing_key = self._component_token_key(routing_token)
+            if not routing_key:
+                return fallback
+            group_start = decision_index
+            joined_key = ""
+            while decision_index < len(decision_occurrences):
+                joined_key += self._component_token_key(decision_occurrences[decision_index][1])
+                decision_index += 1
+                if joined_key == routing_key:
+                    break
+                if not routing_key.startswith(joined_key):
+                    return fallback
+            if joined_key != routing_key:
+                return fallback
+            routed_groups.append(tuple(decision_occurrences[group_start:decision_index]))
+        if decision_index != len(decision_occurrences):
+            return fallback
+
+        source_tokens = self._ordered_component_tokens(baseline.source)
+        assigned = list(zip(baseline.source.order, source_tokens, strict=True))
+        source_index = 0
+        for routing_token, routed_group in zip(routing_tokens, routed_groups, strict=True):
+            routing_key = self._component_token_key(routing_token)
+            while source_index < len(assigned) and self._component_token_key(assigned[source_index][1]) != routing_key:
+                source_index += 1
+            if source_index == len(assigned):
+                return fallback
+            _source_role, source_token = assigned[source_index]
+            replacement = routed_group if len(routed_group) > 1 else ((routed_group[0][0], source_token),)
+            assigned[source_index : source_index + 1] = replacement
+            source_index += len(replacement)
+
+        tokens_by_role = {
+            role: tuple(token for assigned_role, token in assigned if assigned_role == role)
+            for role in ("given", "middle", "surname", "suffix")
+        }
+        return NameComponents(
+            given_name=" ".join(tokens_by_role["given"]),
+            middle_name=" ".join(tokens_by_role["middle"]),
+            surname=" ".join(tokens_by_role["surname"]),
+            suffix=" ".join(tokens_by_role["suffix"]),
+            given_tokens=tokens_by_role["given"],
+            middle_tokens=tokens_by_role["middle"],
+            surname_tokens=tokens_by_role["surname"],
+            suffix_tokens=tokens_by_role["suffix"],
+            order=tuple(role for role, _token in assigned),
+        )
+
     def _canonical_name_from_order_decision(
         self,
         baseline: CanonicalName,
@@ -1814,6 +1913,7 @@ class ChineseNameDetector:
             first_name=decision.first_name,
             middle_name=decision.middle_name,
             last_name=decision.last_name,
+            suffix=baseline.normalized.suffix,
         )
         if routed.outcome is not PersonNameOutcome.PERSON or routed.canonical_name is None:
             # Routed components failed to re-normalize (e.g. a stray leading-hyphen/apostrophe
@@ -1828,7 +1928,7 @@ class ChineseNameDetector:
         return replace(
             routed.canonical_name,
             source_text=baseline.source_text,
-            source=decision.source_components(),
+            source=self._routed_source_components(baseline, decision),
         )
 
     def normalize_person_name_components(

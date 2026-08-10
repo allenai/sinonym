@@ -92,12 +92,11 @@ _POST_PREPROCESSING_SAFETY_HYPHENS = frozenset(
     },
 )
 
-# Keep the pre-review token-normalization deletion contract and add soft hyphen
-# so all-Han and comparison-key checks ignore that discretionary control.
-# Characters folded above otherwise reach this table as ASCII.
-_NORMALIZATION_HYPHEN_DELETE = frozenset(
-    "-\u00ad\u2010\u2012\u2013\u2014\u2015\ufe58\ufe63\uff0d\u2043\u208b",
-)
+# All approved structural Roman hyphens are equivalent in comparison keys.
+# Preserve the pre-review deletion behavior for these validation-only marks;
+# U+2027 deliberately remains visible to direct token normalization.
+_LEGACY_COMPARISON_ONLY_HYPHENS = frozenset("\u00ad\u2015\u208b\ufe58")
+_NORMALIZATION_HYPHEN_DELETE = ROMAN_HYPHEN_LIKE | _LEGACY_COMPARISON_ONLY_HYPHENS
 # Exact Unicode 14 expansion of the generic person's pre-consolidation
 # category/name predicate, plus the three explicit legacy extras. Keeping it a
 # table avoids a Unicode lookup and nested function call for every input char.
