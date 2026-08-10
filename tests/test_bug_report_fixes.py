@@ -1,11 +1,18 @@
 # ruff: noqa: EM101, PLC0415, SLF001, TRY003
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
 from sinonym import chinese_names_data
 from sinonym.coretypes import BatchFormatPattern, NameFormat, ParseCandidate, ParseResult
-from sinonym.name_punctuation import APOSTROPHE_LIKE, HYPHEN_LIKE
+from sinonym.name_punctuation import (
+    APOSTROPHE_LIKE,
+    HYPHEN_FOLD_TRANSLATION,
+    PERSON_HYPHEN_LIKE,
+    ROMAN_HYPHEN_LIKE,
+)
 from sinonym.pipeline import name_order_routing
 from sinonym.pipeline.name_order_routing import (
     _input_order_display,
@@ -22,10 +29,13 @@ _EXPECTED_APOSTROPHE_LIKE = frozenset(
     "\u2018\u2019\u201a\u201b\u2032\u2035\u2039\u203a"
     "\u275b\u275c\u275f\u276e\u276f\ua78b\ua78c\uff07\uff40",
 )
-_EXPECTED_HYPHEN_LIKE = frozenset(
-    "-\u00ad\u058a\u05be\u1400\u1806\u2010\u2011\u2012\u2013\u2014\u2015"
-    "\u2027\u2043\u208b\u2212\u2e17\u2e1a\u2e3a\u2e3b\u2e40\u2e5d"
-    "\u301c\u3030\u30a0\ufe31\ufe32\ufe58\ufe63\uff0d\U00010ead",
+_EXPECTED_ROMAN_HYPHEN_LIKE = frozenset("-\u2010\u2011\u2012\u2013\u2014\u2043\u2212\ufe63\uff0d")
+_EXPECTED_POST_PREPROCESSING_HYPHENS = frozenset("\u00ad\u2015\u2027\u208b\ufe58")
+_EXPECTED_NO_SCALAR_FOLD = frozenset(
+    "\u058a\u05be\u1400\u1806\u2e17\u2e1a\u2e3a\u2e3b\u2e40\u2e5d\u301c\u3030\u30a0\ufe31\ufe32\U00010ead",
+)
+_EXPECTED_LEGACY_PERSON_ONLY = frozenset(
+    "\u00b1\u02d7\u0320\u2052\u2796\u2a29\u2a2a\u2a2b\u2a2c\u2a3a\u2a41\U000e002d",
 )
 
 
@@ -650,35 +660,174 @@ def test_unicode_apostrophe_variants_preserve_display_and_lineage(detector, apos
 
 @pytest.mark.parametrize(
     "hyphen",
-    sorted(_EXPECTED_HYPHEN_LIKE),
+    sorted(_EXPECTED_ROMAN_HYPHEN_LIKE),
     ids=lambda character: f"U+{ord(character):04X}",
 )
-def test_unicode_hyphen_variants_preserve_chinese_given_boundary(detector, hyphen):
-    variant = f"Guo{hyphen}e Li"
+@pytest.mark.parametrize("ascii_form", ["Guo-e Li", "Cheng-meiLi"])
+def test_reviewed_roman_hyphens_match_ascii_behavior(detector, hyphen, ascii_form):
+    """Approved variants match ASCII before structural surname/camel-case rules run."""
+    variant = ascii_form.replace("-", hyphen)
+    baseline = detector.normalize_name(ascii_form)
     result = detector.normalize_name(variant)
 
-    assert result.success, variant
-    assert result.result == "Guo-E Li"
-    assert result.parsed is not None
-    assert result.parsed.given_tokens == ["Guo", "E"]
-    assert result.parsed.middle_tokens == []
-    assert result.canonical_name is not None
-    assert result.canonical_name.text == "Guo-E Li"
-    person = detector.normalize_person_name(variant)
+    assert result.success == baseline.success, variant
+    assert result.result == baseline.result, variant
+    assert result.parsed == baseline.parsed, variant
+    variant_person = detector.normalize_person_name(variant)
+    baseline_person = detector.normalize_person_name(ascii_form)
+    assert variant_person is not None
+    assert baseline_person is not None
+    assert variant_person.source_text == variant
+    assert replace(variant_person, source_text=baseline_person.source_text) == baseline_person
+
+
+def test_reviewed_roman_hyphens_match_ascii_in_batch(detector):
+    variants = [f"Guo{hyphen}e Li" for hyphen in sorted(_EXPECTED_ROMAN_HYPHEN_LIKE)]
+    baseline_names = ["Guo-e Li"] * len(variants)
+
+    actual = detector.analyze_name_batch(variants).results
+    baseline = detector.analyze_name_batch(baseline_names).results
+
+    assert [(item.success, item.result, item.parsed) for item in actual] == [
+        (item.success, item.result, item.parsed) for item in baseline
+    ]
+
+
+def test_shared_name_joiners_match_the_reviewed_policy():
+    scalar_fold = {chr(codepoint) for codepoint in HYPHEN_FOLD_TRANSLATION}
+    assert APOSTROPHE_LIKE == _EXPECTED_APOSTROPHE_LIKE
+    assert ROMAN_HYPHEN_LIKE == _EXPECTED_ROMAN_HYPHEN_LIKE
+    assert scalar_fold == _EXPECTED_ROMAN_HYPHEN_LIKE | _EXPECTED_POST_PREPROCESSING_HYPHENS
+    assert not (_EXPECTED_NO_SCALAR_FOLD & scalar_fold)
+    assert PERSON_HYPHEN_LIKE == (
+        _EXPECTED_ROMAN_HYPHEN_LIKE
+        | _EXPECTED_POST_PREPROCESSING_HYPHENS
+        | _EXPECTED_NO_SCALAR_FOLD
+        | _EXPECTED_LEGACY_PERSON_ONLY
+    )
+
+
+@pytest.mark.parametrize(
+    "character",
+    sorted(_EXPECTED_POST_PREPROCESSING_HYPHENS),
+    ids=lambda character: f"U+{ord(character):04X}",
+)
+def test_post_preprocessing_hyphens_preserve_legacy_person_output(detector, character):
+    person = detector.normalize_person_name(f"Guo{character}e Li")
+
+    assert character not in ROMAN_HYPHEN_LIKE
     assert person is not None
     assert person.text == "Guo-E Li"
 
 
-def test_shared_name_joiners_match_the_reviewed_unicode_oracle():
-    assert APOSTROPHE_LIKE == _EXPECTED_APOSTROPHE_LIKE
-    assert HYPHEN_LIKE == _EXPECTED_HYPHEN_LIKE
+@pytest.mark.parametrize(
+    ("character", "expected"),
+    [
+        ("\u058a", "Guoe Li"),  # script-specific Armenian mark
+        ("\u05be", "Guoe Li"),  # script-specific Hebrew maqaf
+        ("\u1400", "Guoe Li"),  # script-specific Canadian syllabics mark
+        ("\u1806", "Guoe Li"),  # Mongolian line-breaking mark
+        ("\u2e17", "Guoe Li"),
+        ("\u2e1a", "Guoe Li"),
+        ("\u2e3a", "Guoe Li"),
+        ("\u2e3b", "Guoe Li"),
+        ("\u2e40", "Guoe Li"),
+        ("\u2e5d", "Guoe Li"),
+        ("\u301c", "Guoe Li"),  # wave dash
+        ("\u3030", "Guoe Li"),
+        ("\u30a0", None),  # script-specific Japanese double hyphen
+        ("\ufe31", "Guoe Li"),
+        ("\ufe32", "Guoe Li"),
+        ("\U00010ead", "Guoe Li"),
+    ],
+    ids=lambda value: f"U+{ord(value):04X}" if isinstance(value, str) and len(value) == 1 else None,
+)
+def test_unapproved_scalar_hyphens_do_not_create_a_boundary(detector, character, expected):
+    result = detector.normalize_name(f"Guo{character}e Li")
+    person = detector.normalize_person_name(f"Guo{character}e Li")
+
+    if expected is None:
+        assert not result.success
+    else:
+        assert result.success
+        assert result.result == expected
+    assert person is not None
+    assert person.text == "Guo-e Li"
 
 
-def test_non_joiner_unicode_symbol_is_not_promoted_to_a_name_boundary(detector):
-    raw_name = "Guo\u00b1e Li"
+@pytest.mark.parametrize(
+    ("raw_name", "expected_success", "expected", "expected_error"),
+    [
+        ("Seung\u00adJi Lim", False, "", "Korean structural patterns detected"),
+        ("Jong\u2015Ho Lee", False, "", "Korean structural patterns detected"),
+        ("Dong\u2015Hee Lee", False, "", "Korean structural patterns detected"),
+        ("\u0414\u2027\u8c22\u6cfd", False, "", "name not recognised as Chinese"),
+        ("Ji\u208bHyun Park", False, "", "Korean-only surname detected"),
+        ("Jong\ufe58Ho Lee", False, "", "Korean structural patterns detected"),
+        ("De\u2015Yun Wang", True, "De-Yun Wang", None),
+    ],
+)
+def test_post_preprocessing_hyphens_preserve_validation_boundaries(
+    detector,
+    raw_name,
+    expected_success,
+    expected,
+    expected_error,
+):
+    scalar = detector.normalize_name(raw_name)
+    batch = detector.analyze_name_batch([raw_name]).results[0]
+
+    assert scalar.success is expected_success
+    assert scalar.result == expected
+    assert scalar.error_message == expected_error
+    assert batch.success is expected_success
+    assert batch.result == expected
+    assert batch.error_message == expected_error
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("Chen\u2011Yang Cai", "Chen-Yang Cai"),
+        ("Ting\u2013Ting Zhang", "Ting-Ting Zhang"),
+        ("Yan\u2014Tuan Li", "Yan-Tuan Li"),
+        ("Ru\u2043quan Han", "Ru-Quan Han"),
+        ("Yan\u2212pei Lin", "Yan-Pei Lin"),
+        ("LIWen\uff0dyan", "Li-Wen Yan"),
+    ],
+)
+def test_reviewed_corpus_hyphen_examples(detector, raw_name, expected):
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "British Drama 1533\u20131642: A Catalogue",
+        "T H s = 1 \u2212 T L T H",
+        "Urt. v. 20.2.2018 \u2013 VI ZR 3017 BGH",
+        "19 \uff0d 23",
+    ],
+)
+def test_reviewed_metadata_hyphens_do_not_turn_negative_controls_into_people(detector, raw_name):
+    assert not detector.normalize_name(raw_name).success
+    assert detector.normalize_person_name(raw_name) is None
+
+
+@pytest.mark.parametrize(
+    "character",
+    sorted(_EXPECTED_LEGACY_PERSON_ONLY),
+    ids=lambda character: f"U+{ord(character):04X}",
+)
+def test_scalar_hyphen_policy_does_not_redefine_legacy_person_joiners(detector, character):
+    raw_name = f"Guo{character}e Li"
     scalar = detector.normalize_name(raw_name)
     person = detector.normalize_person_name(raw_name)
 
     assert scalar.canonical_name is not None
     assert scalar.canonical_name.text == "Guoe Li"
-    assert person is None
+    assert person is not None
+    assert person.text == "Guo-e Li"

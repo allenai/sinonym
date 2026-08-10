@@ -13,6 +13,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Literal
 
 from sinonym.chinese_names_data import VALID_CHINESE_RIMES
+from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
 from sinonym.text_processing import CompoundDetector, TextNormalizer, TextPreprocessor
 from sinonym.utils.string_manipulation import StringManipulationUtils
 from sinonym.utils.thread_cache import ThreadLocalCache
@@ -106,6 +107,11 @@ class NormalizationService:
         self._text_normalizer = TextNormalizer(config)
         self._text_preprocessor = TextPreprocessor(config, self)
         self._compound_detector = CompoundDetector(config)
+        self._structural_hyphen_tr = {
+            source: target
+            for source, target in config.roman_punctuation_fold_tr.items()
+            if source > 0x7F and chr(source) in ROMAN_HYPHEN_LIKE and target == "-"
+        }
 
     def set_data_context(self, data) -> None:
         """Inject data context after initialization - breaks circular dependency."""
@@ -168,9 +174,12 @@ class NormalizationService:
                 compound_metadata=compound_metadata,
             )
 
-        # Phase 1: Clean input (single regex pass)
+        # Phase 1: Give Unicode hyphens the same structural treatment as ASCII
+        # before camel-case and concatenated-surname decisions run. Apostrophes
+        # retain their existing later fold point.
+        structural_name = raw_name if raw_name.isascii() else raw_name.translate(self._structural_hyphen_tr)
         cleaned, from_camel_case_pair, surname_first_parenthetical_hint = self._text_preprocessor.preprocess_input(
-            raw_name,
+            structural_name,
             self._data,
         )
 

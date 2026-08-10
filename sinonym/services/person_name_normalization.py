@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 
 from sinonym.coretypes import CanonicalName, NameComponents
-from sinonym.name_punctuation import APOSTROPHE_LIKE, HYPHEN_LIKE
+from sinonym.name_punctuation import PERSON_JOINER_FOLD_TRANSLATION
 from sinonym.services.non_person import reviewed_non_person_text_pattern
 
 
@@ -1027,7 +1027,7 @@ class PersonNameNormalizationService:
         else:
             normalized = value.translate(_PRE_NFKC_JOINER_TRANSLATION)
             normalized = unicodedata.normalize("NFKC", normalized)
-            normalized = "".join(PersonNameNormalizationService._normalize_joiner(character) for character in normalized)
+            normalized = normalized.translate(PERSON_JOINER_FOLD_TRANSLATION)
             normalized = unicodedata.normalize("NFC", normalized)
         normalized = _WHITESPACE_RE.sub(" ", normalized)
         normalized = _LEADING_STRAY_JOINER_RE.sub("", normalized)
@@ -1063,11 +1063,8 @@ class PersonNameNormalizationService:
 
     @staticmethod
     def _normalize_joiner(character: str) -> str:
-        if character in APOSTROPHE_LIKE:
-            return "'"
-        if character in HYPHEN_LIKE:
-            return "-"
-        return character
+        """Fold one person-name joiner while preserving the existing helper contract."""
+        return character.translate(PERSON_JOINER_FOLD_TRANSLATION)
 
     @staticmethod
     def _tokens(value: str, source_role: str, offset: int) -> list[_Token]:

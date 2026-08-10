@@ -1,10 +1,18 @@
-"""Shared Unicode punctuation definitions for personal names.
+"""Shared Unicode punctuation policy for personal names.
 
 The apostrophe oracle follows Unicode 17.0 ``Quotation_Mark`` entries for
 single quotes plus the spacing modifier characters that Unicode's NamesList
 cross-references to apostrophe, prime, or single-quote forms. Double quotes,
 combining marks, invisible tag characters, and letters whose names merely
 mention an apostrophe are intentionally excluded.
+
+The structural Roman hyphen fold is deliberately narrower than Unicode
+``Dash``. It contains semantic/compatibility hyphens plus metadata
+substitutions supported by the August 2026 author-corpus review. A second,
+post-preprocessing safety set keeps ambiguous separators visible to downstream
+ethnicity gates without claiming that they are semantically hyphens. The
+generic person normalizer's older Unicode-name oracle remains separate so
+sharing this module does not change that path's deployed behavior.
 """
 
 APOSTROPHE_LIKE = frozenset(
@@ -49,42 +57,65 @@ APOSTROPHE_LIKE = frozenset(
     },
 )
 
-HYPHEN_LIKE = frozenset(
+_CANONICAL_ROMAN_HYPHENS = frozenset(
     {
         "-",
-        "\u00ad",  # soft hyphen
-        "\u058a",  # Armenian hyphen
-        "\u05be",  # Hebrew punctuation maqaf
-        "\u1400",  # Canadian syllabics hyphen
-        "\u1806",  # Mongolian todo soft hyphen
         "\u2010",  # hyphen
         "\u2011",  # non-breaking hyphen
-        "\u2012",  # figure dash
-        "\u2013",  # en dash
-        "\u2014",  # em dash
-        "\u2015",  # horizontal bar
-        "\u2043",  # hyphen bullet
-        "\u2027",  # hyphenation point
-        "\u208b",  # subscript minus
-        "\u2212",  # minus sign
-        "\u2e17",  # double oblique hyphen
-        "\u2e1a",  # hyphen with diaeresis
-        "\u2e3a",  # two-em dash
-        "\u2e3b",  # three-em dash
-        "\u2e40",  # double hyphen
-        "\u2e5d",  # oblique hyphen
-        "\u301c",  # wave dash
-        "\u3030",  # wavy dash
-        "\u30a0",  # katakana-hiragana double hyphen
-        "\ufe31",  # vertical em dash presentation form
-        "\ufe32",  # vertical en dash presentation form
-        "\ufe58",  # small em dash
         "\ufe63",  # small hyphen-minus
         "\uff0d",  # fullwidth hyphen-minus
-        "\U00010ead",  # Yezidi hyphenation mark
     },
 )
 
+_REVIEWED_METADATA_HYPHENS = frozenset(
+    {
+        "\u2012",  # figure dash
+        "\u2013",  # en dash
+        "\u2014",  # em dash
+        "\u2043",  # hyphen bullet
+        "\u2212",  # minus sign
+    },
+)
+
+ROMAN_HYPHEN_LIKE = _CANONICAL_ROMAN_HYPHENS | _REVIEWED_METADATA_HYPHENS
+
+# These marks must not be promoted to structural ASCII parity. Folding them
+# after preprocessing preserves the boundary evidence used by the ethnicity
+# gates and prevents sep_pattern from turning them into spaces first.
+_POST_PREPROCESSING_SAFETY_HYPHENS = frozenset(
+    {
+        "\u00ad",  # soft hyphen: boundary evidence in author metadata
+        "\u2015",  # horizontal bar
+        "\u2027",  # hyphenation point
+        "\u208b",  # subscript minus
+        "\ufe58",  # small em dash
+    },
+)
+
+# Keep the pre-review token-normalization deletion contract and add soft hyphen
+# so all-Han and comparison-key checks ignore that discretionary control.
+# Characters folded above otherwise reach this table as ASCII.
+_NORMALIZATION_HYPHEN_DELETE = frozenset(
+    "-\u00ad\u2010\u2012\u2013\u2014\u2015\ufe58\ufe63\uff0d\u2043\u208b",
+)
+# Exact Unicode 14 expansion of the generic person's pre-consolidation
+# category/name predicate, plus the three explicit legacy extras. Keeping it a
+# table avoids a Unicode lookup and nested function call for every input char.
+PERSON_HYPHEN_LIKE = frozenset(
+    "-\u00ad\u058a\u05be\u1400\u1806\u2010\u2011\u2012\u2013\u2014\u2015"
+    "\u2027\u2043\u208b\u2212\u2e17\u2e1a\u2e3a\u2e3b\u2e40\u2e5d"
+    "\u301c\u3030\u30a0\ufe31\ufe32\ufe58\ufe63\uff0d\U00010ead"
+    "\u00b1\u02d7\u0320\u2052\u2796\u2a29\u2a2a\u2a2b\u2a2c\u2a3a\u2a41\U000e002d",
+)
+
+
 APOSTROPHE_FOLD_TRANSLATION = str.maketrans(dict.fromkeys(APOSTROPHE_LIKE, "'"))
-HYPHEN_FOLD_TRANSLATION = str.maketrans(dict.fromkeys(HYPHEN_LIKE, "-"))
-NAME_JOINER_DELETE_TRANSLATION = str.maketrans(dict.fromkeys(APOSTROPHE_LIKE | HYPHEN_LIKE, None))
+HYPHEN_FOLD_TRANSLATION = str.maketrans(
+    dict.fromkeys(ROMAN_HYPHEN_LIKE | _POST_PREPROCESSING_SAFETY_HYPHENS, "-"),
+)
+PERSON_JOINER_FOLD_TRANSLATION = APOSTROPHE_FOLD_TRANSLATION | str.maketrans(
+    dict.fromkeys(PERSON_HYPHEN_LIKE, "-"),
+)
+NAME_JOINER_DELETE_TRANSLATION = str.maketrans(
+    dict.fromkeys(APOSTROPHE_LIKE | _NORMALIZATION_HYPHEN_DELETE, None),
+)
