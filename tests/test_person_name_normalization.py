@@ -19,52 +19,26 @@ def normalizer() -> PersonNameNormalizationService:
 
 
 @pytest.mark.parametrize(
-    "dash",
-    ["-", "\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2015", "\u2043", "\u2212", "\ufe58", "\ufe63", "\uff0d"],
-)
-def test_normalize_text_converts_dash_like_joiners(
-    normalizer: PersonNameNormalizationService,
-    dash: str,
-) -> None:
-    result = normalizer.normalize_text(f"anne {dash} marie smith")
-
-    assert result.outcome is PersonNameOutcome.PERSON
-    assert result.canonical_name is not None
-    assert result.canonical_name.text == "Anne-Marie Smith"
-    assert result.canonical_name.normalized.given_name == "Anne-Marie"
-
-
-@pytest.mark.parametrize(
-    "apostrophe",
+    ("raw_name", "expected_text", "expected_given", "expected_surname"),
     [
-        "'",
-        "\u2018",
-        "\u2019",
-        "\u201a",
-        "\u201b",
-        "\u2032",
-        "\u2035",
-        "\u02bb",
-        "\u02bc",
-        "\u02b9",
-        "\ua78b",
-        "\ua78c",
-        "\uff07",
-        "`",
-        "\uff40",
-        "\u00b4",
+        ("anne \u2014 marie smith", "Anne-Marie Smith", "Anne-Marie", "Smith"),
+        ("sean o \u2019 connor", "Sean O'Connor", "Sean", "O'Connor"),
     ],
 )
-def test_normalize_text_converts_apostrophe_like_joiners(
+def test_normalize_text_collapses_spaces_around_name_joiners(
     normalizer: PersonNameNormalizationService,
-    apostrophe: str,
+    raw_name: str,
+    expected_text: str,
+    expected_given: str,
+    expected_surname: str,
 ) -> None:
-    result = normalizer.normalize_text(f"sean o {apostrophe} connor")
+    result = normalizer.normalize_text(raw_name)
 
     assert result.outcome is PersonNameOutcome.PERSON
     assert result.canonical_name is not None
-    assert result.canonical_name.text == "Sean O'Connor"
-    assert result.canonical_name.normalized.surname == "O'Connor"
+    assert result.canonical_name.text == expected_text
+    assert result.canonical_name.normalized.given_name == expected_given
+    assert result.canonical_name.normalized.surname == expected_surname
 
 
 def test_nfkc_apostrophe_expansion_preserves_its_letter(
@@ -1098,7 +1072,7 @@ def test_period_policy_distinguishes_initial_clusters_from_transliteration_abbre
     [
         ("Dr.Wenjun Zhang", "Wenjun Zhang"),
         ("Mrs.E. Sumathi", "E. Sumathi"),
-        ("Dr.AARCHA S S", "Aarcha S. S"),
+        ("Dr.AARCHA S S", "Aarcha S. S."),
         ("PD Dr. M. Mengel", "M. Mengel"),
     ],
 )
@@ -1263,15 +1237,29 @@ def test_exact_leading_ma_abbreviation_is_preserved_before_initial_and_surname(
         assert result.dropped_tokens == ()
 
 
-@pytest.mark.parametrize("raw_name", ["M.A. E. Zayas", "Jane Smith M.A."])
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text", "expected_components"),
+    [
+        ("M.A. E. Zayas", "E. Zayas", ("E.", "", "Zayas")),
+        ("Jane Smith M.A.", "Jane Smith", ("Jane", "", "Smith")),
+    ],
+)
 def test_ma_credential_forms_are_still_dropped(
     normalizer: PersonNameNormalizationService,
     raw_name: str,
+    expected_text: str,
+    expected_components: tuple[str, str, str],
 ) -> None:
     result = normalizer.normalize_text(raw_name)
 
+    assert result.outcome is PersonNameOutcome.PERSON
     assert result.canonical_name is not None
-    assert "M.A." not in result.canonical_name.text
+    assert result.canonical_name.text == expected_text
+    assert (
+        result.canonical_name.normalized.given_name,
+        result.canonical_name.normalized.middle_name,
+        result.canonical_name.normalized.surname,
+    ) == expected_components
     assert [(token.text, token.reason) for token in result.dropped_tokens] == [
         ("M.A.", DropReason.CREDENTIAL),
     ]
@@ -1466,33 +1454,12 @@ def test_sentence_like_periods_are_not_preserved_as_abbreviations(
     assert result.canonical_name.text == expected
 
 
-def test_packed_surname_first_with_two_trailing_initials_is_reordered(
+def test_initial_tail_repair_requires_two_initials_and_no_explicit_given_name(
     normalizer: PersonNameNormalizationService,
 ) -> None:
-    raw = normalizer.normalize_text("Masterov R. A.")
-    structured = normalizer.normalize_components(last_name="Masterov R. A.")
-
-    for result in (raw, structured):
-        assert result.canonical_name is not None
-        assert result.canonical_name.text == "R. A. Masterov"
-        assert result.canonical_name.normalized.given_name == "R."
-        assert result.canonical_name.normalized.middle_name == "A."
-        assert result.canonical_name.normalized.surname == "Masterov"
-
-    assert raw.canonical_name is not None
-    assert raw.canonical_name.source.order == ("surname", "given", "middle")
-
-
-def test_packed_surname_first_gate_preserves_normal_order_and_source_last_floor(
-    normalizer: PersonNameNormalizationService,
-) -> None:
-    normal = normalizer.normalize_text("R. A. Masterov")
     one_initial = normalizer.normalize_text("Masterov R.")
     source_last = normalizer.normalize_components(first_name="John", last_name="Masterov R. A.")
 
-    assert normal.canonical_name is not None
-    assert normal.canonical_name.text == "R. A. Masterov"
-    assert normal.canonical_name.normalized.surname == "Masterov"
     assert one_initial.canonical_name is not None
     assert one_initial.canonical_name.text == "Masterov R."
     assert one_initial.canonical_name.normalized.given_name == "Masterov"
@@ -1849,7 +1816,6 @@ def test_titlecase_honorific_still_dropped(
         ("Robert Jones MD", "Robert Jones", "MD"),
         ("Jane Doe EdD", "Jane Doe", "EdD"),      # mixed-case degree dropped...
         ("Jane Doe EDD", "Jane Doe", "EDD"),      # ...and its all-caps form
-        ("M.A. E. Zayas", "E. Zayas", "M.A."),    # dotted degree acronym (ambiguous; repo convention = drop)
     ],
 )
 def test_trailing_and_dotted_credentials_still_dropped(

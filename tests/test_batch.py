@@ -168,7 +168,11 @@ def test_threshold_fallback_reuses_exact_ethnicity_failures(detector):
     names = ["Kim Min-jun", "John Smith"]
     expected = [detector._normalize_chinese_name(name).error_message for name in names]  # noqa: SLF001
 
-    batch = detector._analyze_name_batch_strict(names, format_threshold=1.0)  # noqa: SLF001
+    batch = detector._analyze_related_name_batches_strict(  # noqa: SLF001
+        names,
+        None,
+        format_threshold=1.0,
+    ).pp_batch
 
     assert not batch.format_pattern.threshold_met
     assert [result.error_message for result in batch.results] == expected

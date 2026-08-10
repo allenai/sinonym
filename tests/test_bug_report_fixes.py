@@ -1,10 +1,11 @@
-# ruff: noqa: RUF001, RUF002, EM101, PLC0415, SLF001, TRY003
+# ruff: noqa: EM101, PLC0415, SLF001, TRY003
 
 import numpy as np
 import pytest
 
 from sinonym import chinese_names_data
 from sinonym.coretypes import BatchFormatPattern, NameFormat, ParseCandidate, ParseResult
+from sinonym.name_punctuation import APOSTROPHE_LIKE, HYPHEN_LIKE
 from sinonym.pipeline import name_order_routing
 from sinonym.pipeline.name_order_routing import (
     _input_order_display,
@@ -14,6 +15,18 @@ from sinonym.pipeline.name_order_routing import (
 )
 from sinonym.services.batch_analysis import LATIN_ONLY_REPRESENTATION, BatchCandidateEntry
 from sinonym.timo.interface import Instance, Predictor, PredictorConfig, PredictorV2
+
+_EXPECTED_APOSTROPHE_LIKE = frozenset(
+    "'`\u00b4\u02b9\u02bb\u02bc\u02bd\u02be\u02bf\u02c0\u02c1"
+    "\u02c8\u02ca\u02cb\u02ee\u0559\u055a\u05f3\u07f4\u07f5"
+    "\u2018\u2019\u201a\u201b\u2032\u2035\u2039\u203a"
+    "\u275b\u275c\u275f\u276e\u276f\ua78b\ua78c\uff07\uff40",
+)
+_EXPECTED_HYPHEN_LIKE = frozenset(
+    "-\u00ad\u058a\u05be\u1400\u1806\u2010\u2011\u2012\u2013\u2014\u2015"
+    "\u2027\u2043\u208b\u2212\u2e17\u2e1a\u2e3a\u2e3b\u2e40\u2e5d"
+    "\u301c\u3030\u30a0\ufe31\ufe32\ufe58\ufe63\uff0d\U00010ead",
+)
 
 
 def _pp_abstain_row(**overrides):
@@ -614,32 +627,58 @@ def test_leading_hyphen_or_apostrophe_token_does_not_crash(detector, raw_name):
 
 
 @pytest.mark.parametrize(
-    ("ascii_form", "variant"),
-    [
-        ("Zheng Cui'e", "Zheng Cui’e"),  # RIGHT SINGLE QUOTATION MARK
-        ("Zheng Cui'e", "Zheng Cui‘e"),  # LEFT SINGLE QUOTATION MARK
-        ("Zheng Cui'e", "Zheng Cuiʼe"),  # MODIFIER LETTER APOSTROPHE
-        ("Zheng Cui'e", "Zheng Cui′e"),  # PRIME
-        ("Zheng Cui'e", "Zheng Cui＇e"),  # FULLWIDTH APOSTROPHE
-        ("Wu Yue'e", "Wu Yue’e"),
-        ("Xiu'e Zheng", "Xiu’e Zheng"),
-        ("Ji-Ae Shin", "Ji‐Ae Shin"),  # HYPHEN
-        ("Ji-Ae Shin", "Ji−Ae Shin"),  # MINUS SIGN
-        ("Mohd Ma'ruf", "Mohd Ma’ruf"),
-        ("Ana-Maria O'Neill", "Ana‐Maria O’Neill"),
-    ],
+    "apostrophe",
+    sorted(_EXPECTED_APOSTROPHE_LIKE),
+    ids=lambda character: f"U+{ord(character):04X}",
 )
-def test_unicode_hyphen_and_apostrophe_variants_match_their_ascii_form(detector, ascii_form, variant):
-    """Regression: clean_roman_pattern preserved only ASCII `-` and `'`, so every other Unicode
-    hyphen/apostrophe was DELETED rather than folded. That destroyed the author-supplied syllable
-    boundary the splitter looks for: `Cui’e` arrived as `Cuie` and split into `Cui` + a middle
-    initial `E`, while `Cui'e` correctly joined as `Cui-E`. Same name, different punctuation,
-    different answer."""
-    baseline = detector.normalize_name(ascii_form)
+def test_unicode_apostrophe_variants_preserve_display_and_lineage(detector, apostrophe):
+    """Every supported apostrophe-like mark folds to one stable ASCII representation."""
+    variant = f"Zheng Cui{apostrophe}e"
     result = detector.normalize_name(variant)
 
-    assert result.success == baseline.success, variant
-    assert result.result == baseline.result, variant
-    if baseline.success:
-        assert result.parsed.middle_tokens == baseline.parsed.middle_tokens, variant
-        assert result.parsed.surname == baseline.parsed.surname, variant
+    assert result.success, variant
+    assert result.result == "Cui'e Zheng", variant
+    assert result.parsed is not None
+    assert result.parsed.given_tokens == ["Cui", "E"]
+    assert result.parsed.middle_tokens == []
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "Cui'e Zheng"
+    person = detector.normalize_person_name(variant)
+    assert person is not None
+    assert person.text == "Cui'e Zheng"
+
+
+@pytest.mark.parametrize(
+    "hyphen",
+    sorted(_EXPECTED_HYPHEN_LIKE),
+    ids=lambda character: f"U+{ord(character):04X}",
+)
+def test_unicode_hyphen_variants_preserve_chinese_given_boundary(detector, hyphen):
+    variant = f"Guo{hyphen}e Li"
+    result = detector.normalize_name(variant)
+
+    assert result.success, variant
+    assert result.result == "Guo-E Li"
+    assert result.parsed is not None
+    assert result.parsed.given_tokens == ["Guo", "E"]
+    assert result.parsed.middle_tokens == []
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "Guo-E Li"
+    person = detector.normalize_person_name(variant)
+    assert person is not None
+    assert person.text == "Guo-E Li"
+
+
+def test_shared_name_joiners_match_the_reviewed_unicode_oracle():
+    assert APOSTROPHE_LIKE == _EXPECTED_APOSTROPHE_LIKE
+    assert HYPHEN_LIKE == _EXPECTED_HYPHEN_LIKE
+
+
+def test_non_joiner_unicode_symbol_is_not_promoted_to_a_name_boundary(detector):
+    raw_name = "Guo\u00b1e Li"
+    scalar = detector.normalize_name(raw_name)
+    person = detector.normalize_person_name(raw_name)
+
+    assert scalar.canonical_name is not None
+    assert scalar.canonical_name.text == "Guoe Li"
+    assert person is None

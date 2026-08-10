@@ -179,7 +179,7 @@ def test_persistent_multiprocess_pool_analyzes_batches_with_batch_evidence(detec
 
 
 def test_persistent_pool_strict_analysis_matches_local_strict_analysis(detector):
-    """The shared pool dispatcher must preserve strict V3 batch results exactly."""
+    """The pool dispatcher must preserve strict V3 batch results exactly."""
     batches = [
         ["Wang An", "Yan Li", "Wu Gang", "Li Bao"],
         TEST_NAMES[:5],
@@ -284,8 +284,36 @@ def test_detector_process_name_batches_auto_uses_pool_above_threshold(detector, 
     assert captured["closed"]
 
 
+def test_detector_related_batch_parallel_path_propagates_worker_failures(detector, monkeypatch):
+    """V3's related pool path propagates worker failures without fallback rows."""
+    captured = {}
+
+    class FakePool:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            captured["closed"] = True
+
+        @staticmethod
+        def _analyze_related_batch_requests_strict(_requests, **_kwargs):
+            message = "synthetic strict worker failure"
+            raise RuntimeError(message)
+
+    monkeypatch.setattr(detector, "create_persistent_multiprocess_pool", lambda **_kwargs: FakePool())
+
+    with pytest.raises(RuntimeError, match="synthetic strict worker failure"):
+        detector._analyze_related_batch_requests_strict(  # noqa: SLF001
+            [(["Li Wei"], None)],
+            parallel="always",
+            max_workers=2,
+        )
+
+    assert captured["closed"]
+
+
 def test_detector_strict_batch_parallel_path_propagates_worker_failures(detector, monkeypatch):
-    """V3's strict pool path must not switch to the legacy fallback analyzer."""
+    """The public strict pool path must not switch to the forgiving analyzer."""
     captured = {}
 
     class FakePool:
@@ -302,7 +330,7 @@ def test_detector_strict_batch_parallel_path_propagates_worker_failures(detector
 
         @staticmethod
         def analyze_name_batches(*_args, **_kwargs):
-            message = "legacy fallback path must not run"
+            message = "forgiving fallback path must not run"
             raise AssertionError(message)
 
     monkeypatch.setattr(detector, "create_persistent_multiprocess_pool", lambda **_kwargs: FakePool())

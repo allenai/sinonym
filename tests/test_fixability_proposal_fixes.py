@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -18,6 +18,26 @@ from sinonym.timo.routing_v3 import (
 
 if TYPE_CHECKING:
     from sinonym.timo.interface import RoutingPredictorV3
+
+
+def _load_reviewed_korean_rows() -> tuple[dict[str, str], ...]:
+    """Load the manually adjudicated Korean source-assignment ledger."""
+    ledger_path = Path(__file__).parent / "data" / "reviewed_korean_source_assignments.tsv"
+    with ledger_path.open(encoding="utf-8", newline="") as ledger_file:
+        return tuple(cast("dict[str, str]", row) for row in csv.DictReader(ledger_file, delimiter="\t"))
+
+
+_REVIEWED_KOREAN_ROWS = _load_reviewed_korean_rows()
+_REVIEWED_KOREAN_ASSIGNMENTS = tuple(row for row in _REVIEWED_KOREAN_ROWS if row["decision"] == "assign")
+
+
+def _source_from_korean_row(row: dict[str, str]) -> SourceAuthorFields:
+    """Materialize the source tuple recorded in a Korean ledger row."""
+    return SourceAuthorFields(
+        first_name=row["source_first_name"],
+        middle_names=row["source_middle_names"],
+        last_name=row["source_last_name"],
+    )
 
 
 @pytest.fixture(scope="module")
@@ -364,171 +384,92 @@ def test_cyrillic_rotation_declines_short_mismatched_or_ambiguous_shapes(
 
 
 @pytest.mark.parametrize(
-    ("source", "expected"),
+    "source",
     [
-        (
-            SourceAuthorFields(first_name="Nabiev", middle_names="Valery", last_name="Sharifyanovich"),
-            ("Valery", "Sharifyanovich", "Nabiev"),
+        SourceAuthorFields(
+            first_name="Nabiev",
+            middle_names="Valery",
+            last_name="Sharifyanovich",
         ),
-        (
-            SourceAuthorFields(first_name="Turaxodjayeva", middle_names="Moxidil", last_name="Obidjonovna"),
-            ("Moxidil", "Obidjonovna", "Turaxodjayeva"),
+        SourceAuthorFields(
+            first_name="Turaxodjayeva",
+            middle_names="Moxidil",
+            last_name="Obidjonovna",
         ),
-        (
-            SourceAuthorFields(
-                first_name="\u0410\u043b\u0435\u043a\u0441\u0435\u0435\u0432",
-                middle_names="\u0413\u0435\u043d\u043d\u0430\u0434\u0438\u0439",
-                last_name="\u0412\u0430\u043b\u0435\u043d\u0442\u0438\u043d\u043e\u0432\u0438\u0447",
-            ),
-            (
-                "\u0413\u0435\u043d\u043d\u0430\u0434\u0438\u0439",
-                "\u0412\u0430\u043b\u0435\u043d\u0442\u0438\u043d\u043e\u0432\u0438\u0447",
-                "\u0410\u043b\u0435\u043a\u0441\u0435\u0435\u0432",
-            ),
+        SourceAuthorFields(
+            first_name="\u0410\u043b\u0435\u043a\u0441\u0435\u0435\u0432",
+            middle_names="\u0413\u0435\u043d\u043d\u0430\u0434\u0438\u0439",
+            last_name="\u0412\u0430\u043b\u0435\u043d\u0442\u0438\u043d\u043e\u0432\u0438\u0447",
         ),
-        (
-            SourceAuthorFields(
-                first_name="\u0411\u0435\u043b\u043e\u0432",
-                middle_names="\u0412\u043b\u0430\u0434\u0438\u043c\u0438\u0440",
-                last_name="\u041d\u0438\u043a\u043e\u043b\u0430\u0435\u0432\u0438\u0447",
-            ),
-            (
-                "\u0412\u043b\u0430\u0434\u0438\u043c\u0438\u0440",
-                "\u041d\u0438\u043a\u043e\u043b\u0430\u0435\u0432\u0438\u0447",
-                "\u0411\u0435\u043b\u043e\u0432",
-            ),
+        SourceAuthorFields(
+            first_name="\u0411\u0435\u043b\u043e\u0432",
+            middle_names="\u0412\u043b\u0430\u0434\u0438\u043c\u0438\u0440",
+            last_name="\u041d\u0438\u043a\u043e\u043b\u0430\u0435\u0432\u0438\u0447",
         ),
-        (
-            SourceAuthorFields(
-                first_name="\u0412\u043e\u043b\u044b\u043d\u043e\u0432",
-                middle_names="\u041c\u0438\u0445\u0430\u0438\u043b",
-                last_name="\u0410\u043d\u0430\u0442\u043e\u043b\u044c\u0435\u0432\u0438\u0447",
-            ),
-            (
-                "\u041c\u0438\u0445\u0430\u0438\u043b",
-                "\u0410\u043d\u0430\u0442\u043e\u043b\u044c\u0435\u0432\u0438\u0447",
-                "\u0412\u043e\u043b\u044b\u043d\u043e\u0432",
-            ),
+        SourceAuthorFields(
+            first_name="\u0412\u043e\u043b\u044b\u043d\u043e\u0432",
+            middle_names="\u041c\u0438\u0445\u0430\u0438\u043b",
+            last_name="\u0410\u043d\u0430\u0442\u043e\u043b\u044c\u0435\u0432\u0438\u0447",
         ),
-        (
-            SourceAuthorFields(
-                first_name="\u041a\u0438\u0440\u0441\u0430\u043d\u043e\u0432",
-                middle_names="\u0410\u043d\u0434\u0440\u0435\u0439",
-                last_name="\u0420\u043e\u043c\u0430\u043d\u043e\u0432\u0438\u0447",
-            ),
-            (
-                "\u0410\u043d\u0434\u0440\u0435\u0439",
-                "\u0420\u043e\u043c\u0430\u043d\u043e\u0432\u0438\u0447",
-                "\u041a\u0438\u0440\u0441\u0430\u043d\u043e\u0432",
-            ),
+        SourceAuthorFields(
+            first_name="\u041a\u0438\u0440\u0441\u0430\u043d\u043e\u0432",
+            middle_names="\u0410\u043d\u0434\u0440\u0435\u0439",
+            last_name="\u0420\u043e\u043c\u0430\u043d\u043e\u0432\u0438\u0447",
         ),
-        (
-            SourceAuthorFields(
-                first_name="\u041a\u0438\u0441\u0442\u0435\u0440\u0441\u043a\u0438\u0439",
-                middle_names="\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440",
-                last_name="\u041f\u0435\u0442\u0440\u043e\u0432\u0438\u0447",
-            ),
-            (
-                "\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440",
-                "\u041f\u0435\u0442\u0440\u043e\u0432\u0438\u0447",
-                "\u041a\u0438\u0441\u0442\u0435\u0440\u0441\u043a\u0438\u0439",
-            ),
+        SourceAuthorFields(
+            first_name="\u041a\u0438\u0441\u0442\u0435\u0440\u0441\u043a\u0438\u0439",
+            middle_names="\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440",
+            last_name="\u041f\u0435\u0442\u0440\u043e\u0432\u0438\u0447",
         ),
-        (
-            SourceAuthorFields(
-                first_name="\u041c\u0430\u043a\u0430\u0440\u043e\u0432\u0430",
-                middle_names="\u0415\u043a\u0430\u0442\u0435\u0440\u0438\u043d\u0430",
-                last_name="\u0412\u043b\u0430\u0434\u0438\u043c\u0438\u0440\u043e\u0432\u043d\u0430",
-            ),
-            (
-                "\u0415\u043a\u0430\u0442\u0435\u0440\u0438\u043d\u0430",
-                "\u0412\u043b\u0430\u0434\u0438\u043c\u0438\u0440\u043e\u0432\u043d\u0430",
-                "\u041c\u0430\u043a\u0430\u0440\u043e\u0432\u0430",
-            ),
+        SourceAuthorFields(
+            first_name="\u041c\u0430\u043a\u0430\u0440\u043e\u0432\u0430",
+            middle_names="\u0415\u043a\u0430\u0442\u0435\u0440\u0438\u043d\u0430",
+            last_name="\u0412\u043b\u0430\u0434\u0438\u043c\u0438\u0440\u043e\u0432\u043d\u0430",
         ),
-        (
-            SourceAuthorFields(
-                first_name="\u041d\u0435\u0432\u0435\u0440\u043e\u0432\u0430",
-                middle_names="\u041e\u043b\u044c\u0433\u0430",
-                last_name="\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440\u043e\u0432\u043d\u0430",
-            ),
-            (
-                "\u041e\u043b\u044c\u0433\u0430",
-                "\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440\u043e\u0432\u043d\u0430",
-                "\u041d\u0435\u0432\u0435\u0440\u043e\u0432\u0430",
-            ),
+        SourceAuthorFields(
+            first_name="\u041d\u0435\u0432\u0435\u0440\u043e\u0432\u0430",
+            middle_names="\u041e\u043b\u044c\u0433\u0430",
+            last_name="\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440\u043e\u0432\u043d\u0430",
         ),
-        (
-            SourceAuthorFields(
-                first_name="\u0421\u0432\u0438\u0434\u0443\u043d\u043e\u0432\u0438\u0447",
-                middle_names="\u041d\u0438\u043a\u043e\u043b\u0430\u0439",
-                last_name="\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440\u043e\u0432\u0438\u0447",
-            ),
-            (
-                "\u041d\u0438\u043a\u043e\u043b\u0430\u0439",
-                "\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440\u043e\u0432\u0438\u0447",
-                "\u0421\u0432\u0438\u0434\u0443\u043d\u043e\u0432\u0438\u0447",
-            ),
+        SourceAuthorFields(
+            first_name="\u0421\u0432\u0438\u0434\u0443\u043d\u043e\u0432\u0438\u0447",
+            middle_names="\u041d\u0438\u043a\u043e\u043b\u0430\u0439",
+            last_name="\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440\u043e\u0432\u0438\u0447",
         ),
-        (
-            SourceAuthorFields(
-                first_name="\u0422\u0440\u043e\u0444\u0438\u043c\u043e\u0432",
-                middle_names="\u0410\u0440\u0442\u0435\u043c",
-                last_name="\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440\u043e\u0432\u0438\u0447",
-            ),
-            (
-                "\u0410\u0440\u0442\u0435\u043c",
-                "\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440\u043e\u0432\u0438\u0447",
-                "\u0422\u0440\u043e\u0444\u0438\u043c\u043e\u0432",
-            ),
+        SourceAuthorFields(
+            first_name="\u0422\u0440\u043e\u0444\u0438\u043c\u043e\u0432",
+            middle_names="\u0410\u0440\u0442\u0435\u043c",
+            last_name="\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440\u043e\u0432\u0438\u0447",
         ),
-        (
-            SourceAuthorFields(
-                first_name="\u0422\u0443\u0445\u0442\u0430\u043c\u0443\u0440\u043e\u0434",
-                middle_names="\u0417\u0438\u0451\u0434\u0443\u043b\u043b\u0430",
-                last_name="\u0417\u0438\u043a\u0440\u0438\u043b\u043b\u0430",
-            ),
-            (
-                "\u0417\u0438\u0451\u0434\u0443\u043b\u043b\u0430",
-                "\u0417\u0438\u043a\u0440\u0438\u043b\u043b\u0430",
-                "\u0422\u0443\u0445\u0442\u0430\u043c\u0443\u0440\u043e\u0434",
-            ),
+        SourceAuthorFields(
+            first_name="\u0422\u0443\u0445\u0442\u0430\u043c\u0443\u0440\u043e\u0434",
+            middle_names="\u0417\u0438\u0451\u0434\u0443\u043b\u043b\u0430",
+            last_name="\u0417\u0438\u043a\u0440\u0438\u043b\u043b\u0430",
         ),
-        (
-            SourceAuthorFields(
-                first_name="\u0428\u0435\u0432\u0447\u0435\u043d\u043a\u043e",
-                middle_names="\u0415\u043b\u0435\u043d\u0430",
-                last_name="\u0412\u0438\u043a\u0442\u043e\u0440\u043e\u0432\u043d\u0430",
-            ),
-            (
-                "\u0415\u043b\u0435\u043d\u0430",
-                "\u0412\u0438\u043a\u0442\u043e\u0440\u043e\u0432\u043d\u0430",
-                "\u0428\u0435\u0432\u0447\u0435\u043d\u043a\u043e",
-            ),
+        SourceAuthorFields(
+            first_name="\u0428\u0435\u0432\u0447\u0435\u043d\u043a\u043e",
+            middle_names="\u0415\u043b\u0435\u043d\u0430",
+            last_name="\u0412\u0438\u043a\u0442\u043e\u0440\u043e\u0432\u043d\u0430",
         ),
-        (
-            SourceAuthorFields(
-                first_name="\u042f\u043c\u0430\u043b\u0434\u0438\u043d\u043e\u0432",
-                middle_names="\u0422\u0438\u043c\u0443\u0440",
-                last_name="\u0420\u0438\u0444\u0430\u0442\u043e\u0432\u0438\u0447",
-            ),
-            (
-                "\u0422\u0438\u043c\u0443\u0440",
-                "\u0420\u0438\u0444\u0430\u0442\u043e\u0432\u0438\u0447",
-                "\u042f\u043c\u0430\u043b\u0434\u0438\u043d\u043e\u0432",
-            ),
+        SourceAuthorFields(
+            first_name="\u042f\u043c\u0430\u043b\u0434\u0438\u043d\u043e\u0432",
+            middle_names="\u0422\u0438\u043c\u0443\u0440",
+            last_name="\u0420\u0438\u0444\u0430\u0442\u043e\u0432\u0438\u0447",
         ),
     ],
 )
 def test_reviewed_exact_surname_given_patronymic_tuples(
     predictor: RoutingPredictorV3,
     source: SourceAuthorFields,
-    expected: tuple[str, str, str],
 ) -> None:
     """Every full-corpus occurrence of these exact tuples agreed on roles."""
     resolved = _route(predictor, source)
 
-    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == expected
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == (
+        source.middle_names,
+        source.last_name,
+        source.first_name,
+    )
     assert resolved.resolution_reason is ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT
 
 
@@ -596,34 +537,23 @@ def test_reviewed_spaced_korean_given_surface_is_restored_after_vys_selection(
 
 
 def test_reviewed_korean_source_assignment_inventory_matches_manual_ledger() -> None:
-    ledger_path = Path(__file__).parent / "data" / "reviewed_korean_source_assignments.tsv"
-    with ledger_path.open(encoding="utf-8", newline="") as ledger_file:
-        rows = list(csv.DictReader(ledger_file, delimiter="\t"))
+    assert len(_REVIEWED_KOREAN_ROWS) == 66
+    assert len(_REVIEWED_KOREAN_ASSIGNMENTS) == 59
+    assert sum(row["decision"] == "exclude" for row in _REVIEWED_KOREAN_ROWS) == 6
+    assert sum(row["decision"] == "abstain" for row in _REVIEWED_KOREAN_ROWS) == 1
 
-    assert len(rows) == 66
-    assert sum(row["decision"] == "assign" for row in rows) == 59
-    assert sum(row["decision"] == "exclude" for row in rows) == 6
-    assert sum(row["decision"] == "abstain" for row in rows) == 1
-
-    assigned_rows = [row for row in rows if row["decision"] == "assign"]
     ledger_inventory = {
         (
             row["source_first_name"].casefold(),
             row["source_middle_names"].casefold(),
             row["source_last_name"].casefold(),
         ): int(row["given_prefix_tokens"])
-        for row in assigned_rows
+        for row in _REVIEWED_KOREAN_ASSIGNMENTS
     }
     assert ledger_inventory == REVIEWED_EXACT_KOREAN_GIVEN_PREFIX_PACKS
 
-    for row in assigned_rows:
-        resolved = reviewed_exact_source_assignment(
-            SourceAuthorFields(
-                first_name=row["source_first_name"],
-                middle_names=row["source_middle_names"],
-                last_name=row["source_last_name"],
-            ),
-        )
+    for row in _REVIEWED_KOREAN_ASSIGNMENTS:
+        resolved = reviewed_exact_source_assignment(_source_from_korean_row(row))
         assert resolved is not None
         assert (resolved.given_name, resolved.middle_name, resolved.surname) == (
             row["expected_given_name"],
@@ -633,80 +563,22 @@ def test_reviewed_korean_source_assignment_inventory_matches_manual_ledger() -> 
 
 
 @pytest.mark.parametrize(
-    ("source", "expected"),
-    [
-        (SourceAuthorFields(first_name="Bong", middle_names="Soo", last_name="Cha"), ("Bong Soo", "", "Cha")),
-        (SourceAuthorFields(first_name="Boo", middle_names="Young", last_name="Ko"), ("Boo Young", "", "Ko")),
-        (SourceAuthorFields(first_name="Byoung", middle_names="Yoon", last_name="Kim"), ("Byoung Yoon", "", "Kim")),
-        (SourceAuthorFields(first_name="Chang", middle_names="Hee", last_name="Lee"), ("Chang Hee", "", "Lee")),
-        (SourceAuthorFields(first_name="Chang", middle_names="Mo", last_name="Yang"), ("Chang Mo", "", "Yang")),
-        (SourceAuthorFields(first_name="Changwoo", last_name="Lee"), ("Changwoo", "", "Lee")),
-        (SourceAuthorFields(first_name="Dong", middle_names="Soo", last_name="Han"), ("Dong Soo", "", "Han")),
-        (SourceAuthorFields(first_name="Eun", middle_names="Kee", last_name="Jeong"), ("Eun Kee", "", "Jeong")),
-        (SourceAuthorFields(first_name="Han", middle_names="Jin", last_name="Jung"), ("Han Jin", "", "Jung")),
-        (SourceAuthorFields(first_name="Heung", middle_names="Soo", last_name="Lee"), ("Heung Soo", "", "Lee")),
-        (SourceAuthorFields(first_name="Hoe", middle_names="Joon", last_name="Kim"), ("Hoe Joon", "", "Kim")),
-        (SourceAuthorFields(first_name="Hyoung", middle_names="Sub", last_name="Kim"), ("Hyoung Sub", "", "Kim")),
-        (SourceAuthorFields(first_name="Jae", middle_names="moon", last_name="Lee"), ("Jae moon", "", "Lee")),
-        (SourceAuthorFields(first_name="Jae", middle_names="Won", last_name="Chung"), ("Jae Won", "", "Chung")),
-        (SourceAuthorFields(first_name="Jeong", middle_names="Seon", last_name="Yeo"), ("Jeong Seon", "", "Yeo")),
-        (SourceAuthorFields(first_name="Ji", middle_names="Hyun", last_name="Moon"), ("Ji Hyun", "", "Moon")),
-        (SourceAuthorFields(first_name="Ji", middle_names="Soo", last_name="Lee"), ("Ji Soo", "", "Lee")),
-        (SourceAuthorFields(first_name="Ji", middle_names="Woon", last_name="Ha"), ("Ji Woon", "", "Ha")),
-        (SourceAuthorFields(first_name="Jin", middle_names="Cheul", last_name="Kim"), ("Jin Cheul", "", "Kim")),
-        (SourceAuthorFields(first_name="Jong", middle_names="Hak", last_name="Kim"), ("Jong Hak", "", "Kim")),
-        (SourceAuthorFields(first_name="Jong", middle_names="Ho", last_name="Kim"), ("Jong Ho", "", "Kim")),
-        (SourceAuthorFields(first_name="Jong", middle_names="Hoon", last_name="Kang"), ("Jong Hoon", "", "Kang")),
-        (SourceAuthorFields(first_name="Jong", middle_names="Soo", last_name="Woo"), ("Jong Soo", "", "Woo")),
-        (SourceAuthorFields(first_name="Joon", middle_names="Young", last_name="Choi"), ("Joon Young", "", "Choi")),
-        (SourceAuthorFields(first_name="Kang", middle_names="Ju", last_name="Kim"), ("Kang Ju", "", "Kim")),
-        (SourceAuthorFields(first_name="Keum", middle_names="Seok", last_name="Bae"), ("Keum Seok", "", "Bae")),
-        (SourceAuthorFields(first_name="Kyeong", middle_names="Ah", last_name="Kim"), ("Kyeong Ah", "", "Kim")),
-        (SourceAuthorFields(first_name="Min", middle_names="Young", last_name="Lee"), ("Min Young", "", "Lee")),
-        (SourceAuthorFields(first_name="Minwoo", last_name="Lee"), ("Minwoo", "", "Lee")),
-        (SourceAuthorFields(first_name="Sang", middle_names="Hoon", last_name="Han"), ("Sang Hoon", "", "Han")),
-        (SourceAuthorFields(first_name="Sang", middle_names="Hyub", last_name="Lee"), ("Sang Hyub", "", "Lee")),
-        (SourceAuthorFields(first_name="Sang", middle_names="Min", last_name="Yoon"), ("Sang Min", "", "Yoon")),
-        (SourceAuthorFields(first_name="Sang", middle_names="Yong", last_name="Shin"), ("Sang Yong", "", "Shin")),
-        (SourceAuthorFields(first_name="Sang", middle_names="Yun", last_name="Han"), ("Sang Yun", "", "Han")),
-        (SourceAuthorFields(first_name="Sanghun", last_name="Lee"), ("Sanghun", "", "Lee")),
-        (SourceAuthorFields(first_name="Sangji", last_name="Lee"), ("Sangji", "", "Lee")),
-        (SourceAuthorFields(first_name="Seok", middle_names="Yong", last_name="Kang"), ("Seok Yong", "", "Kang")),
-        (SourceAuthorFields(first_name="Seung", middle_names="Jun", last_name="Lee"), ("Seung Jun", "", "Lee")),
-        (SourceAuthorFields(first_name="Soo", middle_names="Ick", last_name="Cho"), ("Soo Ick", "", "Cho")),
-        (SourceAuthorFields(first_name="Su", middle_names="Ja", last_name="Kim"), ("Su Ja", "", "Kim")),
-        (SourceAuthorFields(first_name="Su", middle_names="Jin", last_name="Hwang"), ("Su Jin", "", "Hwang")),
-        (SourceAuthorFields(first_name="Su", middle_names="Jung", last_name="Choi"), ("Su Jung", "", "Choi")),
-        (SourceAuthorFields(first_name="Sumin", last_name="Lee"), ("Sumin", "", "Lee")),
-        (SourceAuthorFields(first_name="Sung", middle_names="Hoon", last_name="Chung"), ("Sung Hoon", "", "Chung")),
-        (SourceAuthorFields(first_name="Sung", middle_names="Ik", last_name="Lee"), ("Sung Ik", "", "Lee")),
-        (SourceAuthorFields(first_name="Sunghak", last_name="Lee"), ("Sunghak", "", "Lee")),
-        (SourceAuthorFields(first_name="Suji", last_name="Choi"), ("Suji", "", "Choi")),
-        (SourceAuthorFields(first_name="Weon", middle_names="Ju", last_name="Lee"), ("Weon Ju", "", "Lee")),
-        (
-            SourceAuthorFields(first_name="Won", middle_names="Hyung A.", last_name="Ryu"),
-            ("Won Hyung", "A.", "Ryu"),
-        ),
-        (SourceAuthorFields(first_name="Woo", middle_names="Sung", last_name="Jeon"), ("Woo Sung", "", "Jeon")),
-        (SourceAuthorFields(first_name="Ye", middle_names="Hun", last_name="Choi"), ("Ye Hun", "", "Choi")),
-        (SourceAuthorFields(first_name="Yi", middle_names="Ho", last_name="Lee"), ("Yi Ho", "", "Lee")),
-        (SourceAuthorFields(first_name="Youme", last_name="Ko"), ("Youme", "", "Ko")),
-        (SourceAuthorFields(first_name="Young", middle_names="Hee", last_name="Choi"), ("Young Hee", "", "Choi")),
-        (SourceAuthorFields(first_name="Young", middle_names="In", last_name="Shin"), ("Young In", "", "Shin")),
-        (SourceAuthorFields(first_name="Young", middle_names="Mo", last_name="Sung"), ("Young Mo", "", "Sung")),
-        (SourceAuthorFields(first_name="Youn", middle_names="Sik", last_name="Kim"), ("Youn Sik", "", "Kim")),
-        (SourceAuthorFields(first_name="Yoon", middle_names="Kyung", last_name="Choi"), ("Yoon Kyung", "", "Choi")),
-        (SourceAuthorFields(first_name="Yunjin", last_name="Lee"), ("Yunjin", "", "Lee")),
-    ],
+    "row",
+    _REVIEWED_KOREAN_ASSIGNMENTS,
+    ids=lambda row: row["occurrence_ids"],
 )
 def test_reviewed_korean_source_orthography_is_assigned_exactly(
     predictor: RoutingPredictorV3,
-    source: SourceAuthorFields,
-    expected: tuple[str, str, str],
+    row: dict[str, str],
 ) -> None:
+    source = _source_from_korean_row(row)
     resolved = _route(predictor, source)
 
-    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == expected
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == (
+        row["expected_given_name"],
+        row["expected_middle_name"],
+        row["expected_surname"],
+    )
     assert resolved.resolution_action is ResolutionAction.ASSIGN
     assert resolved.resolution_reason is ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT
 

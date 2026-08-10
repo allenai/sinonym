@@ -10,9 +10,8 @@ function with plain dict lookups, which is ~2 orders of magnitude faster.
 ``from_skops_bytes`` reads those parameters straight out of the ``.skops``
 zip (``schema.json`` plus ``.npy`` payloads) with zipfile/json/numpy, so the
 runtime never imports skops, sklearn, or scipy — the skops import alone costs
-~2s of cold start. ``from_pipeline`` builds the same scorer from a
-deserialized sklearn pipeline and anchors the parity tests in
-``tests/test_ml_fast_scorer.py``.
+~2s of cold start. ``from_pipeline`` remains available as a model-development
+helper for comparison with a deserialized sklearn pipeline.
 """
 
 from __future__ import annotations

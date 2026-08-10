@@ -36,11 +36,12 @@ class NameComponents:
 class CanonicalName:
     """Canonical representation of a person's name and its source components.
 
-    ``source`` records the component assignment before normalization, while
-    ``normalized`` records the final component assignment used to render
-    ``text``. For structured input, surviving source roles remain authoritative;
-    normalization repairs roles only when mechanical cleanup empties a required
-    boundary. Both use immutable tuples so the complete value is immutable.
+    ``source`` records component lineage before normalization; it is not an
+    alternative semantic answer. ``normalized`` records the final assignment
+    used to render ``text`` after generic cleanup and any evidence-backed
+    culture or reviewed structured-source routing. The two assignments may
+    therefore differ even when cleanup leaves every source field populated.
+    Both use immutable tuples so the complete value is immutable.
     """
 
     source_text: str

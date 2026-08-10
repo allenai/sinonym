@@ -2,8 +2,9 @@
 
 The runtime assets `east_asian_roman_lexicons.json.gz` and
 `japanese_native_lexicons.json.gz` are deterministic derived lookup lists used
-only by the conservative Japanese, Korean, and Vietnamese family-first router.
-They contain component names, not complete people.
+by the conservative Japanese, Korean, and Vietnamese name-order logic. They are
+primarily component lexicons. The Roman asset also contains the small reviewed
+set of exact Japanese given-first surfaces described below.
 
 ## Japanese Personal Name Dataset
 
@@ -66,6 +67,17 @@ Vietnamese surname rows whose provenance is recorded in the generated JSON.
 The Roman asset also retains the folded Vietnamese surnames ranked 1-4 as a
 separate thresholded list for the candidate-conditioned reorder-conflict rule;
 it does not expose or infer a general runtime rank map.
+
+## Regeneration
+
+From the repository root, rebuild both assets with:
+
+```bash
+uv run python scripts/build_east_asian_name_lexicons.py --roman-output sinonym/data/east_asian_roman_lexicons.json.gz --native-output sinonym/data/japanese_native_lexicons.json.gz
+```
+
+The script downloads the pinned sources, verifies their hashes, and prints the
+generated asset counts and hashes.
 
 ## Excluded research source
 

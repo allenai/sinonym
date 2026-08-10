@@ -315,7 +315,7 @@ def test_reordered_pp_result_is_an_invariant_failure(
         SourceAuthorFields(first_name="Steve", last_name="Blando"),
     ]
     names = [source.full_name() for source in sources]
-    batch = predictor._detector._analyze_name_batch_strict(names)  # noqa: SLF001
+    batch = predictor._detector._analyze_related_name_batches_strict(names, None).pp_batch  # noqa: SLF001
     reordered = replace(
         batch,
         names=list(reversed(batch.names)),
@@ -411,6 +411,39 @@ def test_present_empty_vys_cannot_change_pp_only_semantic_result(
         pp_only.resolved_fields.last_name,
     ) == ("Zhang", "Wei", "Q.")
     assert pp_only.resolved_fields == present_vys.resolved_fields
+
+
+def test_v3_preserves_unicode_apostrophe_display(
+    predictor: RoutingPredictorV3,
+) -> None:
+    source = SourceAuthorFields(first_name="Xiang\u02bban", last_name="Yan")
+
+    (result,) = _route(predictor, [source])
+
+    resolved = result.resolved_fields
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("Xiang'an", "", "Yan")
+
+
+@pytest.mark.parametrize("suffix", [None, "III", "Jr."])
+def test_v3_uses_last_name_field_as_surname_first_initial_evidence(
+    predictor: RoutingPredictorV3,
+    suffix: str | None,
+) -> None:
+    (result,) = _route(
+        predictor,
+        [SourceAuthorFields(last_name="Masterov R. A.", suffix=suffix)],
+    )
+
+    resolved = result.resolved_fields
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name, resolved.suffix) == (
+        "R.",
+        "A.",
+        "Masterov",
+        suffix,
+    )
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.ASSIGN
+    assert resolved.resolution_reason is ResolutionReason.STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT
 
 
 def test_timo_config_registers_v3_without_replacing_v2() -> None:

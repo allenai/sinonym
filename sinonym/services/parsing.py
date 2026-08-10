@@ -90,6 +90,9 @@ class NameParsingService:
         compound_metadata: dict[str, CompoundMetadata],
     ) -> ParseResult:
         """Parse and return ParseResult for compatibility with external callers."""
+        if len(order) < self._config.min_tokens_required:
+            return ParseResult.failure(f"needs at least {self._config.min_tokens_required} tokens")
+
         parsed = self.parse_name_order_tokens(order, normalized_cache, compound_metadata)
         if parsed is None:
             return ParseResult.failure("surname not recognised")
@@ -104,6 +107,9 @@ class NameParsingService:
         compound_metadata: dict[str, CompoundMetadata],
     ) -> tuple[list[str], list[str], str | None] | None:
         """Fast internal parse path that avoids ParseResult object construction."""
+        if len(order) < self._config.min_tokens_required:
+            return None
+
         # Try probabilistic parsing first
         best_parse = self._best_parse_tokens(order, normalized_cache, compound_metadata)
         if best_parse is not None:

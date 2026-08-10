@@ -1,20 +1,9 @@
-"""Regression tests for the scalar clean source-surname repartition rule.
+"""Regression tests for scalar clean source-surname repartition.
 
-The rule keeps the structured source surname intact when scalar parsing cleanly
-peels a non-initial prefix of a multi-token source surname into middle names.
-It was validated on an untouched corpus bucket: 326 fixes against 90
-regressions over 500 blind-labelled activations, recorded in
-``docs/scalar_source_surname_repartition_evaluation.md``.
-
-The activation cases below are verbatim source tuples from that holdout whose
-expected components were adjudicated by hand from source-only packets before
-any prediction was revealed.
-
-The rule is not regression-free, and one of its 90 measured regressions is
-pinned in the routed V3 parity fixture: ``production-248247190`` position 0
-("Anh" / "Tram" / "Ngoc Mai") now keeps the publisher's over-wide surname
-instead of the linguistically correct Vietnamese surname "Mai". That
-expectation records shipped behavior, not a desired boundary.
+The source-only adjudication and 500-activation blind evaluation are recorded
+in ``docs/scalar_source_surname_repartition_evaluation.md``. The routed V3
+parity fixture separately pins the known ``production-248247190`` regression
+as shipped behavior, not a desired boundary.
 """
 
 from __future__ import annotations

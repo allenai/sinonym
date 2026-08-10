@@ -100,3 +100,19 @@ def test_strict_and_forgiving_batches_share_analysis_but_not_sidecars(detector):
     assert strict.results == [replace(result, canonical_name=None) for result in forgiving.results]
     assert any(result.canonical_name is not None for result in forgiving.results)
     assert all(result.canonical_name is None for result in strict.results)
+
+
+def test_strict_batches_propagate_analysis_failures(detector, monkeypatch):
+    """The strict public twin must not degrade a programming failure to fallback rows."""
+    def crashing_batch(*args, **kwargs):
+        message = "synthetic strict batch crash"
+        raise RuntimeError(message)
+
+    monkeypatch.setattr(
+        detector._batch_analysis_service,  # noqa: SLF001
+        "analyze_name_batch",
+        crashing_batch,
+    )
+
+    with pytest.raises(RuntimeError, match="synthetic strict batch crash"):
+        detector.analyze_name_batches_strict([BATCH], parallel="never")

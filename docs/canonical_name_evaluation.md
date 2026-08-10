@@ -93,7 +93,12 @@ packet was then rerun as a regression check and the reported holdout score was
 unchanged. Exact match requires the person outcome, canonical text, first,
 middle, last, and suffix to all agree with the manual record.
 
-Reproduction commands, when the ignored source/review artifacts are present:
+The table above records the policy at commit
+`595c79303c0d1d62eb69679d5b8e655ed202cb58`. When the ignored source/review
+artifacts are present, the following commands rebuild the gold packet and
+evaluate the policy in the checked-out revision. Run them at that commit to
+reproduce the historical result; on a newer revision they perform a
+current-policy reevaluation and are expected to differ.
 
 ```powershell
 uv run python scratch\canonical_names\assemble_gold.py `

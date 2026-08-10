@@ -25,14 +25,9 @@ classifiers = [
 ]
 keywords = ["chinese", "names", "nlp", "romanization", "pinyin"]
 dependencies = [
-    "joblib>=1.3",
     "numpy>=1.24",
     "pydantic>=1.10,<2",
     "pypinyin>=0.44.0",
-    "requests>=2.31",
-    "scikit-learn==1.7.1",
-    "scipy>=1.10",
-    "skops>=0.9",
 ]
 
 [project.optional-dependencies]
@@ -56,6 +51,9 @@ packages = ["sinonym"]
 include = [
     "sinonym/data/**/*"
 ]
+exclude = [
+    "sinonym/data/chinese_japanese_classifier.joblib",
+]
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -72,6 +70,9 @@ include = [
     "scripts/train_ml_classifier_for_chinese_vs_japanese.py",
     "README.md",
     "pyproject.toml",
+]
+exclude = [
+    "sinonym/data/chinese_japanese_classifier.joblib",
 ]
 
 [tool.pytest.ini_options]
@@ -138,7 +139,15 @@ warn_unreachable = true
 strict_equality = true
 
 [dependency-groups]
+training = [
+    "joblib>=1.3",
+    "requests>=2.31",
+    "scikit-learn==1.7.1",
+    "scipy>=1.10",
+    "skops>=0.9",
+]
 dev = [
+    {include-group = "training"},
     "pytest>=8.4.1",
     "ruff>=0.12.5",
 ]

@@ -163,8 +163,10 @@ data structures and the detector can be safely used from multiple threads.
 """
 
 import logging
+import math
 import platform
 import string
+import threading
 from dataclasses import replace
 from typing import Literal
 
@@ -284,6 +286,16 @@ def _auto_start_method(mp_start_method: str) -> str:
     return "spawn"
 
 
+def _validate_batch_policy(format_threshold: float, minimum_batch_size: int | None = None) -> None:
+    """Validate public batch-policy arguments before forgiving fallbacks run."""
+    if not math.isfinite(format_threshold) or not 0.0 <= format_threshold <= 1.0:
+        message = "format_threshold must be finite and between 0.0 and 1.0"
+        raise ValueError(message)
+    if minimum_batch_size is not None and minimum_batch_size < 1:
+        message = "minimum_batch_size must be >= 1"
+        raise ValueError(message)
+
+
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CHINESE NAME DETECTOR CLASS
 # ════════════════════════════════════════════════════════════════════════════════
@@ -299,6 +311,7 @@ class ChineseNameDetector:
         self._person_name_normalizer = PersonNameNormalizationService()
         self._east_asian_name_order = EastAsianNameOrderService()
         self._data_service = DataInitializationService(self._config, self._cache_service, self._normalizer)
+        self._initialization_lock = threading.RLock()
         self._data: NameDataStructures | None = None
         self._surname_resolver: SurnameResolver | None = None
         self._weights = weights  # Store weights to pass to parsing service
@@ -316,47 +329,53 @@ class ChineseNameDetector:
     def _initialize(self) -> None:
         """Initialize cache and data structures."""
         try:
-            self._data = self._data_service.initialize_data_structures()
-            # Inject data context into normalizer after initialization
-            self._normalizer.set_data_context(self._data)
-            # Initialize services
-            self._initialize_services()
+            self._ensure_initialized()
         except Exception as e:  # noqa: BLE001 - construction keeps lazy initialization fallback semantics.
             LOGGER.warning("Failed to initialize at construction: %s. Will initialize lazily.", e)
 
-    def _initialize_services(self) -> None:
-        """Initialize service instances with data context."""
-        if self._data is not None:
-            # Create shared context to reduce dependency injection complexity
-            context = ServiceContext(self._config, self._normalizer, self._data)
-            self._surname_resolver = SurnameResolver(self._data, self._normalizer)
-
-            self._ethnicity_service = EthnicityClassificationService(context)
-            self._parsing_service = NameParsingService(context, weights=self._weights)
-            self._formatting_service = NameFormattingService(context)
-            self._non_person_input_service = NonPersonInputDetectionService(self._config, self._normalizer, self._data)
-            self._batch_analysis_service = BatchAnalysisService(
-                self._parsing_service,
-                ethnicity_service=self._ethnicity_service,
-                dependencies=BatchAnalysisDependencies(
-                    min_tokens_required=self._config.min_tokens_required,
-                    # Batch policy consumes only Chinese parse/evidence fields.
-                    # Public batch APIs attach canonical sidecars after batch
-                    # analysis; V3 performs its sole scalar resolution later.
-                    individual_parser=self._normalize_chinese_name,
-                    input_failure=self._initial_input_failure,
-                    surname_resolver=self._surname_resolver,
-                ),
-            )
+    def _initialize_services(self, data: NameDataStructures) -> None:
+        """Build dependent services and publish them only after all succeed."""
+        context = ServiceContext(self._config, self._normalizer, data)
+        surname_resolver = SurnameResolver(data, self._normalizer)
+        ethnicity_service = EthnicityClassificationService(context)
+        parsing_service = NameParsingService(context, weights=self._weights)
+        formatting_service = NameFormattingService(context)
+        non_person_input_service = NonPersonInputDetectionService(self._config, self._normalizer, data)
+        batch_analysis_service = BatchAnalysisService(
+            parsing_service,
+            ethnicity_service=ethnicity_service,
+            dependencies=BatchAnalysisDependencies(
+                min_tokens_required=self._config.min_tokens_required,
+                # Batch policy consumes only Chinese parse/evidence fields.
+                # Public batch APIs attach canonical sidecars after batch
+                # analysis; V3 performs its sole scalar resolution later.
+                individual_parser=self._normalize_chinese_name,
+                input_failure=self._initial_input_failure,
+                surname_resolver=surname_resolver,
+            ),
+        )
+        self._surname_resolver = surname_resolver
+        self._ethnicity_service = ethnicity_service
+        self._parsing_service = parsing_service
+        self._formatting_service = formatting_service
+        self._non_person_input_service = non_person_input_service
+        self._batch_analysis_service = batch_analysis_service
+        self._data = data
 
     def _ensure_initialized(self) -> None:
         """Ensure data is initialized (lazy initialization)."""
-        if self._data is None:
-            self._data = self._data_service.initialize_data_structures()
-            # Inject data context into normalizer
-            self._normalizer.set_data_context(self._data)
-            # Initialize services
-            self._initialize_services()
+        if self._data is not None:
+            return
+        with self._initialization_lock:
+            if self._data is not None:
+                return
+            data = self._data_service.initialize_data_structures()
+            try:
+                self._normalizer.set_data_context(data)
+                self._initialize_services(data)
+            except Exception:
+                self._normalizer.set_data_context(None)
+                raise
 
     def _require_surname_resolver(self) -> SurnameResolver:
         """Return the initialized surname resolver."""
@@ -555,6 +574,11 @@ class ChineseNameDetector:
 
         bound_tokens: list[str] = []
         for token in given_tokens:
+            if token.count("'") == 1 and not token.startswith("'") and not token.endswith("'"):
+                # The source already carries an explicit boundary or aspiration mark.
+                # Let the formatter retain it while preserving split-token lineage.
+                bound_tokens.append(token)
+                continue
             target = self._normalizer.norm_light(token)
             matches = {
                 "-".join(sequence[start:end])
@@ -1942,6 +1966,7 @@ class ChineseNameDetector:
             result = detector.analyze_name_batch(names)
             # "Bei Yu" will be correctly parsed as "Bei Yu" due to batch context
         """
+        _validate_batch_policy(format_threshold, minimum_batch_size)
         self._ensure_initialized()
         if self._batch_analysis_service is None:
             individual_results = [self._guarded_normalize_name(name) for name in names]
@@ -1993,6 +2018,7 @@ class ChineseNameDetector:
         minimum_batch_size: int = 2,
     ) -> BatchParseResult:
         """Analyze one V3 batch without converting exceptions into fallback rows."""
+        _validate_batch_policy(format_threshold, minimum_batch_size)
         self._ensure_initialized()
         return self._analyze_name_batch_core(
             names,
@@ -2009,6 +2035,7 @@ class ChineseNameDetector:
         prepared_cache=None,
     ) -> RelatedBatchParseResult:
         """Analyze one related PP/VYS work item without duplicating focal preparation."""
+        _validate_batch_policy(format_threshold, minimum_batch_size)
         self._ensure_initialized()
         if self._batch_analysis_service is None:
             message = "batch analysis service is not initialized"
@@ -2066,6 +2093,7 @@ class ChineseNameDetector:
             if pattern.threshold_met:
                 print(f"Detected {pattern.dominant_format} with {pattern.decision_confidence:.1%} confidence")
         """
+        _validate_batch_policy(format_threshold)
         self._ensure_initialized()
 
         if self._batch_analysis_service is None:
@@ -2221,6 +2249,7 @@ class ChineseNameDetector:
         mp_start_method: str = "auto",
     ) -> list[RelatedBatchParseResult]:
         """Analyze PP/VYS pairs as related worker units while preserving request order."""
+        _validate_batch_policy(format_threshold, minimum_batch_size)
         self._ensure_initialized()
         if _should_use_multiprocessing(
             item_count=len(requests),
@@ -2266,6 +2295,7 @@ class ChineseNameDetector:
         mp_start_method: str,
     ) -> list[BatchParseResult]:
         """Run the shared batch scheduler with one explicit failure policy."""
+        _validate_batch_policy(format_threshold, minimum_batch_size)
         self._ensure_initialized()
         if _should_use_multiprocessing(
             item_count=len(batches),

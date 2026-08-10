@@ -70,16 +70,23 @@ class NameFormattingService:
         - surname_str / given_str: component strings as used in full_formatted_name
         - middle_tokens_final: canonical standalone initials outside the Chinese given span
         """
+        apostrophe_lineage = {
+            token: lineage
+            for token in given_tokens
+            if (lineage := self._direct_apostrophe_lineage(token, normalized_cache)) is not None
+        }
         # Validate given name tokens first
         compact_initial = self._accepts_compact_initial(surname_tokens, given_tokens)
         alias_given_parts = self._reviewed_alias_compact_given_parts(surname_tokens, given_tokens)
         wade_giles_single_given = self._accepts_wade_giles_single_given(surname_tokens, given_tokens)
         unbounded_syllabic_prefix = bool(
-            len(given_tokens) == 1
-            and self._accepts_unbounded_syllabic_prefix(surname_tokens, given_tokens, given_tokens[0]),
+            len(given_tokens) == 1 and self._accepts_unbounded_syllabic_prefix(surname_tokens, given_tokens, given_tokens[0]),
         )
         if (
-            not self._normalizer.validate_given_tokens(given_tokens, normalized_cache)
+            not all(
+                token in apostrophe_lineage or self._normalizer.is_valid_given_name_token(token, normalized_cache)
+                for token in given_tokens
+            )
             and not compact_initial
             and not alias_given_parts
             and not wade_giles_single_given
@@ -92,6 +99,9 @@ class NameFormattingService:
         parts: list[str] = []
         syllabic_keys = {token.casefold().rstrip(".") for token in syllabic_single_letter_tokens or ()}
         for token in given_tokens:
+            if token in apostrophe_lineage:
+                parts.append(token)
+                continue
             if normalized_cache and token in normalized_cache:
                 normalized_token = normalized_cache[token]
             else:
@@ -136,7 +146,10 @@ class NameFormattingService:
                     self._normalizer,
                     self._config,
                 )
-            if split:
+            if split and (explicit_lineage := self._explicit_apostrophe_lineage(token, split)):
+                parts.append(token)
+                apostrophe_lineage[token] = explicit_lineage
+            elif split:
                 trailing = split[-1].casefold().rstrip(".")
                 if len(split) > 1 and len(split[-1]) == 1 and trailing not in syllabic_keys:
                     parts.append(token)
@@ -161,20 +174,28 @@ class NameFormattingService:
             clean_part = StringManipulationUtils.clean_hyphen_boundaries(part)
             if not clean_part:
                 continue
-            if "-" in clean_part:
+            if explicit_lineage := apostrophe_lineage.get(part):
+                capitalized_parts, subpart_initials = self._format_bound_given_parts(
+                    explicit_lineage,
+                    syllabic_keys,
+                )
+                display_parts = StringManipulationUtils.capitalize_name_part(clean_part).split("'")
+                formatted_parts.append(
+                    "'".join(
+                        formatted if is_initial else display
+                        for formatted, display, is_initial in zip(
+                            capitalized_parts,
+                            display_parts,
+                            subpart_initials,
+                            strict=True,
+                        )
+                    ),
+                )
+                formatted_part_tokens.append(capitalized_parts)
+                initial_parts.append(False)
+            elif "-" in clean_part:
                 sub_parts = StringManipulationUtils.split_and_clean_hyphens(clean_part)
-                all_initial_parts = bool(sub_parts) and all(self._initial_letter(sub) is not None for sub in sub_parts)
-                capitalized_parts: list[str] = []
-                for sub in sub_parts:
-                    letter = self._initial_letter(sub)
-                    key = sub.casefold().rstrip(".")
-                    is_syllable = key in syllabic_keys or (
-                        not all_initial_parts and key in SINGLE_LETTER_PINYIN_SYLLABLES and "." not in sub
-                    )
-                    if letter is not None and not is_syllable:
-                        capitalized_parts.append(f"{letter}.")
-                    else:
-                        capitalized_parts.append(StringManipulationUtils.capitalize_name_part(sub))
+                capitalized_parts, _subpart_initials = self._format_bound_given_parts(sub_parts, syllabic_keys)
                 formatted_part_tokens.append(capitalized_parts)
                 formatted_parts.append(StringManipulationUtils.join_with_hyphens(capitalized_parts))
                 # An explicit hyphen binds every subpart into the first name.
@@ -225,6 +246,54 @@ class NameFormattingService:
         surname_tokens_final = [StringManipulationUtils.capitalize_name_part(t) for t in surname_tokens]
 
         return full_formatted, given_tokens_final, surname_tokens_final, surname_str, given_str, middle_tokens_final
+
+    def _format_bound_given_parts(
+        self,
+        parts: list[str],
+        syllabic_keys: set[str],
+    ) -> tuple[list[str], list[bool]]:
+        """Format explicitly bound given-name parts without manufacturing initials."""
+        all_initial_parts = bool(parts) and all(self._initial_letter(part) is not None for part in parts)
+        formatted: list[str] = []
+        initial_flags: list[bool] = []
+        for part in parts:
+            letter = self._initial_letter(part)
+            key = part.casefold().rstrip(".")
+            is_syllable = key in syllabic_keys or (
+                not all_initial_parts and key in SINGLE_LETTER_PINYIN_SYLLABLES and "." not in part
+            )
+            is_initial = letter is not None and not is_syllable
+            formatted.append(f"{letter}." if is_initial else StringManipulationUtils.capitalize_name_part(part))
+            initial_flags.append(is_initial)
+        return formatted, initial_flags
+
+    def _direct_apostrophe_lineage(
+        self,
+        token: str,
+        normalized_cache: dict[str, str] | None,
+    ) -> list[str] | None:
+        """Return an explicit boundary without misreading Wade-Giles aspiration."""
+        if token.count("'") != 1 or token.startswith("'") or token.endswith("'"):
+            return None
+        pieces = token.split("'")
+        if all(
+            self._initial_letter(piece) is not None and (piece.isupper() or "." in piece) for piece in pieces
+        ) and not self._normalizer.is_valid_given_name_token(token, normalized_cache):
+            return pieces
+        if any(len(piece) == 1 and piece.casefold() not in SINGLE_LETTER_PINYIN_SYLLABLES for piece in pieces):
+            return None
+        return pieces if all(self._normalizer.is_valid_given_name_token(piece, normalized_cache) for piece in pieces) else None
+
+    def _explicit_apostrophe_lineage(self, token: str, split: list[str]) -> list[str] | None:
+        """Keep an explicit apostrophe in display while retaining validated split tokens."""
+        if token.count("'") != 1 or token.startswith("'") or token.endswith("'"):
+            return None
+        pieces = [piece for split_part in split for piece in StringManipulationUtils.split_and_clean_hyphens(split_part)]
+        if len(pieces) != len(token.split("'")):
+            return None
+        source_key = self._normalizer.norm_light(token)
+        split_key = "".join(self._normalizer.norm_light(piece) for piece in pieces)
+        return pieces if source_key == split_key else None
 
     def _accepts_compact_initial(self, surname_tokens: list[str], given_tokens: list[str]) -> bool:
         """Return dominant surname plus a single vowelless 2-3 letter bundle."""

@@ -15,6 +15,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 
 from sinonym.coretypes import CanonicalName, NameComponents
+from sinonym.name_punctuation import APOSTROPHE_LIKE, HYPHEN_LIKE
 from sinonym.services.non_person import reviewed_non_person_text_pattern
 
 
@@ -101,28 +102,6 @@ _DOTTED_INITIAL_SEQUENCE_RE = re.compile(r"[A-Z][a-z](?:\.[A-Z])+\.")
 _PARENTHETICAL_DUPLICATE_RE = re.compile(r"^(\S+)\s+\(([^)]+)\)\s+(.+)$")
 _ASCII_JOINER_TRANSLATION = str.maketrans({"`": "'"})
 _PRE_NFKC_JOINER_TRANSLATION = str.maketrans({"\u00b4": "'"})
-
-_APOSTROPHE_LIKE = frozenset(
-    {
-        "'",
-        "\u02b9",  # modifier letter prime
-        "\u02bb",  # modifier letter turned comma
-        "\u02bc",  # modifier letter apostrophe
-        "\u2018",  # left single quotation mark
-        "\u2019",  # right single quotation mark
-        "\u201a",  # single low-9 quotation mark
-        "\u201b",  # single high-reversed-9 quotation mark
-        "\u2032",  # prime
-        "\u2035",  # reversed prime
-        "\ua78b",  # Latin capital letter saltillo
-        "\ua78c",  # Latin small letter saltillo
-        "\uff07",  # fullwidth apostrophe
-        "`",  # grave accent used as an apostrophe
-        "\uff40",  # fullwidth grave accent
-        "\u00b4",  # acute accent used as an apostrophe
-    },
-)
-_DASH_LIKE_EXTRAS = frozenset({"\u2043", "\u2212", "\u208b"})
 
 _TITLE_KEYS = frozenset(
     {
@@ -881,7 +860,6 @@ class PersonNameNormalizationService:
             return self._invalid("no personal-name tokens remain", dropped)
 
         tokens = self._split_fused_initial_sequence_surname(tokens)
-        packed_surname_first = self._is_packed_surname_first_initials(tokens)
         source_given, source_middle, source_surname = self._infer_regular_roles(tokens)
         assigned = [*source_given, *source_middle, *source_surname]
         assigned_by_position = {token.position: token for token in assigned}
@@ -895,20 +873,17 @@ class PersonNameNormalizationService:
             replace(item.token, source_role="suffix") for item in dropped if item.reason is DropReason.CREDENTIAL
         ]
         source_suffix = [*([suffix_token] if suffix_token is not None else []), *credential_source]
-        source_order = None
-        if packed_surname_first and not prefix_source and not source_suffix:
-            source_order = ("surname", "given", *("middle" for _token in source_middle))
         source = self._components(
             [*prefix_source, *source_given],
             source_middle,
             source_surname,
             source_suffix,
-            order=source_order,
         )
         given, middle, surname = self._apply_unbound_initial_policy(
             source_given,
             source_middle,
             source_surname,
+            normalize_ambiguous_tail=True,
         )
         return self._person(source_text, source, given, middle, surname, suffix, dropped)
 
@@ -1088,16 +1063,9 @@ class PersonNameNormalizationService:
 
     @staticmethod
     def _normalize_joiner(character: str) -> str:
-        character_name = unicodedata.name(character, "")
-        is_single_quote = "SINGLE" in character_name and "QUOTATION MARK" in character_name
-        if character in _APOSTROPHE_LIKE or "APOSTROPHE" in character_name or is_single_quote:
+        if character in APOSTROPHE_LIKE:
             return "'"
-        if (
-            unicodedata.category(character) == "Pd"
-            or character in _DASH_LIKE_EXTRAS
-            or "HYPHEN" in character_name
-            or "MINUS SIGN" in character_name
-        ):
+        if character in HYPHEN_LIKE:
             return "-"
         return character
 
@@ -1607,24 +1575,43 @@ class PersonNameNormalizationService:
         given: list[_Token],
         middle: list[_Token],
         surname: list[_Token],
+        *,
+        normalize_ambiguous_tail: bool = False,
     ) -> tuple[list[_Token], list[_Token], list[_Token]]:
         """Allocate unbound initials without revisiting the inferred surname floor.
 
         Packed and spaced variants converge here, after surname/order inference:
         the first personal initial may occupy ``given`` and every later unbound
-        initial occupies ``middle``.  Explicitly hyphenated initials are never
-        expanded, so they remain one compound given-name unit.
+        initial occupies ``middle``. For raw comma-free input, a full given name
+        followed only by two or more initials keeps the final initial as the
+        required surname floor, with the same canonical punctuation as the rest
+        of the tail. Explicitly structured and comma-delimited boundaries are
+        left intact. Explicitly hyphenated initials are never expanded, so they
+        remain one compound given-name unit.
         """
-        expanded_given = [
-            unit
-            for token in given
-            for unit in self._expand_packed_initials(token, "given")
-        ]
-        expanded_middle = [
-            unit
-            for token in middle
-            for unit in self._expand_packed_initials(token, "middle")
-        ]
+        expanded_given = [unit for token in given for unit in self._expand_packed_initials(token, "given")]
+        expanded_middle = [unit for token in middle for unit in self._expand_packed_initials(token, "middle")]
+
+        normalized_surname = [replace(token, source_role="surname") for token in surname]
+        initial_tail = [*middle, *surname]
+        initial_tail_widths = [self._unbound_initial_width(token.text) for token in initial_tail]
+        if (
+            normalize_ambiguous_tail
+            and any(self._is_full_name_token(token.text) for token in given)
+            and all(initial_tail_widths)
+            and sum(initial_tail_widths) >= _TWO_COMPONENTS
+        ):
+            expanded_tail = [unit for token in initial_tail for unit in self._expand_packed_initials(token, "middle")]
+            expanded_middle = [replace(token, source_role="middle") for token in expanded_tail[:-1]]
+            final_initial = expanded_tail[-1]
+            cleaned_final = self._clean_name_token(final_initial.text)
+            normalized_surname = [
+                replace(
+                    final_initial,
+                    text=f"{cleaned_final.rstrip('.').upper()}.",
+                    source_role="surname",
+                ),
+            ]
 
         normalized_given: list[_Token] = []
         promoted_middle: list[_Token] = []
@@ -1636,7 +1623,7 @@ class PersonNameNormalizationService:
         return (
             normalized_given,
             [*promoted_middle, *(replace(token, source_role="middle") for token in expanded_middle)],
-            [replace(token, source_role="surname") for token in surname],
+            normalized_surname,
         )
 
     def _is_ma_given_abbreviation(self, tokens: list[_Token]) -> bool:
@@ -1696,18 +1683,22 @@ class PersonNameNormalizationService:
             [replace(token, source_role="surname") for token in tokens[:family_end]],
         )
 
-    def _is_packed_surname_first_initials(self, tokens: list[_Token]) -> bool:
-        if (
-            len(tokens) < _TWO_COMPONENTS
-            or not self._is_full_name_token(tokens[0].text)
-            or tokens[0].text.isupper()
-        ):
-            return False
-        widths = [self._unbound_initial_width(token.text) for token in tokens[1:]]
-        if not all(widths):
-            return False
-        initial_count = sum(widths)
-        return initial_count >= _TWO_COMPONENTS
+    def _packed_surname_first_roles(
+        self,
+        tokens: list[_Token],
+    ) -> tuple[list[_Token], list[_Token], list[_Token]] | None:
+        """Repair an initial tail only when structured input supplies order evidence."""
+        if len(tokens) < _TWO_COMPONENTS or not self._is_full_name_token(tokens[0].text):
+            return None
+        trailing = tokens[1:]
+        widths = [self._unbound_initial_width(token.text) for token in trailing]
+        if not all(widths) or sum(widths) < _TWO_COMPONENTS:
+            return None
+        return (
+            [replace(trailing[0], source_role="given")],
+            [replace(token, source_role="middle") for token in trailing[1:]],
+            [replace(tokens[0], source_role="surname")],
+        )
 
     def _unbound_initial_width(self, token: str) -> int:
         """Return the number of semantic initials in an unhyphenated token."""
@@ -1743,13 +1734,6 @@ class PersonNameNormalizationService:
 
         if particle_roles := self._particle_surname_first_roles(tokens):
             return particle_roles
-
-        if self._is_packed_surname_first_initials(tokens):
-            return (
-                [replace(tokens[1], source_role="given")],
-                [replace(token, source_role="middle") for token in tokens[2:]],
-                [replace(tokens[0], source_role="surname")],
-            )
 
         surname_start = len(tokens) - 1
         strong_particle = self._find_strong_particle_span(tokens)
@@ -1877,8 +1861,8 @@ class PersonNameNormalizationService:
                         ],
                     )
             if len(surname) >= _TWO_COMPONENTS and self._particle_key(surname[0].text) not in _FAMILY_PARTICLES:
-                if self._is_packed_surname_first_initials(surname):
-                    return self._infer_regular_roles(surname)
+                if packed_roles := self._packed_surname_first_roles(surname):
+                    return packed_roles
                 if surname[-1].text.isupper() and not any(self._is_initial(token.text) for token in surname[:-1]):
                     return (
                         [replace(token, source_role="given") for token in surname[:-1]],
@@ -1901,6 +1885,8 @@ class PersonNameNormalizationService:
         tokens = surviving_groups[0]
         if len(tokens) == 1:
             return [replace(tokens[0], source_role="given")], [], []
+        if packed_roles := self._packed_surname_first_roles(tokens):
+            return packed_roles
         return self._infer_regular_roles(tokens)
 
     def _invalid_token_reason(self, tokens: list[_Token]) -> str | None:

@@ -19,54 +19,6 @@ UNEXPECTED_FAILURE_SAMPLE_SIZE = 5
 PERFORMANCE_METRIC_MARKERS = ("Time per name:", "names/second")
 EXPECTED_NORMALIZED_NAME_FAILURES = (
     (
-        "tests.test_manufactured_initials::test_surname_first_concatenated_forms_keep_their_surname[Liang Alei-Alei Liang]",
-        "Liang Alei",
-        "Alei Liang",
-        "Liang Alei",
-    ),
-    (
-        r"tests.test_manufactured_initials::test_leading_letter_bilingual_rows_resolve_to_the_han_surname[Alei \u963f\u857e Li \u674e-Alei Li]",
-        "Alei 阿蕾 Li 李",
-        "Alei Li",
-        "Alei 阿蕾 Li 李",
-    ),
-    (
-        r"tests.test_manufactured_initials::test_leading_letter_bilingual_rows_resolve_to_the_han_surname[Axin \u963f\u946b Guo \u90ed-Axin Guo]",
-        "Axin 阿鑫 Guo 郭",
-        "Axin Guo",
-        "Axin 阿鑫 Guo 郭",
-    ),
-    (
-        r"tests.test_manufactured_initials::test_leading_letter_bilingual_rows_resolve_to_the_han_surname[\u4faf\u963f\u6167 Hou Ahui-Ahui Hou]",
-        "侯阿慧 Hou Ahui",
-        "Ahui Hou",
-        "侯阿慧 Hou Ahui",
-    ),
-    (
-        r"tests.test_manufactured_initials::test_leading_letter_bilingual_rows_resolve_to_the_han_surname[\u5f20\u963f\u9f99 ZHANG Along-Along Zhang]",
-        "张阿龙 ZHANG Along",
-        "Along Zhang",
-        "张阿龙 Zhang Along",
-    ),
-    (
-        r"tests.test_manufactured_initials::test_leading_letter_bilingual_rows_resolve_to_the_han_surname[\u6a0a\u963f\u99a8 Fan Axin-Axin Fan]",
-        "樊阿馨 Fan Axin",
-        "Axin Fan",
-        "樊阿馨 Fan Axin",
-    ),
-    (
-        r"tests.test_manufactured_initials::test_leading_letter_bilingual_rows_resolve_to_the_han_surname[\u6768\u963f\u5764 Yang Akun-Akun Yang]",
-        "杨阿坤 Yang Akun",
-        "Akun Yang",
-        "杨阿坤 Yang Akun",
-    ),
-    (
-        r"tests.test_manufactured_initials::test_leading_letter_bilingual_rows_resolve_to_the_han_surname[Eyou Wang \u738b\u9102\u53cb-Eyou Wang]",
-        "Eyou Wang 王鄂友",
-        "Eyou Wang",
-        "Eyou Wang 王鄂友",
-    ),
-    (
         "tests.test_acl::test_acl_chinese_names[Fei Yu-Fei Yu]",
         "Fei Yu",
         "Fei Yu",

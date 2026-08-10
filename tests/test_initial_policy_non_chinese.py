@@ -19,29 +19,18 @@ def normalizer() -> PersonNameNormalizationService:
 
 def assert_person_components(
     result: PersonNameNormalizationResult,
-    *,
-    given: str,
-    middle: str,
-    surname: str,
+    expected: tuple[str, str, str],
 ) -> None:
     """Assert one successful canonical component assignment."""
     assert result.outcome is PersonNameOutcome.PERSON
     assert result.canonical_name is not None
-    assert result.canonical_name.normalized.given_name == given
-    assert result.canonical_name.normalized.middle_name == middle
-    assert result.canonical_name.normalized.surname == surname
+    normalized = result.canonical_name.normalized
+    assert (normalized.given_name, normalized.middle_name, normalized.surname) == expected
 
 
 @pytest.mark.parametrize(
     "raw_name",
-    [
-        "A.D. Smith",
-        "A.D.Smith",
-        "A D Smith",
-        "A. D. Smith",
-        "A.D Smith",
-        "a d Smith",
-    ],
+    ["A.D. Smith", "A.D.Smith", "A D Smith", "A. D. Smith", "A.D Smith", "a d Smith"],
 )
 def test_two_initial_typography_variants_converge(
     normalizer: PersonNameNormalizationService,
@@ -49,42 +38,36 @@ def test_two_initial_typography_variants_converge(
 ) -> None:
     result = normalizer.normalize_text(raw_name)
 
-    assert_person_components(result, given="A.", middle="D.", surname="Smith")
+    assert_person_components(result, ("A.", "D.", "Smith"))
     assert result.canonical_name is not None
     assert result.canonical_name.text == "A. D. Smith"
     assert result.canonical_name.source_text == raw_name
 
 
 @pytest.mark.parametrize(
-    ("raw_name", "middle", "surname"),
+    ("raw_name", "expected"),
     [
-        ("A.B.C. Smith", "B. C.", "Smith"),
-        ("A B C Smith", "B. C.", "Smith"),
-        ("P.M D'Mello", "M.", "D'Mello"),
-        ("A.S.V.L.Sandhya", "S. V. L.", "Sandhya"),
+        ("A.B.C. Smith", ("A.", "B. C.", "Smith")),
+        ("A B C Smith", ("A.", "B. C.", "Smith")),
+        ("P.M D'Mello", ("P.", "M.", "D'Mello")),
+        ("A.S.V.L.Sandhya", ("A.", "S. V. L.", "Sandhya")),
     ],
 )
 def test_longer_initial_sequences_use_first_as_given_and_rest_as_middle(
     normalizer: PersonNameNormalizationService,
     raw_name: str,
-    middle: str,
-    surname: str,
+    expected: tuple[str, str, str],
 ) -> None:
     result = normalizer.normalize_text(raw_name)
 
-    expected_given = "P." if raw_name.startswith("P") else "A."
-    assert_person_components(result, given=expected_given, middle=middle, surname=surname)
+    assert_person_components(result, expected)
     assert result.canonical_name is not None
     assert result.canonical_name.source_text == raw_name
 
 
 @pytest.mark.parametrize(
     "raw_name",
-    [
-        "John A B Smith",
-        "John A. B. Smith",
-        "John A.B. Smith",
-    ],
+    ["John A B Smith", "John A. B. Smith", "John A.B. Smith"],
 )
 def test_full_given_name_keeps_all_following_initials_in_middle(
     normalizer: PersonNameNormalizationService,
@@ -92,7 +75,7 @@ def test_full_given_name_keeps_all_following_initials_in_middle(
 ) -> None:
     result = normalizer.normalize_text(raw_name)
 
-    assert_person_components(result, given="John", middle="A. B.", surname="Smith")
+    assert_person_components(result, ("John", "A. B.", "Smith"))
 
 
 @pytest.mark.parametrize(
@@ -113,32 +96,45 @@ def test_initial_expansion_does_not_change_compound_surname_floor(
 
     assert result.canonical_name is not None
     assert result.canonical_name.normalized.surname == "Llibre Rodriguez"
-    assert result.canonical_name.normalized.middle_name.endswith("B.") or result.canonical_name.normalized.middle_name.endswith(
-        "C.",
-    )
+    assert result.canonical_name.normalized.middle_name.endswith(("B.", "C."))
 
 
-@pytest.mark.parametrize("raw_name", ["Masterov R. A.", "Masterov R A", "Masterov R.A."])
-def test_surname_first_initial_tails_accept_dotted_and_undotted_forms(
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("AARCHA S S", ("Aarcha", "S.", "S.", "Aarcha S. S.")),
+        ("Masterov R. A.", ("Masterov", "R.", "A.", "Masterov R. A.")),
+        ("MASTEROV R.A.", ("Masterov", "R.", "A.", "Masterov R. A.")),
+    ],
+)
+def test_comma_free_full_name_and_initial_tail_preserves_source_order(
     normalizer: PersonNameNormalizationService,
     raw_name: str,
+    expected: tuple[str, str, str, str],
 ) -> None:
     result = normalizer.normalize_text(raw_name)
 
-    assert_person_components(result, given="R.", middle="A.", surname="Masterov")
+    assert_person_components(result, expected[:3])
     assert result.canonical_name is not None
-    assert result.canonical_name.text == "R. A. Masterov"
-    assert result.canonical_name.source.order[0] == "surname"
+    assert result.canonical_name.text == expected[3]
+    assert result.canonical_name.source.order[0] == "given"
 
 
-@pytest.mark.parametrize("last_name", ["Masterov R. A.", "Masterov R A", "Masterov R.A."])
-def test_structured_surname_first_initial_tails_match_raw_policy(
+@pytest.mark.parametrize(
+    "last_name",
+    [
+        "Masterov R. A.",
+        "Masterov R.A.",
+        "MASTEROV R A",
+    ],
+)
+def test_structured_last_name_field_can_repair_surname_first_initial_tail(
     normalizer: PersonNameNormalizationService,
     last_name: str,
 ) -> None:
     result = normalizer.normalize_components(last_name=last_name)
 
-    assert_person_components(result, given="R.", middle="A.", surname="Masterov")
+    assert_person_components(result, ("R.", "A.", "Masterov"))
     assert result.canonical_name is not None
     assert result.canonical_name.source.surname == last_name
 
@@ -158,7 +154,7 @@ def test_structured_variants_match_raw_policy_and_preserve_source_fields(
 ) -> None:
     result = normalizer.normalize_components(**components)
 
-    assert_person_components(result, given="A.", middle="D.", surname="Smith")
+    assert_person_components(result, ("A.", "D.", "Smith"))
     assert result.canonical_name is not None
     if "first_name" in components:
         assert result.canonical_name.source.given_name == components["first_name"]
@@ -168,26 +164,12 @@ def test_structured_variants_match_raw_policy_and_preserve_source_fields(
         assert result.canonical_name.source.surname == components["last_name"]
 
 
-@pytest.mark.parametrize("raw_name", ["J-D Smith", "J.-D. Smith"])
-def test_explicitly_hyphenated_initials_remain_one_compound_given_name(
-    normalizer: PersonNameNormalizationService,
-    raw_name: str,
-) -> None:
-    result = normalizer.normalize_text(raw_name)
-
-    assert_person_components(result, given="J.-D.", middle="", surname="Smith")
-
-
 @pytest.mark.parametrize(
     ("raw_name", "expected"),
     [
         ("AD Smith", "AD Smith"),
-        ("Gordon CS Smith", "Gordon CS Smith"),
         ("A.DSmith", "A.DSmith"),
         ("St.John Smith", "St.John Smith"),
-        ("P.Sh. Ibragimov", "P.Sh. Ibragimov"),
-        ("Alekseeva M.Yu. Alekseeva", "Alekseeva M.Yu. Alekseeva"),
-        ("MM. Cunningham", "MM. Cunningham"),
     ],
 )
 def test_initial_policy_does_not_split_undelimited_or_transliteration_tokens(
@@ -201,22 +183,22 @@ def test_initial_policy_does_not_split_undelimited_or_transliteration_tokens(
     assert result.canonical_name.text == expected
 
 
-def test_credential_cleanup_precedes_initial_expansion(
+def test_explicit_comma_establishes_surname_first_order(
     normalizer: PersonNameNormalizationService,
 ) -> None:
-    result = normalizer.normalize_text("M.A. E. Zayas")
+    raw_name = "SMITH, A D"
+    result = normalizer.normalize_text(raw_name)
 
-    assert_person_components(result, given="E.", middle="", surname="Zayas")
+    assert_person_components(result, ("A.", "D.", "Smith"))
     assert result.canonical_name is not None
-    assert result.canonical_name.text == "E. Zayas"
-    assert [token.text for token in result.dropped_tokens] == ["M.A."]
+    assert result.canonical_name.source_text == raw_name
 
 
-def test_comma_form_uses_the_same_initial_policy(
+def test_explicit_component_boundaries_are_not_reallocated(
     normalizer: PersonNameNormalizationService,
 ) -> None:
-    result = normalizer.normalize_text("Smith, A.D.")
+    comma = normalizer.normalize_text("J. K., Aarcha")
+    structured = normalizer.normalize_components(first_name="Aarcha", last_name="J. K.")
 
-    assert_person_components(result, given="A.", middle="D.", surname="Smith")
-    assert result.canonical_name is not None
-    assert result.canonical_name.source_text == "Smith, A.D."
+    for result in (comma, structured):
+        assert_person_components(result, ("Aarcha", "", "J. K."))

@@ -183,7 +183,8 @@ class NormalizationService:
         # Phase 3: Detect all-Chinese input for special processing
         is_all_chinese = self._text_preprocessor.is_all_chinese_input(cleaned)
 
-        # Phase 4: Tokenize on separators/whitespace and filter out invalid tokens
+        # Phase 4: Preserve authored name joiners before the generic separator pass.
+        cleaned = cleaned.translate(self._config.roman_punctuation_fold_tr)
         raw_tokens = self._config.sep_pattern.sub(" ", cleaned).split()
         tokens = tuple(t for t in raw_tokens if t and not all(c in string.punctuation for c in t))
 
@@ -231,29 +232,32 @@ class NormalizationService:
     def _process_mixed_tokens(self, tokens: list[str], is_all_chinese: bool = False) -> list[str]:
         """Extract existing mixed token processing logic with enhanced all-Chinese support."""
         mix = []
+        has_compact_mixed_token = False
         # Cache for character-level CJK pattern checks to avoid repeated regex calls
         cjk_cache = {}
 
         for token in tokens:
             if self._config.cjk_pattern.search(token) and self._config.ascii_alpha_pattern.search(token):
-                # Split mixed Han/Roman token - use character caching for performance
-                han_chars = []
-                rom_chars = []
+                has_compact_mixed_token = True
+                # Split into contiguous script runs so source order survives
+                # romanization (for example, both ``张Wei`` and ``Wei张``).
+                current_run = []
+                current_run_is_han = None
                 for c in token:
                     if c not in cjk_cache:
                         cjk_cache[c] = bool(self._config.cjk_pattern.search(c))
 
-                    if cjk_cache[c]:
-                        han_chars.append(c)
-                    elif c.isascii() and c.isalpha():
-                        rom_chars.append(c)
+                    is_han = cjk_cache[c]
+                    if not is_han and not (c.isascii() and c.isalpha()):
+                        continue
+                    if current_run and is_han != current_run_is_han:
+                        mix.append("".join(current_run))
+                        current_run = []
+                    current_run.append(c)
+                    current_run_is_han = is_han
 
-                han = "".join(han_chars)
-                rom = "".join(rom_chars)
-                if han:
-                    mix.append(han)
-                if rom:
-                    mix.append(rom)
+                if current_run:
+                    mix.append("".join(current_run))
             else:
                 mix.append(token)
 
@@ -261,6 +265,7 @@ class NormalizationService:
         han_tokens = []
         roman_tokens_split = []
         roman_tokens_original = []
+        source_order_tokens = []
 
         for token in mix:
             if self._config.cjk_pattern.search(token):
@@ -268,6 +273,7 @@ class NormalizationService:
                 han_token = self._han_conversion_token(token, is_all_chinese)
                 pinyin_tokens = self._cache_service.han_to_pinyin_fast(han_token)
                 han_tokens.extend(pinyin_tokens)
+                source_order_tokens.extend(pinyin_tokens)
             else:
                 # Clean Roman token
                 clean_token = self._config.clean_roman_pattern.sub(
@@ -282,6 +288,7 @@ class NormalizationService:
                     if "-" in clean_token:
                         parts = StringManipulationUtils.split_and_clean_hyphens(clean_token)
                         roman_tokens_split.extend(parts)
+                        source_order_tokens.extend(parts)
                     # Use centralized split_concat method if available
                     elif self._data:
                         # Seed cache with the full token; split helper fills additional entries on demand.
@@ -296,10 +303,13 @@ class NormalizationService:
                         )
                         if split_result:
                             roman_tokens_split.extend(split_result)
+                            source_order_tokens.extend(split_result)
                         else:
                             roman_tokens_split.append(clean_token)
+                            source_order_tokens.append(clean_token)
                     else:
                         roman_tokens_split.append(clean_token)
+                        source_order_tokens.append(clean_token)
 
         # Handle Han/Roman duplication
         if han_tokens and roman_tokens_split:
@@ -313,7 +323,8 @@ class NormalizationService:
             if len(overlap) >= max_size * 0.5:
                 # Use original Roman format (preserves hyphens and avoids duplication)
                 return roman_tokens_original
-            # Combine them
+            if has_compact_mixed_token:
+                return source_order_tokens
             return han_tokens + roman_tokens_split
         if han_tokens:
             return han_tokens

@@ -59,6 +59,7 @@ class ResolutionReason(str, Enum):
     HARD_SCALAR_MATERIALIZATION_FAILED = "hard_scalar_materialization_failed"
     SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT = "scalar_known_compound_surname_preserve_input"
     SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT = "scalar_clean_source_surname_repartition_assignment"
+    STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT = "structured_surname_initial_tail_assignment"
 
     JAPANESE_ITERATION_MARK_ASSIGNMENT = "japanese_iteration_mark_assignment"
     IDENTITY_BACKED_EXACT_ASSIGNMENT = "identity_backed_exact_assignment"
@@ -95,118 +96,53 @@ class ResolutionDecisionSpec:
     action: ResolutionAction
 
 
+_RESOLUTION_REASON_GROUPS = {
+    (ResolutionProvenance.SOURCE, ResolutionAction.PRESERVE_INPUT): (
+        ResolutionReason.MIXED_SCRIPT_SAFETY_SUPPRESSION,
+        ResolutionReason.ROUTED_CJK_SAFETY_SUPPRESSION,
+        ResolutionReason.HANDLED_EVIDENCE_FAILURE,
+        ResolutionReason.HARD_SCALAR_MATERIALIZATION_FAILED,
+        ResolutionReason.SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT,
+        ResolutionReason.INITIALS_COMMA_REORDER_VETO_PRESERVE_INPUT,
+        ResolutionReason.REVIEWED_EXACT_SOURCE_REORDER_VETO_PRESERVE_INPUT,
+        ResolutionReason.PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME,
+        ResolutionReason.BATCH_ABSTAIN_MATERIALIZATION_FAILED,
+        ResolutionReason.NON_PERSON_SOURCE_PASSTHROUGH,
+        ResolutionReason.NO_USABLE_SEMANTIC_RESULT,
+    ),
+    (ResolutionProvenance.SOURCE, ResolutionAction.ASSIGN): (
+        ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT,
+        ResolutionReason.STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT,
+        ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT,
+        ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
+    ),
+    (ResolutionProvenance.SOURCE, ResolutionAction.SUPPRESS): (ResolutionReason.REVIEWED_NON_PERSON_PATTERN,),
+    (ResolutionProvenance.SCALAR, ResolutionAction.PRESERVE_INPUT): (
+        ResolutionReason.KOREAN_WESTERN_CONFLICT_PRESERVE_INPUT,
+        ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT,
+        ResolutionReason.VIETNAMESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT,
+        ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT,
+    ),
+    (ResolutionProvenance.SCALAR, ResolutionAction.ASSIGN): (
+        ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT,
+        ResolutionReason.IDENTITY_BACKED_EXACT_ASSIGNMENT,
+        ResolutionReason.SCALAR_BASELINE,
+    ),
+    (ResolutionProvenance.PP, ResolutionAction.PRESERVE_INPUT): (
+        ResolutionReason.PP_VYS_ABSTAIN_PP_INPUT,
+        ResolutionReason.PP_ONLY_ABSTAIN_INPUT,
+    ),
+    (ResolutionProvenance.PP, ResolutionAction.ASSIGN): (ResolutionReason.PP_SELECTED,),
+    (ResolutionProvenance.VYS, ResolutionAction.PRESERVE_INPUT): (ResolutionReason.PP_VYS_ABSTAIN_VYS_INPUT,),
+    (ResolutionProvenance.VYS, ResolutionAction.ASSIGN): (ResolutionReason.VYS_SELECTED,),
+}
+_RESOLUTION_DISPOSITIONS = {
+    reason: disposition for disposition, reasons in _RESOLUTION_REASON_GROUPS.items() for reason in reasons
+}
 RESOLUTION_DECISION_TABLE = MappingProxyType(
-    {
-        ResolutionReason.MIXED_SCRIPT_SAFETY_SUPPRESSION: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.ROUTED_CJK_SAFETY_SUPPRESSION: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.HANDLED_EVIDENCE_FAILURE: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.HARD_SCALAR_MATERIALIZATION_FAILED: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.ASSIGN,
-        ),
-        ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT: ResolutionDecisionSpec(
-            ResolutionProvenance.SCALAR,
-            ResolutionAction.ASSIGN,
-        ),
-        ResolutionReason.IDENTITY_BACKED_EXACT_ASSIGNMENT: ResolutionDecisionSpec(
-            ResolutionProvenance.SCALAR,
-            ResolutionAction.ASSIGN,
-        ),
-        ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.ASSIGN,
-        ),
-        ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.ASSIGN,
-        ),
-        ResolutionReason.KOREAN_WESTERN_CONFLICT_PRESERVE_INPUT: ResolutionDecisionSpec(
-            ResolutionProvenance.SCALAR,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT: ResolutionDecisionSpec(
-            ResolutionProvenance.SCALAR,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.VIETNAMESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT: ResolutionDecisionSpec(
-            ResolutionProvenance.SCALAR,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.INITIALS_COMMA_REORDER_VETO_PRESERVE_INPUT: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.REVIEWED_EXACT_SOURCE_REORDER_VETO_PRESERVE_INPUT: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT: ResolutionDecisionSpec(
-            ResolutionProvenance.SCALAR,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.PP_SELECTED: ResolutionDecisionSpec(
-            ResolutionProvenance.PP,
-            ResolutionAction.ASSIGN,
-        ),
-        ResolutionReason.VYS_SELECTED: ResolutionDecisionSpec(
-            ResolutionProvenance.VYS,
-            ResolutionAction.ASSIGN,
-        ),
-        ResolutionReason.PP_VYS_ABSTAIN_PP_INPUT: ResolutionDecisionSpec(
-            ResolutionProvenance.PP,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.PP_VYS_ABSTAIN_VYS_INPUT: ResolutionDecisionSpec(
-            ResolutionProvenance.VYS,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.PP_ONLY_ABSTAIN_INPUT: ResolutionDecisionSpec(
-            ResolutionProvenance.PP,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.BATCH_ABSTAIN_MATERIALIZATION_FAILED: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.SCALAR_BASELINE: ResolutionDecisionSpec(
-            ResolutionProvenance.SCALAR,
-            ResolutionAction.ASSIGN,
-        ),
-        ResolutionReason.REVIEWED_NON_PERSON_PATTERN: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.SUPPRESS,
-        ),
-        ResolutionReason.NON_PERSON_SOURCE_PASSTHROUGH: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-        ResolutionReason.NO_USABLE_SEMANTIC_RESULT: ResolutionDecisionSpec(
-            ResolutionProvenance.SOURCE,
-            ResolutionAction.PRESERVE_INPUT,
-        ),
-    },
+    {reason: ResolutionDecisionSpec(*_RESOLUTION_DISPOSITIONS[reason]) for reason in ResolutionReason},
 )
+del _RESOLUTION_DISPOSITIONS, _RESOLUTION_REASON_GROUPS
 
 
 def resolution_decision_spec(reason: ResolutionReason) -> ResolutionDecisionSpec:
@@ -215,21 +151,14 @@ def resolution_decision_spec(reason: ResolutionReason) -> ResolutionDecisionSpec
 
 
 EAST_ASIAN_EVIDENCE_RESOLUTION_REASONS = MappingProxyType(
-    {
+    dict.fromkeys(EastAsianEvidenceReason)
+    | {
         EastAsianEvidenceReason.JAPANESE_ITERATION_MARK_ONE_SIDED_EXCLUSIVE: (
             ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT
         ),
         EastAsianEvidenceReason.JAPANESE_ITERATION_MARK_DUAL_EXCLUSIVE: (ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT),
         EastAsianEvidenceReason.IDENTITY_BACKED_EXACT_FULL_SURFACE: ResolutionReason.IDENTITY_BACKED_EXACT_ASSIGNMENT,
         EastAsianEvidenceReason.KOREAN_WESTERN_SUFFIX_CONFLICT: (ResolutionReason.KOREAN_WESTERN_CONFLICT_PRESERVE_INPUT),
-        EastAsianEvidenceReason.KOREAN_NATIVE_THREE_SYLLABLE: None,
-        EastAsianEvidenceReason.JAPANESE_NATIVE_DICTIONARY: None,
-        EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_DICTIONARY: None,
-        EastAsianEvidenceReason.VIETNAMESE_GIVEN_FIRST_EXACT_SURFACE: None,
-        EastAsianEvidenceReason.VIETNAMESE_UNICODE_SURNAME_FIRST: None,
-        EastAsianEvidenceReason.KOREAN_COMPACT_GIVEN_UNIQUE_SPLIT: None,
-        EastAsianEvidenceReason.KOREAN_ROMANIZED_STRICT: None,
-        EastAsianEvidenceReason.JAPANESE_ROMANIZED_DIRECTIONAL_DICTIONARY: None,
     },
 )
 

@@ -58,11 +58,14 @@ UV_PROJECT_ENVIRONMENT=/tmp/sinonym-wsl-venv uv run python scripts/verify_multip
 ```
 
 ### `train_ml_classifier_for_chinese_vs_japanese.py`
-Trains the Chinese-vs-Japanese name classifier used in production. Downloads Chinese (~1.2M) and Japanese (~180K) name corpora, trains a scikit-learn pipeline (TF-IDF character n-grams + 20 linguistic heuristic features + logistic regression), and saves the model to `data/chinese_japanese_classifier.skops`.
+Trains the Chinese-vs-Japanese name classifier used in production. Downloads Chinese (~1.2M) and Japanese (~180K) name corpora, trains a scikit-learn pipeline (TF-IDF character n-grams + 20 linguistic heuristic features + logistic regression), and writes `sinonym/data/chinese_japanese_classifier.skops` plus a runtime-unused `.joblib` copy for development comparisons.
 
 ```bash
-uv run python scripts/train_ml_classifier_for_chinese_vs_japanese.py
+uv run --group training python scripts/train_ml_classifier_for_chinese_vs_japanese.py
 ```
+
+### `build_east_asian_name_lexicons.py`
+Rebuilds the deterministic Japanese, Korean, and Vietnamese name-order assets from hash-pinned sources and the reviewed Japanese additions. See the [data notice](../sinonym/data/EAST_ASIAN_NAME_LEXICONS.md#regeneration) for attribution and the exact command.
 
 ### `name_order_routing_rules.py`
 Applies the external routing rules for context runs that compare paper-level PP, VYS, input-order abstain, and terminal non-person outputs. The routing policy lives in `sinonym.pipeline.name_order_routing`; this script is the file-format CLI wrapper for already-expanded routing rows and adds `router_prediction` plus `router_reason`.

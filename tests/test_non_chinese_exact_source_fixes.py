@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias, cast
 
 import pytest
 
@@ -44,6 +44,7 @@ _CANONICAL_COMMA_CREDENTIAL_INITIALS = {
     "33720872:0": ("Mark", "F. H.", "Brougham", None),
     "73362146:3": ("Raja", "J.", "Selvaraj", None),
 }
+_SourceParts: TypeAlias = tuple[str | None, str | None, str | None, str | None]
 
 
 @pytest.fixture(scope="module")
@@ -60,6 +61,11 @@ def _route(predictor: RoutingPredictorV3, source: SourceAuthorFields):
 def _route_paper(predictor: RoutingPredictorV3, sources: list[SourceAuthorFields]):
     (paper,) = predictor.predict_batch([RoutingInstanceV3(pp_authors=sources)])
     return [author.resolved_fields for author in paper.authors]
+
+
+def _source(parts: _SourceParts) -> SourceAuthorFields:
+    first, middle, last, suffix = parts
+    return SourceAuthorFields(first_name=first, middle_names=middle, last_name=last, suffix=suffix)
 
 
 @pytest.mark.parametrize(
@@ -119,6 +125,21 @@ def _route_paper(predictor: RoutingPredictorV3, sources: list[SourceAuthorFields
         (("Kim", "Tae", "In"), ("Tae", "In", "Kim")),
         (("Lee", "Joo", "Hee"), ("Joo", "Hee", "Lee")),
         (("Tormos", "Josep", "Maria"), ("Josep", "Maria", "Tormos")),
+        pytest.param(
+            ("モンゴメリー\uff0c", "エイチ\uff0e", "マンニング\uff0c"),
+            ("エイチ.", "モンゴメリー", "マンニング"),
+            id="montgomery-catalog-internal-roles",
+        ),
+        pytest.param(
+            ("Fernando", "del.", "Pulgar"),
+            ("Fernando", "", "del Pulgar"),
+            id="fernando-del-pulgar-particle-period",
+        ),
+        pytest.param(
+            ("Min", "-Fu", "Tsan"),
+            ("Min-Fu", "", "Tsan"),
+            id="min-fu-tsan-split-given-name",
+        ),
     ],
 )
 def test_reviewed_exact_source_assignments_are_terminal(
@@ -333,61 +354,6 @@ def test_katakana_middle_period_veto_requires_exact_cyclic_candidate() -> None:
     )
 
 
-def test_reviewed_montgomery_catalog_tuple_gets_correct_internal_roles(
-    predictor: RoutingPredictorV3,
-) -> None:
-    source = SourceAuthorFields(
-        first_name="モンゴメリー\uff0c",
-        middle_names="エイチ\uff0e",
-        last_name="マンニング\uff0c",
-    )
-
-    resolved = _route(predictor, source)
-
-    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == (
-        "エイチ.",
-        "モンゴメリー",
-        "マンニング",
-    )
-    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
-    assert resolved.resolution_action is ResolutionAction.ASSIGN
-    assert resolved.resolution_reason is ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT
-
-
-def test_reviewed_fernando_del_pulgar_tuple_drops_particle_period(
-    predictor: RoutingPredictorV3,
-) -> None:
-    source = SourceAuthorFields(first_name="Fernando", middle_names="del.", last_name="Pulgar")
-
-    resolved = _route(predictor, source)
-
-    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == (
-        "Fernando",
-        "",
-        "del Pulgar",
-    )
-    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
-    assert resolved.resolution_action is ResolutionAction.ASSIGN
-    assert resolved.resolution_reason is ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT
-
-
-def test_reviewed_min_fu_tsan_tuple_joins_the_split_given_name(
-    predictor: RoutingPredictorV3,
-) -> None:
-    source = SourceAuthorFields(first_name="Min", middle_names="-Fu", last_name="Tsan")
-
-    resolved = _route(predictor, source)
-
-    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == (
-        "Min-Fu",
-        "",
-        "Tsan",
-    )
-    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
-    assert resolved.resolution_action is ResolutionAction.ASSIGN
-    assert resolved.resolution_reason is ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT
-
-
 @pytest.mark.parametrize(
     ("source_middle", "source_last", "peer"),
     [
@@ -432,20 +398,8 @@ def test_reviewed_leading_jr_assignment_is_terminal(predictor: RoutingPredictorV
 
 @pytest.mark.parametrize("case", _JR_PATTERN_ORACLE, ids=lambda row: row["stable_id"])
 def test_all_reviewed_leading_jr_actions_match_the_frozen_oracle(case: dict[str, object]) -> None:
-    source_first, source_middle, source_last, source_suffix = case["source"]
-    peer_first, peer_middle, peer_last, peer_suffix = case["peer"]
-    source = SourceAuthorFields(
-        first_name=source_first,
-        middle_names=source_middle,
-        last_name=source_last,
-        suffix=source_suffix,
-    )
-    peer = SourceAuthorFields(
-        first_name=peer_first,
-        middle_names=peer_middle,
-        last_name=peer_last,
-        suffix=peer_suffix,
-    )
+    source = _source(cast("_SourceParts", case["source"]))
+    peer = _source(cast("_SourceParts", case["peer"]))
 
     selected = reviewed_leading_jr_peer_assignment(source, [source, peer], 0)
 
@@ -454,49 +408,33 @@ def test_all_reviewed_leading_jr_actions_match_the_frozen_oracle(case: dict[str,
 
 
 @pytest.mark.parametrize(
-    ("source", "peers"),
+    ("source_parts", "peer_parts"),
     [
+        (("JR.", "John", "Cobb", None), [("John", None, "Cobb", None)]),
+        (("Jr.", "John", "Cobb", "III"), [("John", None, "Cobb", None)]),
+        (("Jr.", "University", "Board", None), [("University", None, "Board", None)]),
+        (("Jr.", "John", "Cobb", None), []),
         (
-            SourceAuthorFields(first_name="JR.", middle_names="John", last_name="Cobb"),
-            [SourceAuthorFields(first_name="John", last_name="Cobb")],
-        ),
-        (
-            SourceAuthorFields(first_name="Jr.", middle_names="John", last_name="Cobb", suffix="III"),
-            [SourceAuthorFields(first_name="John", last_name="Cobb")],
-        ),
-        (
-            SourceAuthorFields(first_name="Jr.", middle_names="University", last_name="Board"),
-            [SourceAuthorFields(first_name="University", last_name="Board")],
-        ),
-        (
-            SourceAuthorFields(first_name="Jr.", middle_names="John", last_name="Cobb"),
-            [],
-        ),
-        (
-            SourceAuthorFields(first_name="Jr.", middle_names="John", last_name="Cobb"),
+            ("Jr.", "John", "Cobb", None),
             [
-                SourceAuthorFields(first_name="John", last_name="Cobb"),
-                SourceAuthorFields(first_name="John", last_name="Cobb"),
+                ("John", None, "Cobb", None),
+                ("John", None, "Cobb", None),
             ],
         ),
+        (("Jr.", "John", "Cobb", None), [(None, "John", "Cobb", None)]),
         (
-            SourceAuthorFields(first_name="Jr.", middle_names="John", last_name="Cobb"),
-            [SourceAuthorFields(middle_names="John", last_name="Cobb")],
+            ("jr", "Van", "Vaerenbergh", None),
+            [(" Van ", " ", "Vaerenbergh", None)],
         ),
-        (
-            SourceAuthorFields(first_name="jr", middle_names="Van", last_name="Vaerenbergh"),
-            [SourceAuthorFields(first_name=" Van ", middle_names=" ", last_name="Vaerenbergh")],
-        ),
-        (
-            SourceAuthorFields(first_name="Jr", middle_names="Ann A", last_name="Smith"),
-            [SourceAuthorFields(first_name="Anna", last_name="Smith")],
-        ),
+        (("Jr", "Ann A", "Smith", None), [("Anna", None, "Smith", None)]),
     ],
 )
 def test_reviewed_leading_jr_assignment_excludes_nearby_controls(
-    source: SourceAuthorFields,
-    peers: list[SourceAuthorFields],
+    source_parts: _SourceParts,
+    peer_parts: list[_SourceParts],
 ) -> None:
+    source = _source(source_parts)
+    peers = [_source(parts) for parts in peer_parts]
     assert reviewed_leading_jr_peer_assignment(source, [source, *peers], 0) is None
 
 
@@ -533,13 +471,7 @@ def test_reviewed_fullwidth_alias_preserves_raw_segments_and_parentheses(
 
 @pytest.mark.parametrize("case", _FULLWIDTH_PATTERN_ORACLE, ids=lambda row: row["stable_id"])
 def test_all_reviewed_fullwidth_alias_actions_match_the_frozen_oracle(case: dict[str, object]) -> None:
-    source_first, source_middle, source_last, source_suffix = case["source"]
-    source = SourceAuthorFields(
-        first_name=source_first,
-        middle_names=source_middle,
-        last_name=source_last,
-        suffix=source_suffix,
-    )
+    source = _source(cast("_SourceParts", case["source"]))
 
     selected = reviewed_fullwidth_katakana_alias_assignment(
         source,
@@ -563,13 +495,7 @@ def test_all_reviewed_closed_comma_credential_actions_match_the_frozen_oracle(
     predictor: RoutingPredictorV3,
     case: dict[str, object],
 ) -> None:
-    source_first, source_middle, source_last, source_suffix = case["source"]
-    source = SourceAuthorFields(
-        first_name=source_first,
-        middle_names=source_middle,
-        last_name=source_last,
-        suffix=source_suffix,
-    )
+    source = _source(cast("_SourceParts", case["source"]))
 
     resolved = _route(predictor, source)
     expected_first, expected_middle, expected_last, expected_suffix = _CANONICAL_COMMA_CREDENTIAL_INITIALS.get(
@@ -612,36 +538,26 @@ def test_reviewed_closed_comma_credential_rule_excludes_full_corpus_controls(
 
 
 @pytest.mark.parametrize(
-    "source",
+    "source_parts",
     [
-        SourceAuthorFields(
-            first_name="X",
-            last_name="\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09",
-        ),
-        SourceAuthorFields(
-            middle_names="X",
-            last_name="\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09",
-        ),
-        SourceAuthorFields(
-            last_name="\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09",
-            suffix="Jr.",
-        ),
-        SourceAuthorFields(last_name="\u30b7\u30a2\u30f3\u30b0,\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09"),
-        SourceAuthorFields(last_name="\u30b7\u30a2\u30f3\u30b0\u3001\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09"),
-        SourceAuthorFields(last_name="\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff0c\u30a8\u30a4\u30df\u30fc"),
-        SourceAuthorFields(last_name="\u30b7\u30fb\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09"),
-        SourceAuthorFields(last_name="\u30b7\uff65\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09"),
-        SourceAuthorFields(last_name="\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff0e\uff08\u30a8\u30a4\u30df\u30fc\uff09"),
-        SourceAuthorFields(last_name="\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3"),
-        SourceAuthorFields(last_name="\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08 \uff09"),
-        SourceAuthorFields(last_name="\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\uff08\u30df\u30fc\uff09\uff09"),
-        SourceAuthorFields(last_name="\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09\u4e8c"),
-        SourceAuthorFields(
-            last_name="\u30de\u30f3\u30cb\u30f3\u30b0\uff0c\u30b8\u30e5\u30cb\u30a2\uff08\u30a8\u30a4\u30df\u30fc\uff09",
-        ),
+        ("X", None, "\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09", None),
+        (None, "X", "\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09", None),
+        (None, None, "\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09", "Jr."),
+        (None, None, "\u30b7\u30a2\u30f3\u30b0,\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09", None),
+        (None, None, "\u30b7\u30a2\u30f3\u30b0\u3001\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09", None),
+        (None, None, "\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff0c\u30a8\u30a4\u30df\u30fc", None),
+        (None, None, "\u30b7\u30fb\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09", None),
+        (None, None, "\u30b7\uff65\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09", None),
+        (None, None, "\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff0e\uff08\u30a8\u30a4\u30df\u30fc\uff09", None),
+        (None, None, "\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3", None),
+        (None, None, "\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08 \uff09", None),
+        (None, None, "\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\uff08\u30df\u30fc\uff09\uff09", None),
+        (None, None, "\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09\u4e8c", None),
+        (None, None, "\u30de\u30f3\u30cb\u30f3\u30b0\uff0c\u30b8\u30e5\u30cb\u30a2\uff08\u30a8\u30a4\u30df\u30fc\uff09", None),
     ],
 )
-def test_reviewed_fullwidth_alias_excludes_nearby_source_controls(source: SourceAuthorFields) -> None:
+def test_reviewed_fullwidth_alias_excludes_nearby_source_controls(source_parts: _SourceParts) -> None:
+    source = _source(source_parts)
     peer_name = "\u30e0\u30b5\uff0c\u30cf\u30c3\u30b5\u30f3"
     assert reviewed_fullwidth_katakana_alias_assignment(source, [source.full_name(), peer_name], 0) is None
 

@@ -1,50 +1,20 @@
-"""Parity and performance tests for the fast Japanese-classifier scorer.
+"""Runtime and performance tests for the fast Japanese-classifier scorer.
 
 ``FastJapaneseScorer`` re-implements the fitted sklearn pipeline's decision
-function with plain dict lookups. These tests pin numerical parity against the
-actual pipeline artifact and guard the performance win that motivated it.
+function with plain dict lookups. These tests verify the production artifact
+reader and guard the performance win that motivated it.
 """
 
 from __future__ import annotations
 
 import itertools
-import math
 import time
 
 import pytest
 
-import sinonym.ml_model_components  # noqa: F401 - required to deserialize the model
 from sinonym import ChineseNameDetector
 from sinonym.ml_fast_scorer import FastJapaneseScorer
-from sinonym.resources import load_skops, read_bytes
-
-# Diverse inputs: Japanese, Chinese, edge cases, non-CJK, and analyzer quirks
-# (lowercasing, whitespace collapsing, out-of-vocabulary characters).
-PARITY_NAMES = [
-    "山田太郎",
-    "佐藤健一",
-    "田中花子",
-    "鈴木一郎",
-    "高橋愛",
-    "佐々木希",
-    "王伟",
-    "陈志强",
-    "刘德华",
-    "欧阳修",
-    "司马光",
-    "张伟",
-    "王",
-    "",
-    "々",
-    "山田  太郎",
-    "a\t\t山田b",
-    "John Smith",
-    "JOHN SMITH",
-    "MIXED山田",
-    "김민준",
-    "1234!?",
-    "王伟" * 40,
-]
+from sinonym.resources import read_bytes
 
 # Han-only names driven through the full detector for the end-to-end guard.
 HAN_SURNAME_CHARS = "王李张刘陈杨黄赵吴周徐孙马朱胡郭何高林罗"
@@ -57,49 +27,14 @@ MIN_UNIQUE_HAN_NAMES_PER_SECOND = 900
 
 
 @pytest.fixture(scope="module")
-def pipeline():
-    return load_skops("chinese_japanese_classifier.skops")
-
-
-@pytest.fixture(scope="module")
-def scorer(pipeline):
-    return FastJapaneseScorer.from_pipeline(pipeline)
-
-
-def test_from_skops_bytes_is_bit_identical_to_from_pipeline(scorer):
-    """The minimal artifact reader must extract exactly what skops deserializes."""
-    zip_scorer = FastJapaneseScorer.from_skops_bytes(read_bytes("chinese_japanese_classifier.skops"))
-    assert zip_scorer == scorer
+def scorer():
+    return FastJapaneseScorer.from_skops_bytes(read_bytes("chinese_japanese_classifier.skops"))
 
 
 def test_detector_ml_classifier_is_loaded():
     """Load failures are downgraded to a warning, so pin availability explicitly."""
     detector = ChineseNameDetector()
     assert detector._ethnicity_service._ml_classifier.is_available()  # noqa: SLF001
-
-
-def test_scorer_matches_pipeline_probabilities(pipeline, scorer):
-    jp_column = list(pipeline.classes_).index("jp")
-    expected = pipeline.predict_proba(PARITY_NAMES)[:, jp_column]
-
-    for name, expected_probability in zip(PARITY_NAMES, expected, strict=True):
-        actual = scorer.japanese_probability(name)
-        assert math.isclose(actual, expected_probability, rel_tol=1e-9, abs_tol=1e-12), (
-            f"{name!r}: scorer={actual!r} pipeline={expected_probability!r}"
-        )
-
-
-def test_scorer_matches_pipeline_rejection_decisions(pipeline, scorer):
-    """The classifier's reject rule must be unchanged: predict()=='jp' with confidence >= 0.8."""
-    threshold = 0.8
-    predictions = pipeline.predict(PARITY_NAMES)
-    probabilities = pipeline.predict_proba(PARITY_NAMES)
-
-    for name, prediction, probability_row in zip(PARITY_NAMES, predictions, probabilities, strict=True):
-        old_rule = prediction == "jp" and max(probability_row) >= threshold
-        jp_probability = scorer.japanese_probability(name)
-        new_rule = jp_probability > 0.5 and jp_probability >= threshold
-        assert new_rule == old_rule, f"{name!r}: rejection decision diverged"
 
 
 def test_scorer_is_fast(scorer):

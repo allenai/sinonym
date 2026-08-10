@@ -204,6 +204,7 @@ class TextPreprocessor:
         """
         if not text:
             return False
+        text = text.translate(self._config.roman_punctuation_fold_tr)
         if text.isascii():
             return False
 

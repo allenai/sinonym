@@ -643,6 +643,39 @@ def test_batch_does_not_treat_compact_mixed_han_roman_as_latin_only(detector):
     assert batch.individual_analyses[0].best_candidate is None
 
 
+@pytest.mark.parametrize(
+    ("raw_name", "expected_tokens", "expected_order"),
+    [
+        ("张Wei", ("zhang", "Wei"), ["surname", "given"]),
+        ("Wei张", ("Wei", "zhang"), ["given", "surname"]),
+    ],
+)
+def test_compact_mixed_han_roman_preserves_source_run_order(
+    detector,
+    raw_name,
+    expected_tokens,
+    expected_order,
+):
+    normalized = detector._normalizer.apply(raw_name)
+    result = detector.normalize_name(raw_name)
+
+    assert normalized.roman_tokens == expected_tokens
+    assert result.success
+    assert result.result == "Wei Zhang"
+    assert result.parsed_original_order.order == expected_order
+
+
+@pytest.mark.parametrize("order", [[], ["Zhang"]])
+def test_name_parser_rejects_fewer_than_minimum_tokens(detector, order):
+    parsing = detector._parsing_service
+
+    result = parsing.parse_name_order(order, {}, {})
+
+    assert not result.success
+    assert result.error_message == "needs at least 2 tokens"
+    assert parsing.parse_name_order_tokens(order, {}, {}) is None
+
+
 def test_aligned_bilingual_pairs_use_han_identity(detector):
     given_first = detector.normalize_name("Mi \u5bc6 Jiang \u848b")
     surname_first = detector.normalize_name("\u9ad8 Gao \u9759 Jing")

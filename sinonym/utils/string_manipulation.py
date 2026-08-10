@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 # Import at module level to avoid repeated imports in hot paths
 from sinonym.chinese_names_data import COMPOUND_VARIANTS, HIGH_CONFIDENCE_ANCHORS
+from sinonym.name_punctuation import APOSTROPHE_LIKE
 
 if TYPE_CHECKING:
     from sinonym.services.normalization import CompoundMetadata
@@ -28,7 +29,6 @@ if TYPE_CHECKING:
 MIN_SPLIT_TOKEN_LENGTH = 3
 MAX_UNBALANCED_SPLIT_REST_LENGTH = 4
 MIN_SPLIT_PART_LENGTH = 2
-APOSTROPHES = ("'", "\u2019", "\u2018")  # straight, right single quote, left single quote
 
 
 def _single_letter_side(a: str, b: str) -> str | None:
@@ -346,10 +346,11 @@ class StringManipulationUtils:
             # Respect the explicit hyphen boundary; do not try other splits
             return None
 
-        # Pattern A2: an apostrophe is the same author-supplied syllable boundary as a hyphen
-        # (`Xiang'an` == `Xiang-an`). Honor that boundary when both sides are valid instead of
-        # deleting it and accepting an unrelated positional split such as `Xian` + `gan`.
-        apostrophes = [index for index, char in enumerate(token) if char in APOSTROPHES]
+        # Pattern A2: an apostrophe carries the same syllable-boundary evidence as a hyphen.
+        # Honor that boundary when both sides are valid instead of deleting it and accepting
+        # an unrelated positional split such as `Xian` + `gan`; the formatter retains the
+        # authored apostrophe rather than changing it to a hyphen.
+        apostrophes = [index for index, char in enumerate(token) if char in APOSTROPHE_LIKE]
         if len(apostrophes) == 1:
             a, b = token[: apostrophes[0]], token[apostrophes[0] + 1 :]
             if a and b:

@@ -92,28 +92,37 @@ jobs:
       - name: Smoke test import from sdist
         if: steps.decide.outputs.should_publish == 'true'
         run: |
-          uv pip install --system dist/*.tar.gz --force-reinstall
+          artifact="$(realpath dist/*.tar.gz)"
           cd /tmp
-          python -c "import sinonym; print('✓ sdist import OK:', sinonym.__file__)"
+          uv run --no-project --isolated --with "$artifact" python - <<'PY'
+          import importlib.util
+
+          from sinonym import ChineseNameDetector
+
+          for module in ("joblib", "requests", "sklearn", "scipy", "skops"):
+              assert importlib.util.find_spec(module) is None, module
+          assert ChineseNameDetector().normalize_name("\u738b\u4f1f").result == "Wei Wang"
+          print("sdist runtime smoke passed without training dependencies")
+          PY
 
       - name: Smoke test import from wheel + resources
         if: steps.decide.outputs.should_publish == 'true'
         run: |
-          uv pip install --system dist/*.whl --force-reinstall
+          artifact="$(realpath dist/*.whl)"
           cd /tmp
-          python - <<'PY'
-          import sys, sinonym, pypinyin
-          print("✓ Wheel import OK")
-          print("PY:", sys.executable)
-          print("sinonym from:", sinonym.__file__)
-          print("pypinyin OK:", pypinyin.__version__)
-          try:
-              import importlib.resources as ir
-              files = list((ir.files("sinonym.data")).iterdir())
-              print("✓ data files present:", [f.name for f in files][:8], "…")
-          except Exception as e:
-              print("! data access failed:", e)
-              raise
+          uv run --no-project --isolated --with "$artifact" python - <<'PY'
+          import importlib.resources as resources
+          import importlib.util
+
+          from sinonym import ChineseNameDetector
+
+          for module in ("joblib", "requests", "sklearn", "scipy", "skops"):
+              assert importlib.util.find_spec(module) is None, module
+          data_files = {path.name for path in resources.files("sinonym.data").iterdir()}
+          assert "chinese_japanese_classifier.skops" in data_files
+          assert "chinese_japanese_classifier.joblib" not in data_files
+          assert ChineseNameDetector().normalize_name("\u738b\u4f1f").result == "Wei Wang"
+          print("wheel runtime smoke passed without training dependencies")
           PY
 
       - uses: actions/upload-artifact@v4

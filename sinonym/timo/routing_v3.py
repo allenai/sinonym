@@ -1,9 +1,11 @@
 """Wire contracts and terminal author resolution for routed V3.
 
-V3 receives structured source fields so source fallback is lossless.  The
-first/middle/last labels are not semantic evidence: scalar and batch inference
-run on ``SourceAuthorFields.full_name()``, matching the existing ``fullNameOf``
-sequence and deliberately excluding suffix.
+V3 receives structured source fields so source fallback is lossless. Scalar
+and batch inference run on ``SourceAuthorFields.full_name()``, matching the
+existing ``fullNameOf`` sequence and deliberately excluding suffix. Source
+labels ordinarily preserve lineage rather than establish semantic roles, but
+a closed set of reviewed structured shapes may use their placement as direct
+evidence.
 """
 
 from __future__ import annotations
@@ -866,7 +868,7 @@ class RoutingV3Model(BaseModel):
 
 
 class SourceAuthorFields(RoutingV3Model):
-    """Original author fields, retained without treating their labels as truth."""
+    """Original fields retained losslessly for lineage and reviewed shape rules."""
 
     first_name: StrictStr | None = Field(default=None)
     middle_names: StrictStr | None = Field(default=None)
@@ -970,8 +972,9 @@ class RoutingInstanceV3(RoutingV3Model):
     source authors.  All alignment is positional; duplicate text is valid and
     must never be joined back to authors by name.
 
-    ``vys_other_names=None`` means PP-only.  An empty list is a present VYS
-    context whose pool consists only of the focal paper authors.
+    ``vys_other_names=None`` means PP-only. An empty list remains distinct on
+    the request DTO but adds no non-focal evidence, so prediction also follows
+    the PP-only policy. A nonempty list enables PP/VYS routing.
     """
 
     pp_authors: list[SourceAuthorFields] = Field(
@@ -999,7 +1002,7 @@ class RoutingInstanceV3(RoutingV3Model):
 
     @property
     def vys_pool_names(self) -> list[str] | None:
-        """Return the derived leading PP slice plus the supplied non-focal names."""
+        """Return the representational PP-prefixed pool, if VYS was supplied."""
         if self.vys_other_names is None:
             return None
         return [*self.pp_names, *self.vys_other_names]
@@ -1025,7 +1028,8 @@ class ResolvedAuthorFields(RoutingV3Model):
 
     ``PRESERVE_INPUT`` means the selected policy did not flip the derived input
     order. ``SUPPRESS`` tells the writer not to emit the author while retaining
-    this aligned diagnostic slot. ``SOURCE`` plus either action promises exact source fields;
+    this aligned diagnostic slot. ``SOURCE`` plus either action preserves source
+    boundary text, mapping absent name components to required empty strings;
     ``SOURCE`` plus ``ASSIGN`` applies roles supported by reviewed source
     structure or one exact reviewed source tuple.
     PP/VYS materialization may also assign source tokens to output fields. The
@@ -1088,7 +1092,7 @@ class ResolvedAuthorFields(RoutingV3Model):
         *,
         reason: ResolutionReason,
     ) -> ResolvedAuthorFields:
-        """Copy exact source boundaries for a legal non-assignment SOURCE reason."""
+        """Copy source boundaries, mapping absent name components to empty strings."""
         decision = resolution_decision_spec(reason)
         if decision.provenance is not ResolutionProvenance.SOURCE or decision.action is ResolutionAction.ASSIGN:
             message = f"{reason.value} is not a SOURCE non-assignment reason"
@@ -1129,18 +1133,18 @@ class RoutingV3Resolver:
                     return True
         return False
 
-    def _reviewed_source_assignment_resolution(
+    def _source_assignment_resolution(
         self,
         *,
         source: SourceAuthorFields,
         selected: NameComponents,
         reason: ResolutionReason,
     ) -> ResolvedAuthorFields:
-        """Canonicalize initials in a closed reviewed SOURCE assignment.
+        """Canonicalize initials in a SOURCE assignment.
 
-        SOURCE non-assignment resolutions remain byte-exact.  These reviewed
-        assignments are already proven people with semantic roles, but their
-        literal/source-derived components bypass the ordinary formatters.
+        SOURCE non-assignment resolutions remain byte-exact. These assignments
+        already have proven semantic roles, but their source-derived components
+        bypass the ordinary formatters.
         """
 
         if self._selected_has_personal_initials(selected):
@@ -1151,7 +1155,7 @@ class RoutingV3Resolver:
                 suffix=selected.suffix,
             )
             if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
-                message = f"reviewed source assignment could not be normalized: {selected!r}"
+                message = f"source assignment could not be normalized: {selected!r}"
                 raise RuntimeError(message)
             selected = normalized.canonical_name.normalized
         return ResolvedAuthorFields.from_selected_components(
@@ -1198,6 +1202,38 @@ class RoutingV3Resolver:
             folded(selected.given_name.split()) == folded(given)
             and folded(selected.middle_name.split()) == folded([*middle, *surname[:-1]])
             and folded(selected.surname.split()) == folded(surname[-1:])
+        )
+
+    def _structured_surname_initial_tail_candidate(
+        self,
+        source: SourceAuthorFields,
+        selected: NameComponents,
+    ) -> NameComponents | None:
+        """Recover surname-first initials proven by a last-name-only source field."""
+        if (source.first_name or "").strip() or (source.middle_names or "").strip():
+            return None
+        normalized = self._source_normalizer.normalize_components(
+            last_name=source.last_name,
+            suffix=source.suffix,
+        )
+        if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
+            return None
+        candidate = normalized.canonical_name.normalized
+        initials = [*candidate.given_name.split(), *candidate.middle_name.split()]
+        is_initial = PersonNameNormalizationService._is_initial  # noqa: SLF001
+        if len(initials) <= 1 or not all(is_initial(token) for token in initials):
+            return None
+
+        def folded(value: str) -> list[str]:
+            return [token.casefold() for token in value.split()]
+
+        return (
+            candidate
+            if folded(candidate.surname) == folded(selected.given_name)
+            and [*folded(candidate.given_name), *folded(candidate.middle_name)]
+            == [*folded(selected.middle_name), *folded(selected.surname)]
+            and (bool((source.suffix or "").strip()) or folded(candidate.suffix) == folded(selected.suffix))
+            else None
         )
 
     def _scalar_clean_source_surname_repartition_candidate(  # noqa: C901, PLR0911
@@ -1255,7 +1291,7 @@ class RoutingV3Resolver:
         pattern_reason = ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT
         hangul_assignment = reviewed_hangul_affiliation_person_assignment(source)
         if hangul_assignment is not None:
-            return self._reviewed_source_assignment_resolution(
+            return self._source_assignment_resolution(
                 source=source,
                 selected=hangul_assignment,
                 reason=pattern_reason,
@@ -1278,7 +1314,7 @@ class RoutingV3Resolver:
         for rule, reason in assignment_rules:
             selected = rule()
             if selected is not None:
-                return self._reviewed_source_assignment_resolution(source=source, selected=selected, reason=reason)
+                return self._source_assignment_resolution(source=source, selected=selected, reason=reason)
         return None
 
     def _reviewed_cleanup_resolution(
@@ -1313,7 +1349,7 @@ class RoutingV3Resolver:
             return None, None
         surname_tokens = selected.surname.split()
         if len(surname_tokens) <= 1 or not _has_reviewed_cleanup_surname_prefix(surname_tokens[:-1]):
-            resolved = self._reviewed_source_assignment_resolution(
+            resolved = self._source_assignment_resolution(
                 source=source,
                 selected=selected,
                 reason=ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
@@ -1381,7 +1417,7 @@ class RoutingV3Resolver:
                     selected=scalar_resolution.normalized,
                     reason=ResolutionReason.SCALAR_BASELINE,
                 )
-            return self._reviewed_source_assignment_resolution(
+            return self._source_assignment_resolution(
                 source=source,
                 selected=cleanup_selected,
                 reason=ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
@@ -1425,6 +1461,16 @@ class RoutingV3Resolver:
                 ResolutionReason.MIXED_SCRIPT_SAFETY_SUPPRESSION,
             )
         if scalar_canonical is not None and scalar_canonical.normalized.surname:
+            structured_initial_tail = self._structured_surname_initial_tail_candidate(
+                source,
+                scalar_canonical.normalized,
+            )
+            if structured_initial_tail is not None:
+                return self._source_assignment_resolution(
+                    source=source,
+                    selected=structured_initial_tail,
+                    reason=ResolutionReason.STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT,
+                )
             if self._scalar_repartitions_reviewed_compound_surname(source, scalar_canonical.normalized):
                 return self._source_resolution(
                     source,
@@ -1435,7 +1481,7 @@ class RoutingV3Resolver:
                 scalar_canonical.normalized,
             )
             if source_surname_candidate is not None:
-                return self._reviewed_source_assignment_resolution(
+                return self._source_assignment_resolution(
                     source=source,
                     selected=source_surname_candidate,
                     reason=ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT,
@@ -1452,7 +1498,7 @@ class RoutingV3Resolver:
         if router_not_person:
             katakana_assignment = reviewed_fullwidth_katakana_alias_assignment(source, paper_names, focal_index)
             if katakana_assignment is not None:
-                return self._reviewed_source_assignment_resolution(
+                return self._source_assignment_resolution(
                     source=source,
                     selected=katakana_assignment,
                     reason=ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,

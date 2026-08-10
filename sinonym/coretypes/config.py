@@ -11,6 +11,11 @@ import re
 from dataclasses import dataclass, replace
 
 from sinonym.chinese_names_data import VALID_CHINESE_ONSETS
+from sinonym.name_punctuation import (
+    APOSTROPHE_FOLD_TRANSLATION,
+    HYPHEN_FOLD_TRANSLATION,
+    NAME_JOINER_DELETE_TRANSLATION,
+)
 from sinonym.patterns import (
     CLEAN_PATTERN,
     COMPREHENSIVE_CJK_PATTERN,
@@ -82,22 +87,8 @@ class ChineseNameConfig:
             camel_case_finder=re.compile(r"[A-Z][a-z]+"),
             clean_pattern=CLEAN_PATTERN,
             forbidden_patterns_regex=FORBIDDEN_PATTERNS_REGEX,
-            hyphens_apostrophes_tr=str.maketrans("", "", "-‐‒–—―﹘﹣－⁃₋''''''''"),
-            # U+2011-U+2015 and the fullwidth/small forms are already sep_pattern separators;
-            # only the variants nothing else claims are folded here.
-            roman_punctuation_fold_tr=str.maketrans(
-                {
-                    "‐": "-",  # HYPHEN
-                    "−": "-",  # MINUS SIGN
-                    "‘": "'",  # LEFT SINGLE QUOTATION MARK
-                    "’": "'",  # RIGHT SINGLE QUOTATION MARK
-                    "‛": "'",  # SINGLE HIGH-REVERSED-9 QUOTATION MARK
-                    "ʼ": "'",  # MODIFIER LETTER APOSTROPHE
-                    "ʹ": "'",  # MODIFIER LETTER PRIME
-                    "′": "'",  # PRIME
-                    "＇": "'",  # FULLWIDTH APOSTROPHE
-                },
-            ),
+            hyphens_apostrophes_tr=NAME_JOINER_DELETE_TRANSLATION,
+            roman_punctuation_fold_tr=APOSTROPHE_FOLD_TRANSLATION | HYPHEN_FOLD_TRANSLATION,
             sorted_chinese_onsets=tuple(sorted(VALID_CHINESE_ONSETS, key=len, reverse=True)),
             default_surname_logp=-15.0,
             default_given_logp=-15.0,

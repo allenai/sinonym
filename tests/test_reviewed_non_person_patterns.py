@@ -32,42 +32,28 @@ from sinonym.services.non_person import reviewed_non_person_source_pattern
         ((None, None, "한국연구소"), "hangul_organization_marker"),
         ((None, None, "연구원자료"), "hangul_organization_marker"),
         ((None, None, "상임위원회"), "hangul_organization_marker"),
+        (("Pendidikan", None, "Mardiah Astuti"), None),
+        (("Manish", None, "Goyal Research Scholar"), None),
+        (("Olivier", None, "Company"), None),
+        (("BEng", None, "Robert McManus"), None),
+        (("Babak", None, "Esmaeili"), None),
+        (("Horiguchi", None, "Daigaku"), None),
+        (("STADT", None, "ß"), None),
+        (("Unknown", None, "Authors"), None),
+        (("January", None, "February"), None),
+        (("Nan", None, "Hao"), None),
+        (("Syafira", "Elfithri", "Universitas"), None),
+        (("Benjamín", "Cristian", "Corona-Comunidad"), None),
+        (("Roque", "A.", "Comunidad-Bonilla"), None),
+        (("E.", "Slovenská poľnohospodárska univerzita v Nitre", "Hazuchová"), None),
+        (("Miguel", "Angel Clínica Universitaria de Navarra", "Monge"), None),
+        (("M.", "D", "Services-REGINALD M. ATWATER"), None),
+        (("A.", "Hosp. Clínico Universitario Lozano Bles", "Angusto"), None),
+        (("STADT", None, "NÜRNBERG", "Jr."), None),
     ],
 )
-def test_reviewed_non_person_patterns_match_complete_reviewed_classes(
-    source: tuple[str | None, str | None, str | None],
-    expected_pattern: str,
+def test_reviewed_non_person_patterns_match_the_complete_review_matrix(
+    source: tuple[str | None, ...],
+    expected_pattern: str | None,
 ) -> None:
     assert reviewed_non_person_source_pattern(*source) == expected_pattern
-
-
-@pytest.mark.parametrize(
-    "source",
-    [
-        ("Pendidikan", None, "Mardiah Astuti"),
-        ("Manish", None, "Goyal Research Scholar"),
-        ("Olivier", None, "Company"),
-        ("BEng", None, "Robert McManus"),
-        ("Babak", None, "Esmaeili"),
-        ("Horiguchi", None, "Daigaku"),
-        ("STADT", None, "ß"),
-        ("Unknown", None, "Authors"),
-        ("January", None, "February"),
-        ("Nan", None, "Hao"),
-        ("Syafira", "Elfithri", "Universitas"),
-        ("Benjamín", "Cristian", "Corona-Comunidad"),
-        ("Roque", "A.", "Comunidad-Bonilla"),
-        ("E.", "Slovenská poľnohospodárska univerzita v Nitre", "Hazuchová"),
-        ("Miguel", "Angel Clínica Universitaria de Navarra", "Monge"),
-        ("M.", "D", "Services-REGINALD M. ATWATER"),
-        ("A.", "Hosp. Clínico Universitario Lozano Bles", "Angusto"),
-    ],
-)
-def test_reviewed_non_person_patterns_exclude_person_controls(
-    source: tuple[str | None, str | None, str | None],
-) -> None:
-    assert reviewed_non_person_source_pattern(*source) is None
-
-
-def test_reviewed_non_person_patterns_decline_a_nonempty_source_suffix() -> None:
-    assert reviewed_non_person_source_pattern("STADT", None, "NÜRNBERG", "Jr.") is None
