@@ -82,7 +82,7 @@ def main() -> None:
     con.execute("PRAGMA threads=6")
     total, dnm, tocc = con.execute(f"select count(*), count(distinct nm), sum(occ) from {src}").fetchone()
     cd, cocc = con.execute(f"select count(*), sum(occ) from {src} where chinese=true").fetchone()
-    den = con.execute(f"select sum(occ) from {src} where chinese=false").fetchone()[0]
+    den = con.execute(f"select sum(occ) from {src} where chinese=false").fetchone()[0] or 0
     print(f"file: {parquet}")
     print(f"rows (production splits): {total:,}   distinct name strings: {dnm:,}   total occ: {tocc:,}")
     print(f"chinese: splits={cd:,} occ={cocc:,}")
@@ -92,7 +92,8 @@ def main() -> None:
         d, o = con.execute(
             f"select count(*), coalesce(sum(occ), 0) from {src} where chinese=false and {where}",
         ).fetchone()
-        print(f"{name:44}{d:>12,}{o:>14,}{100 * o / den:>8.4f}%")
+        percentage = 100 * o / den if den else 0.0
+        print(f"{name:44}{d:>12,}{o:>14,}{percentage:>8.4f}%")
 
 
 if __name__ == "__main__":
