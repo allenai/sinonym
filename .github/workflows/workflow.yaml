@@ -48,22 +48,20 @@ jobs:
       - name: Detect version change (pyproject.toml)
         id: decide
         shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
-          BEFORE_SHA="${{ github.event.before }}"
           echo "BEFORE_SHA=$BEFORE_SHA"
-          python - <<'PY'
+          uv run --no-project python - <<'PY'
           import os, subprocess, tomllib
           out = open(os.environ["GITHUB_OUTPUT"], "a")
           with open("pyproject.toml","rb") as f:
               new_version = tomllib.load(f)["project"]["version"]
           old_version = ""
-          before = os.environ.get("BEFORE_SHA")
+          before = os.environ["BEFORE_SHA"]
           if before and before != "0000000000000000000000000000000000000000":
-              try:
-                  blob = subprocess.check_output(["git","show",f"{before}:pyproject.toml"])
-                  old_version = tomllib.loads(blob.decode())["project"]["version"]
-              except subprocess.CalledProcessError:
-                  pass
+              blob = subprocess.check_output(["git","show",f"{before}:pyproject.toml"])
+              old_version = tomllib.loads(blob.decode())["project"]["version"]
           should = str(bool(new_version and new_version != old_version)).lower()
           print(f"Old version: {old_version}")
           print(f"New version: {new_version}")
