@@ -122,10 +122,21 @@ NAME_JOINER_DELETE_TRANSLATION = str.maketrans(
     dict.fromkeys(APOSTROPHE_LIKE | _NORMALIZATION_HYPHEN_DELETE, None),
 )
 
-_SPACED_APOSTROPHE_JOIN_RE = re.compile(
-    r"(?P<prefix>[^\s']*[^\W\d_])(?P<before>\s*)'(?P<after>\s*)(?P<tail>[^\s]+)",
+_TRANSLITERATION_APOSTROPHE_RE = re.compile(
+    r"(?<![^\W\d_])(?P<prefix>[^\W\d_]+)\s*'\s*(?=(?P<tail>[^\W\d_]+)(?![^\W\d_]))",
     re.UNICODE,
 )
+_TRANSLITERATION_APOSTROPHE_PAIRS = frozenset(
+    {
+        ("cui", "e"),
+        ("ma", "ayan"),
+        ("o", "connor"),
+        ("p", "eng"),
+        ("sa", "di"),
+        ("ts", "ai"),
+    },
+)
+_DUTCH_T_SPACING_RE = re.compile(r"(?<=\S)(?:\s+'\s*|'\s+)t(?=\s+\S)", re.UNICODE)
 
 
 def fold_internal_name_joiners(value: str, translation: Mapping[int, str | None]) -> str:
@@ -151,21 +162,19 @@ def fold_internal_name_joiners(value: str, translation: Mapping[int, str | None]
 
 
 def fold_spaced_transliteration_apostrophes(value: str) -> str:
-    """Join a separated transliteration apostrophe to its adjacent letters.
+    """Repair spacing around reviewed transliteration apostrophes.
 
-    Paired quoted tokens and the standalone Dutch ``'t`` particle retain their
-    token boundaries. The caller must first fold supported apostrophe variants
-    to ASCII.
+    Only audited prefix/tail pairs are joined. Separated variants of the Dutch
+    ``'t`` particle retain its token boundary. The caller must first fold
+    supported apostrophe variants to ASCII.
     """
 
     def join(match: re.Match[str]) -> str:
+        prefix = match.group("prefix")
         tail = match.group("tail")
-        before = match.group("before")
-        after = match.group("after")
-        if not tail[0].isalpha() or "'" in tail:
+        if tail != tail.lower() or (prefix.casefold(), tail) not in _TRANSLITERATION_APOSTROPHE_PAIRS:
             return match.group(0)
-        if before and not after and tail.casefold() == "t":
-            return match.group(0)
-        return f"{match.group('prefix')}'{tail}"
+        return f"{prefix}'"
 
-    return _SPACED_APOSTROPHE_JOIN_RE.sub(join, value)
+    value = _TRANSLITERATION_APOSTROPHE_RE.sub(join, value)
+    return _DUTCH_T_SPACING_RE.sub(" 't", value)

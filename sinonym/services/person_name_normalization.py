@@ -1195,7 +1195,11 @@ class PersonNameNormalizationService:
         for separator in _SPACED_HYPHEN_RE.finditer(folded):
             left = self._tokens(folded[: separator.start()], "", 0)
             right = self._tokens(folded[separator.end() :], "", separator.end())
-            if self._looks_like_two_complete_names(left, right):
+            if (
+                len(left) >= _TWO_COMPONENTS
+                and len(right) >= _TWO_COMPONENTS
+                and self._particle_key(right[0].text) not in _FAMILY_PARTICLES
+            ):
                 return True
         return False
 
@@ -2280,7 +2284,7 @@ class PersonNameNormalizationService:
     def _looks_like_two_complete_names(self, left: list[_Token], right: list[_Token]) -> bool:
         if len(left) < _TWO_COMPONENTS or len(right) < _TWO_COMPONENTS:
             return False
-        if any(self._particle_key(token.text) in _FAMILY_PARTICLES for token in [*left[:-1], *right[:-1]]):
+        if any(self._particle_key(token.text) in _FAMILY_PARTICLES for token in left[:-1]):
             return False
         return not any(self._is_initial(token.text) for token in [*left, *right])
 

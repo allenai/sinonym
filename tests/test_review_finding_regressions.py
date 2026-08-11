@@ -5,6 +5,7 @@ from typing import cast
 import pytest
 
 from sinonym import ChineseNameDetector
+from sinonym.name_punctuation import fold_spaced_transliteration_apostrophes
 from sinonym.services.normalization import LazyNormalizationMap, NormalizationService
 from sinonym.services.person_name_normalization import PersonNameNormalizationService, PersonNameOutcome
 
@@ -16,6 +17,8 @@ from sinonym.services.person_name_normalization import PersonNameNormalizationSe
         ("Ts 'ai Ing-wen", "Ts'ai Ing-wen"),
         ("Ma 'ayan Hillel", "Ma'ayan Hillel"),
         ("Cui 'e Zheng", "Cui'e Zheng"),
+        ("P 'eng Wang", "P'eng Wang"),
+        ("SA 'di Ahmed", "SA'di Ahmed"),
     ],
 )
 def test_spaced_transliteration_apostrophes_join_the_preceding_token(raw_name: str, expected: str) -> None:
@@ -25,6 +28,84 @@ def test_spaced_transliteration_apostrophes_join_the_preceding_token(raw_name: s
     assert result.outcome is PersonNameOutcome.PERSON
     assert result.canonical_name is not None
     assert result.canonical_name.text == expected
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "Zhang 'Wei",
+        "john 'smith",
+        "Sa 'Di Ahmed",
+        "John 'Jack' Smith",
+        "Claude Bigar' PhD",
+        "Gerard't Hooft",
+        "can't stop",
+    ],
+)
+def test_unreviewed_apostrophe_spacing_is_left_unchanged(raw_name: str) -> None:
+    """The transliteration repair is an exact allowlist, not a casing heuristic."""
+    assert fold_spaced_transliteration_apostrophes(raw_name) == raw_name
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("Zhang 'Wei", "Wei Zhang"),
+        ("Li 'Na", "Na Li"),
+        ("Chen 'Long Fei", "Long-Fei Chen"),
+        ("Zhang \u2019Wei", "Wei Zhang"),
+    ],
+)
+def test_unreviewed_spaced_apostrophe_preserves_chinese_token_boundaries(
+    detector: ChineseNameDetector,
+    raw_name: str,
+    expected: str,
+) -> None:
+    """Stray apostrophes cannot fuse otherwise separate Chinese name tokens."""
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == expected
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "Gerard 't Hooft",
+        "Gerard' t Hooft",
+        "Gerard ' t Hooft",
+    ],
+)
+def test_dutch_t_particle_has_one_canonical_spacing(raw_name: str) -> None:
+    """Source spacing cannot fuse the Dutch particle to the given name."""
+    result = PersonNameNormalizationService().normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "Gerard 't Hooft"
+    assert result.canonical_name.normalized.surname_tokens == ("'t", "Hooft")
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text", "expected_suffix"),
+    [
+        ("Claude Bigar' PhD", "Claude Bigar'", ""),
+        ("Claude Bigar' Jr.", "Claude Bigar' Jr.", "Jr."),
+    ],
+)
+def test_terminal_surname_apostrophe_does_not_absorb_credentials_or_suffixes(
+    raw_name: str,
+    expected_text: str,
+    expected_suffix: str,
+) -> None:
+    """A terminal semantic apostrophe stays attached only to the surname."""
+    result = PersonNameNormalizationService().normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected_text
+    assert result.canonical_name.normalized.surname == "Bigar'"
+    assert result.canonical_name.normalized.suffix == expected_suffix
 
 
 def test_spaced_chinese_apostrophe_uses_the_shared_public_normalization(
@@ -91,11 +172,38 @@ def test_spaced_hyphen_before_particle_surname_is_not_a_multi_name_separator(raw
     assert result.canonical_name.text == expected
 
 
-def test_spaced_hyphen_between_complete_names_remains_non_person() -> None:
-    """The particle exception must not accept an actual two-person surface."""
-    result = PersonNameNormalizationService().normalize_text("John Smith - Mary Jones")
+@pytest.mark.parametrize(
+    ("raw_name", "expected_reason"),
+    [
+        ("John Smith - Mary Jones", "multiple-name separator"),
+        ("John Smith - Mary van der Berg", "multiple-name separator"),
+        ("John van der Berg - Mary Jones", "multiple-name separator"),
+        ("John A. Smith - Mary Jones", "multiple-name separator"),
+        ("Smith John, Mary van der Berg", "comma separates two complete names"),
+    ],
+)
+def test_separator_between_complete_names_remains_non_person(raw_name: str, expected_reason: str) -> None:
+    """Particles and initials within complete sides cannot hide a second person."""
+    result = PersonNameNormalizationService().normalize_text(raw_name)
 
     assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.reason == expected_reason
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("van der Berg, John Adam", "John Adam van der Berg"),
+        ("Smith Jones, John A.", "John A. Smith Jones"),
+    ],
+)
+def test_comma_name_particle_and_initial_controls_remain_person(raw_name: str, expected: str) -> None:
+    """The comma-specific particle and initial guards still protect name forms."""
+    result = PersonNameNormalizationService().normalize_text(raw_name)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == expected
 
 
 @pytest.mark.parametrize(
