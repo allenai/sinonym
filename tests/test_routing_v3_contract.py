@@ -15,12 +15,12 @@ from sinonym.coretypes.routing_resolution import (
     ResolutionProvenance,
     ResolutionReason,
 )
+from sinonym.timo.interface import RoutedPaperPredictionV3
 from sinonym.timo.routing_v3 import (
     ResolvedAuthorFields,
     RoutingInstanceV3,
     SourceAuthorFields,
     merge_resolved_suffix,
-    restore_reviewed_atomic_korean_tokens,
 )
 
 
@@ -72,6 +72,27 @@ def test_v3_request_wire_omits_nulls_without_changing_parsed_defaults() -> None:
     assert instance.dict() == {"pp_authors": [{"first_name": "Li", "last_name": "Wei"}]}
     assert instance.json() == '{"pp_authors": [{"first_name": "Li", "last_name": "Wei"}]}'
     assert RoutingInstanceV3.parse_raw(instance.json()) == instance
+
+
+def test_v3_json_schemas_match_the_nullable_runtime_contract() -> None:
+    request_schema = RoutingInstanceV3.schema()
+    source_properties = request_schema["definitions"]["SourceAuthorFields"]["properties"]
+
+    assert {name: source_properties[name]["type"] for name in source_properties} == {
+        "first_name": ["string", "null"],
+        "middle_names": ["string", "null"],
+        "last_name": ["string", "null"],
+        "suffix": ["string", "null"],
+    }
+    assert request_schema["properties"]["vys_other_names"]["type"] == ["array", "null"]
+    assert request_schema["properties"]["pp_authors"]["type"] == "array"
+
+    response_schema = RoutedPaperPredictionV3.schema()
+    resolved_properties = response_schema["definitions"]["ResolvedAuthorFields"]["properties"]
+    assert resolved_properties["suffix"]["type"] == ["string", "null"]
+    assert {resolved_properties[name]["type"] for name in ("first_name", "middle_names", "last_name")} == {
+        "string",
+    }
 
 
 def test_full_name_matches_current_flattening_and_excludes_suffix() -> None:
@@ -289,83 +310,6 @@ def test_hard_assignment_rejects_other_east_asian_rules() -> None:
             canonical_name=_canonical("Min-su", "Kim"),
             evidence_reason=EastAsianEvidenceReason.KOREAN_ROMANIZED_STRICT,
         )
-
-
-def test_atomic_korean_token_repair_matches_complete_hyphen_parts_and_updates_lineage() -> None:
-    source = SourceAuthorFields(first_name="So Young", last_name="Kim")
-    selected = NameComponents(
-        given_name="So-You-Ng",
-        surname="Kim",
-        given_tokens=("So", "You", "Ng"),
-        surname_tokens=("Kim",),
-        order=("given", "surname"),
-    )
-
-    repaired = restore_reviewed_atomic_korean_tokens(source, selected)
-
-    assert repaired.given_name == "So Young"
-    assert repaired.given_tokens == ("So", "Young")
-    assert repaired.surname == "Kim"
-    assert repaired.surname_tokens == ("Kim",)
-    assert repaired.order == selected.order
-
-
-def test_atomic_korean_token_repair_does_not_match_a_longer_hyphen_part() -> None:
-    source = SourceAuthorFields(first_name="Hana", last_name="Ha-Nam")
-    selected = NameComponents(
-        given_name="Hana",
-        surname="Ha-Nam",
-        given_tokens=("Hana",),
-        surname_tokens=("Ha", "Nam"),
-        order=("given", "surname"),
-    )
-
-    assert restore_reviewed_atomic_korean_tokens(source, selected) == selected
-
-
-def test_atomic_korean_token_repair_does_not_restore_an_unreviewed_source_given() -> None:
-    source = SourceAuthorFields(first_name="Wei Ming", last_name="Young")
-    selected = NameComponents(
-        given_name="Wei-Ming",
-        surname="Young",
-        given_tokens=("Wei", "Ming"),
-        surname_tokens=("Young",),
-        order=("given", "surname"),
-    )
-
-    assert restore_reviewed_atomic_korean_tokens(source, selected) == selected
-
-
-def test_atomic_korean_token_repair_requires_whole_source_given_equivalence() -> None:
-    source = SourceAuthorFields(first_name="Young In", last_name="Shin")
-    selected = NameComponents(
-        given_name="You-Ng-Other",
-        surname="Shin",
-        given_tokens=("You", "Ng", "Other"),
-        surname_tokens=("Shin",),
-        order=("given", "surname"),
-    )
-
-    repaired = restore_reviewed_atomic_korean_tokens(source, selected)
-
-    assert repaired.given_name == "Young-Other"
-    assert repaired.given_tokens == ("Young", "Other")
-
-
-def test_atomic_korean_token_repair_restores_source_mixed_case_and_lineage() -> None:
-    source = SourceAuthorFields(first_name="SeungBo", last_name="Choi")
-    selected = NameComponents(
-        given_name="Seung-Bo",
-        surname="Choi",
-        given_tokens=("Seung", "Bo"),
-        surname_tokens=("Choi",),
-        order=("given", "surname"),
-    )
-
-    repaired = restore_reviewed_atomic_korean_tokens(source, selected)
-
-    assert repaired.given_name == "SeungBo"
-    assert repaired.given_tokens == ("SeungBo",)
 
 
 def test_evidence_failure_is_typed_outside_the_hard_constraint_union() -> None:

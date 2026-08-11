@@ -412,6 +412,10 @@ class ChineseNameDetector:
         compact = "".join(normalized_tokens)
         return spaced in CURATED_COMPOUND_SURNAME_FORMS or compact in CURATED_COMPOUND_SURNAME_FORMS
 
+    def is_curated_compound_surname(self, surname: str) -> bool:
+        """Return whether a complete string is an explicitly curated compound surname."""
+        return self._is_curated_compound_surname_group(surname.split(), {})
+
     def _surname_group_strength(self, pinyin_tokens: list[str] | tuple[str, ...], han_group: str = "") -> float:
         """Return the strongest surname-frequency signal for a Han-backed pinyin group."""
         if not pinyin_tokens:

@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from sinonym.timo.interface import RoutingPredictorV3
 
 _REPARTITION_REASON = ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT
+_KNOWN_COMPOUND_REASON = ResolutionReason.SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT
 
 # (audit_id, source first/middle/last, expected first/middle/last) drawn from the
 # locked holdout; every row is a single-author paper, so routing one author
@@ -65,8 +66,15 @@ def resolver(detector: ChineseNameDetector) -> RoutingV3Resolver:
     return RoutingV3Resolver(detector)
 
 
-def _route(predictor: RoutingPredictorV3, source: SourceAuthorFields):
-    (paper,) = predictor.predict_batch([RoutingInstanceV3(pp_authors=[source])])
+def _route(
+    predictor: RoutingPredictorV3,
+    source: SourceAuthorFields,
+    *,
+    vys_other_names: list[str] | None = None,
+):
+    (paper,) = predictor.predict_batch(
+        [RoutingInstanceV3(pp_authors=[source], vys_other_names=vys_other_names)],
+    )
     return paper.authors[0].resolved_fields
 
 
@@ -112,6 +120,61 @@ def test_initial_in_the_source_first_name_blocks_activation(predictor: RoutingPr
     resolved = _route(predictor, SourceAuthorFields(first_name="A.", last_name="Vicens Poveda"))
 
     assert resolved.resolution_reason is not _REPARTITION_REASON
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (
+            SourceAuthorFields(first_name="Ka", middle_names="Ming", last_name="Au Yeung"),
+            ("Ka", "Ming", "Au Yeung"),
+        ),
+        (
+            SourceAuthorFields(first_name="Ka Ming", last_name="Au Yeung"),
+            ("Ka Ming", "", "Au Yeung"),
+        ),
+        (
+            SourceAuthorFields(first_name="Wei", middle_names="Ming", last_name="Ou Yang"),
+            ("Wei", "Ming", "Ou Yang"),
+        ),
+        (
+            SourceAuthorFields(first_name="Li", middle_names="Ming", last_name="Zhu Ge"),
+            ("Li", "Ming", "Zhu Ge"),
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "vys_other_names",
+    [pytest.param(None, id="pp-only"), pytest.param(["Jane Doe"], id="pp-vys")],
+)
+def test_curated_spaced_compound_surname_outlives_batch_materialization(
+    predictor: RoutingPredictorV3,
+    source: SourceAuthorFields,
+    expected: tuple[str, str, str],
+    vys_other_names: list[str] | None,
+) -> None:
+    resolved = _route(predictor, source, vys_other_names=vys_other_names)
+
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == expected
+    assert resolved.resolution_reason is _KNOWN_COMPOUND_REASON
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.PRESERVE_INPUT
+
+
+@pytest.mark.parametrize(
+    "vys_other_names",
+    [pytest.param(None, id="pp-only"), pytest.param(["Jane Doe"], id="pp-vys")],
+)
+def test_curated_compound_guard_does_not_trust_an_unreviewed_last_name(
+    predictor: RoutingPredictorV3,
+    vys_other_names: list[str] | None,
+) -> None:
+    source = SourceAuthorFields(first_name="Au", middle_names="Yeung", last_name="Ka Ming")
+
+    resolved = _route(predictor, source, vys_other_names=vys_other_names)
+
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("Ka-Ming", "", "Au Yeung")
+    assert resolved.resolution_reason is not _KNOWN_COMPOUND_REASON
 
 
 def test_predicate_accepts_a_clean_peel(resolver: RoutingV3Resolver) -> None:

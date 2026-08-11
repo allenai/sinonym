@@ -236,6 +236,55 @@ def test_atomic_korean_token_repair_does_not_change_a_longer_hyphenated_name(
     assert (result.resolved_fields.first_name, result.resolved_fields.last_name) == ("Hana", "Ha-Nam")
 
 
+@pytest.mark.parametrize(
+    ("source", "expected_first", "expected_last"),
+    [
+        (SourceAuthorFields(first_name="Young", last_name="Lee"), "Young", "Lee"),
+        (SourceAuthorFields(first_name="Young Yun", last_name="So"), "Young Yun", "So"),
+        (SourceAuthorFields(first_name="Hoon", last_name="Lee"), "Hoon", "Lee"),
+        (SourceAuthorFields(first_name="Seon", last_name="Choi"), "Seon", "Choi"),
+        (SourceAuthorFields(first_name="Hana", last_name="Choi"), "Hana", "Choi"),
+        (SourceAuthorFields(first_name="SeungBo", last_name="Choi"), "SeungBo", "Choi"),
+    ],
+)
+def test_v3_uses_the_shared_atomic_korean_given_tokens(
+    predictor: RoutingPredictorV3,
+    source: SourceAuthorFields,
+    expected_first: str,
+    expected_last: str,
+) -> None:
+    (result,) = _route(predictor, [source])
+
+    assert (result.resolved_fields.first_name, result.resolved_fields.last_name) == (expected_first, expected_last)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        SourceAuthorFields(first_name="J", last_name="Aibar Manero"),
+        SourceAuthorFields(first_name="L", last_name="Carreras Matas"),
+        SourceAuthorFields(first_name="R", middle_names="F", last_name="Lai A Fat"),
+        SourceAuthorFields(first_name="A", middle_names="Y F", last_name="Li Yim"),
+        SourceAuthorFields(first_name="N.M.A.", last_name="Nik Long"),
+    ],
+)
+def test_reviewed_compound_surnames_compare_canonical_initial_surfaces(
+    predictor: RoutingPredictorV3,
+    source: SourceAuthorFields,
+) -> None:
+    (result,) = _route(predictor, [source])
+
+    resolved = result.resolved_fields
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == (
+        source.first_name or "",
+        source.middle_names or "",
+        source.last_name or "",
+    )
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.PRESERVE_INPUT
+    assert resolved.resolution_reason is ResolutionReason.SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT
+
+
 def test_pp_only_abstain_is_a_terminal_input_order_decision(
     predictor: RoutingPredictorV3,
 ) -> None:

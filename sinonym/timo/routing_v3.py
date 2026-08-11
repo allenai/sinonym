@@ -15,7 +15,7 @@ import re
 import unicodedata
 from dataclasses import replace
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, StrictStr, root_validator
 
@@ -33,6 +33,7 @@ from sinonym.coretypes.routing_resolution import (
 )
 from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
 from sinonym.pipeline.name_order_routing import pp_abstain_parsed
+from sinonym.services.formatting import REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS
 from sinonym.services.non_person import REVIEWED_HANGUL_ORGANIZATION_MARKERS, reviewed_non_person_source_pattern
 from sinonym.services.person_name_normalization import (
     PersonNameNormalizationService,
@@ -174,15 +175,6 @@ REVIEWED_SCALAR_COMPOUND_SURNAMES = frozenset(
     },
 )
 REVIEWED_TRAILING_HYPHENATED_COMPOUND_SURNAMES = frozenset({"au-yeung", "ou-yang"})
-REVIEWED_ATOMIC_KOREAN_TOKEN_REPAIRS = {
-    "hana": "Ha-Na",
-    "hoon": "Ho-On",
-    "seon": "Se-On",
-    "seungbo": "Seung-Bo",
-    "woong": "Woo-Ng",
-    "young": "You-Ng",
-}
-
 # Every occurrence of these exact normalized source tuples was reviewed in the
 # full corpus. The first set only exchanges the supplied endpoint components;
 # the maps below record field-sourced and literal output roles.
@@ -762,69 +754,18 @@ def reviewed_initials_comma_reversal(
     )
 
 
-def restore_reviewed_atomic_korean_tokens(
+def _preserve_reviewed_atomic_korean_source_given(
     source: SourceAuthorFields,
     selected: NameComponents,
 ) -> NameComponents:
-    """Restore reviewed Korean tokens and their complete source given surface."""
-    source_tokens = {token.casefold(): token for token in source.full_name().split()}
-    replacements = {
-        mutation: source_tokens[token]
-        for token, mutation in REVIEWED_ATOMIC_KOREAN_TOKEN_REPAIRS.items()
-        if token in source_tokens
-    }
-    if not replacements:
-        return selected
-
-    def repaired(value: str, tokens: tuple[str, ...]) -> tuple[str, tuple[str, ...]]:
-        """Repair complete hyphen-part sequences and matching lineage together."""
-        repaired_value = value
-        repairs: list[tuple[str, str]] = []
-        for mutation, source_token in replacements.items():
-            pattern = re.compile(rf"(?<![^\W\d_]){re.escape(mutation)}(?![^\W\d_])", re.IGNORECASE)
-            repaired_value, count = pattern.subn(source_token, repaired_value)
-            repairs.extend((mutation, source_token) for _ in range(count))
-        if not repairs:
-            return value, tokens
-
-        repaired_tokens = list(tokens)
-        for mutation, source_token in repairs:
-            mutation_key = mutation.casefold()
-            mutation_parts = tuple(part.casefold() for part in mutation.split("-"))
-            for index, token in enumerate(repaired_tokens):
-                if token.casefold() == mutation_key:
-                    repaired_tokens[index] = source_token
-                    break
-                end = index + len(mutation_parts)
-                if tuple(part.casefold() for part in repaired_tokens[index:end]) == mutation_parts:
-                    repaired_tokens[index:end] = [source_token]
-                    break
-            else:
-                repaired_tokens = [part for atom in repaired_value.split() for part in atom.split("-") if part]
-        return repaired_value, tuple(repaired_tokens)
-
-    given_name, given_tokens = repaired(selected.given_name, selected.given_tokens)
-    middle_name, middle_tokens = repaired(selected.middle_name, selected.middle_tokens)
-    surname, surname_tokens = repaired(selected.surname, selected.surname_tokens)
-
+    """Keep source spacing/case after the shared formatter preserves atomic tokens."""
     source_given = " ".join((source.first_name or "").split())
-    source_given_tokens = tuple(source_given.split())
-    has_reviewed_source_given_token = any(
-        token.casefold() in REVIEWED_ATOMIC_KOREAN_TOKEN_REPAIRS for token in source_given_tokens
-    )
-    if has_reviewed_source_given_token and _alnum_key(source_given) == _alnum_key(given_name):
-        given_name = source_given
-        given_tokens = source_given_tokens
-
-    return replace(
-        selected,
-        given_name=given_name,
-        middle_name=middle_name,
-        surname=surname,
-        given_tokens=given_tokens,
-        middle_tokens=middle_tokens,
-        surname_tokens=surname_tokens,
-    )
+    source_tokens = tuple(source_given.split())
+    if not any(token.casefold() in REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS for token in source_tokens):
+        return selected
+    if _alnum_key(source_given) != _alnum_key(selected.given_name):
+        return selected
+    return replace(selected, given_name=source_given, given_tokens=source_tokens)
 
 
 def routed_components_leak_cjk(parsed) -> bool:
@@ -875,6 +816,14 @@ class RoutingV3Model(BaseModel):
 
     class Config:
         extra = "forbid"
+
+        @staticmethod
+        def schema_extra(schema: dict[str, Any], model: type[BaseModel]) -> None:
+            """Expose Pydantic-v1 nullable fields as nullable JSON Schema types."""
+            for field in model.__fields__.values():
+                if field.allow_none:
+                    property_schema = schema["properties"][field.alias]
+                    property_schema["type"] = [property_schema["type"], "null"]
 
     def dict(self, *args, **kwargs):
         """Return plain Python serialization values for enum fields."""
@@ -1172,27 +1121,38 @@ class RoutingV3Resolver:
             reason=constraint.reason,
         )
 
-    @staticmethod
     def _scalar_repartitions_reviewed_compound_surname(
+        self,
         source: SourceAuthorFields,
         selected: NameComponents,
     ) -> bool:
         """Return whether scalar parsing only breaks apart a compound surname."""
-        if _source_component_key(source) not in REVIEWED_SCALAR_COMPOUND_SURNAMES:
+        surname = (source.last_name or "").split()
+        if len(surname) <= 1:
+            return False
+        source_is_reviewed = _source_component_key(source) in REVIEWED_SCALAR_COMPOUND_SURNAMES
+        source_is_curated = self._detector.is_curated_compound_surname(source.last_name or "")
+        if not source_is_reviewed and not source_is_curated:
             return False
 
         given = (source.first_name or "").split()
         middle = (source.middle_names or "").split()
-        surname = (source.last_name or "").split()
+        selected_personal = [*selected.given_name.split(), *selected.middle_name.split()]
+        source_personal = [*given, *middle, *surname[:-1]]
 
-        def folded(tokens: list[str]) -> list[str]:
-            return [token.casefold() for token in tokens]
+        def surface_key(tokens: list[str]) -> str:
+            return _alnum_key(" ".join(tokens))
 
-        return (
-            folded(selected.given_name.split()) == folded(given)
-            and folded(selected.middle_name.split()) == folded([*middle, *surname[:-1]])
-            and folded(selected.surname.split()) == folded(surname[-1:])
-        )
+        if (
+            source_is_reviewed
+            and surface_key(selected_personal) == surface_key([*given, *middle])
+            and surface_key(selected.surname.split()) == surface_key(surname)
+        ):
+            return True
+
+        return surface_key(selected_personal) == surface_key(source_personal) and surface_key(
+            selected.surname.split(),
+        ) == surface_key(surname[-1:])
 
     def _structured_surname_initial_tail_candidate(
         self,
@@ -1416,6 +1376,19 @@ class RoutingV3Resolver:
         if isinstance(scalar_resolution, ApplyAssignment | PreserveBaseline):
             return self._hard_scalar_resolution(source, scalar_resolution)
 
+        scalar_canonical = scalar_resolution
+        scalar_is_unsafe = canonical_name_leaks_mixed_script(scalar_canonical)
+        if (
+            not scalar_is_unsafe
+            and scalar_canonical is not None
+            and scalar_canonical.normalized.surname
+            and self._scalar_repartitions_reviewed_compound_surname(source, scalar_canonical.normalized)
+        ):
+            return self._source_resolution(
+                source,
+                ResolutionReason.SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT,
+            )
+
         if parsed is not None and routed_components_leak_cjk(parsed):
             return self._source_resolution(
                 source,
@@ -1427,8 +1400,6 @@ class RoutingV3Resolver:
         }:
             return self._source_resolution(source, batch_reason)
 
-        scalar_canonical = scalar_resolution
-        scalar_is_unsafe = canonical_name_leaks_mixed_script(scalar_canonical)
         selected_suffix = scalar_canonical.normalized.suffix if scalar_canonical is not None and not scalar_is_unsafe else None
         if parsed is not None and parsed.surname:
             return self._materialize_selected_candidate(
@@ -1460,11 +1431,6 @@ class RoutingV3Resolver:
                     source=source,
                     selected=structured_initial_tail,
                     reason=ResolutionReason.STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT,
-                )
-            if self._scalar_repartitions_reviewed_compound_surname(source, scalar_canonical.normalized):
-                return self._source_resolution(
-                    source,
-                    ResolutionReason.SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT,
                 )
             source_surname_candidate = self._scalar_clean_source_surname_repartition_candidate(
                 source,
@@ -1522,7 +1488,7 @@ class RoutingV3Resolver:
                 source,
                 ResolutionReason.REVIEWED_EXACT_SOURCE_REORDER_VETO_PRESERVE_INPUT,
             )
-        selected = restore_reviewed_atomic_korean_tokens(source, selected)
+        selected = _preserve_reviewed_atomic_korean_source_given(source, selected)
         selected, conflict_reason = self._detector.routing_reorder_veto(
             raw_name,
             selected,
