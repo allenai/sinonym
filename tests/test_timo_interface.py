@@ -17,9 +17,11 @@ from sinonym.timo.interface import (
     Predictor,
     PredictorConfig,
     RoutedPaperPrediction,
+    RoutedPaperPredictionV2,
     RoutedPrediction,
     RoutingInstance,
     RoutingPredictor,
+    RoutingPredictorV2,
 )
 
 EXPECTED_BATCH_CONTEXT_RESULT_COUNT = 3
@@ -592,6 +594,31 @@ def test_routing_predictor_one_prediction_per_instance():
     # timo reconstructs each prediction via prediction_class(**raw_pred); round-trip must hold
     rebuilt = [RoutedPaperPrediction(**p.dict()) for p in results]
     assert rebuilt == results
+
+
+@pytest.mark.parametrize(
+    ("predictor_type", "paper_prediction_type"),
+    [
+        (RoutingPredictor, RoutedPaperPrediction),
+        (RoutingPredictorV2, RoutedPaperPredictionV2),
+    ],
+)
+def test_routing_predict_batch_matches_individual_routes(predictor_type, paper_prediction_type):
+    predictor = predictor_type(config=PredictorConfig(parallel="never"), artifacts_dir=".")
+    instances = [
+        RoutingInstance(pp_names=[]),
+        RoutingInstance(pp_names=["Zhang San"]),
+        RoutingInstance(
+            pp_names=["Yue Lin", "Wei Wang"],
+            vys_pool_names=["Yue Lin", "Wei Wang", "Jun Zhao"],
+        ),
+    ]
+    expected = [
+        paper_prediction_type(authors=predictor.route(instance.pp_names, instance.vys_pool_names))
+        for instance in instances
+    ]
+
+    assert predictor.predict_batch(instances) == expected
 
 
 def test_routing_predictor_batches_related_analysis_through_auto_wrapper(monkeypatch):

@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 from pydantic import BaseModel, BaseSettings, Field, root_validator
 
@@ -20,9 +20,6 @@ from sinonym.timo.routing_v3 import (
     routed_components_leak_cjk,
     serialize_enum_values,
 )
-
-if TYPE_CHECKING:
-    from sinonym.services.batch_analysis import RelatedBatchParseResult
 
 
 class _PoolPreconditionError(ValueError):
@@ -663,17 +660,21 @@ class Predictor:
             message = "vys_pool_names must start with the paper's authors: vys_pool_names[:len(pp_names)] == pp_names"
             raise _PoolPreconditionError(message)
 
-    def _analyze_routing_instances(
+    def _predict_routed_papers(
         self,
         instances: list[RoutingInstance],
-    ) -> tuple[list["RelatedBatchParseResult"], list[tuple[int, int]], list[int]]:
-        """Analyze nonempty V1/V2 routing instances through one shared schedule."""
+        *,
+        routed_prediction_type: type[RoutedPrediction],
+        paper_prediction_type: type[RoutedPaperPrediction],
+    ) -> list[RoutedPaperPrediction]:
+        """Route V1/V2 papers through one shared batch schedule."""
+        predictions: list[RoutedPaperPrediction | None] = [None] * len(instances)
         requests: list[tuple[list[str], list[str] | None]] = []
         plans: list[tuple[int, int]] = []
-        empty_indices: list[int] = []
+
         for instance_index, instance in enumerate(instances):
             if not instance.pp_names:
-                empty_indices.append(instance_index)
+                predictions[instance_index] = paper_prediction_type(authors=[])
                 continue
 
             vys_pool_names = instance.vys_pool_names or None
@@ -690,7 +691,30 @@ class Predictor:
             chunk_size=self._config.mp_chunk_size,
             mp_start_method=self._config.mp_start_method,
         )
-        return batch_results, plans, empty_indices
+        for instance_index, request_index in plans:
+            instance = instances[instance_index]
+            related = batch_results[request_index]
+            pp_batch = self._detector._attach_batch_canonical_names(related.pp_batch)  # noqa: SLF001
+            if instance.vys_pool_names:
+                if related.vys_batch is None:
+                    message = "pp_vys routing plan missing VYS batch result"
+                    raise RuntimeError(message)
+                authors = self._route_pp_vys_batches(
+                    pp_batch,
+                    self._detector._attach_batch_canonical_names(related.vys_batch),  # noqa: SLF001
+                    len(instance.pp_names),
+                )
+            else:
+                authors = [
+                    routed_prediction_type(**result.dict(), input_order_candidate=None, vys=None)
+                    for result in self._route_pp_batch(pp_batch)
+                ]
+            predictions[instance_index] = paper_prediction_type(authors=authors)
+
+        if any(prediction is None for prediction in predictions):
+            message = "routing prediction plan did not fill every instance slot"
+            raise RuntimeError(message)
+        return [prediction for prediction in predictions if prediction is not None]
 
     def _route_pp_vys_batches(
         self,
@@ -826,33 +850,11 @@ class RoutingPredictor(Predictor):
         self,
         instances: list[RoutingInstance],
     ) -> list[RoutedPaperPrediction]:
-        predictions: list[RoutedPaperPrediction | None] = [None] * len(instances)
-        batch_results, plans, empty_indices = self._analyze_routing_instances(instances)
-        for instance_index in empty_indices:
-            predictions[instance_index] = RoutedPaperPrediction(authors=[])
-
-        for instance_index, request_index in plans:
-            instance = instances[instance_index]
-            related = batch_results[request_index]
-            pp_batch = self._detector._attach_batch_canonical_names(related.pp_batch)  # noqa: SLF001
-            if instance.vys_pool_names:
-                if related.vys_batch is None:
-                    message = "pp_vys routing plan missing VYS batch result"
-                    raise RuntimeError(message)
-                authors = self._route_pp_vys_batches(
-                    pp_batch,
-                    self._detector._attach_batch_canonical_names(related.vys_batch),  # noqa: SLF001
-                    len(instance.pp_names),
-                )
-            else:
-                pp_only = self._route_pp_batch(pp_batch)
-                authors = [RoutedPrediction(**r.dict(), input_order_candidate=None, vys=None) for r in pp_only]
-            predictions[instance_index] = RoutedPaperPrediction(authors=authors)
-
-        if any(prediction is None for prediction in predictions):
-            message = "routing prediction plan did not fill every instance slot"
-            raise RuntimeError(message)
-        return [prediction for prediction in predictions if prediction is not None]
+        return self._predict_routed_papers(
+            instances,
+            routed_prediction_type=RoutedPrediction,
+            paper_prediction_type=RoutedPaperPrediction,
+        )
 
 
 class PredictorV2(Predictor):
@@ -1231,33 +1233,14 @@ class RoutingPredictorV2(PredictorV2):
         self,
         instances: list[RoutingInstance],
     ) -> list[RoutedPaperPredictionV2]:
-        predictions: list[RoutedPaperPredictionV2 | None] = [None] * len(instances)
-        batch_results, plans, empty_indices = self._analyze_routing_instances(instances)
-        for instance_index in empty_indices:
-            predictions[instance_index] = RoutedPaperPredictionV2(authors=[])
-
-        for instance_index, request_index in plans:
-            instance = instances[instance_index]
-            related = batch_results[request_index]
-            pp_batch = self._detector._attach_batch_canonical_names(related.pp_batch)  # noqa: SLF001
-            if instance.vys_pool_names:
-                if related.vys_batch is None:
-                    message = "pp_vys routing plan missing VYS batch result"
-                    raise RuntimeError(message)
-                authors = self._route_pp_vys_batches(
-                    pp_batch,
-                    self._detector._attach_batch_canonical_names(related.vys_batch),  # noqa: SLF001
-                    len(instance.pp_names),
-                )
-            else:
-                pp_only = self._route_pp_batch(pp_batch)
-                authors = [RoutedPredictionV2(**result.dict(), input_order_candidate=None, vys=None) for result in pp_only]
-            predictions[instance_index] = RoutedPaperPredictionV2(authors=authors)
-
-        if any(prediction is None for prediction in predictions):
-            message = "routing prediction plan did not fill every instance slot"
-            raise RuntimeError(message)
-        return [prediction for prediction in predictions if prediction is not None]
+        return cast(
+            "list[RoutedPaperPredictionV2]",
+            self._predict_routed_papers(
+                instances,
+                routed_prediction_type=RoutedPredictionV2,
+                paper_prediction_type=RoutedPaperPredictionV2,
+            ),
+        )
 
 
 class RoutingPredictorV3:
