@@ -959,6 +959,8 @@ class EastAsianNameOrderService:
         if not _is_compact_japanese(surface):
             return self._infer_spaced_japanese_native(surface, japanese_probability)
         lookup_surface = _native_lookup_text(surface)
+        if len(lookup_surface) < MIN_ROMANIZED_TOKENS:
+            return None
         if not _clears_japanese_classifier(surface, japanese_probability):
             return None
         lookup_boundary = self._japanese_native_boundary(lookup_surface)

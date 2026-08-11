@@ -907,6 +907,16 @@ def test_all_japanese_native_rules_reject_invalid_classifier_probability(
         )
 
 
+@pytest.mark.parametrize("raw_name", ["\u8fbb", "\u512a\ufe00"])
+def test_singleton_japanese_native_surface_has_no_name_boundary(raw_name: str) -> None:
+    resolution = EastAsianNameOrderService().infer_resolution(
+        raw_name,
+        japanese_probability=lambda _name: 0.9,
+    )
+
+    assert resolution is None
+
+
 def test_japanese_romanized_routes_only_unambiguous_dictionary_direction(
     detector: ChineseNameDetector,
 ) -> None:
