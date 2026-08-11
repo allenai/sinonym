@@ -250,46 +250,31 @@ class NameParsingService:
         if not scored_parses:
             return None
 
-        best_parse_result = None
-        best_score = float("-inf")
-        best_format_alignment = 0.0
-        best_secondary_key = ""
-        tie_break_ready = False
-        for candidate in scored_parses:
-            surname_tokens, given_tokens, score, _original_compound_format = candidate
-            if best_parse_result is None or score > best_score:
-                best_parse_result = candidate
-                best_score = score
-                tie_break_ready = False
-                continue
-            if score < best_score:
-                continue
-
-            if not tie_break_ready:
-                best_surname_tokens, best_given_tokens, _best_score, _best_original_compound = best_parse_result
-                best_format_alignment = self._calculate_format_alignment_bonus(
-                    best_surname_tokens,
-                    best_given_tokens,
-                    tokens,
-                )
-                best_secondary_key = f"{best_surname_tokens}|{best_given_tokens}"
-                tie_break_ready = True
-
-            format_alignment = self._calculate_format_alignment_bonus(surname_tokens, given_tokens, tokens)
-            if format_alignment > best_format_alignment:
-                best_parse_result = candidate
-                best_format_alignment = format_alignment
-                best_secondary_key = f"{surname_tokens}|{given_tokens}"
-                continue
-            if format_alignment < best_format_alignment:
-                continue
-
-            secondary_key = f"{surname_tokens}|{given_tokens}"
-            if secondary_key > best_secondary_key:
-                best_parse_result = candidate
-                best_secondary_key = secondary_key
+        best_parse_result = max(
+            scored_parses,
+            key=lambda candidate: self.candidate_rank_key(
+                candidate[0],
+                candidate[1],
+                candidate[2],
+                tokens,
+            ),
+        )
 
         return best_parse_result[0], best_parse_result[1], best_parse_result[3]
+
+    def candidate_rank_key(
+        self,
+        surname_tokens: list[str] | tuple[str, ...],
+        given_tokens: list[str] | tuple[str, ...],
+        score: float,
+        original_tokens: list[str],
+    ) -> tuple[float, float, str]:
+        """Return the deterministic rank shared by scalar and batch parsing."""
+        return (
+            score,
+            self._calculate_format_alignment_bonus(list(surname_tokens), list(given_tokens), original_tokens),
+            f"{list(surname_tokens)}|{list(given_tokens)}",
+        )
 
     def _generate_all_parses_with_format(
         self,

@@ -34,6 +34,32 @@ from tests._korean_atomic_cases import ATOMIC_KOREAN_GIVEN_CASES, AtomicKoreanGi
 # ===================================================================
 
 
+def test_batch_dependencies_default_classification_input_to_identity() -> None:
+    """The legacy three-argument constructor keeps the submitted surface."""
+    dependencies = BatchAnalysisDependencies(
+        2,
+        lambda _name: ParseResult.failure("unused"),
+        lambda _name: None,
+    )
+
+    assert dependencies.classification_input("Li Ming") == "Li Ming"
+    assert dependencies.surname_resolver is None
+
+
+def test_batch_dependencies_keep_surname_resolver_as_fourth_positional_field() -> None:
+    """The legacy fourth positional argument remains the surname resolver."""
+    surname_resolver = object()
+    dependencies = BatchAnalysisDependencies(
+        2,
+        lambda _name: ParseResult.failure("unused"),
+        lambda _name: None,
+        surname_resolver,
+    )
+
+    assert dependencies.surname_resolver is surname_resolver
+    assert dependencies.classification_input("Li Ming") == "Li Ming"
+
+
 def test_homogeneous_given_first_batch(detector):
     """Test detection with names that individual processing handles correctly."""
     # Names with common surnames (Liu/Li/Huang/Zhang/Wang) and common given names (Xin/Yang/Chen/Wei/Ming)
@@ -298,6 +324,21 @@ def test_name_order_evidence_supports_external_context_routing(detector):
     assert evidence.selected_over_alternate_surname_frequency_ratio == pytest.approx(
         evidence.first_token_surname_frequency / evidence.last_token_surname_frequency,
     )
+
+
+def test_batch_applied_requires_selected_dominant_format(detector):
+    """A row without the dominant candidate reports that batch was not applied."""
+    batch = detector.analyze_name_batch(["Li Ming", "Wei Zhang", "Ming Li", "Hao Wang"])
+    evidence = batch.name_order_evidence[0]
+
+    assert batch.format_pattern.dominant_format is NameFormat.GIVEN_FIRST
+    assert batch.format_pattern.threshold_met
+    assert evidence.individual_format is NameFormat.SURNAME_FIRST
+    assert evidence.selected_format is NameFormat.SURNAME_FIRST
+    assert evidence.batch_participant is True
+    assert evidence.batch_applied is False
+    assert evidence.batch_changed_format is False
+    assert [candidate.format for candidate in batch.individual_analyses[0].candidates] == [NameFormat.SURNAME_FIRST]
 
 
 def test_batch_evidence_uses_actual_individual_format_for_guarded_given_first(detector):

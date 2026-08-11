@@ -115,8 +115,8 @@ not contain caller metadata or a PP/VYS routing decision.
 | --- | --- |
 | `raw_name`, `raw_tokens`, `raw_token_count` | Submitted text and the tokens used for evidence. |
 | `script_representation` | Parser cohort, such as `latin_only`, `han_only`, or `rejected_input`. |
-| `batch_participant` | Whether this name was eligible for the Latin batch convention. |
-| `batch_applied` | Whether the detected convention was applied to this successful row. |
+| `batch_participant` | Whether the row contributed a candidate to the Latin batch vote. |
+| `batch_applied` | Whether this successful row actually selected the detected convention. |
 | `batch_changed_format` | Whether batch context changed the selected order. |
 | `individual_format`, `selected_format` | Order before and after batch selection. |
 | `selected_surname_position` | `first`, `last`, `internal`, or `unknown` in the evidence tokens. |
@@ -133,11 +133,13 @@ without depending on Sinonym internals.
 
 ## Mixed inputs and script cohorts
 
-Only vote-eligible Latin-only Chinese names vote in and receive Latin batch
-formatting. Han-only names, explicitly aligned Han/Roman names, and other
-mixed-script inputs use their own script evidence, so a Latin convention does
-not flip their order. Latin rows with all-caps source-token cues expose those
-cues in `name_order_evidence` but do not vote or receive Latin batch formatting.
+Only vote-eligible Latin-only Chinese names vote on the Latin batch convention.
+They receive that convention only when they have a candidate in the detected
+format and source-order evidence has not locked the row. Han-only names,
+explicitly aligned Han/Roman names, and other mixed-script inputs use their own
+script evidence, so a Latin convention does not flip their order. Latin rows
+with all-caps source-token cues expose those cues in `name_order_evidence` but
+do not vote or receive Latin batch formatting.
 
 Unambiguous names also retain their best individual parse. Recoverable
 non-Chinese people remain unsuccessful in the legacy Chinese fields, while

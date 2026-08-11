@@ -45,6 +45,11 @@ REJECTED_INPUT_REPRESENTATION = "rejected_input"
 _HAN_SURNAME_READING_SOURCE_CHARACTERS = frozenset(character for character, _reading in HAN_SURNAME_POSITION_READINGS)
 
 
+def _identity_classification_input(name: str) -> str:
+    """Return an unchanged classification surface."""
+    return name
+
+
 @dataclass(frozen=True)
 class BatchAnalysisDependencies:
     """Detector-owned callbacks and constants needed by batch analysis."""
@@ -52,8 +57,11 @@ class BatchAnalysisDependencies:
     min_tokens_required: int
     individual_parser: collections.abc.Callable[[str], ParseResult]
     input_failure: collections.abc.Callable[[str], ParseResult | None]
-    classification_input: collections.abc.Callable[[str], str]
     surname_resolver: SurnameResolver | None = None
+    classification_input: collections.abc.Callable[[str], str] = field(
+        default=_identity_classification_input,
+        kw_only=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -400,6 +408,15 @@ class BatchAnalysisService:
         format_candidates: list[_PreparedCandidate] = []
         scored_parses: list[tuple[list[str], list[str], _PreparedCandidate]] = []
         score_cache: dict[str, dict] = {}
+
+        def candidate_rank_key(candidate: _PreparedCandidate) -> tuple[float, float, str]:
+            return self._parsing_service.candidate_rank_key(
+                candidate.surname_tokens,
+                candidate.given_tokens,
+                candidate.score,
+                tokens,
+            )
+
         for surname_tokens, given_tokens, original_compound_format in parses:
             common = {
                 "surname_tokens": tuple(surname_tokens),
@@ -422,7 +439,7 @@ class BatchAnalysisService:
             format_candidates.append(candidate)
             scored_parses.append((surname_tokens, given_tokens, candidate))
 
-        format_candidates.sort(key=lambda candidate: candidate.score, reverse=True)
+        format_candidates.sort(key=candidate_rank_key, reverse=True)
         if not need_individual and (not format_candidates or format_candidates[0].format != NameFormat.SURNAME_FIRST):
             return tuple(format_candidates), (), None
 
@@ -448,7 +465,7 @@ class BatchAnalysisService:
                 )
             individual_candidates.append(replace(candidate, score=guarded_score))
 
-        individual_candidates.sort(key=lambda candidate: candidate.score, reverse=True)
+        individual_candidates.sort(key=candidate_rank_key, reverse=True)
         return tuple(format_candidates), tuple(individual_candidates), None
 
     @staticmethod
@@ -877,7 +894,7 @@ class BatchAnalysisService:
             # Participation guarantees a non-empty candidate list and a best_candidate,
             # so a candidate is always selected below.
             matching_candidates = [c for c in entry.candidates if c.format == target_format]
-            selected_candidate = max(matching_candidates, key=lambda x: x.score) if matching_candidates else entry.best_candidate
+            selected_candidate = matching_candidates[0] if matching_candidates else entry.best_candidate
 
             result = self._candidate_to_parse_result(
                 selected_candidate,
@@ -1098,7 +1115,12 @@ class BatchAnalysisService:
             )
             all_caps_tokens = self._all_caps_tokens(raw_tokens)
             batch_participant = self._candidate_entry_participates(entry)
-            name_batch_applied = batch_format_applied and self._batch_format_applies_to_entry(entry) and result.success
+            name_batch_applied = (
+                batch_format_applied
+                and self._batch_format_applies_to_entry(entry)
+                and result.success
+                and selected_format is format_pattern.dominant_format
+            )
             batch_changed_format = (
                 name_batch_applied
                 and NameFormat.MIXED not in {individual_format, selected_format}
