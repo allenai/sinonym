@@ -5,11 +5,19 @@ import pytest
 from scripts import check_test_status
 
 
-def _expected_failure_details() -> list[check_test_status.FailureDetail]:
-    return [
-        check_test_status.FailureDetail(nodeid, kind, message)
-        for nodeid, kind, message in check_test_status.EXPECTED_FAILURE_SIGNATURES
-    ]
+def _install_synthetic_failure_baseline(monkeypatch: pytest.MonkeyPatch) -> check_test_status.FailureDetail:
+    failure = check_test_status.FailureDetail(
+        "tests.test_known::test_failure",
+        "failure",
+        "AssertionError: known failure",
+    )
+    monkeypatch.setattr(
+        check_test_status,
+        "EXPECTED_FAILURE_SIGNATURES",
+        ((failure.nodeid, failure.kind, failure.message),),
+    )
+    monkeypatch.setattr(check_test_status, "EXPECTED_FAILURES", 1)
+    return failure
 
 
 def _write_junit(path: Path, body: str) -> None:
@@ -117,7 +125,6 @@ def test_status_fails_on_junit_error():
 
 def test_status_detects_regressions_beyond_expected_baseline():
     failures = [
-        *_expected_failure_details(),
         check_test_status.FailureDetail(
             "tests.test_new_regression::test_extra_failure",
             "failure",
@@ -138,8 +145,8 @@ def test_status_detects_regressions_beyond_expected_baseline():
     assert "EXPECTED_FAILURES" not in message
 
 
-def test_status_allows_expected_baseline():
-    expected_failures = _expected_failure_details()
+def test_status_allows_expected_baseline(monkeypatch: pytest.MonkeyPatch):
+    expected_failures = [_install_synthetic_failure_baseline(monkeypatch)]
 
     exit_code, message = check_test_status.status_exit_decision(
         total_failures=check_test_status.EXPECTED_FAILURES,
@@ -154,10 +161,9 @@ def test_status_allows_expected_baseline():
     assert "EXPECTED_FAILURES" not in message
 
 
-def test_status_fails_on_unexpected_failure_with_same_total_count():
-    expected_failures = _expected_failure_details()
+def test_status_fails_on_unexpected_failure_with_same_total_count(monkeypatch: pytest.MonkeyPatch):
+    _install_synthetic_failure_baseline(monkeypatch)
     swapped_failures = [
-        *expected_failures[:-1],
         check_test_status.FailureDetail(
             "tests.test_new_regression::test_wrong_output",
             "failure",
@@ -177,15 +183,14 @@ def test_status_fails_on_unexpected_failure_with_same_total_count():
     assert "tests.test_new_regression::test_wrong_output" in message
 
 
-def test_status_fails_on_changed_failure_message_with_same_nodeids():
-    expected_failures = _expected_failure_details()
+def test_status_fails_on_changed_failure_message_with_same_nodeids(monkeypatch: pytest.MonkeyPatch):
+    expected_failure = _install_synthetic_failure_baseline(monkeypatch)
     changed_failures = [
         check_test_status.FailureDetail(
-            expected_failures[0].nodeid,
-            expected_failures[0].kind,
+            expected_failure.nodeid,
+            expected_failure.kind,
             "AssertionError: different wrong output",
         ),
-        *expected_failures[1:],
     ]
 
     exit_code, message = check_test_status.status_exit_decision(
@@ -197,26 +202,27 @@ def test_status_fails_on_changed_failure_message_with_same_nodeids():
 
     assert exit_code == 1
     assert "Unexpected pytest failure signatures" in message
-    assert expected_failures[0].nodeid in message
+    assert expected_failure.nodeid in message
 
 
-def test_status_fails_when_expected_baseline_failure_is_missing():
-    subset_failures = _expected_failure_details()[:-1]
+def test_status_fails_when_expected_baseline_failure_is_missing(monkeypatch: pytest.MonkeyPatch):
+    expected_failure = _install_synthetic_failure_baseline(monkeypatch)
+    subset_failures = []
 
     exit_code, message = check_test_status.status_exit_decision(
         total_failures=len(subset_failures),
         perf_passed=True,
-        pytest_returncode=1,
+        pytest_returncode=0,
         failures=subset_failures,
     )
 
     assert exit_code == 1
     assert "Missing expected pytest failure signatures" in message
-    assert _expected_failure_details()[-1].nodeid in message
+    assert expected_failure.nodeid in message
     assert "EXPECTED_FAILURES" not in message
 
 
-def test_status_fails_until_baseline_is_updated_when_all_tests_pass():
+def test_status_passes_when_all_tests_pass():
     exit_code, message = check_test_status.status_exit_decision(
         total_failures=0,
         perf_passed=True,
@@ -224,15 +230,16 @@ def test_status_fails_until_baseline_is_updated_when_all_tests_pass():
         failures=[],
     )
 
-    assert exit_code == 1
-    assert "Missing expected pytest failure signatures" in message
+    assert exit_code == 0
+    assert "0 failures" in message
 
 
-def test_status_improvement_requires_failure_list_when_pytest_reported_failures():
+def test_status_improvement_requires_failure_list_when_pytest_reported_failures(monkeypatch: pytest.MonkeyPatch):
+    _install_synthetic_failure_baseline(monkeypatch)
     exit_code, message = check_test_status.status_exit_decision(
         total_failures=check_test_status.EXPECTED_FAILURES - 1,
         perf_passed=True,
-        pytest_returncode=1,
+        pytest_returncode=0,
         failures=None,
     )
 
@@ -240,8 +247,9 @@ def test_status_improvement_requires_failure_list_when_pytest_reported_failures(
     assert "failure list" in message.lower()
 
 
-def test_status_fails_when_failure_list_length_disagrees_with_total():
-    failures = _expected_failure_details()[:2]
+def test_status_fails_when_failure_list_length_disagrees_with_total(monkeypatch: pytest.MonkeyPatch):
+    _install_synthetic_failure_baseline(monkeypatch)
+    failures = []
 
     exit_code, message = check_test_status.status_exit_decision(
         total_failures=check_test_status.EXPECTED_FAILURES,
