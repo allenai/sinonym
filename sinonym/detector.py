@@ -221,7 +221,6 @@ from sinonym.services.east_asian_name_order import (
     EastAsianNameOrderService,
 )
 from sinonym.services.formatting import REVIEWED_UNBOUNDED_PREFIX_GIVEN_FORMS, SINGLE_LETTER_PINYIN_SYLLABLES
-from sinonym.services.order_metadata import original_component_order
 from sinonym.services.person_name_normalization import (
     DropReason,
     PersonNameNormalizationResult,
@@ -448,53 +447,30 @@ class ChineseNameDetector:
         original_compound_format: str | None = None,
     ) -> ParseResult:
         """Format parsed components and attach stable structured name fields."""
-        given_tokens = self._native_bound_given_tokens(normalized_input, given_tokens)
-        surname_tokens = self._han_surname_position_readings(
-            surname_tokens,
-            normalized_input,
-            original_order,
-        )
-        formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
-            self._formatting_service.format_name_output_with_tokens(
+        try:
+            given_tokens = self._native_bound_given_tokens(normalized_input, given_tokens)
+            surname_tokens = self._han_surname_position_readings(
                 surname_tokens,
-                given_tokens,
-                normalized_input.norm_map,
-                normalized_input.compound_metadata,
-                original_compound_format=original_compound_format,
-                allow_surname_like_given_split=self._allows_surname_like_given_split(normalized_input),
-                syllabic_single_letter_tokens=self._native_single_letter_given_tokens(
-                    normalized_input,
-                    given_tokens,
-                ),
+                normalized_input,
+                original_order,
             )
+            allow_surname_like_given_split = self._allows_surname_like_given_split(normalized_input)
+            syllabic_single_letter_tokens = self._native_single_letter_given_tokens(normalized_input, given_tokens)
+        except ValueError as error:
+            return ParseResult.failure(str(error))
+
+        selected_format = (
+            NameFormat.GIVEN_FIRST if original_order and original_order[0] == "given" else NameFormat.SURNAME_FIRST
         )
-        parsed = ParsedName(
-            surname=surname_str,
-            given_name=given_str,
-            surname_tokens=surname_final,
-            given_tokens=given_final,
-            middle_name=" ".join(middle_tokens) if middle_tokens else "",
-            middle_tokens=middle_tokens,
-            order=["given", "middle", "surname"],
-        )
-        parsed_original_order = ParsedName(
-            surname=surname_str,
-            given_name=given_str,
-            surname_tokens=surname_final,
-            given_tokens=given_final,
-            middle_name=" ".join(middle_tokens) if middle_tokens else "",
-            middle_tokens=middle_tokens,
-            order=original_component_order(
-                NameFormat.GIVEN_FIRST if original_order and original_order[0] == "given" else NameFormat.SURNAME_FIRST,
-                given_tokens,
-                middle_tokens,
-            ),
-        )
-        return ParseResult.success_with_name(
-            formatted_name,
-            original_compound_surname=original_compound_format,
-            parsed=parsed,
-            parsed_original_order=parsed_original_order,
+        return self._formatting_service.materialize_parse_result(
+            surname_tokens,
+            given_tokens,
+            selected_format,
+            normalized_input.norm_map,
+            normalized_input.compound_metadata,
+            original_compound_format=original_compound_format,
+            allow_surname_like_given_split=allow_surname_like_given_split,
+            syllabic_single_letter_tokens=syllabic_single_letter_tokens,
         )
 
     def _han_surname_position_readings(
@@ -634,10 +610,7 @@ class ChineseNameDetector:
             surname_tokens, given_tokens = [first], [last]
             original_order = ["surname", "given"]
 
-        try:
-            return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
-        except ValueError as e:
-            return ParseResult.failure(str(e))
+        return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
 
     def _normalize_aligned_bilingual_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
         """Parse explicit Roman/Han aligned names using Han surname identity."""
@@ -674,10 +647,7 @@ class ChineseNameDetector:
         given_tokens = [pair.roman_token for index, pair in enumerate(pairs) if index != best_index]
         original_order = ["surname", "given"] if best_index == 0 else ["given", "surname"]
 
-        try:
-            return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
-        except ValueError as e:
-            return ParseResult.failure(str(e))
+        return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
 
     def _normalize_weak_roman_han_pair_order(
         self,
@@ -703,10 +673,7 @@ class ChineseNameDetector:
 
         surname_tokens = [pairs[-1].roman_token]
         given_tokens = [pair.roman_token for pair in pairs[:-1]]
-        try:
-            return self._format_parse_result(surname_tokens, given_tokens, normalized_input, ["given", "surname"])
-        except ValueError as e:
-            return ParseResult.failure(str(e))
+        return self._format_parse_result(surname_tokens, given_tokens, normalized_input, ["given", "surname"])
 
     def _is_roman_han_bilingual_pair_input(self, normalized_input: NormalizedInput) -> bool:
         """Return whether the source is exactly two Roman-Han aligned pairs."""
@@ -749,10 +716,7 @@ class ChineseNameDetector:
             return None
         surname_tokens, given_tokens, original_order = compact_components
 
-        try:
-            return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
-        except ValueError as e:
-            return ParseResult.failure(str(e))
+        return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
 
     def _compact_han_roman_components(
         self,
@@ -965,10 +929,7 @@ class ChineseNameDetector:
         if not self._is_unbounded_single_letter_syllable_shape(given, leading_only=True):
             return None
 
-        try:
-            return self._format_parse_result([surname], [given], normalized_input, ["surname", "given"])
-        except ValueError as error:
-            return ParseResult.failure(str(error))
+        return self._format_parse_result([surname], [given], normalized_input, ["surname", "given"])
 
     def _normalize_spaced_all_chinese_name(self, normalized_input: NormalizedInput) -> ParseResult | None:
         """Parse all-Han names whose whitespace already separates name components."""
@@ -1025,10 +986,7 @@ class ChineseNameDetector:
             else:
                 return None
 
-        try:
-            return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
-        except ValueError as e:
-            return ParseResult.failure(str(e))
+        return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
 
     def _spaced_han_prefers_prefix_surname(self, first_group: list[str], last_group: list[str]) -> bool:
         """Return whether noisy spacing likely split a surname-first Han name's given name."""
@@ -1150,10 +1108,7 @@ class ChineseNameDetector:
             if best_result:
                 surname_tokens, given_tokens = best_result
                 original_order = ["surname", "given"] if token1_is_surname else ["given", "surname"]
-                try:
-                    return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
-                except ValueError as e:
-                    return ParseResult.failure(str(e))
+                return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
         elif is_all_chinese and len(normalized_input.roman_tokens) == THREE_CHARACTER_ALL_CHINESE_TOKEN_COUNT:
             # For 3-character all-Chinese names: check compound surname vs single surname
             tokens = list(normalized_input.roman_tokens)
@@ -1181,10 +1136,7 @@ class ChineseNameDetector:
             if best_result:
                 surname_tokens, given_tokens = best_result
                 # For 3-character all-Chinese, original order is surname-first.
-                try:
-                    return self._format_parse_result(surname_tokens, given_tokens, normalized_input, ["surname", "given"])
-                except ValueError as e:
-                    return ParseResult.failure(str(e))
+                return self._format_parse_result(surname_tokens, given_tokens, normalized_input, ["surname", "given"])
         else:
             if normalized_input.from_camel_case_pair:
                 camel_result = self._normalize_camel_case_pair(normalized_input)
@@ -1285,16 +1237,13 @@ class ChineseNameDetector:
 
                 original_is_given_first = is_surname_last_in_this_order if used_original else is_surname_first_in_this_order
                 original_order = ["given", "surname"] if original_is_given_first else ["surname", "given"]
-                try:
-                    return self._format_parse_result(
-                        surname_tokens,
-                        given_tokens,
-                        normalized_input,
-                        original_order,
-                        original_compound_format=best_candidate["original_compound_format"],
-                    )
-                except ValueError as e:
-                    return ParseResult.failure(str(e))
+                return self._format_parse_result(
+                    surname_tokens,
+                    given_tokens,
+                    normalized_input,
+                    original_order,
+                    original_compound_format=best_candidate["original_compound_format"],
+                )
 
         return ParseResult.failure("name not recognised as Chinese")
 
@@ -1310,15 +1259,12 @@ class ChineseNameDetector:
         if given_parts == ("tsung", "jr"):
             norm_map["jr"] = "zhi"
         contextual_input = replace(normalized_input, norm_map=norm_map)
-        try:
-            return self._format_parse_result(
-                [normalized_input.roman_tokens[-1]],
-                list(given_parts),
-                contextual_input,
-                ["given", "surname"],
-            )
-        except ValueError as error:
-            return ParseResult.failure(str(error))
+        return self._format_parse_result(
+            [normalized_input.roman_tokens[-1]],
+            list(given_parts),
+            contextual_input,
+            ["given", "surname"],
+        )
 
     def _leading_et_al_normalization(self, raw_name: str) -> PersonNameNormalizationResult | None:
         """Return the audited normalization for one exact leading citation marker."""

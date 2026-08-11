@@ -15,10 +15,13 @@ compound name splitting, and output standardization to "Given-Name Surname" form
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES
+from sinonym.coretypes import NameFormat, ParsedName, ParseResult
 from sinonym.services.name_lookup import DOMINANT_CHINESE_SURNAME_FREQ_MIN, SurnameResolver
+from sinonym.services.order_metadata import original_component_order
 from sinonym.services.person_name_normalization import is_reviewed_compact_initial_boundary
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
@@ -52,6 +55,53 @@ class NameFormattingService:
             self._normalizer = normalizer
             self._data = data
         self._surname_resolver = SurnameResolver(self._data, self._normalizer)
+
+    def materialize_parse_result(  # noqa: PLR0913 - formatter inputs are independent policy evidence
+        self,
+        surname_tokens: list[str],
+        given_tokens: list[str],
+        selected_format: NameFormat,
+        normalized_cache: dict[str, str] | None = None,
+        compound_metadata: dict[str, CompoundMetadata] | None = None,
+        *,
+        original_compound_format: str | None = None,
+        allow_surname_like_given_split: bool = True,
+        syllabic_single_letter_tokens: frozenset[str] | None = None,
+    ) -> ParseResult:
+        """Format prepared components and build their public parse result."""
+        try:
+            formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
+                self.format_name_output_with_tokens(
+                    surname_tokens,
+                    given_tokens,
+                    normalized_cache,
+                    compound_metadata,
+                    original_compound_format=original_compound_format,
+                    allow_surname_like_given_split=allow_surname_like_given_split,
+                    syllabic_single_letter_tokens=syllabic_single_letter_tokens,
+                )
+            )
+            parsed = ParsedName(
+                surname=surname_str,
+                given_name=given_str,
+                surname_tokens=surname_final,
+                given_tokens=given_final,
+                middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                middle_tokens=middle_tokens,
+                order=["given", "middle", "surname"],
+            )
+            parsed_original_order = replace(
+                parsed,
+                order=original_component_order(selected_format, given_tokens, middle_tokens),
+            )
+            return ParseResult.success_with_name(
+                formatted_name,
+                original_compound_surname=original_compound_format,
+                parsed=parsed,
+                parsed_original_order=parsed_original_order,
+            )
+        except ValueError as error:
+            return ParseResult.failure(str(error))
 
     def format_name_output_with_tokens(  # noqa: PLR0913 - formatter inputs are independent policy evidence
         self,

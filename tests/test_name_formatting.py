@@ -11,6 +11,7 @@ This module contains tests for various name formatting patterns including:
 
 import pytest
 
+from sinonym.coretypes import NameFormat, ParsedName, ParseResult
 from tests._case_assertions import assert_normalized_name
 
 # Test cases for name formatting and separators
@@ -185,3 +186,116 @@ def test_compact_initial_boundary_policy_has_individual_batch_parity(detector) -
     batch = detector.analyze_name_batch(names)
 
     assert [result.result for result in batch.results] == individual
+
+
+@pytest.mark.parametrize(
+    ("selected_format", "expected_order"),
+    [
+        (NameFormat.GIVEN_FIRST, ["middle", "given", "middle", "surname"]),
+        (NameFormat.SURNAME_FIRST, ["surname", "middle", "given", "middle"]),
+        (NameFormat.MIXED, ["surname", "middle", "given", "middle"]),
+    ],
+)
+def test_materialize_parse_result_preserves_selected_format_semantics(
+    detector,
+    selected_format: NameFormat,
+    expected_order: list[str],
+) -> None:
+    detector._ensure_initialized()  # noqa: SLF001
+    formatter = detector._formatting_service  # noqa: SLF001
+    assert formatter is not None
+
+    parsed = ParsedName(
+        surname="Zhang",
+        given_name="Wei",
+        surname_tokens=["Zhang"],
+        given_tokens=["Wei"],
+        middle_name="A. K.",
+        middle_tokens=["A.", "K."],
+        order=["given", "middle", "surname"],
+    )
+    expected = ParseResult.success_with_name(
+        "Wei A. K. Zhang",
+        parsed=parsed,
+        parsed_original_order=ParsedName(
+            surname=parsed.surname,
+            given_name=parsed.given_name,
+            surname_tokens=parsed.surname_tokens,
+            given_tokens=parsed.given_tokens,
+            middle_name=parsed.middle_name,
+            middle_tokens=parsed.middle_tokens,
+            order=expected_order,
+        ),
+    )
+
+    assert formatter.materialize_parse_result(
+        ["Zhang"],
+        ["A", "Wei", "K"],
+        selected_format,
+        {},
+    ) == expected
+
+
+def test_materialize_parse_result_preserves_compound_source_format(detector) -> None:
+    detector._ensure_initialized()  # noqa: SLF001
+    formatter = detector._formatting_service  # noqa: SLF001
+    assert formatter is not None
+
+    result = formatter.materialize_parse_result(
+        ["Ou", "Yang"],
+        ["Xiao", "Ming"],
+        NameFormat.GIVEN_FIRST,
+        {},
+        original_compound_format="Ouyang",
+    )
+
+    assert result.success
+    assert result.result == "Xiao-Ming Ouyang"
+    assert result.original_compound_surname == "Ouyang"
+    assert result.parsed is not None
+    assert result.parsed.surname_tokens == ["Ou", "Yang"]
+    assert result.parsed_original_order is not None
+    assert result.parsed_original_order.order == ["given", "surname"]
+
+
+def test_materialize_parse_result_converts_only_value_errors(detector, monkeypatch) -> None:
+    detector._ensure_initialized()  # noqa: SLF001
+    formatter = detector._formatting_service  # noqa: SLF001
+    assert formatter is not None
+
+    value_error_message = "invalid formatted components"
+
+    def raise_value_error(*_args, **_kwargs):
+        raise ValueError(value_error_message)
+
+    monkeypatch.setattr(formatter, "format_name_output_with_tokens", raise_value_error)
+    result = formatter.materialize_parse_result(["Zhang"], ["Wei"], NameFormat.SURNAME_FIRST)
+    assert result == ParseResult.failure(value_error_message)
+
+    runtime_error_message = "formatter unavailable"
+
+    def raise_runtime_error(*_args, **_kwargs):
+        raise RuntimeError(runtime_error_message)
+
+    monkeypatch.setattr(formatter, "format_name_output_with_tokens", raise_runtime_error)
+    with pytest.raises(RuntimeError, match=runtime_error_message):
+        formatter.materialize_parse_result(["Zhang"], ["Wei"], NameFormat.SURNAME_FIRST)
+
+
+def test_detector_formatting_converts_preprocessing_value_errors(detector, monkeypatch) -> None:
+    detector._ensure_initialized()  # noqa: SLF001
+    normalized_input = detector._normalizer.apply("Zhang Wei")  # noqa: SLF001
+    error_message = "invalid native-token alignment"
+
+    def raise_value_error(*_args, **_kwargs):
+        raise ValueError(error_message)
+
+    monkeypatch.setattr(detector, "_native_bound_given_tokens", raise_value_error)
+    result = detector._format_parse_result(  # noqa: SLF001
+        ["Zhang"],
+        ["Wei"],
+        normalized_input,
+        ["surname", "given"],
+    )
+
+    assert result == ParseResult.failure(error_message)

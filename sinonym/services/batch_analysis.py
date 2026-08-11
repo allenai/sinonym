@@ -24,8 +24,6 @@ from sinonym.coretypes import (
     ParseCandidate,
     ParseResult,
 )
-from sinonym.coretypes.results import ParsedName
-from sinonym.services.order_metadata import original_component_order
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 GUARDED_GIVEN_FIRST_BATCH_MIN_SHARE = 0.75
@@ -997,44 +995,14 @@ class BatchAnalysisService:
         if not candidate:
             return ParseResult.failure("no valid parse found")
 
-        try:
-            # Use the EXACT same formatting pipeline as individual processing, with tokens
-            formatted_name, given_final, surname_final, surname_str, given_str, middle_tokens = (
-                formatting_service.format_name_output_with_tokens(
-                    candidate.surname_tokens,
-                    candidate.given_tokens,
-                    {},  # norm_map - not needed for this step since tokens are already normalized
-                    compound_metadata,
-                    original_compound_format=candidate.original_compound_format,
-                )
-            )
-            parsed = ParsedName(
-                surname=surname_str,
-                given_name=given_str,
-                surname_tokens=surname_final,
-                given_tokens=given_final,
-                middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                middle_tokens=middle_tokens,
-                order=["given", "middle", "surname"],
-            )
-            order_list = original_component_order(candidate.format, candidate.given_tokens, middle_tokens)
-            parsed_original_order = ParsedName(
-                surname=surname_str,
-                given_name=given_str,
-                surname_tokens=surname_final,
-                given_tokens=given_final,
-                middle_name=" ".join(middle_tokens) if middle_tokens else "",
-                middle_tokens=middle_tokens,
-                order=order_list,
-            )
-            return ParseResult.success_with_name(
-                formatted_name,
-                original_compound_surname=candidate.original_compound_format,
-                parsed=parsed,
-                parsed_original_order=parsed_original_order,
-            )
-        except ValueError as e:
-            return ParseResult.failure(str(e))
+        return formatting_service.materialize_parse_result(
+            candidate.surname_tokens,
+            candidate.given_tokens,
+            candidate.format,
+            {},  # norm_map - not needed here because candidate tokens are already normalized
+            compound_metadata,
+            original_compound_format=candidate.original_compound_format,
+        )
 
     def _find_improvements(
         self,
