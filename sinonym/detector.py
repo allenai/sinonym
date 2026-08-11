@@ -603,7 +603,7 @@ class ChineseNameDetector:
         return tuple(
             tuple(self._cache_service.han_to_pinyin_fast(token))
             for token in normalized_input.tokens
-            if self._is_source_han_token(token)
+            if self._is_han_source_token(token)
         )
 
     def _normalize_camel_case_pair(self, normalized_input: NormalizedInput) -> ParseResult | None:
@@ -759,11 +759,11 @@ class ChineseNameDetector:
         normalized_input: NormalizedInput,
     ) -> tuple[list[str], list[str], list[str]] | None:
         """Return parsed components for exact compact Han/Roman transliterations."""
-        han_groups = [token for token in normalized_input.tokens if self._is_source_han_token(token)]
+        han_groups = [token for token in normalized_input.tokens if self._is_han_source_token(token)]
         roman_tokens = [
             clean_token
             for token in normalized_input.tokens
-            if self._is_source_roman_token(token)
+            if self._is_roman_source_token(token)
             for clean_token in [self._clean_source_roman_token(token)]
             if clean_token
         ]
@@ -853,16 +853,6 @@ class ChineseNameDetector:
         if suffix_strength >= prefix_strength * BILINGUAL_SURNAME_STRENGTH_RATIO_MIN:
             return suffix_candidate
         return prefix_candidate
-
-    def _is_source_han_token(self, token: str) -> bool:
-        """Return whether a source token is entirely CJK."""
-        return bool(token) and all(self._config.cjk_pattern.search(char) for char in token)
-
-    def _is_source_roman_token(self, token: str) -> bool:
-        """Return whether a source token has Roman letters and no CJK characters."""
-        return bool(
-            token and self._config.ascii_alpha_pattern.search(token) and not self._config.cjk_pattern.search(token),
-        )
 
     def _clean_source_roman_token(self, token: str) -> str:
         """Clean a source Roman token while preserving source capitalization."""
@@ -963,7 +953,7 @@ class ChineseNameDetector:
     ) -> ParseResult | None:
         """Keep an A/E-prefixed whole given token behind an evidenced surname."""
         if len(normalized_input.tokens) != TWO_TOKEN_NAME_COUNT or not all(
-            self._is_source_roman_token(token) for token in normalized_input.tokens
+            self._is_roman_source_token(token) for token in normalized_input.tokens
         ):
             return None
 
@@ -1606,21 +1596,12 @@ class ChineseNameDetector:
         chinese_result: ParseResult | None,
     ) -> CanonicalName | None:
         """Normalize one person while reusing an already-computed Chinese result."""
-        if not raw_name or len(raw_name) > self._config.max_name_length:
-            return None
-        if all(character in string.punctuation + string.whitespace for character in raw_name):
-            return None
-        self._ensure_initialized()
-        if self._non_person_input_service is not None:
-            non_person_reason = self._non_person_input_service.failure_reason(raw_name)
-            if non_person_reason is not None:
-                return None
-        normalized = self._person_name_normalizer.normalize_text(raw_name)
-        if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
+        baseline = self._person_name_baseline(raw_name)
+        if baseline is None:
             return None
         return self._canonical_person_name_from_baseline(
             raw_name,
-            normalized.canonical_name,
+            baseline,
             chinese_result=chinese_result,
         )
 
@@ -1799,8 +1780,8 @@ class ChineseNameDetector:
             for candidate in candidates
         )
 
-    def _routing_input_baseline(self, raw_name: str) -> CanonicalName | None:
-        """Return V3's policy-neutral cleaned result in flattened input order."""
+    def _person_name_baseline(self, raw_name: str) -> CanonicalName | None:
+        """Return a policy-neutral cleaned person name in flattened input order."""
         if not raw_name or len(raw_name) > self._config.max_name_length:
             return None
         if all(character in string.punctuation + string.whitespace for character in raw_name):
@@ -1823,7 +1804,7 @@ class ChineseNameDetector:
         interior tokens as middle. It is used only after a selected candidate
         has been proven to reverse those endpoints.
         """
-        baseline = self._routing_input_baseline(raw_name)
+        baseline = self._person_name_baseline(raw_name)
         if baseline is None:
             return None
         normalized = baseline.normalized
@@ -1857,7 +1838,7 @@ class ChineseNameDetector:
         resolver can record an explicit source-preservation outcome. Ordinary
         non-applicability remains ``None``.
         """
-        baseline = self._routing_input_baseline(raw_name)
+        baseline = self._person_name_baseline(raw_name)
         if baseline is None:
             return None
         if self._ethnicity_service is None:
