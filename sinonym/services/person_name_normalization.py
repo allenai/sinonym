@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 
 from sinonym.coretypes import CanonicalName, NameComponents
-from sinonym.name_punctuation import PERSON_JOINER_FOLD_TRANSLATION
+from sinonym.name_punctuation import PERSON_JOINER_FOLD_TRANSLATION, fold_internal_name_joiners
 from sinonym.services.non_person import reviewed_non_person_text_pattern
 
 
@@ -71,7 +71,12 @@ class _DroppedToken:
 
 
 _WHITESPACE_RE = re.compile(r"\s+")
-_JOINER_SPACING_RE = re.compile(r"\s*([-'])\s*")
+_HYPHEN_SPACING_RE = re.compile(r"\s*-\s*")
+_SINGLE_LETTER_APOSTROPHE_SPACING_RE = re.compile(
+    r"(?<![^\W\d_])(?P<prefix>[^\W\d_])\s*'\s*(?=[^\W\d_])",
+    re.UNICODE,
+)
+_SPACED_HYPHEN_RE = re.compile(r"\s+-\s+")
 _DUPLICATE_APOSTROPHE_RE = re.compile(r"'{2,}")
 _LEADING_STRAY_JOINER_RE = re.compile(r"^[-']\s+")
 # Author-list connector "and" is whitespace-delimited ("First Last and First Last").
@@ -227,6 +232,7 @@ _REVIEWED_CLOSED_COMMA_HEAD_BLOCKERS = frozenset({"DM", "MDRD", "MDS"})
 _LEADING_ARRAY_REMAINDER_EXCLUSIONS = frozenset({"array", "редакционная", "статья"})
 _FAMILY_PARTICLES = frozenset(
     {
+        "'t",
         "al",
         "ap",
         "ben",
@@ -260,7 +266,7 @@ _FAMILY_PARTICLES = frozenset(
         "zur",
     },
 )
-_LOWERCASE_RELATIONAL_TOKENS = frozenset({"b.", "d.", "e", "kizi", "kyzy", "oglu", "o'g'li", "oğlu", "qizi"})
+_LOWERCASE_RELATIONAL_TOKENS = frozenset({"'t", "b.", "d.", "e", "kizi", "kyzy", "oglu", "o'g'li", "oğlu", "qizi"})
 _STRONG_FAMILY_PARTICLE_SPANS = (
     ("de", "la"),
     ("de", "las"),
@@ -515,6 +521,14 @@ def _is_credential_boundary_surface(token: str, *, explicit_context: bool = Fals
     return "." in token or letters.isupper() or token.strip(".,") == _MIXED_CASE_CREDENTIALS.get(key)
 
 
+def _is_trailing_credential_surface(token: str, *, explicit_context: bool = False) -> bool:
+    """Return whether one token is a credential at a trailing boundary."""
+    return token.strip(",") in _EXACT_CASE_TRAILING_CREDENTIALS or _is_credential_boundary_surface(
+        token,
+        explicit_context=explicit_context,
+    )
+
+
 def _canonical_suffix_surface(token: str, *, explicit: bool) -> str:
     """Return the canonical suffix represented by one source token."""
     stripped = token.strip(".,")
@@ -578,15 +592,6 @@ def reviewed_leading_credential_source_pattern(
     return None
 
 
-def _is_explicit_credential_surface(token: str) -> bool:
-    """Return whether one comma-tail token is an existing exact credential."""
-    surface = token.strip(",")
-    if surface in _EXACT_CASE_BOUNDARY_CREDENTIALS | _EXACT_CASE_TRAILING_CREDENTIALS:
-        return True
-    key = "".join(character.casefold() for character in surface if character.isalnum())
-    return key in _CREDENTIAL_KEYS
-
-
 def reviewed_closed_comma_credential_tail_head(
     last_name: str | None,
     suffix: str | None = None,
@@ -602,14 +607,15 @@ def reviewed_closed_comma_credential_tail_head(
         not tail_tokens
         or not any(token in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS for token in tail_tokens)
         or not all(
-            token in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS or _is_explicit_credential_surface(token) for token in tail_tokens
+            token in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS or _is_trailing_credential_surface(token, explicit_context=True)
+            for token in tail_tokens
         )
     ):
         return None
 
     head_tokens = head.split()
     while head_tokens and (
-        head_tokens[-1] in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS or _is_explicit_credential_surface(head_tokens[-1])
+        head_tokens[-1] in _REVIEWED_CLOSED_COMMA_TAIL_CREDENTIALS or _is_trailing_credential_surface(head_tokens[-1])
     ):
         head_tokens.pop()
     if any(token in _REVIEWED_CLOSED_COMMA_HEAD_BLOCKERS for token in head_tokens):
@@ -668,6 +674,8 @@ class PersonNameNormalizationService:
 
         source_text = raw_name
         normalized_input, leading_markers = self._strip_leading_superscript_affiliation(raw_name)
+        if self._has_spaced_multi_name_separator(normalized_input):
+            return self._non_person("multiple-name separator")
         surface = self._normalize_surface(normalized_input)
         if not surface:
             return self._invalid("name is empty")
@@ -906,7 +914,9 @@ class PersonNameNormalizationService:
             if canonical_suffix:
                 return self._invalid("name has multiple suffixes", dropped)
             canonical_suffix = structured_middle_suffix
-        name_tokens, boundary_suffix, _ = self._strip_trailing_boundaries(name_tokens, dropped)
+        name_tokens, boundary_suffix, _, multiple_suffixes = self._strip_trailing_boundaries(name_tokens, dropped)
+        if multiple_suffixes:
+            return self._invalid("name has multiple suffixes", dropped)
         if boundary_suffix:
             if canonical_suffix:
                 return self._invalid("name has multiple suffixes", dropped)
@@ -948,7 +958,9 @@ class PersonNameNormalizationService:
         tokens = self._strip_dangling_and(tokens, dropped)
         tokens = self._strip_standalone_periods(tokens, dropped)
         tokens = self._strip_boundary_markers(tokens, dropped)
-        tokens, boundary_suffix, boundary_suffix_token = self._strip_trailing_boundaries(tokens, dropped)
+        tokens, boundary_suffix, boundary_suffix_token, multiple_suffixes = self._strip_trailing_boundaries(tokens, dropped)
+        if multiple_suffixes:
+            return self._invalid("name has multiple suffixes", dropped)
         if boundary_suffix:
             if suffix:
                 return self._invalid("name has multiple suffixes", dropped)
@@ -1013,7 +1025,7 @@ class PersonNameNormalizationService:
             )
         return prefix
 
-    def _normalize_comma_name(  # noqa: PLR0913
+    def _normalize_comma_name(  # noqa: PLR0911, PLR0913
         self,
         source_text: str,
         family_tokens: list[_Token],
@@ -1032,11 +1044,25 @@ class PersonNameNormalizationService:
         given_tokens = self._strip_standalone_periods(given_tokens, dropped)
         family_tokens = self._strip_boundary_markers(family_tokens, dropped)
         given_tokens = self._strip_boundary_markers(given_tokens, dropped)
-        given_tokens, boundary_suffix, boundary_suffix_token = self._strip_trailing_boundaries(
+        family_tokens, family_suffix, family_suffix_token, multiple_suffixes = self._strip_trailing_boundaries(
+            family_tokens,
+            dropped,
+            has_external_name_context=bool(given_tokens),
+        )
+        if multiple_suffixes:
+            return self._invalid("name has multiple suffixes", dropped)
+        if family_suffix:
+            if suffix:
+                return self._invalid("name has multiple suffixes", dropped)
+            suffix = family_suffix
+            suffix_token = family_suffix_token
+        given_tokens, boundary_suffix, boundary_suffix_token, multiple_suffixes = self._strip_trailing_boundaries(
             given_tokens,
             dropped,
             has_external_name_context=bool(family_tokens),
         )
+        if multiple_suffixes:
+            return self._invalid("name has multiple suffixes", dropped)
         if boundary_suffix:
             if suffix:
                 return self._invalid("name has multiple suffixes", dropped)
@@ -1125,31 +1151,47 @@ class PersonNameNormalizationService:
             # ("Martin G&#x00F6;tz" -> "Martin Götz", "D&#39;Arcy" -> "D'Arcy") and a
             # literal "&amp;" collapses to "&" for the downstream separator logic.
             value = html.unescape(value)
-        if value.isascii():
+        ascii_surface = value.isascii()
+        if ascii_surface:
             normalized = value.translate(_ASCII_JOINER_TRANSLATION)
         else:
             normalized = value.translate(_PRE_NFKC_JOINER_TRANSLATION)
             normalized = unicodedata.normalize("NFKC", normalized)
-            normalized = normalized.translate(PERSON_JOINER_FOLD_TRANSLATION)
+        normalized = fold_internal_name_joiners(normalized, PERSON_JOINER_FOLD_TRANSLATION)
+        if not ascii_surface:
             normalized = unicodedata.normalize("NFC", normalized)
         normalized = _WHITESPACE_RE.sub(" ", normalized)
         normalized = _LEADING_STRAY_JOINER_RE.sub("", normalized)
-        normalized = _JOINER_SPACING_RE.sub(r"\1", normalized)
+        normalized = _SINGLE_LETTER_APOSTROPHE_SPACING_RE.sub(r"\g<prefix>'", normalized)
+        normalized = _HYPHEN_SPACING_RE.sub("-", normalized)
         normalized = _DUPLICATE_APOSTROPHE_RE.sub("'", normalized)
         return normalized.strip(" \t\r\n,")
 
     @staticmethod
     def _strip_leading_superscript_affiliation(value: str) -> tuple[str, str]:
-        """Strip fused leading superscript digits while returning their lineage."""
+        """Strip leading superscript digits before a name while returning lineage."""
         marker_end = 0
         while marker_end < len(value):
             character = value[marker_end]
             if "SUPERSCRIPT" not in unicodedata.name(character, "") or not character.isdigit():
                 break
             marker_end += 1
-        if marker_end == 0 or marker_end >= len(value) or not value[marker_end].isalpha():
+        name_start = marker_end
+        while name_start < len(value) and value[name_start].isspace():
+            name_start += 1
+        if marker_end == 0 or name_start >= len(value) or not value[name_start].isalpha():
             return value, ""
-        return value[marker_end:], value[:marker_end]
+        return value[name_start:], value[:marker_end]
+
+    def _has_spaced_multi_name_separator(self, value: str) -> bool:
+        """Return whether a spaced hyphen separates two complete names."""
+        folded = value.translate(PERSON_JOINER_FOLD_TRANSLATION)
+        for separator in _SPACED_HYPHEN_RE.finditer(folded):
+            left = self._tokens(folded[: separator.start()], "", 0)
+            right = self._tokens(folded[separator.end() :], "", separator.end())
+            if self._looks_like_two_complete_names(left, right):
+                return True
+        return False
 
     def _collapse_parenthetical_duplicate_surface(self, surface: str) -> str:
         """Collapse ``Alan (Alan B.) Cantor``-style duplicate given forms."""
@@ -1303,9 +1345,12 @@ class PersonNameNormalizationService:
     @staticmethod
     def _has_leading_et_al_contamination(tokens: list[_Token]) -> bool:
         """Match only a leading citation marker followed by a two-token name."""
-        return bool(
-            len(tokens) >= _FOUR_COMPONENTS and tokens[0].text.casefold() == "et" and tokens[1].text.casefold() == "al.",
-        )
+        return len(tokens) >= _FOUR_COMPONENTS and PersonNameNormalizationService._is_et_al_pair(tokens[:2])
+
+    @staticmethod
+    def _is_et_al_pair(tokens: list[_Token]) -> bool:
+        """Match one exact citation-marker token pair."""
+        return len(tokens) == _TWO_COMPONENTS and tokens[0].text.casefold() == "et" and tokens[1].text.casefold() == "al."
 
     def _split_attached_leading_title(self, token: _Token) -> tuple[_Token, _Token] | None:
         """Split ``Dr.Name`` only when the attached prefix is a known title."""
@@ -1318,16 +1363,17 @@ class PersonNameNormalizationService:
         name = replace(token, text=remainder, position=token.position + len(prefix) + 1)
         return title, name
 
-    def _strip_trailing_boundaries(
+    def _strip_trailing_boundaries(  # noqa: C901
         self,
         tokens: list[_Token],
         dropped: list[_DroppedToken],
         *,
         has_external_name_context: bool = False,
-    ) -> tuple[list[_Token], str, _Token | None]:
+    ) -> tuple[list[_Token], str, _Token | None, bool]:
         remaining = list(tokens)
         suffix = ""
         suffix_token: _Token | None = None
+        minimum_et_al_width = _THREE_COMPONENTS if has_external_name_context else _FOUR_COMPONENTS
         while len(remaining) >= _FOUR_COMPONENTS:
             credential_width = self._trailing_spaced_credential_width(remaining)
             if not credential_width:
@@ -1335,9 +1381,15 @@ class PersonNameNormalizationService:
             dropped.extend(_DroppedToken(token, DropReason.CREDENTIAL) for token in remaining[-credential_width:])
             del remaining[-credential_width:]
         while remaining:
+            if len(remaining) >= minimum_et_al_width and self._is_et_al_pair(remaining[-2:]):
+                dropped.extend(_DroppedToken(token, DropReason.CONNECTOR) for token in remaining[-2:])
+                del remaining[-2:]
+                continue
             token = remaining[-1]
             attached_jr = self._split_attached_terminal_jr(token)
-            if attached_jr is not None and not suffix:
+            if attached_jr is not None and suffix:
+                return remaining, suffix, suffix_token, True
+            if attached_jr is not None:
                 remaining[-1], suffix_token = attached_jr
                 suffix = "Jr."
                 continue
@@ -1361,13 +1413,18 @@ class PersonNameNormalizationService:
             # at least two non-initial tokens must precede it (a given AND a surname),
             # or an external name context already supplies the surname.
             surname_like_ok = has_external_name_context or any(not self._is_initial(other.text) for other in remaining[1:-1])
-            if candidate and not suffix and (not is_roman or has_complete_name) and (not surname_like or surname_like_ok):
+            accepted_suffix = bool(
+                candidate and (not is_roman or has_complete_name) and (not surname_like or surname_like_ok),
+            )
+            if accepted_suffix and suffix:
+                return remaining, suffix, suffix_token, True
+            if accepted_suffix:
                 suffix = candidate
                 suffix_token = replace(token, source_role="suffix")
                 remaining.pop()
                 continue
             break
-        return remaining, suffix, suffix_token
+        return remaining, suffix, suffix_token, False
 
     @staticmethod
     def _split_attached_terminal_jr(token: _Token) -> tuple[_Token, _Token] | None:
@@ -2003,7 +2060,7 @@ class PersonNameNormalizationService:
                 continue
             if not any(character.isalpha() for character in cleaned):
                 return f"name token has no letters: {token.text!r}"
-            if cleaned[0] in "-'" or cleaned[-1] == "-":
+            if cleaned[0] == "-" or (cleaned[0] == "'" and cleaned.casefold() != "'t") or cleaned[-1] == "-":
                 return f"name joiner is not between letters: {token.text!r}"
             if any(not self._allowed_name_character(character) for character in cleaned):
                 return f"unsupported character in name token: {token.text!r}"
@@ -2089,6 +2146,8 @@ class PersonNameNormalizationService:
     def _clean_name_token(token: str) -> str:
         if PersonNameNormalizationService._is_parenthesized_name_token(token):
             return token
+        if len(token) > _TWO_COMPONENTS and token.startswith("'") and token.endswith("'"):
+            token = token[1:-1]
         cleaned = token.strip('"()[]{}<>:;,\u201c\u201d')
         if cleaned.endswith(".") and not (
             _INITIAL_RE.fullmatch(cleaned)
@@ -2133,7 +2192,7 @@ class PersonNameNormalizationService:
 
     def _is_trailing_credential(self, token: str, *, explicit_context: bool = False) -> bool:
         """Match a credential at a reviewed trailing boundary."""
-        return token.strip(",") in _EXACT_CASE_TRAILING_CREDENTIALS or self._is_credential(
+        return _is_trailing_credential_surface(
             token,
             explicit_context=explicit_context,
         )

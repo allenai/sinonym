@@ -5,6 +5,7 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from sinonym.coretypes import NameComponents
+from sinonym.name_punctuation import APOSTROPHE_LIKE, PERSON_HYPHEN_LIKE
 from sinonym.services import person_name_normalization
 from sinonym.services.person_name_normalization import (
     DropReason,
@@ -52,6 +53,54 @@ def test_normalize_text_collapses_spaces_around_name_joiners(
     assert result.canonical_name.text == expected_text
     assert result.canonical_name.normalized.given_name == expected_given
     assert result.canonical_name.normalized.surname == expected_surname
+
+
+def test_quoted_given_name_does_not_fuse_adjacent_components(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    result = normalizer.normalize_text("John 'Jack' Smith")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "John Jack Smith"
+    assert result.canonical_name.source.middle_name == "'Jack'"
+    assert result.canonical_name.normalized.middle_name == "Jack"
+
+
+def test_leading_apostrophe_particle_remains_a_separate_surname_token(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    result = normalizer.normalize_text("Gerard 't Hooft")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "Gerard 't Hooft"
+    assert result.canonical_name.normalized.surname_tokens == ("'t", "Hooft")
+
+
+def test_spaced_hyphen_between_complete_names_is_not_a_name_joiner(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    result = normalizer.normalize_text("John Smith - Mary Jones")
+
+    assert result.outcome is PersonNameOutcome.NON_PERSON
+    assert result.reason == "multiple-name separator"
+
+
+@pytest.mark.parametrize(
+    "joiner",
+    sorted(APOSTROPHE_LIKE | PERSON_HYPHEN_LIKE),
+    ids=lambda character: f"U+{ord(character):04X}",
+)
+def test_boundary_joiners_are_delimiters(
+    normalizer: PersonNameNormalizationService,
+    joiner: str,
+) -> None:
+    result = normalizer.normalize_text(f"{joiner}John Smith{joiner}")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "John Smith"
 
 
 def test_nfkc_apostrophe_expansion_preserves_its_letter(
@@ -190,6 +239,48 @@ def test_structured_reviewed_closed_comma_credential_tail_is_removed(
     assert result.canonical_name.text == expected_text
     assert result.dropped_tokens
     assert all(token.reason is DropReason.CREDENTIAL for token in result.dropped_tokens)
+
+
+@pytest.mark.parametrize(
+    ("head", "expected_text", "expected_drops"),
+    [
+        ("Ma", "Alice Ma", ["MB"]),
+        ("Meng", "Alice Meng", ["MB"]),
+        ("MA", "Alice", ["MA", "MB"]),
+        ("MEng", "Alice", ["MEng", "MB"]),
+    ],
+)
+def test_closed_comma_tail_uses_boundary_evidence_for_its_head(
+    normalizer: PersonNameNormalizationService,
+    head: str,
+    expected_text: str,
+    expected_drops: list[str],
+) -> None:
+    results = [
+        normalizer.normalize_text(f"Alice {head}, MB"),
+        normalizer.normalize_components(first_name="Alice", last_name=f"{head}, MB"),
+    ]
+
+    for result in results:
+        assert result.outcome is PersonNameOutcome.PERSON
+        assert result.canonical_name is not None
+        assert result.canonical_name.text == expected_text
+        assert [token.text for token in result.dropped_tokens] == expected_drops
+
+
+@pytest.mark.parametrize("credential", ["MD", "PhD"])
+def test_pre_comma_credential_is_removed_from_family_boundary(
+    normalizer: PersonNameNormalizationService,
+    credential: str,
+) -> None:
+    result = normalizer.normalize_text(f"Smith {credential}, John")
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "John Smith"
+    assert [(token.text, token.source_role, token.reason) for token in result.dropped_tokens] == [
+        (credential, "surname", DropReason.CREDENTIAL),
+    ]
 
 
 def test_structured_credential_only_tail_returns_typed_invalid(
@@ -374,6 +465,16 @@ def test_normalize_text_extracts_true_suffix(normalizer: PersonNameNormalization
     assert result.canonical_name.normalized.middle_name == ""
     assert result.canonical_name.normalized.surname == "Blando"
     assert result.canonical_name.normalized.suffix == "IV"
+
+
+def test_multiple_trailing_suffixes_return_typed_invalid(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    result = normalizer.normalize_text("John Smith Jr. III")
+
+    assert result.outcome is PersonNameOutcome.INVALID
+    assert result.reason == "name has multiple suffixes"
+    assert result.canonical_name is None
 
 
 def test_comma_suffix_does_not_trigger_family_first_parsing(
@@ -844,6 +945,7 @@ def test_only_exact_attached_terminal_jr_is_split(
         ("John Smith and Jane Doe", PersonNameOutcome.NON_PERSON),
         ("John Smith, Jane Doe", PersonNameOutcome.NON_PERSON),
         ("Stanford University", PersonNameOutcome.NON_PERSON),
+        ("services-customer support", PersonNameOutcome.NON_PERSON),
         (" Unknown   Author ", PersonNameOutcome.NON_PERSON),
         ("\tJanuary-February\n", PersonNameOutcome.NON_PERSON),
     ],
@@ -1592,11 +1694,13 @@ def test_compound_initial_join_does_not_change_normal_initial_order_or_words(
     assert word.outcome is PersonNameOutcome.INVALID
 
 
+@pytest.mark.parametrize("separator", ["", " "])
 def test_leading_superscript_affiliation_marker_is_removed_with_lineage(
     normalizer: PersonNameNormalizationService,
+    separator: str,
 ) -> None:
-    raw = normalizer.normalize_text("\u00b9Matias Julyus")
-    structured = normalizer.normalize_components(first_name="\u00b9Matias", last_name="Julyus")
+    raw = normalizer.normalize_text(f"\u00b9{separator}Matias Julyus")
+    structured = normalizer.normalize_components(first_name=f"\u00b9{separator}Matias", last_name="Julyus")
 
     for result in (raw, structured):
         assert result.outcome is PersonNameOutcome.PERSON

@@ -72,8 +72,7 @@ REVIEWED_HYPHENATED_SERVICES_RE = re.compile(
     re.IGNORECASE,
 )
 REVIEWED_SERVICES_PERSON_TAIL_RE = re.compile(
-    r"(?:^|\s)services-[A-Z][A-Za-z'-]+(?:\s+[A-Z][.]?)?\s+[A-Z][A-Za-z'-]+$",
-    re.IGNORECASE,
+    r"(?:^|\s)(?i:services)-[A-Z][A-Za-z'-]+(?:\s+[A-Z][.]?)?\s+[A-Z][A-Za-z'-]+$",
 )
 
 

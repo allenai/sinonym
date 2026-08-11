@@ -15,6 +15,8 @@ generic person normalizer's older Unicode-name oracle remains separate so
 sharing this module does not change that path's deployed behavior.
 """
 
+from collections.abc import Mapping
+
 APOSTROPHE_LIKE = frozenset(
     {
         "'",
@@ -118,3 +120,25 @@ PERSON_JOINER_FOLD_TRANSLATION = APOSTROPHE_FOLD_TRANSLATION | str.maketrans(
 NAME_JOINER_DELETE_TRANSLATION = str.maketrans(
     dict.fromkeys(APOSTROPHE_LIKE | _NORMALIZATION_HYPHEN_DELETE, None),
 )
+
+
+def fold_internal_name_joiners(value: str, translation: Mapping[int, str | None]) -> str:
+    """Fold configured joiners while removing paired outer delimiter runs.
+
+    A lone leading hyphen or terminal transliteration apostrophe can carry name
+    semantics, so an outer run is a delimiter only when the opposite boundary
+    has a run that folds to the same ASCII mark.
+    """
+    first_text = len(value) - len(value.lstrip())
+    last_text = len(value.rstrip()) - 1
+    if first_text <= last_text:
+        boundary = translation.get(ord(value[first_text]))
+        if boundary is not None and boundary == translation.get(ord(value[last_text])):
+            content_start = first_text
+            while content_start <= last_text and translation.get(ord(value[content_start])) == boundary:
+                content_start += 1
+            content_end = last_text
+            while content_end >= content_start and translation.get(ord(value[content_end])) == boundary:
+                content_end -= 1
+            value = f"{value[:first_text]} {value[content_start : content_end + 1]} {value[last_text + 1 :]}"
+    return value.translate(translation)

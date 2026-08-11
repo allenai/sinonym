@@ -27,6 +27,7 @@ from sinonym.services.non_person import reviewed_non_person_source_pattern, revi
         (("Array", None, "BioPharma"), "non_person_literal"),
         (("Professur", None, "Fördertechnik"), "non_person_literal"),
         ((None, None, "Petroleum Geo-Services"), "hyphenated_services"),
+        ((None, None, "services-customer support"), "hyphenated_services"),
         ((None, None, "대한전자공학회"), "hangul_organization_marker"),
         ((None, None, "부산외국어대학교 중국학부"), "hangul_organization_marker"),
         ((None, None, "한국연구소"), "hangul_organization_marker"),
@@ -66,6 +67,7 @@ def test_reviewed_non_person_patterns_match_the_complete_review_matrix(
         ("Unknown\t\nAuthor", "placeholder_literal"),
         (" January-February ", "month_range"),
         (" Anthony C. Laborte,  Marissa C. Hitalia* ", "non_person_literal"),
+        (" services-customer support ", "hyphenated_services"),
     ],
 )
 def test_reviewed_non_person_text_patterns_ignore_incidental_whitespace(
