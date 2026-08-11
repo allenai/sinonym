@@ -18,7 +18,6 @@ do not participate keep their own parsing.
 | `analyze_name_batch()` | One related name list | `BatchParseResult` | You need final parses plus decision and per-name evidence. |
 | `process_name_batches()` | Many independent name lists | `list[list[ParseResult]]` | You have many batch boundaries, such as many papers. |
 | `analyze_name_batches()` | Many independent name lists | `list[BatchParseResult]` | You need evidence for many independent batches. |
-| `analyze_name_batches_strict()` | Many independent name lists | `list[BatchParseResult]` | An invariant or programming failure must fail the request. |
 | `normalize_names()` | Independent names | `list[ParseResult]` | The names do not share a batch convention. |
 
 `process_name_batch_multiprocess()` is a compatibility helper that processes
@@ -78,7 +77,7 @@ applying a batch direction. If the submitted list is smaller than
 `threshold_met=False` and keeps individual results.
 
 `format_threshold` must be finite and within `[0.0, 1.0]`. Invalid thresholds
-and `minimum_batch_size < 1` raise `ValueError` before any forgiving fallback.
+and `minimum_batch_size < 1` raise `ValueError` before analysis starts.
 
 `confidence` and `decision_confidence` answer different questions:
 
@@ -161,24 +160,18 @@ for name, result in zip(names, analysis.results, strict=True):
         print(name, "->", result.canonical_name.text)
 ```
 
-## Forgiving and strict analysis
+## Failure behavior
 
-`analyze_name_batch()` and `analyze_name_batches()` are forgiving. After public
-arguments are validated, an unexpected batch-analysis failure is logged and
-degrades to guarded per-name results. This keeps ordinary batch ingestion
-aligned even when one batch cannot be analyzed jointly.
+`analyze_name_batch()`, `analyze_name_batches()`, `process_name_batch()`, and
+`process_name_batches()` are fail-fast. Validation, service, invariant, and
+unexpected implementation failures propagate to the caller instead of being
+converted into fallback rows. Successful public analysis calls attach
+`canonical_name` sidecars to their aligned parse results.
 
-`analyze_name_batches_strict()` instead propagates invariant, service, and
-programming failures. Use it for integrations where producing fallback rows
-would hide a broken contract. It returns the same batch evidence but does not
-attach `canonical_name` sidecars; routed V3 resolves scalar candidates
-separately. The persistent-pool equivalent is
-`pool.analyze_name_batches_strict()`; it also preserves the original task error
-rather than wrapping it as an ordinary worker-task failure.
-
-Process-pool initialization failures, broken workers, and invalid public
-arguments still surface as exceptions. Forgiving analysis is not a promise
-that environment or policy errors are ignored.
+The persistent-pool equivalent is `pool.analyze_name_batches()`. It preserves
+the original worker task error and closes the pool after a failed task. Broken
+workers and initialization failures surface with process-pool context. Retry
+and fallback policies belong to the caller so they can be bounded and observed.
 
 ## Many batches and multiprocessing
 
@@ -209,9 +202,8 @@ def main() -> None:
     ) as pool:
         parsed = pool.process_name_batches(paper_batches)
         analyzed = pool.analyze_name_batches(paper_batches)
-        strict = pool.analyze_name_batches_strict(paper_batches)
 
-    print(len(parsed), len(analyzed), len(strict))
+    print(len(parsed), len(analyzed))
 
 
 if __name__ == "__main__":

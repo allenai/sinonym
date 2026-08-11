@@ -20,7 +20,6 @@ from sinonym.timo.interface import (
     RoutedPrediction,
     RoutingInstance,
     RoutingPredictor,
-    ScriptRepresentationValue,
 )
 
 EXPECTED_BATCH_CONTEXT_RESULT_COUNT = 3
@@ -333,17 +332,15 @@ def test_process_name_batches_forwards_auto_parallel_options(predictor: Predicto
     assert actual[0][0].surname == "Li"
 
 
-def test_analyze_name_batch_handles_detector_fallback_evidence(predictor: Predictor):
+def test_analyze_name_batch_surfaces_missing_detector_service(
+    predictor: Predictor,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     detector = object.__getattribute__(predictor, "_detector")
-    original_service = object.__getattribute__(detector, "_batch_analysis_service")
-    object.__setattr__(detector, "_batch_analysis_service", None)
-    try:
-        result = predictor.analyze_name_batch(["Li Wei"])
-    finally:
-        object.__setattr__(detector, "_batch_analysis_service", original_service)
+    monkeypatch.setattr(detector, "_batch_analysis_service", None)
 
-    assert len(result.name_order_evidence) == 1
-    assert result.name_order_evidence[0].script_representation == ScriptRepresentationValue.UNKNOWN
+    with pytest.raises(RuntimeError, match="batch analysis service is not initialized"):
+        predictor.analyze_name_batch(["Li Wei"])
 
 
 def test_route_pp_vys_requires_paper_authors_first(predictor: Predictor):
@@ -357,10 +354,10 @@ def test_route_pp_vys_empty(predictor: Predictor):
 
 
 def test_route_pp_vys_matches_manual_pp_then_vys_then_router(predictor: Predictor):
-    """Documents the underlying flow: run PP batch, run VYS batch, feed BOTH to the router.
+    """The related-batch reuse path preserves independent PP/VYS routing semantics.
 
-    `route_pp_vys` is a thin wrapper over exactly these steps; this test rebuilds them by hand
-    and asserts the routed answers match.
+    This test rebuilds the former independent analysis by hand and asserts the
+    related preparation path returns the same routed answers.
     """
     pp_names = ["Yue Lin", "Wei Wang", "Chuang Yang"]
     # paper authors first, then the other venue authors
@@ -400,6 +397,37 @@ def test_route_pp_vys_matches_manual_pp_then_vys_then_router(predictor: Predicto
     endpoint = predictor.route_pp_vys(pp_names, vys_pool)
     assert [manual_surname(i) for i in range(len(pp_names))] == [r.surname for r in endpoint]
     assert [routed_rows[i]["router_prediction"] for i in range(len(pp_names))] == [r.router_prediction for r in endpoint]
+
+
+def test_route_pp_vys_prepares_focal_names_once_and_only_attaches_focal_rows(
+    predictor: Predictor,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    detector = object.__getattribute__(predictor, "_detector")
+    service = detector._batch_analysis_service  # noqa: SLF001
+    assert service is not None
+    prepared: list[str] = []
+    attached: list[str] = []
+    original_prepare = service._prepare_name  # noqa: SLF001
+    original_attach = detector._attach_canonical_name  # noqa: SLF001
+
+    def counted_prepare(name, normalizer, *, need_individual=True):
+        prepared.append(name)
+        return original_prepare(name, normalizer, need_individual=need_individual)
+
+    def counted_attach(name, result):
+        attached.append(name)
+        return original_attach(name, result)
+
+    monkeypatch.setattr(service, "_prepare_name", counted_prepare)
+    monkeypatch.setattr(detector, "_attach_canonical_name", counted_attach)
+    pp_names = ["Yue Lin", "Wei Wang"]
+    pool = [*pp_names, "Jun Zhao", "Hui Li", "Tao Sun"]
+
+    predictor.route_pp_vys(pp_names, pool)
+
+    assert prepared == pool
+    assert attached == [*pp_names, *pp_names]
 
 
 # Fixed-scenario regression: exact routed values (batch-composition dependent).
@@ -566,7 +594,7 @@ def test_routing_predictor_one_prediction_per_instance():
     assert rebuilt == results
 
 
-def test_routing_predictor_batches_instance_analysis_through_auto_wrapper(monkeypatch):
+def test_routing_predictor_batches_related_analysis_through_auto_wrapper(monkeypatch):
     rp = RoutingPredictor(
         config=PredictorConfig(
             parallel="never",
@@ -577,15 +605,15 @@ def test_routing_predictor_batches_instance_analysis_through_auto_wrapper(monkey
         artifacts_dir=".",
     )
     detector = object.__getattribute__(rp, "_detector")
-    original_analyze_name_batches = detector.analyze_name_batches
+    original_analyze_related = detector._analyze_related_batch_requests  # noqa: SLF001
     captured = {}
 
-    def wrapped_analyze_name_batches(batches, **kwargs):
-        captured["batches"] = batches
+    def wrapped_analyze_related(requests, **kwargs):
+        captured["requests"] = requests
         captured.update(kwargs)
-        return original_analyze_name_batches(batches, **kwargs)
+        return original_analyze_related(requests, **kwargs)
 
-    monkeypatch.setattr(detector, "analyze_name_batches", wrapped_analyze_name_batches)
+    monkeypatch.setattr(detector, "_analyze_related_batch_requests", wrapped_analyze_related)
 
     good_vys = RoutingInstance(pp_names=["Yue Lin", "Wei Wang"], vys_pool_names=["Yue Lin", "Wei Wang", "Jun Zhao"])
     pp_only = RoutingInstance(pp_names=["Zhang San"])
@@ -596,10 +624,9 @@ def test_routing_predictor_batches_instance_analysis_through_auto_wrapper(monkey
 
     assert len(results) == len(instances)
     assert [len(result.authors) for result in results] == [2, 1, 0]
-    assert captured["batches"] == [
-        good_vys.pp_names,
-        good_vys.vys_pool_names,
-        pp_only.pp_names,
+    assert captured["requests"] == [
+        (good_vys.pp_names, good_vys.vys_pool_names),
+        (pp_only.pp_names, None),
     ]
     assert captured["parallel"] == "never"
     assert captured["max_workers"] == TIMO_TEST_MAX_WORKERS

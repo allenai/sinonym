@@ -193,10 +193,11 @@ source-shaped slot so diagnostics and positional alignment remain intact.
 
 ## Validation and failures
 
-The public `ChineseNameDetector.analyze_name_batch()` API is forgiving of an
-internal per-batch failure: it logs the failure and returns guarded per-name
-results. Routed V3 intentionally uses a strict batch path because silently
-falling back could change a terminal writer decision.
+The public `ChineseNameDetector.analyze_name_batch()` API is fail-fast: batch,
+service, invariant, and unexpected implementation failures propagate. Routed
+V3 uses a private lean related-batch path that has the same failure contract but
+omits public canonical sidecar work because terminal resolution handles scalar
+candidates separately.
 
 V3 validates paper counts, author ordering, and PP/VYS alignment. Schema
 errors, invariant violations, and unexpected implementation failures

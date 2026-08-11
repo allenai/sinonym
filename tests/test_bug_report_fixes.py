@@ -616,7 +616,7 @@ def test_route_pp_and_pp_vys_delegate_to_single_materialization_helpers(monkeypa
     assert predictor.route_pp(["Li Wei"]) == []
     assert predictor.route_pp_vys(["Li Wei"], ["Li Wei", "Zhang Ming"]) == []
     assert called[0] == ("pp", ["Li Wei"])
-    assert called[1] == ("pp_vys", ["Li Wei"], ["Li Wei", "Zhang Ming"], 1)
+    assert called[1] == ("pp_vys", ["Li Wei"], ["Li Wei"], 1)
 
 
 def test_name_order_evidence_uses_cached_raw_tokens(detector):

@@ -474,7 +474,7 @@ def test_reordered_pp_result_is_an_invariant_failure(
         SourceAuthorFields(first_name="Steve", last_name="Blando"),
     ]
     names = [source.full_name() for source in sources]
-    batch = predictor._detector._analyze_related_name_batches_strict(names, None).pp_batch  # noqa: SLF001
+    batch = predictor._detector._analyze_related_name_batches(names, None).pp_batch  # noqa: SLF001
     reordered = replace(
         batch,
         names=list(reversed(batch.names)),
@@ -484,7 +484,7 @@ def test_reordered_pp_result_is_an_invariant_failure(
     )
     monkeypatch.setattr(
         predictor._detector,  # noqa: SLF001
-        "_analyze_related_batch_requests_strict",
+        "_analyze_related_batch_requests",
         lambda *_args, **_kwargs: [RelatedBatchParseResult(reordered, None, None)],
     )
 
@@ -499,14 +499,14 @@ def test_reordered_vys_context_is_an_invariant_failure(
     source = SourceAuthorFields(first_name="Michael", last_name="Johnson")
     pp_names = [source.full_name()]
     pool_names = [*pp_names, "Jane Doe"]
-    related = predictor._detector._analyze_related_name_batches_strict(  # noqa: SLF001
+    related = predictor._detector._analyze_related_name_batches(  # noqa: SLF001
         pp_names,
         pool_names,
     )
     reordered = replace(related, vys_context_names=tuple(reversed(pool_names)))
     monkeypatch.setattr(
         predictor._detector,  # noqa: SLF001
-        "_analyze_related_batch_requests_strict",
+        "_analyze_related_batch_requests",
         lambda *_args, **_kwargs: [reordered],
     )
 
@@ -521,13 +521,13 @@ def test_missing_or_extra_related_result_is_an_invariant_failure(
     returned_count: int,
 ) -> None:
     source = SourceAuthorFields(first_name="Michael", last_name="Johnson")
-    related = predictor._detector._analyze_related_name_batches_strict(  # noqa: SLF001
+    related = predictor._detector._analyze_related_name_batches(  # noqa: SLF001
         [source.full_name()],
         None,
     )
     monkeypatch.setattr(
         predictor._detector,  # noqa: SLF001
-        "_analyze_related_batch_requests_strict",
+        "_analyze_related_batch_requests",
         lambda *_args, **_kwargs: [related] * returned_count,
     )
 
@@ -540,14 +540,14 @@ def test_misaligned_fields_are_an_invariant_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = SourceAuthorFields(first_name="Michael", last_name="Johnson")
-    related = predictor._detector._analyze_related_name_batches_strict(  # noqa: SLF001
+    related = predictor._detector._analyze_related_name_batches(  # noqa: SLF001
         [source.full_name()],
         None,
     )
     misaligned = replace(related, pp_batch=replace(related.pp_batch, results=[]))
     monkeypatch.setattr(
         predictor._detector,  # noqa: SLF001
-        "_analyze_related_batch_requests_strict",
+        "_analyze_related_batch_requests",
         lambda *_args, **_kwargs: [misaligned],
     )
 

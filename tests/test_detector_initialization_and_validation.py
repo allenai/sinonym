@@ -117,8 +117,6 @@ def test_batch_apis_reject_invalid_format_threshold(detector, format_threshold):
         detector.detect_batch_format(["Zhang Wei"], format_threshold=format_threshold)
     with pytest.raises(ValueError, match="format_threshold"):
         detector.analyze_name_batches([], format_threshold=format_threshold)
-    with pytest.raises(ValueError, match="format_threshold"):
-        detector.analyze_name_batches_strict([], format_threshold=format_threshold)
 
 
 @pytest.mark.parametrize("minimum_batch_size", [0, -1])
@@ -128,5 +126,3 @@ def test_batch_apis_reject_invalid_minimum_batch_size(detector, minimum_batch_si
         detector.analyze_name_batch(["Zhang Wei"], minimum_batch_size=minimum_batch_size)
     with pytest.raises(ValueError, match="minimum_batch_size"):
         detector.analyze_name_batches([], minimum_batch_size=minimum_batch_size)
-    with pytest.raises(ValueError, match="minimum_batch_size"):
-        detector.analyze_name_batches_strict([], minimum_batch_size=minimum_batch_size)

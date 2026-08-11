@@ -181,10 +181,8 @@ from sinonym.coretypes import (
     BatchFormatPattern,
     BatchParseResult,
     CanonicalName,
-    IndividualAnalysis,
     NameComponents,
     NameFormat,
-    NameOrderEvidence,
 )
 from sinonym.coretypes.results import ParsedName
 from sinonym.coretypes.routing_resolution import (
@@ -288,7 +286,7 @@ def _auto_start_method(mp_start_method: str) -> str:
 
 
 def _validate_batch_policy(format_threshold: float, minimum_batch_size: int | None = None) -> None:
-    """Validate public batch-policy arguments before forgiving fallbacks run."""
+    """Validate public batch-policy arguments before analysis starts."""
     if not math.isfinite(format_threshold) or not 0.0 <= format_threshold <= 1.0:
         message = "format_threshold must be finite and between 0.0 and 1.0"
         raise ValueError(message)
@@ -2179,39 +2177,9 @@ class ChineseNameDetector:
         _validate_batch_policy(format_threshold, minimum_batch_size)
         self._ensure_initialized()
         if self._batch_analysis_service is None:
-            individual_results = [self._guarded_normalize_name(name) for name in names]
-            return self._create_fallback_batch_result(names, individual_results)
-
-        try:
-            batch_result = self._analyze_name_batch_core(
-                names,
-                format_threshold=format_threshold,
-                minimum_batch_size=minimum_batch_size,
-            )
-        except Exception:
-            LOGGER.exception("batch analysis crashed; degrading to guarded per-name processing")
-            return self._create_fallback_batch_result(
-                names,
-                [self._guarded_normalize_name(name) for name in names],
-            )
-        canonical_results = [
-            self._guarded_attach_canonical_name(name, result)
-            for name, result in zip(batch_result.names, batch_result.results, strict=True)
-        ]
-        return replace(batch_result, results=canonical_results)
-
-    def _analyze_name_batch_core(
-        self,
-        names: list[str],
-        format_threshold: float = 0.55,
-        minimum_batch_size: int = 2,
-    ) -> BatchParseResult:
-        """Analyze one batch and propagate service or programming failures."""
-        if self._batch_analysis_service is None:
-            individual_results = [self._normalize_chinese_name(name) for name in names]
-            return self._create_fallback_batch_result(names, individual_results)
-
-        return self._batch_analysis_service.analyze_name_batch(
+            message = "batch analysis service is not initialized"
+            raise RuntimeError(message)
+        batch_result = self._batch_analysis_service.analyze_name_batch(
             names,
             self._normalizer,
             self._formatting_service,
@@ -2220,23 +2188,19 @@ class ChineseNameDetector:
                 format_threshold=format_threshold,
             ),
         )
+        return self._attach_batch_canonical_names(batch_result)
 
-    def _analyze_name_batch_strict(
-        self,
-        names: list[str],
-        format_threshold: float = 0.55,
-        minimum_batch_size: int = 2,
-    ) -> BatchParseResult:
-        """Analyze one V3 batch without converting exceptions into fallback rows."""
-        _validate_batch_policy(format_threshold, minimum_batch_size)
-        self._ensure_initialized()
-        return self._analyze_name_batch_core(
-            names,
-            format_threshold=format_threshold,
-            minimum_batch_size=minimum_batch_size,
+    def _attach_batch_canonical_names(self, batch_result: BatchParseResult) -> BatchParseResult:
+        """Attach canonical sidecars to one already-materialized focal batch."""
+        return replace(
+            batch_result,
+            results=[
+                self._attach_canonical_name(name, result)
+                for name, result in zip(batch_result.names, batch_result.results, strict=True)
+            ],
         )
 
-    def _analyze_related_name_batches_strict(
+    def _analyze_related_name_batches(
         self,
         pp_names: list[str],
         vys_pool_names: list[str] | None,
@@ -2244,7 +2208,7 @@ class ChineseNameDetector:
         minimum_batch_size: int = 2,
         prepared_cache=None,
     ) -> RelatedBatchParseResult:
-        """Analyze one related PP/VYS work item without duplicating focal preparation."""
+        """Analyze one lean PP/VYS work item without duplicating focal preparation."""
         _validate_batch_policy(format_threshold, minimum_batch_size)
         self._ensure_initialized()
         if self._batch_analysis_service is None:
@@ -2261,23 +2225,6 @@ class ChineseNameDetector:
             ),
             prepared_cache,
         )
-
-    def _guarded_normalize_name(self, raw_name: str) -> ParseResult:
-        try:
-            return self.normalize_name(raw_name)
-        except Exception:
-            LOGGER.exception("normalize_name crashed for %r; returning per-name failure", raw_name)
-            return ParseResult.failure("internal error while parsing name")
-
-    def _guarded_attach_canonical_name(self, name: str, result: ParseResult) -> ParseResult:
-        try:
-            return self._attach_canonical_name(name, result)
-        except Exception:
-            LOGGER.exception(
-                "canonical-name attachment crashed for %r; keeping base result",
-                name,
-            )
-            return result
 
     def detect_batch_format(
         self,
@@ -2409,44 +2356,36 @@ class ChineseNameDetector:
         small batch lists run in-process and large batch lists use a persistent
         process pool. Output order matches the submitted batch order.
         """
-        return self._analyze_name_batches_core(
-            batches,
-            strict=False,
+        _validate_batch_policy(format_threshold, minimum_batch_size)
+        self._ensure_initialized()
+        if _should_use_multiprocessing(
+            item_count=len(batches),
             parallel=parallel,
-            min_parallel_batches=min_parallel_batches,
-            format_threshold=format_threshold,
-            minimum_batch_size=minimum_batch_size,
+            auto_threshold=min_parallel_batches,
+            default_auto_threshold=AUTO_MULTIPROCESS_MIN_BATCHES,
+            linux_auto_threshold=LINUX_AUTO_MULTIPROCESS_MIN_BATCHES,
             max_workers=max_workers,
-            chunk_size=chunk_size,
-            mp_start_method=mp_start_method,
-        )
+        ):
+            with self.create_persistent_multiprocess_pool(
+                max_workers=max_workers,
+                chunk_size=chunk_size,
+                mp_start_method=_auto_start_method(mp_start_method),
+            ) as pool:
+                return pool.analyze_name_batches(
+                    batches,
+                    format_threshold=format_threshold,
+                    minimum_batch_size=minimum_batch_size,
+                )
+        return [
+            self.analyze_name_batch(
+                batch,
+                format_threshold=format_threshold,
+                minimum_batch_size=minimum_batch_size,
+            )
+            for batch in batches
+        ]
 
-    def analyze_name_batches_strict(
-        self,
-        batches: list[list[str]],
-        *,
-        parallel: ParallelMode = "auto",
-        min_parallel_batches: int | None = None,
-        format_threshold: float = 0.55,
-        minimum_batch_size: int = 2,
-        max_workers: int | None = None,
-        chunk_size: int = 64,
-        mp_start_method: str = "auto",
-    ) -> list[BatchParseResult]:
-        """Analyze V3 batches while propagating invariant and programming failures."""
-        return self._analyze_name_batches_core(
-            batches,
-            strict=True,
-            parallel=parallel,
-            min_parallel_batches=min_parallel_batches,
-            format_threshold=format_threshold,
-            minimum_batch_size=minimum_batch_size,
-            max_workers=max_workers,
-            chunk_size=chunk_size,
-            mp_start_method=mp_start_method,
-        )
-
-    def _analyze_related_batch_requests_strict(
+    def _analyze_related_batch_requests(
         self,
         requests: list[tuple[list[str], list[str] | None]],
         *,
@@ -2474,14 +2413,14 @@ class ChineseNameDetector:
                 chunk_size=chunk_size,
                 mp_start_method=_auto_start_method(mp_start_method),
             ) as pool:
-                return pool._analyze_related_batch_requests_strict(
+                return pool._analyze_related_batch_requests(
                     requests,
                     format_threshold=format_threshold,
                     minimum_batch_size=minimum_batch_size,
                 )
         prepared_cache = {}
         return [
-            self._analyze_related_name_batches_strict(
+            self._analyze_related_name_batches(
                 pp_names,
                 vys_pool_names,
                 format_threshold=format_threshold,
@@ -2489,51 +2428,6 @@ class ChineseNameDetector:
                 prepared_cache=prepared_cache,
             )
             for pp_names, vys_pool_names in requests
-        ]
-
-    def _analyze_name_batches_core(
-        self,
-        batches: list[list[str]],
-        *,
-        strict: bool,
-        parallel: ParallelMode,
-        min_parallel_batches: int | None,
-        format_threshold: float,
-        minimum_batch_size: int,
-        max_workers: int | None,
-        chunk_size: int,
-        mp_start_method: str,
-    ) -> list[BatchParseResult]:
-        """Run the shared batch scheduler with one explicit failure policy."""
-        _validate_batch_policy(format_threshold, minimum_batch_size)
-        self._ensure_initialized()
-        if _should_use_multiprocessing(
-            item_count=len(batches),
-            parallel=parallel,
-            auto_threshold=min_parallel_batches,
-            default_auto_threshold=AUTO_MULTIPROCESS_MIN_BATCHES,
-            linux_auto_threshold=LINUX_AUTO_MULTIPROCESS_MIN_BATCHES,
-            max_workers=max_workers,
-        ):
-            with self.create_persistent_multiprocess_pool(
-                max_workers=max_workers,
-                chunk_size=chunk_size,
-                mp_start_method=_auto_start_method(mp_start_method),
-            ) as pool:
-                analyze = pool.analyze_name_batches_strict if strict else pool.analyze_name_batches
-                return analyze(
-                    batches,
-                    format_threshold=format_threshold,
-                    minimum_batch_size=minimum_batch_size,
-                )
-        analyze = self._analyze_name_batch_strict if strict else self.analyze_name_batch
-        return [
-            analyze(
-                batch,
-                format_threshold=format_threshold,
-                minimum_batch_size=minimum_batch_size,
-            )
-            for batch in batches
         ]
 
     def process_name_batches(
@@ -2618,40 +2512,3 @@ class ChineseNameDetector:
             chunk_size=chunk_size,
             mp_start_method=mp_start_method,
         )[0]
-
-    def _create_fallback_batch_result(
-        self,
-        names: list[str],
-        individual_results: list[ParseResult],
-    ) -> BatchParseResult:
-        """Create a fallback BatchParseResult when batch analysis is not available."""
-        # Create dummy format pattern
-        format_pattern = BatchFormatPattern(
-            dominant_format=NameFormat.MIXED,
-            confidence=0.0,
-            surname_first_count=0,
-            given_first_count=0,
-            total_count=len(names),
-            threshold_met=False,
-        )
-
-        # Create dummy individual analyses
-        individual_analyses = [
-            IndividualAnalysis(
-                raw_name=name,
-                candidates=[],
-                best_candidate=None,
-                confidence=0.0,
-            )
-            for name in names
-        ]
-        name_order_evidence = [NameOrderEvidence(raw_name=name) for name in names]
-
-        return BatchParseResult(
-            names=names,
-            results=individual_results,
-            format_pattern=format_pattern,
-            individual_analyses=individual_analyses,
-            improvements=[],
-            name_order_evidence=name_order_evidence,
-        )

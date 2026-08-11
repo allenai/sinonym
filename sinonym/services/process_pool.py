@@ -93,17 +93,12 @@ def _process_name_batch_chunk(batch_requests: list[_BatchRequest]) -> list[list[
     ]
 
 
-def _analyze_name_batch_chunk_core(
-    batch_requests: list[_BatchRequest],
-    *,
-    strict: bool,
-) -> list[BatchParseResult]:
-    """Analyze one worker chunk with the requested failure policy."""
+def _analyze_name_batch_chunk(batch_requests: list[_BatchRequest]) -> list[BatchParseResult]:
+    """Analyze one fail-fast chunk inside a worker process."""
     if _WORKER_DETECTOR is None:
         raise RuntimeError(WORKER_NOT_INITIALIZED_MESSAGE)
-    analyze = _WORKER_DETECTOR._analyze_name_batch_strict if strict else _WORKER_DETECTOR.analyze_name_batch  # noqa: SLF001
     return [
-        analyze(
+        _WORKER_DETECTOR.analyze_name_batch(
             names,
             format_threshold=format_threshold,
             minimum_batch_size=minimum_batch_size,
@@ -112,17 +107,7 @@ def _analyze_name_batch_chunk_core(
     ]
 
 
-def _analyze_name_batch_chunk(batch_requests: list[_BatchRequest]) -> list[BatchParseResult]:
-    """Analyze one forgiving chunk inside a worker process."""
-    return _analyze_name_batch_chunk_core(batch_requests, strict=False)
-
-
-def _analyze_name_batch_strict_chunk(batch_requests: list[_BatchRequest]) -> list[BatchParseResult]:
-    """Analyze batches without converting worker exceptions into parse fallbacks."""
-    return _analyze_name_batch_chunk_core(batch_requests, strict=True)
-
-
-def _analyze_related_name_batches_strict_chunk(
+def _analyze_related_name_batches_chunk(
     requests: list[_RelatedBatchRequest],
 ) -> list[RelatedBatchParseResult]:
     """Analyze related PP/VYS work items inside one worker-local detector."""
@@ -130,7 +115,7 @@ def _analyze_related_name_batches_strict_chunk(
         raise RuntimeError(WORKER_NOT_INITIALIZED_MESSAGE)
     prepared_cache = {}
     return [
-        _WORKER_DETECTOR._analyze_related_name_batches_strict(  # noqa: SLF001
+        _WORKER_DETECTOR._analyze_related_name_batches(  # noqa: SLF001
             pp_names,
             vys_pool_names,
             format_threshold=format_threshold,
@@ -297,29 +282,18 @@ class PersistentMultiprocessNormalizer:
         Each inner list is processed with `ChineseNameDetector.analyze_name_batch()`,
         so batch-format correction and evidence are isolated to that list.
         """
-        return self._analyze_name_batches(
+        requests = _batch_requests(
             batches,
-            strict=False,
             format_threshold=format_threshold,
             minimum_batch_size=minimum_batch_size,
         )
-
-    def analyze_name_batches_strict(
-        self,
-        batches: list[list[str]],
-        *,
-        format_threshold: float = 0.55,
-        minimum_batch_size: int = 2,
-    ) -> list[BatchParseResult]:
-        """Analyze independent batches and propagate every worker failure."""
-        return self._analyze_name_batches(
-            batches,
-            strict=True,
-            format_threshold=format_threshold,
-            minimum_batch_size=minimum_batch_size,
+        return self._map_chunks(
+            requests,
+            _analyze_name_batch_chunk,
+            preserve_task_errors=True,
         )
 
-    def _analyze_related_batch_requests_strict(
+    def _analyze_related_batch_requests(
         self,
         requests: list[tuple[list[str], list[str] | None]],
         *,
@@ -332,26 +306,9 @@ class PersistentMultiprocessNormalizer:
         ]
         return self._map_chunks(
             worker_requests,
-            _analyze_related_name_batches_strict_chunk,
+            _analyze_related_name_batches_chunk,
             preserve_task_errors=True,
         )
-
-    def _analyze_name_batches(
-        self,
-        batches: list[list[str]],
-        *,
-        strict: bool,
-        format_threshold: float,
-        minimum_batch_size: int,
-    ) -> list[BatchParseResult]:
-        """Submit analyzed batches through one shared pool path."""
-        requests = _batch_requests(
-            batches,
-            format_threshold=format_threshold,
-            minimum_batch_size=minimum_batch_size,
-        )
-        worker = _analyze_name_batch_strict_chunk if strict else _analyze_name_batch_chunk
-        return self._map_chunks(requests, worker, preserve_task_errors=strict)
 
     def close(self) -> None:
         """Shutdown worker processes and release resources."""

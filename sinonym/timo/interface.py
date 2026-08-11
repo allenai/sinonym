@@ -638,8 +638,12 @@ class Predictor:
             message = "vys_pool_names must start with the paper's authors: vys_pool_names[:len(pp_names)] == pp_names"
             raise _PoolPreconditionError(message)
 
-        pp_batch = self._detector.analyze_name_batch(pp_names)
-        pool = self._detector.analyze_name_batch(vys_pool_names)
+        related = self._detector._analyze_related_name_batches(pp_names, vys_pool_names)  # noqa: SLF001
+        if related.vys_batch is None:
+            message = "PP/VYS analysis did not return a VYS batch"
+            raise RuntimeError(message)
+        pp_batch = self._detector._attach_batch_canonical_names(related.pp_batch)  # noqa: SLF001
+        pool = self._detector._attach_batch_canonical_names(related.vys_batch)  # noqa: SLF001
         return self._route_pp_vys_batches(pp_batch, pool, n)
 
     @staticmethod
@@ -791,28 +795,23 @@ class RoutingPredictor(Predictor):
         instances: list[RoutingInstance],
     ) -> list[RoutedPaperPrediction]:
         predictions: list[RoutedPaperPrediction | None] = [None] * len(instances)
-        batch_inputs: list[list[str]] = []
-        plans: list[tuple[int, str, int, int | None, int]] = []
+        requests: list[tuple[list[str], list[str] | None]] = []
+        plans: list[tuple[int, int]] = []
 
         for instance_index, inst in enumerate(instances):
             if not inst.pp_names:
                 predictions[instance_index] = RoutedPaperPrediction(authors=[])
                 continue
 
-            if inst.vys_pool_names:
-                self._validate_vys_pool_names(inst.pp_names, inst.vys_pool_names)
-                pp_batch_index = len(batch_inputs)
-                batch_inputs.append(inst.pp_names)
-                vys_batch_index = len(batch_inputs)
-                batch_inputs.append(inst.vys_pool_names)
-                plans.append((instance_index, "pp_vys", pp_batch_index, vys_batch_index, len(inst.pp_names)))
-            else:
-                pp_batch_index = len(batch_inputs)
-                batch_inputs.append(inst.pp_names)
-                plans.append((instance_index, "pp_only", pp_batch_index, None, 0))
+            vys_pool_names = inst.vys_pool_names or None
+            if vys_pool_names is not None:
+                self._validate_vys_pool_names(inst.pp_names, vys_pool_names)
+            request_index = len(requests)
+            requests.append((inst.pp_names, vys_pool_names))
+            plans.append((instance_index, request_index))
 
-        batch_results = self._detector.analyze_name_batches(
-            batch_inputs,
+        batch_results = self._detector._analyze_related_batch_requests(  # noqa: SLF001
+            requests,
             parallel=self._config.parallel,
             min_parallel_batches=self._config.mp_min_parallel_batches,
             max_workers=self._config.mp_max_workers,
@@ -820,18 +819,21 @@ class RoutingPredictor(Predictor):
             mp_start_method=self._config.mp_start_method,
         )
 
-        for instance_index, mode, pp_batch_index, vys_batch_index, pp_count in plans:
-            if mode == "pp_vys":
-                if vys_batch_index is None:
-                    message = "pp_vys routing plan missing VYS batch index"
+        for instance_index, request_index in plans:
+            instance = instances[instance_index]
+            related = batch_results[request_index]
+            pp_batch = self._detector._attach_batch_canonical_names(related.pp_batch)  # noqa: SLF001
+            if instance.vys_pool_names:
+                if related.vys_batch is None:
+                    message = "pp_vys routing plan missing VYS batch result"
                     raise RuntimeError(message)
                 authors = self._route_pp_vys_batches(
-                    batch_results[pp_batch_index],
-                    batch_results[vys_batch_index],
-                    pp_count,
+                    pp_batch,
+                    self._detector._attach_batch_canonical_names(related.vys_batch),  # noqa: SLF001
+                    len(instance.pp_names),
                 )
             else:
-                pp_only = self._route_pp_batch(batch_results[pp_batch_index])
+                pp_only = self._route_pp_batch(pp_batch)
                 authors = [RoutedPrediction(**r.dict(), input_order_candidate=None, vys=None) for r in pp_only]
             predictions[instance_index] = RoutedPaperPrediction(authors=authors)
 
@@ -1218,28 +1220,23 @@ class RoutingPredictorV2(PredictorV2):
         instances: list[RoutingInstance],
     ) -> list[RoutedPaperPredictionV2]:
         predictions: list[RoutedPaperPredictionV2 | None] = [None] * len(instances)
-        batch_inputs: list[list[str]] = []
-        plans: list[tuple[int, str, int, int | None, int]] = []
+        requests: list[tuple[list[str], list[str] | None]] = []
+        plans: list[tuple[int, int]] = []
 
         for instance_index, instance in enumerate(instances):
             if not instance.pp_names:
                 predictions[instance_index] = RoutedPaperPredictionV2(authors=[])
                 continue
 
-            if instance.vys_pool_names:
-                self._validate_vys_pool_names(instance.pp_names, instance.vys_pool_names)
-                pp_batch_index = len(batch_inputs)
-                batch_inputs.append(instance.pp_names)
-                vys_batch_index = len(batch_inputs)
-                batch_inputs.append(instance.vys_pool_names)
-                plans.append((instance_index, "pp_vys", pp_batch_index, vys_batch_index, len(instance.pp_names)))
-            else:
-                pp_batch_index = len(batch_inputs)
-                batch_inputs.append(instance.pp_names)
-                plans.append((instance_index, "pp_only", pp_batch_index, None, 0))
+            vys_pool_names = instance.vys_pool_names or None
+            if vys_pool_names is not None:
+                self._validate_vys_pool_names(instance.pp_names, vys_pool_names)
+            request_index = len(requests)
+            requests.append((instance.pp_names, vys_pool_names))
+            plans.append((instance_index, request_index))
 
-        batch_results = self._detector.analyze_name_batches(
-            batch_inputs,
+        batch_results = self._detector._analyze_related_batch_requests(  # noqa: SLF001
+            requests,
             parallel=self._config.parallel,
             min_parallel_batches=self._config.mp_min_parallel_batches,
             max_workers=self._config.mp_max_workers,
@@ -1247,18 +1244,21 @@ class RoutingPredictorV2(PredictorV2):
             mp_start_method=self._config.mp_start_method,
         )
 
-        for instance_index, mode, pp_batch_index, vys_batch_index, pp_count in plans:
-            if mode == "pp_vys":
-                if vys_batch_index is None:
-                    message = "pp_vys routing plan missing VYS batch index"
+        for instance_index, request_index in plans:
+            instance = instances[instance_index]
+            related = batch_results[request_index]
+            pp_batch = self._detector._attach_batch_canonical_names(related.pp_batch)  # noqa: SLF001
+            if instance.vys_pool_names:
+                if related.vys_batch is None:
+                    message = "pp_vys routing plan missing VYS batch result"
                     raise RuntimeError(message)
                 authors = self._route_pp_vys_batches(
-                    batch_results[pp_batch_index],
-                    batch_results[vys_batch_index],
-                    pp_count,
+                    pp_batch,
+                    self._detector._attach_batch_canonical_names(related.vys_batch),  # noqa: SLF001
+                    len(instance.pp_names),
                 )
             else:
-                pp_only = self._route_pp_batch(batch_results[pp_batch_index])
+                pp_only = self._route_pp_batch(pp_batch)
                 authors = [RoutedPredictionV2(**result.dict(), input_order_candidate=None, vys=None) for result in pp_only]
             predictions[instance_index] = RoutedPaperPredictionV2(authors=authors)
 
@@ -1420,7 +1420,7 @@ class RoutingPredictorV3:
             requests.append((pp_names, vys_pool_names))
             plans.append((instance_index, request_index))
 
-        batch_results = self._detector._analyze_related_batch_requests_strict(  # noqa: SLF001
+        batch_results = self._detector._analyze_related_batch_requests(  # noqa: SLF001
             requests,
             parallel=self._config.parallel,
             min_parallel_batches=self._config.mp_min_parallel_batches,
