@@ -2,8 +2,7 @@
 
 import pytest
 
-from sinonym.timo.interface import RoutingPredictorV3
-from sinonym.timo.routing_v3 import RoutingInstanceV3, SourceAuthorFields
+from sinonym.timo.interface import Instance, Predictor, SourceAuthorFields
 
 
 @pytest.mark.parametrize(
@@ -66,12 +65,12 @@ def test_contextual_surname_reading_reaches_batch_results(detector, raw_name, ex
     ],
 )
 def test_contextual_reading_preserves_v3_name_boundary(
-    routing_predictor_v3: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
     expected: tuple[str, str, str],
 ) -> None:
-    (paper,) = routing_predictor_v3.predict_batch([RoutingInstanceV3(pp_authors=[source])])
-    resolved = paper.authors[0].resolved_fields
+    (paper,) = predictor.predict_batch([Instance(pp_authors=[source])])
+    resolved = paper.authors[0]
 
     assert (resolved.first_name, resolved.middle_names, resolved.last_name) == expected
 

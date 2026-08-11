@@ -1,7 +1,7 @@
 """Regression tests for scalar clean source-surname repartition.
 
 The source-only adjudication and 500-activation blind evaluation are recorded
-in ``docs/scalar_source_surname_repartition_evaluation.md``. The routed V3
+in ``docs/scalar_source_surname_repartition_evaluation.md``. The routed
 parity fixture separately pins the known ``production-248247190`` regression
 as shipped behavior, not a desired boundary.
 """
@@ -18,15 +18,11 @@ from sinonym.coretypes.routing_resolution import (
     ResolutionProvenance,
     ResolutionReason,
 )
-from sinonym.timo.routing_v3 import (
-    RoutingInstanceV3,
-    RoutingV3Resolver,
-    SourceAuthorFields,
-)
+from sinonym.timo._resolution import _Resolver
+from sinonym.timo.interface import Instance, Predictor, SourceAuthorFields
 
 if TYPE_CHECKING:
     from sinonym import ChineseNameDetector
-    from sinonym.timo.interface import RoutingPredictorV3
 
 _REPARTITION_REASON = ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT
 _KNOWN_COMPOUND_REASON = ResolutionReason.SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT
@@ -55,31 +51,25 @@ _HOLDOUT_ACTIVATIONS = [
 
 
 @pytest.fixture(scope="module")
-def predictor(routing_predictor_v3: RoutingPredictorV3) -> RoutingPredictorV3:
-    """Alias the shared session predictor under this module's name."""
-    return routing_predictor_v3
-
-
-@pytest.fixture(scope="module")
-def resolver(detector: ChineseNameDetector) -> RoutingV3Resolver:
+def resolver(detector: ChineseNameDetector) -> _Resolver:
     """Build a resolver for direct predicate tests."""
-    return RoutingV3Resolver(detector)
+    return _Resolver(detector)
 
 
 def _route(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
     *,
     vys_other_names: list[str] | None = None,
 ):
     (paper,) = predictor.predict_batch(
-        [RoutingInstanceV3(pp_authors=[source], vys_other_names=vys_other_names)],
+        [Instance(pp_authors=[source], vys_other_names=vys_other_names or [])],
     )
-    return paper.authors[0].resolved_fields
+    return paper.authors[0]
 
 
 def _candidate(
-    resolver: RoutingV3Resolver,
+    resolver: _Resolver,
     source: SourceAuthorFields,
     selected: NameComponents,
 ) -> NameComponents | None:
@@ -92,7 +82,7 @@ def _candidate(
     ids=[row[0] for row in _HOLDOUT_ACTIVATIONS],
 )
 def test_holdout_activations_keep_the_structured_source_surname(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     audit_id: str,
     source_fields: tuple[str, str, str],
     expected: tuple[str, str, str],
@@ -110,13 +100,13 @@ def test_holdout_activations_keep_the_structured_source_surname(
     assert resolved.resolution_action is ResolutionAction.ASSIGN
 
 
-def test_single_token_source_surname_cannot_activate(predictor: RoutingPredictorV3) -> None:
+def test_single_token_source_surname_cannot_activate(predictor: Predictor) -> None:
     resolved = _route(predictor, SourceAuthorFields(first_name="Ana", last_name="Poveda"))
 
     assert resolved.resolution_reason is not _REPARTITION_REASON
 
 
-def test_initial_in_the_source_first_name_blocks_activation(predictor: RoutingPredictorV3) -> None:
+def test_initial_in_the_source_first_name_blocks_activation(predictor: Predictor) -> None:
     resolved = _route(predictor, SourceAuthorFields(first_name="A.", last_name="Vicens Poveda"))
 
     assert resolved.resolution_reason is not _REPARTITION_REASON
@@ -148,7 +138,7 @@ def test_initial_in_the_source_first_name_blocks_activation(predictor: RoutingPr
     [pytest.param(None, id="pp-only"), pytest.param(["Jane Doe"], id="pp-vys")],
 )
 def test_curated_spaced_compound_surname_outlives_batch_materialization(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
     expected: tuple[str, str, str],
     vys_other_names: list[str] | None,
@@ -166,7 +156,7 @@ def test_curated_spaced_compound_surname_outlives_batch_materialization(
     [pytest.param(None, id="pp-only"), pytest.param(["Jane Doe"], id="pp-vys")],
 )
 def test_curated_compound_guard_does_not_trust_an_unreviewed_last_name(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     vys_other_names: list[str] | None,
 ) -> None:
     source = SourceAuthorFields(first_name="Au", middle_names="Yeung", last_name="Ka Ming")
@@ -177,7 +167,7 @@ def test_curated_compound_guard_does_not_trust_an_unreviewed_last_name(
     assert resolved.resolution_reason is not _KNOWN_COMPOUND_REASON
 
 
-def test_predicate_accepts_a_clean_peel(resolver: RoutingV3Resolver) -> None:
+def test_predicate_accepts_a_clean_peel(resolver: _Resolver) -> None:
     candidate = _candidate(
         resolver,
         SourceAuthorFields(first_name="Ana", last_name="Vicens Poveda"),
@@ -234,7 +224,7 @@ def test_predicate_accepts_a_clean_peel(resolver: RoutingV3Resolver) -> None:
     ],
 )
 def test_predicate_rejects_unclean_repartitions(
-    resolver: RoutingV3Resolver,
+    resolver: _Resolver,
     source: SourceAuthorFields,
     selected: NameComponents,
 ) -> None:

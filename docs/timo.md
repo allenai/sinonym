@@ -1,57 +1,59 @@
-# Routed V3 writer contract
+# TIMO writer contract
 
-`sinonym_routing_v3` is the integration surface for callers that need final,
+`sinonym` is the TIMO integration surface for callers that need final,
 directly writable author fields. It resolves paper-level (PP), optional
 venue/year/source-level (VYS), scalar canonical, and source-preservation paths
 inside Sinonym instead of asking each writer to reproduce that cascade.
 
 For ordinary single-name normalization, use `ChineseNameDetector` as shown in
-the main README. Use V3 when author records must stay positionally aligned and
-the caller needs an explicit write or suppression decision.
+the main README. Use TIMO when author records must stay positionally aligned
+and the caller needs an explicit write or suppression decision.
 
 ## Python example
 
-The supported Python contracts are exposed from `sinonym.timo.interface`:
+The public contract consists of six classes from `sinonym.timo.interface`:
 
 ```python
 from sinonym.timo.interface import (
+    Instance,
+    Prediction,
+    Predictor,
     PredictorConfig,
-    RoutingInstanceV3,
-    RoutingPredictorV3,
+    ResolvedAuthorFields,
     SourceAuthorFields,
 )
 
-predictor = RoutingPredictorV3(
+predictor = Predictor(
     PredictorConfig(parallel="never"),
     artifacts_dir="",
 )
-request = RoutingInstanceV3(
+request = Instance(
     pp_authors=[
         SourceAuthorFields(first_name="Li", last_name="Wei"),
         SourceAuthorFields(first_name="John", last_name="Smith"),
     ],
-    # Supply only names outside the focal paper. V3 prepends the paper authors.
+    # Supply only names outside the focal paper; Sinonym prepends its authors.
     vys_other_names=["Jane Doe"],
 )
 
 (paper,) = predictor.predict_batch([request])
-resolved = [author.resolved_fields for author in paper.authors]
+assert isinstance(paper, Prediction)
+assert all(isinstance(author, ResolvedAuthorFields) for author in paper.authors)
 
-assert (resolved[0].first_name, resolved[0].last_name) == ("Wei", "Li")
-assert resolved[0].resolution_provenance.value == "pp"
-assert resolved[0].resolution_action.value == "assign"
+assert (paper.authors[0].first_name, paper.authors[0].last_name) == ("Wei", "Li")
+assert paper.authors[0].resolution_provenance.value == "pp"
+assert paper.authors[0].resolution_action.value == "assign"
 
-assert (resolved[1].first_name, resolved[1].last_name) == ("John", "Smith")
-assert resolved[1].resolution_provenance.value == "scalar"
-assert resolved[1].resolution_action.value == "assign"
+assert (paper.authors[1].first_name, paper.authors[1].last_name) == ("John", "Smith")
+assert paper.authors[1].resolution_provenance.value == "scalar"
+assert paper.authors[1].resolution_action.value == "assign"
 ```
 
-The TIMO model name is `sinonym_routing_v3`. The v1 and v2 request/response
-schemas are unchanged; `sinonym_routing_v2` is the rollout rollback path.
+The TIMO model name is `sinonym`. It is the only supported TIMO contract.
 
 ## Request wire shape
 
-One `RoutingInstanceV3` represents one paper:
+One `Instance` represents one paper:
 
 ```json
 {
@@ -68,19 +70,21 @@ author accepts optional strict-string `first_name`, `middle_names`,
 `last_name`, and `suffix` fields. Duplicate names are valid: results are joined
 to requests by position, never by name text.
 
-V3 derives each focal name by joining the first, middle, and last source fields
-in that order; the suffix is deliberately excluded from scalar and batch
-inference. Do not send a second focal-name slice. When `vys_other_names` is
-nonempty, V3 prepends the derived focal names internally, so this field must
-contain only non-focal names from the VYS context.
+Sinonym derives each focal name by joining the first, middle, and last source
+fields in that order; the suffix is deliberately excluded from scalar and
+batch inference. Do not send a second focal-name slice. When
+`vys_other_names` is nonempty, Sinonym prepends the derived focal names
+internally, so this field must contain only non-focal names from the VYS
+context.
 
 The VYS forms have these meanings:
 
 | Input | Routing behavior |
 | --- | --- |
-| omitted or `null` | PP-only |
-| `[]` | PP-only; the empty-list distinction remains visible on the request DTO |
+| omitted | Defaults to `[]`; PP-only |
+| `[]` | PP-only |
 | nonempty list | PP/VYS routing using the derived focal slice plus these names |
+| `null` | Validation error |
 
 An empty `pp_authors` list is valid and produces one paper result with an empty
 `authors` list.
@@ -92,44 +96,39 @@ string is retained. On output, `first_name`, `middle_names`, and `last_name`
 are always strings, using `""` when a component is empty. `suffix` remains
 nullable because its missingness is meaningful.
 
-The suffix in `resolved_fields` is final. A nonempty source suffix wins;
-otherwise a suffix discovered by the selected semantic result fills it. If
-neither exists, the source `None` versus `""` state is retained. Writers must
-not merge or normalize the suffix again.
+The output suffix is final. A nonempty source suffix wins; otherwise a suffix
+discovered by the selected semantic result fills it. If neither exists, the
+source `None` versus `""` state is retained. Writers must not merge or
+normalize the suffix again.
 
 Unknown request fields and non-string component values fail Pydantic
-validation. This deliberately catches misspelled or drifted wire schemas at
-the boundary.
+validation. This catches misspelled or drifted wire schemas at the boundary.
 
 ## Response wire shape
 
-V3 returns one paper prediction for each request and one aligned author slot
-for each `pp_authors` entry:
+TIMO returns one `Prediction` for each request and one directly writable,
+aligned author object for each `pp_authors` entry:
 
 ```json
 {
   "authors": [
     {
-      "resolved_fields": {
-        "first_name": "Wei",
-        "middle_names": "",
-        "last_name": "Li",
-        "suffix": null,
-        "resolution_provenance": "pp",
-        "resolution_action": "assign",
-        "resolution_reason": "pp_selected"
-      }
+      "first_name": "Wei",
+      "middle_names": "",
+      "last_name": "Li",
+      "suffix": null,
+      "resolution_provenance": "pp",
+      "resolution_action": "assign",
+      "resolution_reason": "pp_selected"
     },
     {
-      "resolved_fields": {
-        "first_name": "John",
-        "middle_names": "",
-        "last_name": "Smith",
-        "suffix": null,
-        "resolution_provenance": "scalar",
-        "resolution_action": "assign",
-        "resolution_reason": "scalar_baseline"
-      }
+      "first_name": "John",
+      "middle_names": "",
+      "last_name": "Smith",
+      "suffix": null,
+      "resolution_provenance": "scalar",
+      "resolution_action": "assign",
+      "resolution_reason": "scalar_baseline"
     }
   ]
 }
@@ -155,7 +154,7 @@ Every response also explains how the final fields were obtained:
 `resolution_reason` gives the specific policy explanation, such as
 `pp_selected`, `scalar_baseline`, or `reviewed_non_person_pattern`. Reasons are
 a closed enum, and each reason permits exactly one provenance/action pair. Use
-the action—not ad hoc interpretation of reason strings—to decide whether to
+the action, not ad hoc interpretation of reason strings, to decide whether to
 write the author. The authoritative enum and mapping live in
 [`sinonym/coretypes/routing_resolution.py`](../sinonym/coretypes/routing_resolution.py).
 
@@ -176,13 +175,13 @@ is:
 
 resolves to `first_name="R."`, `middle_names="A."`, and
 `last_name="Masterov"`, with reason
-`structured_surname_initial_tail_assignment`. This exception is narrow; callers
-should submit source fields as received rather than trying to anticipate it.
+`structured_surname_initial_tail_assignment`. This exception is narrow;
+callers should submit source fields as received rather than anticipating it.
 
 ## `not_person` is not automatically suppression
 
 The raw PP/VYS router's `not_person` result describes an intermediate batch
-candidate. V3 still evaluates scalar canonical normalization and safe source
+candidate. TIMO still evaluates scalar canonical normalization and safe source
 materialization. A real person can therefore receive `assign` or
 `preserve_input` even when that router candidate says `not_person`; ordinary
 parser failure is not a writer deletion decision.
@@ -194,15 +193,15 @@ source-shaped slot so diagnostics and positional alignment remain intact.
 ## Validation and failures
 
 The public `ChineseNameDetector.analyze_name_batch()` API is fail-fast: batch,
-service, invariant, and unexpected implementation failures propagate. Routed
-V3 uses a private lean related-batch path that has the same failure contract but
-omits public canonical sidecar work because terminal resolution handles scalar
-candidates separately.
+service, invariant, and unexpected implementation failures propagate. TIMO
+uses a lean related-batch path with the same failure contract but omits public
+canonical sidecar work because terminal resolution handles scalar candidates
+separately.
 
-V3 validates paper counts, author ordering, and PP/VYS alignment. Schema
+TIMO validates paper counts, author ordering, and PP/VYS alignment. Schema
 errors, invariant violations, and unexpected implementation failures
 propagate. Only explicitly typed evidence or hard-materialization failures are
 handled as policy outcomes; those cases preserve source fields and expose an
 explicit resolution reason. Callers should fail the enclosing work item rather
-than inventing another name fallback; any retry policy remains caller-owned and
-bounded.
+than inventing another name fallback; any retry policy remains caller-owned
+and bounded.

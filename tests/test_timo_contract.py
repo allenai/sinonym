@@ -1,7 +1,9 @@
-"""Focused contract tests for routed V3 inputs and terminal decisions."""
+"""Focused contracts for TIMO inputs and terminal decisions."""
+
+import importlib.util
 
 import pytest
-from pydantic import ValidationError
+from pydantic import Field, ValidationError
 
 from sinonym.coretypes import CanonicalName, NameComponents
 from sinonym.coretypes.routing_resolution import (
@@ -15,28 +17,53 @@ from sinonym.coretypes.routing_resolution import (
     ResolutionProvenance,
     ResolutionReason,
 )
-from sinonym.timo.interface import RoutedPaperPredictionV3
-from sinonym.timo.routing_v3 import (
-    ResolvedAuthorFields,
-    RoutingInstanceV3,
-    RoutingV3Model,
-    SourceAuthorFields,
+from sinonym.timo import interface
+from sinonym.timo._resolution import (
+    _Model,
     merge_resolved_suffix,
 )
+from sinonym.timo.interface import Instance, Prediction, ResolvedAuthorFields, SourceAuthorFields
 
 
-def test_v3_derives_focal_pool_positionally_without_a_second_authority() -> None:
+def test_public_interface_is_exactly_the_six_unversioned_classes() -> None:
+    expected = {
+        "SourceAuthorFields",
+        "Instance",
+        "ResolvedAuthorFields",
+        "Prediction",
+        "PredictorConfig",
+        "Predictor",
+    }
+    removed = {
+        "RoutingInstanceV3",
+        "RoutingPredictorV3",
+        "RoutedPaperPredictionV3",
+        "PredictionV2",
+        "PredictorV2",
+        "RoutingInstance",
+        "RoutingPredictor",
+        "ChineseNameDetector",
+    }
+
+    assert set(interface.__all__) == expected
+    assert {name for name, value in vars(interface).items() if not name.startswith("_") and isinstance(value, type)} == expected
+    assert all(not hasattr(interface, name) for name in removed)
+    assert importlib.util.find_spec("sinonym.timo.routing_v3") is None
+
+
+def test_request_derives_focal_pool_positionally_without_a_second_authority() -> None:
     authors = [
         SourceAuthorFields(first_name="Juan", middle_names="Carlos", last_name="de la Cruz", suffix="Jr."),
         SourceAuthorFields(first_name="Juan Carlos", middle_names="de la", last_name="Cruz"),
     ]
-    instance = RoutingInstanceV3(
+    instance = Instance(
         pp_authors=authors,
         vys_other_names=["Jane Doe", "Jane Doe"],
     )
+    pp_names = [author.full_name() for author in instance.pp_authors]
 
-    assert instance.pp_names == ["Juan Carlos de la Cruz", "Juan Carlos de la Cruz"]
-    assert instance.vys_pool_names == [
+    assert pp_names == ["Juan Carlos de la Cruz", "Juan Carlos de la Cruz"]
+    assert [*pp_names, *instance.vys_other_names] == [
         "Juan Carlos de la Cruz",
         "Juan Carlos de la Cruz",
         "Jane Doe",
@@ -47,36 +74,50 @@ def test_v3_derives_focal_pool_positionally_without_a_second_authority() -> None
     assert set(instance.dict()) == {"pp_authors", "vys_other_names"}
 
 
-def test_v3_rejects_a_separately_supplied_focal_slice() -> None:
+def test_request_rejects_a_separately_supplied_focal_slice() -> None:
     with pytest.raises(ValidationError, match="extra fields not permitted"):
-        RoutingInstanceV3(
+        Instance(
             pp_authors=[SourceAuthorFields(first_name="Li", last_name="Wei")],
             pp_names=["Wei Li"],
         )
 
 
-def test_v3_distinguishes_absent_vys_context_from_present_empty_others() -> None:
+def test_vys_other_names_defaults_empty_and_rejects_null() -> None:
     authors = [SourceAuthorFields(first_name="Li", last_name="Wei")]
-    present_empty = RoutingInstanceV3(pp_authors=authors, vys_other_names=[])
+    instance = Instance(pp_authors=authors)
 
-    assert RoutingInstanceV3(pp_authors=authors).vys_pool_names is None
-    assert present_empty.vys_pool_names == ["Li Wei"]
-    assert present_empty.dict()["vys_other_names"] == []
-    assert RoutingInstanceV3.parse_raw(present_empty.json()) == present_empty
+    assert instance.vys_other_names == []
+    assert instance.dict()["vys_other_names"] == []
+    assert Instance.parse_raw(instance.json()) == instance
+    with pytest.raises(ValidationError):
+        Instance(pp_authors=authors, vys_other_names=None)
 
 
-def test_v3_request_wire_omits_nulls_without_changing_parsed_defaults() -> None:
-    instance = RoutingInstanceV3(
+def test_vys_other_names_defaults_are_independent_and_strict() -> None:
+    first = Instance(pp_authors=[])
+    second = Instance(pp_authors=[])
+
+    first.vys_other_names.append("Jane Doe")
+
+    assert second.vys_other_names == []
+    with pytest.raises(ValidationError):
+        Instance(pp_authors=[], vys_other_names=[123])
+
+
+def test_request_wire_omits_nullable_author_fields() -> None:
+    instance = Instance(
         pp_authors=[SourceAuthorFields(first_name="Li", last_name="Wei")],
     )
 
-    assert instance.dict() == {"pp_authors": [{"first_name": "Li", "last_name": "Wei"}]}
-    assert instance.json() == '{"pp_authors": [{"first_name": "Li", "last_name": "Wei"}]}'
-    assert RoutingInstanceV3.parse_raw(instance.json()) == instance
+    assert instance.dict() == {
+        "pp_authors": [{"first_name": "Li", "last_name": "Wei"}],
+        "vys_other_names": [],
+    }
+    assert Instance.parse_raw(instance.json()) == instance
 
 
-def test_v3_json_schemas_match_the_nullable_runtime_contract() -> None:
-    request_schema = RoutingInstanceV3.schema()
+def test_json_schemas_match_the_runtime_contract() -> None:
+    request_schema = Instance.schema()
     source_properties = request_schema["definitions"]["SourceAuthorFields"]["properties"]
 
     assert {name: source_properties[name]["type"] for name in source_properties} == {
@@ -85,10 +126,11 @@ def test_v3_json_schemas_match_the_nullable_runtime_contract() -> None:
         "last_name": ["string", "null"],
         "suffix": ["string", "null"],
     }
-    assert request_schema["properties"]["vys_other_names"]["type"] == ["array", "null"]
+    assert request_schema["properties"]["vys_other_names"]["type"] == "array"
     assert request_schema["properties"]["pp_authors"]["type"] == "array"
 
-    response_schema = RoutedPaperPredictionV3.schema()
+    response_schema = Prediction.schema()
+    assert response_schema["properties"]["authors"]["items"] == {"$ref": "#/definitions/ResolvedAuthorFields"}
     resolved_properties = response_schema["definitions"]["ResolvedAuthorFields"]["properties"]
     assert resolved_properties["suffix"]["type"] == ["string", "null"]
     assert {resolved_properties[name]["type"] for name in ("first_name", "middle_names", "last_name")} == {
@@ -96,13 +138,13 @@ def test_v3_json_schemas_match_the_nullable_runtime_contract() -> None:
     }
 
 
-def test_v3_nullable_reference_schemas_use_any_of() -> None:
+def test_nullable_reference_schemas_use_any_of() -> None:
     """Nullable enum and nested-model fields generate valid reference schemas."""
 
-    class NullableEnumModel(RoutingV3Model):
+    class NullableEnumModel(_Model):
         reason: ResolutionReason | None = None
 
-    class NullableNestedModel(RoutingV3Model):
+    class NullableNestedModel(_Model):
         source: SourceAuthorFields | None = None
 
     enum_property = NullableEnumModel.schema()["properties"]["reason"]
@@ -122,6 +164,32 @@ def test_v3_nullable_reference_schemas_use_any_of() -> None:
     }
     assert NullableEnumModel(reason=ResolutionReason.HANDLED_EVIDENCE_FAILURE).reason is not None
     assert NullableNestedModel(source=None).source is None
+
+
+@pytest.mark.parametrize(
+    ("by_alias", "property_name"),
+    [
+        (True, "resolutionReason"),
+        (False, "reason"),
+    ],
+)
+def test_nullable_aliased_reference_schema_uses_requested_property_name(
+    by_alias: bool,
+    property_name: str,
+) -> None:
+    """Nullable references support schemas keyed by aliases or field names."""
+
+    class NullableAliasedModel(_Model):
+        reason: ResolutionReason | None = Field(default=None, alias="resolutionReason")
+
+    property_schema = NullableAliasedModel.schema(by_alias=by_alias)["properties"][property_name]
+
+    assert property_schema == {
+        "anyOf": [
+            {"$ref": "#/definitions/ResolutionReason"},
+            {"type": "null"},
+        ],
+    }
 
 
 def test_full_name_matches_current_flattening_and_excludes_suffix() -> None:

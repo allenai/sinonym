@@ -246,6 +246,7 @@ THREE_CHARACTER_ALL_CHINESE_TOKEN_COUNT = 3
 SPACED_HAN_PREFIX_SURNAME_RATIO_MIN = 5.0
 CAMEL_CASE_LAST_SURNAME_RATIO_MIN = 5.0
 LEADING_ET_AL_TOKEN_COUNT = 2
+LEADING_ET_AL_MARKER = "et al."
 CURATED_COMPOUND_SURNAME_FORMS = frozenset((*COMPOUND_VARIANTS.keys(), *COMPOUND_VARIANTS.values()))
 HAN_SURNAME_POSITION_SOURCE_READINGS = frozenset(source_reading for _character, source_reading in HAN_SURNAME_POSITION_READINGS)
 CompactHanRomanCandidate = tuple[list[str], list[str], list[str], float, bool]
@@ -346,7 +347,8 @@ class ChineseNameDetector:
                 min_tokens_required=self._config.min_tokens_required,
                 # Batch policy consumes only Chinese parse/evidence fields.
                 # Public batch APIs attach canonical sidecars after batch
-                # analysis; V3 performs its sole scalar resolution later.
+                # analysis; the terminal TIMO resolver performs its sole
+                # scalar resolution later.
                 individual_parser=self._normalize_chinese_name,
                 input_failure=self._initial_input_failure,
                 classification_input=self._chinese_classification_input,
@@ -1269,8 +1271,11 @@ class ChineseNameDetector:
     def _leading_et_al_normalization(self, raw_name: str) -> PersonNameNormalizationResult | None:
         """Return the audited normalization for one exact leading citation marker."""
         prefix = raw_name.lstrip()
-        marker = "et al."
-        if len(prefix) <= len(marker) or prefix[: len(marker)].casefold() != marker or not prefix[len(marker)].isspace():
+        if (
+            len(prefix) <= len(LEADING_ET_AL_MARKER)
+            or prefix[: len(LEADING_ET_AL_MARKER)].casefold() != LEADING_ET_AL_MARKER
+            or not prefix[len(LEADING_ET_AL_MARKER)].isspace()
+        ):
             return None
         normalized = self._person_name_normalizer.normalize_text(raw_name)
         if normalized.canonical_name is None or len(normalized.dropped_tokens) < LEADING_ET_AL_TOKEN_COUNT:
@@ -1286,11 +1291,9 @@ class ChineseNameDetector:
 
     def _chinese_classification_input(self, raw_name: str) -> str:
         """Remove only an audited leading ``Et al.`` citation contaminant."""
-        normalized = self._leading_et_al_normalization(raw_name)
-        if normalized is None:
+        if self._leading_et_al_normalization(raw_name) is None:
             return raw_name
-        assert normalized.canonical_name is not None
-        return normalized.canonical_name.text
+        return raw_name.lstrip()[len(LEADING_ET_AL_MARKER) :].lstrip()
 
     @staticmethod
     def _canonical_components_from_parsed(parsed: ParsedName) -> NameComponents:
@@ -1776,11 +1779,11 @@ class ChineseNameDetector:
         self,
         raw_name: str,
     ) -> CanonicalName | HardScalarConstraint | None:
-        """Resolve V3's scalar candidate and its optional hard constraint.
+        """Resolve TIMO's scalar candidate and its optional hard constraint.
 
         This deliberately consumes the cleaned flattened name rather than
         source component labels. Unlike the public compatibility API, an
-        evidence service failure is typed and propagated so the V3 terminal
+        evidence service failure is typed and propagated so the terminal
         resolver can record an explicit source-preservation outcome. Ordinary
         non-applicability remains ``None``.
         """
@@ -2026,20 +2029,6 @@ class ChineseNameDetector:
             normalized.canonical_name,
             decision,
         )
-
-    def routing_canonical_override(self, raw_name: str) -> tuple[CanonicalName, str] | None:
-        """Return a proven canonical that must replace a routed batch parse."""
-        iteration_mark = self._canonical_name_from_iteration_mark(raw_name)
-        if iteration_mark is not None:
-            return iteration_mark, "japanese_iteration_mark_canonical_override"
-
-        conflict_reason = self._east_asian_name_order.family_first_conflict_reason(raw_name)
-        if conflict_reason is None:
-            return None
-        source_order = self.normalize_person_name(raw_name)
-        if source_order is None:
-            return None
-        return source_order, conflict_reason.value
 
     def _attach_canonical_name(self, raw_name: str, result: ParseResult) -> ParseResult:
         """Attach canonical metadata without changing legacy recognition fields."""

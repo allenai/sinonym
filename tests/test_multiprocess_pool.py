@@ -297,7 +297,7 @@ def test_detector_process_name_batches_auto_uses_pool_above_threshold(detector, 
 
 
 def test_detector_related_batch_parallel_path_propagates_worker_failures(detector, monkeypatch):
-    """V3's related pool path propagates worker failures without fallback rows."""
+    """The related pool path propagates worker failures without fallback rows."""
     captured = {}
 
     class FakePool:

@@ -4,20 +4,16 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import pytest
 
 from sinonym.coretypes.routing_resolution import ResolutionAction, ResolutionReason
-from sinonym.timo.routing_v3 import (
+from sinonym.timo._resolution import (
     REVIEWED_EXACT_KOREAN_GIVEN_PREFIX_PACKS,
-    RoutingInstanceV3,
-    SourceAuthorFields,
     reviewed_exact_source_assignment,
 )
-
-if TYPE_CHECKING:
-    from sinonym.timo.interface import RoutingPredictorV3
+from sinonym.timo.interface import Instance, Predictor, SourceAuthorFields
 
 
 def _load_reviewed_korean_rows() -> tuple[dict[str, str], ...]:
@@ -40,18 +36,12 @@ def _source_from_korean_row(row: dict[str, str]) -> SourceAuthorFields:
     )
 
 
-@pytest.fixture(scope="module")
-def predictor(routing_predictor_v3: RoutingPredictorV3) -> RoutingPredictorV3:
-    """Alias the shared session predictor under this module's name."""
-    return routing_predictor_v3
-
-
 def _route(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ):
-    (paper,) = predictor.predict_batch([RoutingInstanceV3(pp_authors=[source])])
-    return paper.authors[0].resolved_fields
+    (paper,) = predictor.predict_batch([Instance(pp_authors=[source])])
+    return paper.authors[0]
 
 
 @pytest.mark.parametrize(
@@ -103,7 +93,7 @@ def _route(
     ],
 )
 def test_reviewed_source_cleanup_patterns_are_terminal(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
     expected: tuple[str, str, str, str | None],
 ) -> None:
@@ -152,7 +142,7 @@ def test_reviewed_source_cleanup_patterns_are_terminal(
     ],
 )
 def test_cleanup_does_not_expand_a_reviewed_surname_boundary(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
     expected: tuple[str, str, str],
 ) -> None:
@@ -185,7 +175,7 @@ def test_cleanup_does_not_expand_a_reviewed_surname_boundary(
     ],
 )
 def test_reviewed_credential_singletons_use_exact_clean_identity(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
     expected: tuple[str, str, str],
 ) -> None:
@@ -197,7 +187,7 @@ def test_reviewed_credential_singletons_use_exact_clean_identity(
 
 
 def test_reviewed_shifted_alias_uses_exact_latin_identity(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
 ) -> None:
     """The singleton shifted alias emits the verified Chinese identity in Latin."""
     source = SourceAuthorFields(first_name="\u5289\u6bb7\u4f50", last_name="I-Ting Wang")
@@ -208,7 +198,7 @@ def test_reviewed_shifted_alias_uses_exact_latin_identity(
 
 
 def test_reviewed_packed_people_are_suppressed(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
 ) -> None:
     """Two people packed into one author slot cannot be safely materialized."""
     source = SourceAuthorFields(last_name="Anthony C. Laborte, Marissa C. Hitalia*")
@@ -221,16 +211,16 @@ def test_reviewed_packed_people_are_suppressed(
 @pytest.mark.parametrize("source_last_name", ["Kai", "KAI"])
 @pytest.mark.parametrize("vys_other_names", [None, ["Zhang Wei"]])
 def test_mao_kai_exact_family_first_cohort_is_not_vetoed(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source_last_name: str,
     vys_other_names: list[str] | None,
 ) -> None:
     """The reviewed Chinese cohort keeps Mao as surname on both routed paths."""
     source = SourceAuthorFields(first_name="Mao", last_name=source_last_name)
     (paper,) = predictor.predict_batch(
-        [RoutingInstanceV3(pp_authors=[source], vys_other_names=vys_other_names)],
+        [Instance(pp_authors=[source], vys_other_names=vys_other_names or [])],
     )
-    resolved = paper.authors[0].resolved_fields
+    resolved = paper.authors[0]
 
     assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("Kai", "", "Mao")
     assert resolved.resolution_reason is ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT
@@ -263,13 +253,13 @@ def test_mao_kai_exact_family_first_cohort_is_not_vetoed(
     ],
 )
 def test_mao_kai_pp_abstention_contexts_still_use_reviewed_assignment(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     sources: list[SourceAuthorFields],
     focal_index: int,
 ) -> None:
     """Terminal assignment covers the two corpus contexts that PP abstains on."""
-    (paper,) = predictor.predict_batch([RoutingInstanceV3(pp_authors=sources)])
-    resolved = paper.authors[focal_index].resolved_fields
+    (paper,) = predictor.predict_batch([Instance(pp_authors=sources)])
+    resolved = paper.authors[focal_index]
 
     assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("Kai", "", "Mao")
     assert resolved.resolution_reason is ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT
@@ -285,7 +275,7 @@ def test_mao_kai_pp_abstention_contexts_still_use_reviewed_assignment(
     ],
 )
 def test_cyrillic_morphology_alone_does_not_rotate_source_fields(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     """Patronymic-like endings collide with valid given names and surnames."""
@@ -335,7 +325,7 @@ def test_cyrillic_morphology_alone_does_not_rotate_source_fields(
     ],
 )
 def test_gender_concordant_long_suffix_cyrillic_shape_rotates(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     """The censused long-suffix class is surname-given-patronymic."""
@@ -375,7 +365,7 @@ def test_gender_concordant_long_suffix_cyrillic_shape_rotates(
     ],
 )
 def test_cyrillic_rotation_declines_short_mismatched_or_ambiguous_shapes(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     resolved = _route(predictor, source)
@@ -459,7 +449,7 @@ def test_cyrillic_rotation_declines_short_mismatched_or_ambiguous_shapes(
     ],
 )
 def test_reviewed_exact_surname_given_patronymic_tuples(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     """Every full-corpus occurrence of these exact tuples agreed on roles."""
@@ -484,7 +474,7 @@ def test_reviewed_exact_surname_given_patronymic_tuples(
     ],
 )
 def test_reviewed_korean_source_tuples_preserve_roles_and_canonicalize_initials(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     """The complete exact cohorts support the supplied Korean roles and canonical output."""
@@ -500,7 +490,7 @@ def test_reviewed_korean_source_tuples_preserve_roles_and_canonicalize_initials(
 
 
 def test_reviewed_seungbo_token_is_not_split_by_chinese_hyphenation(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
 ) -> None:
     """Every full-corpus Seungbo hit was Korean, independent of surname."""
     source = SourceAuthorFields(first_name="Seungbo", last_name="Choi")
@@ -511,12 +501,12 @@ def test_reviewed_seungbo_token_is_not_split_by_chinese_hyphenation(
 
 
 def test_reviewed_spaced_korean_given_surface_is_restored_after_vys_selection(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
 ) -> None:
     source = SourceAuthorFields(first_name="So Young", last_name="Yun")
     (paper,) = predictor.predict_batch(
         [
-            RoutingInstanceV3(
+            Instance(
                 pp_authors=[source],
                 vys_other_names=[
                     "Jong An Lee",
@@ -530,7 +520,7 @@ def test_reviewed_spaced_korean_given_surface_is_restored_after_vys_selection(
         ],
     )
 
-    resolved = paper.authors[0].resolved_fields
+    resolved = paper.authors[0]
 
     assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("So Young", "", "Yun")
     assert resolved.resolution_reason is ResolutionReason.VYS_SELECTED
@@ -568,7 +558,7 @@ def test_reviewed_korean_source_assignment_inventory_matches_manual_ledger() -> 
     ids=lambda row: row["occurrence_ids"],
 )
 def test_reviewed_korean_source_orthography_is_assigned_exactly(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     row: dict[str, str],
 ) -> None:
     source = _source_from_korean_row(row)
@@ -584,7 +574,7 @@ def test_reviewed_korean_source_orthography_is_assigned_exactly(
 
 
 def test_attested_korean_hyphen_case_remains_unchanged(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
 ) -> None:
     resolved = _route(predictor, SourceAuthorFields(first_name="Yang-sook", last_name="Lee"))
 
@@ -638,7 +628,7 @@ def test_reviewed_korean_source_orthography_assignment_is_exact_tuple_scoped(
     ],
 )
 def test_reviewed_source_cleanup_patterns_exclude_nearby_names(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     """Case, position, punctuation, and usable-remainder gates stay narrow."""
@@ -666,7 +656,7 @@ def test_reviewed_source_cleanup_patterns_exclude_nearby_names(
     ],
 )
 def test_exact_metadata_patterns_are_terminal_suppressions(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     """Reviewed whole-record metadata reaches the writer as suppression."""
@@ -685,7 +675,7 @@ def test_exact_metadata_patterns_are_terminal_suppressions(
     ],
 )
 def test_dotted_initial_casing_fix_is_narrow(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
     expected: tuple[str, str, str],
 ) -> None:
@@ -702,7 +692,7 @@ def test_dotted_initial_casing_fix_is_narrow(
     ],
 )
 def test_organization_token_rules_do_not_suppress_reviewed_people(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     resolved = _route(predictor, source)
@@ -720,7 +710,7 @@ def test_organization_token_rules_do_not_suppress_reviewed_people(
     ],
 )
 def test_mojibake_tail_is_not_stripped_as_a_footnote(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     resolved = _route(predictor, source)
@@ -757,7 +747,7 @@ def test_mojibake_tail_is_not_stripped_as_a_footnote(
     ],
 )
 def test_reviewed_mixed_metadata_rows_salvage_the_person(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
     expected: tuple[str, str, str],
 ) -> None:
@@ -785,7 +775,7 @@ def test_reviewed_mixed_metadata_rows_salvage_the_person(
     ],
 )
 def test_reviewed_cleanup_does_not_corrupt_person_collisions(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     resolved = _route(predictor, source)

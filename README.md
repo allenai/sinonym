@@ -5,7 +5,7 @@
 Sinonym detects and normalizes Chinese names across several romanization
 systems. Its legacy result fields distinguish Chinese from non-Chinese names;
 the canonical APIs can also normalize recoverable person names from other
-cultures, and routed V3 provides final fields for writer integrations.
+cultures, and TIMO provides final fields for writer integrations.
 
 This was mostly written with Claude Code with extensive oversight from me... Sorry if the actual code is too AI-ish. It's fast, well-tested, and works pretty well.
 
@@ -295,20 +295,18 @@ or other affirmative evidence establishes the Chinese path.
 
 ### Routed writer integration
 
-New writer integrations should use `sinonym_routing_v3`. It accepts aligned
-structured paper authors and returns one final `resolved_fields` value for each
-author. Writers copy those fields as-is unless `resolution_action` is
+New writer integrations should use the `sinonym` TIMO model. It accepts aligned
+structured paper authors and returns one directly writable field object for
+each author. Writers copy those fields as-is unless `resolution_action` is
 `suppress`; no downstream fallback or suffix merge is needed.
 
 Source fields ordinarily preserve lineage while scalar and batch inference use
 their combined text. A small set of reviewed structured shapes can also supply
-direct evidence. See the [routed V3 writer contract](docs/routing_v3.md) for a
+direct evidence. See the [TIMO writer contract](docs/timo.md) for a
 runnable example, wire shapes, missing-value rules, decisions, and failure
 semantics.
 
-TIMO clients select `sinonym_routing_v3` for terminal writer-ready fields.
-`sinonym_v2` and `sinonym_routing_v2` retain their existing nested canonical
-schemas and provide the V3 rollout rollback path.
+TIMO clients select `sinonym` for terminal writer-ready fields.
 
 ### Conservative East Asian routing
 

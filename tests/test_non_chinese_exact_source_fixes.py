@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeAlias, cast
+from typing import TypeAlias, cast
 
 import pytest
 
@@ -14,19 +14,14 @@ from sinonym.coretypes.routing_resolution import (
     ResolutionProvenance,
     ResolutionReason,
 )
-from sinonym.timo.routing_v3 import (
-    ResolvedAuthorFields,
-    RoutingInstanceV3,
-    SourceAuthorFields,
+from sinonym.timo._resolution import (
     reviewed_exact_source_assignment,
     reviewed_exact_source_reversal,
     reviewed_fullwidth_katakana_alias_assignment,
     reviewed_katakana_middle_period_cyclic_reversal,
     reviewed_leading_jr_peer_assignment,
 )
-
-if TYPE_CHECKING:
-    from sinonym.timo.interface import RoutingPredictorV3
+from sinonym.timo.interface import Instance, Predictor, ResolvedAuthorFields, SourceAuthorFields
 
 _PATTERN_ORACLE = [
     json.loads(line)
@@ -47,20 +42,14 @@ _CANONICAL_COMMA_CREDENTIAL_INITIALS = {
 _SourceParts: TypeAlias = tuple[str | None, str | None, str | None, str | None]
 
 
-@pytest.fixture(scope="module")
-def predictor(routing_predictor_v3: RoutingPredictorV3) -> RoutingPredictorV3:
-    """Alias the shared session predictor under this module's name."""
-    return routing_predictor_v3
+def _route(predictor: Predictor, source: SourceAuthorFields):
+    (paper,) = predictor.predict_batch([Instance(pp_authors=[source])])
+    return paper.authors[0]
 
 
-def _route(predictor: RoutingPredictorV3, source: SourceAuthorFields):
-    (paper,) = predictor.predict_batch([RoutingInstanceV3(pp_authors=[source])])
-    return paper.authors[0].resolved_fields
-
-
-def _route_paper(predictor: RoutingPredictorV3, sources: list[SourceAuthorFields]):
-    (paper,) = predictor.predict_batch([RoutingInstanceV3(pp_authors=sources)])
-    return [author.resolved_fields for author in paper.authors]
+def _route_paper(predictor: Predictor, sources: list[SourceAuthorFields]):
+    (paper,) = predictor.predict_batch([Instance(pp_authors=sources)])
+    return paper.authors
 
 
 def _source(parts: _SourceParts) -> SourceAuthorFields:
@@ -143,7 +132,7 @@ def _source(parts: _SourceParts) -> SourceAuthorFields:
     ],
 )
 def test_reviewed_exact_source_assignments_are_terminal(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source_parts: tuple[str, str, str],
     expected: tuple[str, str, str],
 ) -> None:
@@ -189,7 +178,7 @@ def test_source_non_assignments_preserve_initial_spelling_byte_exact(reason: Res
     ],
 )
 def test_reviewed_exact_reversals_preserve_source_order(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     resolved = _route(predictor, source)
@@ -261,7 +250,7 @@ def test_exact_source_reversal_veto_requires_an_exact_reversal_candidate(
 
 
 def test_reviewed_agudelo_sepulveda_preserves_the_complete_source_surname(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
 ) -> None:
     source = SourceAuthorFields(first_name="Natalia", last_name="Agudelo Sep\u00falveda")
 
@@ -278,7 +267,7 @@ def test_reviewed_agudelo_sepulveda_preserves_the_complete_source_surname(
 
 
 def test_compound_surname_preservation_does_not_match_a_nearby_tuple(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
 ) -> None:
     resolved = _route(
         predictor,
@@ -304,7 +293,7 @@ def test_compound_surname_preservation_does_not_match_a_nearby_tuple(
     ],
 )
 def test_katakana_middle_period_cyclic_rotation_preserves_source(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     resolved = _route(predictor, source)
@@ -405,7 +394,7 @@ def test_reviewed_leading_jr_assignment_trims_only_the_decision_surface(
     assert source.first_name == first_name
 
 
-def test_reviewed_leading_jr_assignment_is_terminal(predictor: RoutingPredictorV3) -> None:
+def test_reviewed_leading_jr_assignment_is_terminal(predictor: Predictor) -> None:
     source = SourceAuthorFields(first_name="Jr.", middle_names="John B.", last_name="Cobb")
     peer = SourceAuthorFields(first_name="John", middle_names="B", last_name="Cobb")
 
@@ -423,7 +412,7 @@ def test_reviewed_leading_jr_assignment_is_terminal(predictor: RoutingPredictorV
 
 
 def test_reviewed_leading_jr_assignment_with_outer_whitespace_is_terminal(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
 ) -> None:
     source = SourceAuthorFields(first_name=" Jr. ", middle_names="John B.", last_name="Cobb")
     peer = SourceAuthorFields(first_name="John", middle_names="B", last_name="Cobb")
@@ -443,7 +432,7 @@ def test_reviewed_leading_jr_assignment_with_outer_whitespace_is_terminal(
 
 
 def test_reviewed_leading_jr_assignment_nfkc_normalizes_the_organization_guard(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
 ) -> None:
     source = SourceAuthorFields(
         first_name=" Jr. ",
@@ -514,7 +503,7 @@ def test_reviewed_leading_jr_assignment_excludes_nearby_controls(
 
 
 def test_reviewed_fullwidth_alias_preserves_raw_segments_and_parentheses(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
 ) -> None:
     source = SourceAuthorFields(
         last_name="\u30b7\u30a2\u30f3\u30b0\uff0c\u30df\u30f3\uff08\u30a8\u30a4\u30df\u30fc\uff09",
@@ -567,7 +556,7 @@ def test_reviewed_source_pattern_oracle_has_complete_activation_counts() -> None
 
 @pytest.mark.parametrize("case", _COMMA_CREDENTIAL_PATTERN_ORACLE, ids=lambda row: row["stable_id"])
 def test_all_reviewed_closed_comma_credential_actions_match_the_frozen_oracle(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     case: dict[str, object],
 ) -> None:
     source = _source(cast("_SourceParts", case["source"]))
@@ -604,7 +593,7 @@ def test_all_reviewed_closed_comma_credential_actions_match_the_frozen_oracle(
     ],
 )
 def test_reviewed_closed_comma_credential_rule_excludes_full_corpus_controls(
-    predictor: RoutingPredictorV3,
+    predictor: Predictor,
     source: SourceAuthorFields,
 ) -> None:
     resolved = _route(predictor, source)

@@ -99,7 +99,7 @@ def test_pp_abstain_label_fixture_reproduces_current_validation_metrics():
     """Score the pp-abstain router at the route level against production behavior.
 
     Failed PP parses route to raw-router `not_person` (the builder emits
-    `pp_success=False`). The V3 terminal writer treats that as negative batch
+    `pp_success=False`). The terminal writer treats that as negative batch
     evidence, not a conclusive claim about the source record: reviewed and scalar
     resolution may still recover a person before source passthrough.
     """

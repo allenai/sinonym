@@ -1,8 +1,8 @@
 # Scalar source-surname repartition evaluation
 
-This note records the held-out evidence for
-`RoutingV3Resolver._scalar_clean_source_surname_repartition_candidate`. The
-rule keeps a structured, multi-token source surname when scalar parsing changes
+This note records the held-out evidence for the terminal resolver's
+`_scalar_clean_source_surname_repartition_candidate` rule. The rule keeps a
+structured, multi-token source surname when scalar parsing changes
 only the boundary between that surname and the middle-name field. It refuses
 source first-name initials and initials in the peeled surname prefix.
 
@@ -38,7 +38,7 @@ corpus gain was +0.352 percentage points.
 
 The evidence supports the frozen rule for aggregate exact accuracy. It does not
 claim that the rule is regression-free. One known regression is retained in
-the routed V3 parity fixture: `production-248247190`, position 0, keeps the
+the routed parity fixture: `production-248247190`, position 0, keeps the
 publisher surname `Ngoc Mai` although the identity-level boundary is `Mai`.
 
 ## Rejected refinement: bucket 97

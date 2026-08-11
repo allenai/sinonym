@@ -6,8 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from sinonym.timo.interface import PredictorConfig, RoutingPredictorV2, RoutingPredictorV3
-from sinonym.timo.routing_v3 import RoutingInstanceV3, SourceAuthorFields
+from sinonym.timo.interface import Instance, Predictor, SourceAuthorFields
 
 if TYPE_CHECKING:
     from sinonym.coretypes import CanonicalName
@@ -18,18 +17,6 @@ def _canonical_components(canonical: CanonicalName | None) -> tuple[str, str, st
     assert canonical is not None
     normalized = canonical.normalized
     return normalized.given_name, normalized.middle_name, normalized.surname
-
-
-@pytest.fixture(scope="module")
-def routed_v2() -> RoutingPredictorV2:
-    """Return one deterministic V2 router."""
-    return RoutingPredictorV2(PredictorConfig(parallel="never"), ".")
-
-
-@pytest.fixture(scope="module")
-def routed_v3(routing_predictor_v3: RoutingPredictorV3) -> RoutingPredictorV3:
-    """Alias the shared session predictor under this module's name."""
-    return routing_predictor_v3
 
 
 @pytest.mark.parametrize(
@@ -150,29 +137,6 @@ def test_structured_hard_identity_evidence_precedes_heuristic_chinese_canonical(
 
 
 @pytest.mark.parametrize(
-    ("raw_name", "success", "expected"),
-    [
-        ("L Han", False, ("L.", "", "Han")),
-        ("BC Lee", False, ("BC", "", "Lee")),
-        ("A. S. Lee", False, ("A.", "S.", "Lee")),
-        ("A. S. Wang", True, ("A.-S.", "", "Wang")),
-        ("Wei M. Wang", True, ("Wei", "M.", "Wang")),
-    ],
-)
-def test_v2_candidate_canonical_uses_the_same_policy(
-    routed_v2: RoutingPredictorV2,
-    raw_name: str,
-    success: bool,
-    expected: tuple[str, str, str],
-) -> None:
-    """V2 may decline legacy parsing, but its canonical candidate stays usable."""
-    (result,) = routed_v2.route_pp([raw_name])
-
-    assert result.success is success
-    assert _canonical_components(result.canonical_name) == expected
-
-
-@pytest.mark.parametrize(
     ("source", "expected"),
     [
         (SourceAuthorFields(first_name="L", last_name="Han"), ("L.", "", "Han")),
@@ -184,13 +148,13 @@ def test_v2_candidate_canonical_uses_the_same_policy(
         (SourceAuthorFields(first_name="Wei M.", last_name="Wang"), ("Wei", "M.", "Wang")),
     ],
 )
-def test_v3_terminal_fields_use_the_same_policy(
-    routed_v3: RoutingPredictorV3,
+def test_terminal_fields_use_the_same_policy(
+    predictor: Predictor,
     source: SourceAuthorFields,
     expected: tuple[str, str, str],
 ) -> None:
-    """V3 writes canonical semantic fields after its terminal decision."""
-    (paper,) = routed_v3.predict_batch([RoutingInstanceV3(pp_authors=[source])])
-    resolved = paper.authors[0].resolved_fields
+    """TIMO writes canonical semantic fields after its terminal decision."""
+    (paper,) = predictor.predict_batch([Instance(pp_authors=[source])])
+    resolved = paper.authors[0]
 
     assert (resolved.first_name, resolved.middle_names, resolved.last_name) == expected

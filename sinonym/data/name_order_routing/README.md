@@ -68,16 +68,16 @@ marks the surname boundary. If an input-order parse cannot be materialized,
 the result is an explicit failure rather than a fallback to the rejected PP
 reorder.
 
-### `not_person` and V3
+### `not_person` and terminal resolution
 
 At the raw router layer, `not_person` means a required batch candidate was
 unusable. In PP-only routing that is a failed PP parse; in PP/VYS routing it can
 also mean that either candidate failed or produced an overlong garbage result.
 Direct raw-router consumers treat it as terminal.
 
-`RoutingPredictorV3` deliberately has a broader contract: it treats raw-router
+The TIMO `Predictor` deliberately has a broader contract: it treats raw-router
 `not_person` as negative batch evidence while resolving the full record. A real
-person can therefore still receive a reviewed or scalar V3 assignment. Only a
+person can therefore still receive a reviewed or scalar assignment. Only a
 reviewed non-person source pattern produces `suppress`; if no later person
 result is usable, other cases preserve the source fields.
 

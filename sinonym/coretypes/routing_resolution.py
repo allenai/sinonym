@@ -1,4 +1,4 @@
-"""Internal decision types for routed V3 name resolution.
+"""Internal decision types for terminal TIMO name resolution.
 
 The routed API exposes one operational author-field result.  These types keep
 the evidence path that produced that result separate from the action taken on
@@ -51,7 +51,7 @@ class EastAsianEvidenceReason(str, Enum):
 
 
 class ResolutionReason(str, Enum):
-    """Closed set of measurable routed V3 terminal reasons."""
+    """Closed set of measurable terminal resolution reasons."""
 
     MIXED_SCRIPT_SAFETY_SUPPRESSION = "mixed_script_safety_suppression"
     ROUTED_CJK_SAFETY_SUPPRESSION = "routed_cjk_safety_suppression"
@@ -213,7 +213,7 @@ class PreserveBaseline:
 HardScalarConstraint: TypeAlias = ApplyAssignment | PreserveBaseline
 
 
-class EvidenceFailure(RuntimeError):  # noqa: N818 - explicit V3 contract term
+class EvidenceFailure(RuntimeError):  # noqa: N818 - explicit domain term
     """Typed evidence failure that must propagate unless explicitly handled.
 
     A caller that deliberately handles this failure must emit
@@ -222,5 +222,5 @@ class EvidenceFailure(RuntimeError):  # noqa: N818 - explicit V3 contract term
     """
 
 
-class HardScalarMaterializationFailure(RuntimeError):  # noqa: N818 - explicit V3 contract term
+class HardScalarMaterializationFailure(RuntimeError):  # noqa: N818 - explicit domain term
     """A fired hard scalar rule could not produce valid person components."""

@@ -1,6 +1,6 @@
-"""Wire contracts and terminal author resolution for routed V3.
+"""Structured TIMO contracts and terminal author resolution.
 
-V3 receives structured source fields so source fallback is lossless. Scalar
+The resolver receives structured source fields so source fallback is lossless. Scalar
 and batch inference run on ``SourceAuthorFields.full_name()``, matching the
 existing ``fullNameOf`` sequence and deliberately excluding suffix. Source
 labels ordinarily preserve lineage rather than establish semantic roles, but
@@ -43,12 +43,12 @@ from sinonym.services.person_name_normalization import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from sinonym.detector import ChineseNameDetector
 
 
-LOGGER = logging.getLogger("sinonym.timo.interface")
+LOGGER = logging.getLogger(__name__)
 
 # Routed batch components must be fully Romanized. Scalar canonicals may retain
 # CJK, but a CJK surname beside Latin components is an unsafe mixed-script split.
@@ -442,7 +442,11 @@ def _structural_roman_hyphen_key(value: str | None) -> str:
 
 def _source_component_key(source: SourceAuthorFields) -> tuple[str, str, str]:
     """Normalize one source tuple exactly as the reviewed rule inventory does."""
-    return tuple(" ".join((part or "").split()).casefold() for part in (source.first_name, source.middle_names, source.last_name))
+    return (
+        " ".join((source.first_name or "").split()).casefold(),
+        " ".join((source.middle_names or "").split()).casefold(),
+        " ".join((source.last_name or "").split()).casefold(),
+    )
 
 
 def _alnum_key(value: str) -> str:
@@ -811,8 +815,8 @@ def serialize_enum_values(value):
     return value
 
 
-class RoutingV3Model(BaseModel):
-    """Strict base model for the new V3 request and response boundary."""
+class _Model(BaseModel):
+    """Strict base model for the TIMO request and response boundary."""
 
     class Config:
         extra = "forbid"
@@ -820,13 +824,15 @@ class RoutingV3Model(BaseModel):
         @staticmethod
         def schema_extra(schema: dict[str, Any], model: type[BaseModel]) -> None:
             """Expose Pydantic-v1 nullable fields as nullable JSON Schema types."""
-            for field in model.__fields__.values():
+            properties = schema["properties"]
+            for field_name, field in model.__fields__.items():
                 if field.allow_none:
-                    property_schema = schema["properties"][field.alias]
+                    property_name = field.alias if field.alias in properties else field_name
+                    property_schema = properties[property_name]
                     if "type" in property_schema:
                         property_schema["type"] = [property_schema["type"], "null"]
                     else:
-                        schema["properties"][field.alias] = {
+                        properties[property_name] = {
                             "anyOf": [property_schema, {"type": "null"}],
                         }
 
@@ -835,7 +841,7 @@ class RoutingV3Model(BaseModel):
         return serialize_enum_values(super().dict(*args, **kwargs))
 
 
-class SourceAuthorFields(RoutingV3Model):
+class SourceAuthorFields(_Model):
     """Original fields retained losslessly for lineage and reviewed shape rules."""
 
     first_name: StrictStr | None = Field(default=None)
@@ -908,7 +914,7 @@ def _reviewed_closed_comma_credential_assignment(
     return selected if selected.given_name and selected.surname else None
 
 
-class RoutingInstanceV3(RoutingV3Model):
+class Instance(_Model):
     """One paper and only the non-focal portion of its optional VYS pool.
 
     Focal names are derived from ``pp_authors`` and prepended internally.  This
@@ -916,40 +922,27 @@ class RoutingInstanceV3(RoutingV3Model):
     source authors.  All alignment is positional; duplicate text is valid and
     must never be joined back to authors by name.
 
-    ``vys_other_names=None`` means PP-only. An empty list remains distinct on
-    the request DTO but adds no non-focal evidence, so prediction also follows
-    the PP-only policy. A nonempty list enables PP/VYS routing.
+    An omitted or empty ``vys_other_names`` list selects PP-only routing. A
+    nonempty list enables PP/VYS routing.
     """
 
     pp_authors: list[SourceAuthorFields] = Field(
         description="paper authors; output remains aligned to this exact order",
     )
-    vys_other_names: list[StrictStr] | None = Field(
-        default=None,
-        description="non-focal VYS names only; None selects PP-only routing",
+    vys_other_names: list[StrictStr] = Field(
+        default_factory=list,
+        description="non-focal VYS names only; an empty list selects PP-only routing",
     )
 
     def dict(self, *args, **kwargs):
-        """Serialize the request without optional nulls to keep the wire compact."""
+        """Serialize the request without nullable source components."""
         kwargs.setdefault("exclude_none", True)
         return super().dict(*args, **kwargs)
 
     def json(self, *args, **kwargs):
-        """Serialize the request JSON without optional nulls."""
+        """Serialize request JSON without nullable source components."""
         kwargs.setdefault("exclude_none", True)
         return super().json(*args, **kwargs)
-
-    @property
-    def pp_names(self) -> list[str]:
-        """Return scalar/PP inputs derived positionally from ``pp_authors``."""
-        return [author.full_name() for author in self.pp_authors]
-
-    @property
-    def vys_pool_names(self) -> list[str] | None:
-        """Return the representational PP-prefixed pool, if VYS was supplied."""
-        if self.vys_other_names is None:
-            return None
-        return [*self.pp_names, *self.vys_other_names]
 
 
 def merge_resolved_suffix(source_suffix: str | None, selected_suffix: str | None) -> str | None:
@@ -967,7 +960,7 @@ def merge_resolved_suffix(source_suffix: str | None, selected_suffix: str | None
     return source_suffix
 
 
-class ResolvedAuthorFields(RoutingV3Model):
+class ResolvedAuthorFields(_Model):
     """One terminal, directly writable author-field result.
 
     ``PRESERVE_INPUT`` means the selected policy did not flip the derived input
@@ -1052,8 +1045,8 @@ class ResolvedAuthorFields(RoutingV3Model):
         )
 
 
-class RoutingV3Resolver:
-    """Apply V3's terminal author policy to scalar and batch candidates."""
+class _Resolver:
+    """Apply the terminal author policy to scalar and batch candidates."""
 
     def __init__(self, detector: ChineseNameDetector):
         self._detector = detector
@@ -1145,7 +1138,7 @@ class RoutingV3Resolver:
         selected_personal = [*selected.given_name.split(), *selected.middle_name.split()]
         source_personal = [*given, *middle, *surname[:-1]]
 
-        def surface_key(tokens: list[str]) -> str:
+        def surface_key(tokens: Sequence[str]) -> str:
             return _alnum_key(" ".join(tokens))
 
         if (
@@ -1335,7 +1328,7 @@ class RoutingV3Resolver:
             scalar_resolution = self._detector.routing_scalar_resolution(raw_name)
         except EvidenceFailure as error:
             LOGGER.warning(
-                "Routed V3 preserved source fields after evidence failure for %r: %s",
+                "TIMO resolution preserved source fields after evidence failure for %r: %s",
                 raw_name,
                 error,
             )
@@ -1345,7 +1338,7 @@ class RoutingV3Resolver:
             )
         except HardScalarMaterializationFailure as error:
             LOGGER.warning(
-                "Routed V3 preserved source fields after hard scalar materialization failed for %r: %s",
+                "TIMO resolution preserved source fields after hard scalar materialization failed for %r: %s",
                 raw_name,
                 error,
             )

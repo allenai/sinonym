@@ -5,7 +5,7 @@
     "production_replay": 8
   },
   "fixture_file": "requests.jsonl",
-  "fixture_sha256": "16ecba2897b122a20962e8941967d33eeac602ba3191fb310000642c9abe5891",
+  "fixture_sha256": "cd5e45c089a5c103193ac2492e40828b406cb8ca421daa614155aa84a38c45ea",
   "occurrence_count": 37,
   "production_paper_ids": [
     1654190,
@@ -17,8 +17,8 @@
     56166639,
     248247190
   ],
-  "request_set_sha256": "3cb76a8a033851ae5c062b03bb44d45fa8af047ccb6fabd3bc0d217305469e1e",
-  "schema_version": 1,
+  "request_set_sha256": "abaf1343c874731d812f119fa7c4b27d605c5c7587b433e1fda1a341b2ba009e",
+  "schema_version": 2,
   "source_artifacts": {
     "candidate_run": {
       "bytes": 25876036,
@@ -45,5 +45,6 @@
     "The May 2026 authors.parquet schema has no suffix column; production-derived source and output suffixes are null.",
     "The replay manifest recorded the 7,077,451,895-byte authors.parquet size but not its SHA-256; the frozen request file is the committed subset authority.",
     "Synthetic cases specify contract behavior and are not estimates of corpus prevalence."
-  ]
+  ],
+  "terminal_occurrence_sha256": "347bd45913039f01edcc107afda5d1d66575eeac5fcaffab099055a7b9c8f733"
 }

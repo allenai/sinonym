@@ -19,7 +19,7 @@ import os
 import pytest
 
 from sinonym import ChineseNameDetector
-from sinonym.timo.interface import PredictorConfig, RoutingPredictorV3
+from sinonym.timo.interface import Predictor, PredictorConfig
 
 
 @pytest.fixture(scope="session")
@@ -59,13 +59,13 @@ def detector():
 
 
 @pytest.fixture(scope="session")
-def routing_predictor_v3() -> RoutingPredictorV3:
-    """Session-scoped deterministic in-process routed V3 predictor.
+def predictor() -> Predictor:
+    """Session-scoped deterministic in-process TIMO predictor.
 
     The predictor is stateless after initialization; sharing one instance
-    avoids repeating detector initialization in every V3 test module.
+    avoids repeating detector initialization in every TIMO test module.
     """
-    return RoutingPredictorV3(PredictorConfig(parallel="never"), ".")
+    return Predictor(PredictorConfig(parallel="never"), ".")
 
 
 @pytest.fixture(scope="session")

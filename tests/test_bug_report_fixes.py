@@ -5,7 +5,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from sinonym import chinese_names_data
+from sinonym import ChineseNameDetector, chinese_names_data
 from sinonym.coretypes import BatchFormatPattern, NameFormat, ParseResult
 from sinonym.name_punctuation import (
     APOSTROPHE_LIKE,
@@ -21,7 +21,7 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_vys_abstain_rows,
 )
 from sinonym.services.batch_analysis import LATIN_ONLY_REPRESENTATION, BatchCandidateEntry
-from sinonym.timo.interface import Instance, Predictor, PredictorConfig, PredictorV2
+from sinonym.timo.interface import PredictorConfig
 
 _EXPECTED_APOSTROPHE_LIKE = frozenset(
     "'`\u00b4\u02b9\u02bb\u02bc\u02bd\u02be\u02bf\u02c0\u02c1"
@@ -177,25 +177,17 @@ def test_parenthetical_surname_first_hint_suppresses_guarded_given_first_bonus(d
     assert result.parsed.given_name == "Wang"
 
 
-def test_flat_timo_predict_batch_uses_batch_context():
-    predictor = Predictor(PredictorConfig(parallel="never"), "")
-    solo = predictor.predict_batch([Instance(name="Yan Li")])[0]
-    cobatched = predictor.predict_batch(
-        [
-            Instance(name=name)
-            for name in [
-                "Wang An",
-                "Yan Li",
-                "Wu Gang",
-                "Li Bao",
-            ]
-        ],
-    )[1]
+def test_raw_batch_analysis_uses_batch_context(detector):
+    solo = detector.analyze_name_batch(["Yan Li"]).results[0]
+    batch = detector.analyze_name_batch(["Wang An", "Yan Li", "Wu Gang", "Li Bao"])
+    cobatched = batch.results[1]
 
-    assert (solo.given_name, solo.surname) == ("Yan", "Li")
-    assert (cobatched.given_name, cobatched.surname) == ("Li", "Yan")
-    assert cobatched.confidence is not None
-    assert cobatched.format_pattern is not None
+    assert solo.parsed is not None
+    assert cobatched.parsed is not None
+    assert (solo.parsed.given_name, solo.parsed.surname) == ("Yan", "Li")
+    assert (cobatched.parsed.given_name, cobatched.parsed.surname) == ("Li", "Yan")
+    assert batch.individual_analyses[1].confidence is not None
+    assert batch.format_pattern is not None
 
 
 @pytest.mark.parametrize(
@@ -272,20 +264,6 @@ def test_pp_abstain_accepts_compound_surname_first_at_input_start():
     assert compound["router_reason"] == "compound_surname_first_input_start"
 
 
-def test_route_pp_preserves_latin_compound_surname_first_parse():
-    predictor = Predictor(PredictorConfig(parallel="never"), "")
-
-    au, ou, given_first = predictor.route_pp(["Au Yeung Ming", "Ou Yang Ming", "Ming Au Yeung"])
-
-    assert (au.router_prediction.value, au.given_name, au.surname) == ("pp", "Ming", "Au Yeung")
-    assert (ou.router_prediction.value, ou.given_name, ou.surname) == ("pp", "Ming", "Ou Yang")
-    assert (given_first.router_prediction.value, given_first.given_name, given_first.surname) == (
-        "abstain",
-        "Ming",
-        "Au Yeung",
-    )
-
-
 def test_internal_compound_surname_span_reports_real_width(detector):
     batch = detector.analyze_name_batch(["Wei Zhu Ge Ming"])
     result = batch.results[0]
@@ -298,34 +276,6 @@ def test_internal_compound_surname_span_reports_real_width(detector):
     assert result.parsed.given_tokens == ["Wei", "Ming"]
     assert evidence.selected_surname_position == "internal"
     assert evidence.selected_surname_token_count == 2
-
-
-def test_internal_compound_surname_fix_propagates_through_pp_only_routing():
-    predictor = Predictor(PredictorConfig(parallel="never"), "")
-
-    routed = predictor.route_pp(["Wei Zhu Ge Ming"])[0]
-
-    assert routed.router_prediction.value == "abstain"
-    assert routed.router_reason == "weak_zero_batch"
-    assert (routed.given_name, routed.middle_name, routed.surname) == ("Wei-Ming", None, "Zhu Ge")
-    assert (routed.pp.given_name, routed.pp.middle_name, routed.pp.surname) == ("Wei-Ming", None, "Zhu Ge")
-
-
-def test_internal_compound_surname_fix_propagates_to_v2_canonical_name():
-    predictor = PredictorV2(PredictorConfig(parallel="never"), "")
-
-    routed = predictor.route_pp(["Wei Zhu Ge Ming"])[0]
-
-    assert routed.router_prediction.value == "abstain"
-    assert routed.router_reason == "weak_zero_batch"
-    assert (routed.given_name, routed.middle_name, routed.surname) == ("Wei-Ming", None, "Zhu Ge")
-    assert routed.canonical_name is not None
-    assert routed.canonical_name.text == "Wei-Ming Zhu Ge"
-    assert (
-        routed.canonical_name.normalized.given_name,
-        routed.canonical_name.normalized.middle_name,
-        routed.canonical_name.normalized.surname,
-    ) == ("Wei-Ming", "", "Zhu Ge")
 
 
 @pytest.mark.parametrize(
@@ -360,17 +310,6 @@ def test_camel_case_pair_uses_as_written_frequency_before_zero_frequency_guard(d
     assert result.result == spaced.result == "Gun Wei"
     assert result.parsed.surname == spaced.parsed.surname == "Wei"
     assert result.parsed.given_name == spaced.parsed.given_name == "Gun"
-
-
-def test_route_pp_abstain_preserves_compact_compound_token_when_flipping_to_input_order():
-    predictor = Predictor(PredictorConfig(parallel="never"), "")
-
-    (routed,) = predictor.route_pp(["Ouyang K. Wei"])
-
-    assert routed.router_prediction.value == "abstain"
-    assert routed.router_reason == "weak_zero_batch"
-    assert (routed.given_name, routed.middle_name, routed.surname) == ("Ouyang", "K.", "Wei")
-    assert (routed.pp.given_name, routed.pp.middle_name, routed.pp.surname) == ("Wei", "K.", "Ouyang")
 
 
 def test_pp_vys_accepts_mixed_selected_format_as_unknown_input_order():
@@ -421,7 +360,8 @@ def test_japanese_probability_propagates_loaded_scorer_errors():
 
 
 def test_ml_classifier_programming_failure_propagates_through_detector():
-    detector = Predictor(PredictorConfig(parallel="never"), "")._detector
+    detector = ChineseNameDetector()
+    detector._ensure_initialized()
     service = detector._ethnicity_service
     service._ml_classifier._available = True
     service._ml_classifier._scorer = object()
@@ -462,15 +402,15 @@ def test_ml_classifier_runtime_failure_is_not_cached():
     assert scorer.calls == 2
 
 
-def test_timo_han_only_success_reports_full_structural_confidence():
-    predictor = Predictor(PredictorConfig(parallel="never"), "")
-
-    result = predictor.predict_batch([Instance(name="\u5de9\u4fd0")])[0]
+def test_han_only_batch_success_reports_full_structural_confidence(detector):
+    batch = detector.analyze_name_batch(["\u5de9\u4fd0"])
+    result = batch.results[0]
 
     assert result.success
-    assert result.surname == "Gong"
-    assert result.given_name == "Li"
-    assert result.confidence == 1.0
+    assert result.parsed is not None
+    assert result.parsed.surname == "Gong"
+    assert result.parsed.given_name == "Li"
+    assert batch.individual_analyses[0].confidence == 1.0
 
 
 def test_hyphenated_korean_given_name_uses_name_prior():
@@ -498,27 +438,6 @@ def test_hyphenated_korean_given_name_uses_name_prior():
 
     assert routed["router_prediction"] == "vys"
     assert routed["router_reason"] == "name_prior_korean_given_first_three_token"
-
-
-def test_route_pp_and_pp_vys_delegate_to_single_materialization_helpers(monkeypatch):
-    predictor = Predictor(PredictorConfig(), "")
-    called = []
-
-    def fake_route_pp_batch(pp_batch):
-        called.append(("pp", list(pp_batch.names)))
-        return []
-
-    def fake_route_pp_vys_batches(pp_batch, pool, n):
-        called.append(("pp_vys", list(pp_batch.names), list(pool.names), n))
-        return []
-
-    monkeypatch.setattr(predictor, "_route_pp_batch", fake_route_pp_batch)
-    monkeypatch.setattr(predictor, "_route_pp_vys_batches", fake_route_pp_vys_batches)
-
-    assert predictor.route_pp(["Li Wei"]) == []
-    assert predictor.route_pp_vys(["Li Wei"], ["Li Wei", "Zhang Ming"]) == []
-    assert called[0] == ("pp", ["Li Wei"])
-    assert called[1] == ("pp_vys", ["Li Wei"], ["Li Wei"], 1)
 
 
 def test_name_order_evidence_uses_cached_raw_tokens(detector):
