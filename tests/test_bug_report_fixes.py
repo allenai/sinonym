@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from sinonym import chinese_names_data
-from sinonym.coretypes import BatchFormatPattern, NameFormat, ParseCandidate, ParseResult
+from sinonym.coretypes import BatchFormatPattern, NameFormat, ParseResult
 from sinonym.name_punctuation import (
     APOSTROPHE_LIKE,
     HYPHEN_FOLD_TRANSLATION,
@@ -460,45 +460,6 @@ def test_ml_classifier_runtime_failure_is_not_cached():
     assert first.error_message == "ML Japanese classifier failed"
     assert second.success
     assert scorer.calls == 2
-
-
-def test_batch_format_requires_real_voter_share():
-    predictor = Predictor(PredictorConfig(parallel="never"), "")
-    service = predictor._detector._batch_analysis_service
-    surname_first = ParseCandidate(["Li"], ["Wei"], 1.0, NameFormat.SURNAME_FIRST)
-    mixed = ParseCandidate(["Unknown"], ["Name"], 1.0, NameFormat.MIXED)
-    entries = [
-        *[
-            BatchCandidateEntry(
-                f"sf-{index}",
-                [surname_first],
-                surname_first,
-                {},
-                LATIN_ONLY_REPRESENTATION,
-                raw_tokens=("Li", "Wei"),
-            )
-            for index in range(2)
-        ],
-        *[
-            BatchCandidateEntry(
-                f"mixed-{index}",
-                [mixed],
-                mixed,
-                {},
-                LATIN_ONLY_REPRESENTATION,
-                raw_tokens=("Unknown", "Name"),
-            )
-            for index in range(8)
-        ],
-    ]
-
-    pattern = service._detect_format_pattern(entries, 0.55)
-
-    assert pattern.surname_first_count == 2
-    assert pattern.voting_count == 2
-    assert pattern.total_count == 10
-    assert pattern.decision_confidence == 1.0
-    assert not pattern.threshold_met
 
 
 def test_timo_han_only_success_reports_full_structural_confidence():

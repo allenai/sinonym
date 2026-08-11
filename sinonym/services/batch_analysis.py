@@ -35,7 +35,6 @@ LONG_GIVEN_NAME_TOKEN_MIN_LENGTH = 6
 TWO_TOKEN_NAME_LENGTH = 2
 MIN_CANDIDATES_FOR_CONFIDENCE_GAP = 2
 BATCH_PARTICIPANT_MIN = 2
-BATCH_FORMAT_MIN_VOTER_SHARE = 0.5
 BATCH_FORMAT_DIRECTION_MIN_CONFIDENCE = 0.5
 HIGH_SURNAME_FREQUENCY_MIN = 1000
 MEDIUM_SURNAME_FREQUENCY_MIN = 100
@@ -55,6 +54,7 @@ class BatchAnalysisDependencies:
     min_tokens_required: int
     individual_parser: collections.abc.Callable[[str], ParseResult]
     input_failure: collections.abc.Callable[[str], ParseResult | None]
+    classification_input: collections.abc.Callable[[str], str]
     surname_resolver: SurnameResolver | None = None
 
 
@@ -173,13 +173,6 @@ class BatchVoteStats:
         """Return total format votes."""
         return self.surname_first_preferences + self.given_first_preferences
 
-    @property
-    def voter_share(self) -> float:
-        """Return the share of candidate participants that cast a format vote."""
-        if self.names_with_candidates <= 0:
-            return 0.0
-        return self.total_preferences / self.names_with_candidates
-
 
 if TYPE_CHECKING:
     from sinonym.services.ethnicity import EthnicityClassificationService
@@ -205,6 +198,7 @@ class BatchAnalysisService:
         self._min_tokens_required = dependencies.min_tokens_required
         self._individual_parser = dependencies.individual_parser
         self._input_failure_callback = dependencies.input_failure
+        self._classification_input_callback = dependencies.classification_input
         self._surname_resolver = dependencies.surname_resolver
 
     def _require_surname_resolver(self) -> SurnameResolver:
@@ -350,13 +344,15 @@ class BatchAnalysisService:
                 input_failure=input_failure,
             )
 
-        normalized_input = normalizer.apply(name)
+        classification_input = self._classification_input_callback(name)
+        normalized_input = normalizer.apply(classification_input)
+        contextual_taiwan = self._is_contextual_taiwan_name(normalized_input.roman_tokens)
         representation = self._script_representation(normalizer, normalized_input)
         common = {
             "name": name,
             "representation": representation,
             "vote_eligible": self._batch_vote_eligible(normalized_input),
-            "batch_format_locked": normalized_input.surname_first_parenthetical_hint,
+            "batch_format_locked": normalized_input.surname_first_parenthetical_hint or contextual_taiwan,
             "raw_tokens": tuple(normalized_input.roman_tokens),
             "compound_metadata": tuple(normalized_input.compound_metadata.items()),
             "spaced_compound_spans": normalized_input.spaced_compound_spans,
@@ -365,7 +361,7 @@ class BatchAnalysisService:
             return _PreparedName(format_candidates=(), individual_candidates=(), **common)
 
         format_candidates, individual_candidates, failure = self._prepare_candidate_views(
-            name,
+            classification_input,
             normalized_input,
             need_individual=need_individual,
         )
@@ -585,6 +581,8 @@ class BatchAnalysisService:
             return entry.input_failure
         if not self._is_batch_format_participant(entry.representation):
             return self._locked_representation_result(entry.name)
+        if self._is_contextual_taiwan_name(entry.raw_tokens):
+            return self._locked_representation_result(entry.name)
         if entry.best_candidate is None:
             return entry.individual_failure or ParseResult.failure("no valid parse found")
         return self._format_best_candidate(
@@ -784,10 +782,7 @@ class BatchAnalysisService:
             has_decisive_vote or has_unopposed_dominant_vote
         )
         has_enough_voters = stats.total_preferences >= BATCH_PARTICIPANT_MIN
-        has_enough_voter_share = stats.voter_share >= BATCH_FORMAT_MIN_VOTER_SHARE
-        threshold_met = (
-            decision_confidence >= format_threshold and has_confident_direction and has_enough_voters and has_enough_voter_share
-        )
+        threshold_met = decision_confidence >= format_threshold and has_confident_direction and has_enough_voters
 
         return BatchFormatPattern(
             dominant_format=dominant_format,
@@ -955,6 +950,12 @@ class BatchAnalysisService:
     def _input_failure(self, name: str) -> ParseResult | None:
         """Return an early detector-owned input failure, if one matches."""
         return self._input_failure_callback(name)
+
+    def _is_contextual_taiwan_name(self, tokens: tuple[str, ...]) -> bool:
+        """Return whether existing Taiwan evidence makes source order terminal."""
+        return bool(
+            self._ethnicity_service is not None and self._ethnicity_service.contextual_taiwan_given_parts(tokens) is not None,
+        )
 
     @staticmethod
     def _candidate_entry_participates(entry: BatchCandidateEntry) -> bool:

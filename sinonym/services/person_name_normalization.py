@@ -15,7 +15,11 @@ from dataclasses import dataclass, replace
 from enum import Enum
 
 from sinonym.coretypes import CanonicalName, NameComponents
-from sinonym.name_punctuation import PERSON_JOINER_FOLD_TRANSLATION, fold_internal_name_joiners
+from sinonym.name_punctuation import (
+    PERSON_JOINER_FOLD_TRANSLATION,
+    fold_internal_name_joiners,
+    fold_spaced_transliteration_apostrophes,
+)
 from sinonym.services.non_person import reviewed_non_person_text_pattern
 
 
@@ -72,10 +76,6 @@ class _DroppedToken:
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _HYPHEN_SPACING_RE = re.compile(r"\s*-\s*")
-_SINGLE_LETTER_APOSTROPHE_SPACING_RE = re.compile(
-    r"(?<![^\W\d_])(?P<prefix>[^\W\d_])\s*'\s*(?=[^\W\d_])",
-    re.UNICODE,
-)
 _SPACED_HYPHEN_RE = re.compile(r"\s+-\s+")
 _DUPLICATE_APOSTROPHE_RE = re.compile(r"'{2,}")
 _LEADING_STRAY_JOINER_RE = re.compile(r"^[-']\s+")
@@ -1036,7 +1036,12 @@ class PersonNameNormalizationService:
     ) -> PersonNameNormalizationResult:
         family_tokens = [replace(token, source_role="surname") for token in family_tokens]
         given_tokens = [replace(token, source_role="given") for token in given_tokens]
-        family_tokens = self._strip_leading_titles(family_tokens, dropped, preserve_ambiguous_credentials=True)
+        family_tokens = self._strip_leading_titles(
+            family_tokens,
+            dropped,
+            preserve_ambiguous_credentials=True,
+            has_external_name_context=bool(given_tokens),
+        )
         given_tokens = self._strip_leading_titles(given_tokens, dropped, preserve_ambiguous_credentials=True)
         family_tokens = self._strip_dangling_and(family_tokens, dropped)
         given_tokens = self._strip_dangling_and(given_tokens, dropped)
@@ -1060,6 +1065,7 @@ class PersonNameNormalizationService:
             given_tokens,
             dropped,
             has_external_name_context=bool(family_tokens),
+            has_external_surname_context=bool(family_tokens),
         )
         if multiple_suffixes:
             return self._invalid("name has multiple suffixes", dropped)
@@ -1162,7 +1168,7 @@ class PersonNameNormalizationService:
             normalized = unicodedata.normalize("NFC", normalized)
         normalized = _WHITESPACE_RE.sub(" ", normalized)
         normalized = _LEADING_STRAY_JOINER_RE.sub("", normalized)
-        normalized = _SINGLE_LETTER_APOSTROPHE_SPACING_RE.sub(r"\g<prefix>'", normalized)
+        normalized = fold_spaced_transliteration_apostrophes(normalized)
         normalized = _HYPHEN_SPACING_RE.sub("-", normalized)
         normalized = _DUPLICATE_APOSTROPHE_RE.sub("'", normalized)
         return normalized.strip(" \t\r\n,")
@@ -1241,9 +1247,13 @@ class PersonNameNormalizationService:
         *,
         preserve_ambiguous_credentials: bool = False,
         reviewed_credential: str | None = None,
+        has_external_name_context: bool = False,
     ) -> list[_Token]:
         remaining = list(tokens)
-        if self._has_leading_et_al_contamination(remaining):
+        if self._has_leading_et_al_contamination(
+            remaining,
+            has_external_name_context=has_external_name_context,
+        ):
             dropped.extend(_DroppedToken(token, DropReason.CONNECTOR) for token in remaining[:2])
             remaining = remaining[2:]
         stripped_title = False
@@ -1343,9 +1353,14 @@ class PersonNameNormalizationService:
         return len(tail) >= _TWO_COMPONENTS and any(not self._is_initial(token.text) for token in tail)
 
     @staticmethod
-    def _has_leading_et_al_contamination(tokens: list[_Token]) -> bool:
-        """Match only a leading citation marker followed by a two-token name."""
-        return len(tokens) >= _FOUR_COMPONENTS and PersonNameNormalizationService._is_et_al_pair(tokens[:2])
+    def _has_leading_et_al_contamination(
+        tokens: list[_Token],
+        *,
+        has_external_name_context: bool = False,
+    ) -> bool:
+        """Match a leading citation marker only when a complete name survives."""
+        minimum_width = _THREE_COMPONENTS if has_external_name_context else _FOUR_COMPONENTS
+        return len(tokens) >= minimum_width and PersonNameNormalizationService._is_et_al_pair(tokens[:2])
 
     @staticmethod
     def _is_et_al_pair(tokens: list[_Token]) -> bool:
@@ -1369,11 +1384,12 @@ class PersonNameNormalizationService:
         dropped: list[_DroppedToken],
         *,
         has_external_name_context: bool = False,
+        has_external_surname_context: bool = False,
     ) -> tuple[list[_Token], str, _Token | None, bool]:
         remaining = list(tokens)
         suffix = ""
         suffix_token: _Token | None = None
-        minimum_et_al_width = _THREE_COMPONENTS if has_external_name_context else _FOUR_COMPONENTS
+        minimum_et_al_width = _THREE_COMPONENTS
         while len(remaining) >= _FOUR_COMPONENTS:
             credential_width = self._trailing_spaced_credential_width(remaining)
             if not credential_width:
@@ -1411,8 +1427,8 @@ class PersonNameNormalizationService:
             surname_like = self._compact_key(token.text) in _SURNAME_LIKE_SUFFIX_KEYS
             # "Senior"/"Junior" is a suffix only if a surname survives its removal:
             # at least two non-initial tokens must precede it (a given AND a surname),
-            # or an external name context already supplies the surname.
-            surname_like_ok = has_external_name_context or any(not self._is_initial(other.text) for other in remaining[1:-1])
+            # or an external surname context supplies it directly.
+            surname_like_ok = has_external_surname_context or self._has_local_surname_before_boundary(remaining)
             accepted_suffix = bool(
                 candidate and (not is_roman or has_complete_name) and (not surname_like or surname_like_ok),
             )
@@ -1425,6 +1441,13 @@ class PersonNameNormalizationService:
                 continue
             break
         return remaining, suffix, suffix_token, False
+
+    def _has_local_surname_before_boundary(self, remaining: list[_Token]) -> bool:
+        """Return whether removing the boundary token leaves surname material."""
+        surviving = remaining[:-1]
+        if any(token.source_role for token in remaining):
+            return any(token.source_role == "surname" and not self._is_initial(token.text) for token in surviving)
+        return any(not self._is_initial(token.text) for token in surviving[1:])
 
     @staticmethod
     def _split_attached_terminal_jr(token: _Token) -> tuple[_Token, _Token] | None:
@@ -2257,7 +2280,7 @@ class PersonNameNormalizationService:
     def _looks_like_two_complete_names(self, left: list[_Token], right: list[_Token]) -> bool:
         if len(left) < _TWO_COMPONENTS or len(right) < _TWO_COMPONENTS:
             return False
-        if any(self._particle_key(token.text) in _FAMILY_PARTICLES for token in left[:-1]):
+        if any(self._particle_key(token.text) in _FAMILY_PARTICLES for token in [*left[:-1], *right[:-1]]):
             return False
         return not any(self._is_initial(token.text) for token in [*left, *right])
 

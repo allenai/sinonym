@@ -350,6 +350,7 @@ class ChineseNameDetector:
                 # analysis; V3 performs its sole scalar resolution later.
                 individual_parser=self._normalize_chinese_name,
                 input_failure=self._initial_input_failure,
+                classification_input=self._chinese_classification_input,
                 surname_resolver=surname_resolver,
             ),
         )

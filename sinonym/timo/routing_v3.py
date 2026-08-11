@@ -823,7 +823,12 @@ class RoutingV3Model(BaseModel):
             for field in model.__fields__.values():
                 if field.allow_none:
                     property_schema = schema["properties"][field.alias]
-                    property_schema["type"] = [property_schema["type"], "null"]
+                    if "type" in property_schema:
+                        property_schema["type"] = [property_schema["type"], "null"]
+                    else:
+                        schema["properties"][field.alias] = {
+                            "anyOf": [property_schema, {"type": "null"}],
+                        }
 
     def dict(self, *args, **kwargs):
         """Return plain Python serialization values for enum fields."""

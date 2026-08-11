@@ -80,9 +80,15 @@ def main() -> None:
 
     con = duckdb.connect()
     con.execute("PRAGMA threads=6")
-    total, dnm, tocc = con.execute(f"select count(*), count(distinct nm), sum(occ) from {src}").fetchone()
-    cd, cocc = con.execute(f"select count(*), sum(occ) from {src} where chinese=true").fetchone()
-    den = con.execute(f"select sum(occ) from {src} where chinese=false").fetchone()[0] or 0
+    total, dnm, tocc = con.execute(
+        f"select count(*), count(distinct nm), coalesce(sum(occ), 0) from {src}",
+    ).fetchone()
+    cd, cocc = con.execute(
+        f"select count(*), coalesce(sum(occ), 0) from {src} where chinese=true",
+    ).fetchone()
+    den = con.execute(
+        f"select coalesce(sum(occ), 0) from {src} where chinese=false",
+    ).fetchone()[0]
     print(f"file: {parquet}")
     print(f"rows (production splits): {total:,}   distinct name strings: {dnm:,}   total occ: {tocc:,}")
     print(f"chinese: splits={cd:,} occ={cocc:,}")

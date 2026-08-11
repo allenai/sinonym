@@ -76,6 +76,11 @@ class NameFormattingService:
         - surname_str / given_str: component strings as used in full_formatted_name
         - middle_tokens_final: canonical standalone initials outside the Chinese given span
         """
+        surname_tokens = [token.strip("'") for token in surname_tokens]
+        given_tokens = [token.strip("'") for token in given_tokens]
+        if not all(surname_tokens) or not all(given_tokens):
+            raise ValueError("name token invalid")
+
         apostrophe_lineage = {
             token: lineage
             for token in given_tokens
@@ -208,8 +213,9 @@ class NameFormattingService:
                 formatted_part_tokens.append(capitalized_parts)
                 initial_parts.append(False)
             elif clean_part.casefold() in REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS:
-                formatted_part_tokens.append([clean_part])
-                formatted_parts.append(clean_part)
+                capitalized = StringManipulationUtils.capitalize_name_part(clean_part)
+                formatted_part_tokens.append([capitalized])
+                formatted_parts.append(capitalized)
                 initial_parts.append(False)
             elif "-" in clean_part:
                 sub_parts = StringManipulationUtils.split_and_clean_hyphens(clean_part)
@@ -320,14 +326,10 @@ class NameFormattingService:
         if len(surname_tokens) != 1 or len(given_tokens) != 1:
             return False
         abbreviation = given_tokens[0]
-        folded_abbreviation = self._normalizer.norm_light(abbreviation)
         surname_key = self._normalizer.norm_light(surname_tokens[0])
         return bool(
             self._data.get_surname_freq_as_written(surname_key) >= DOMINANT_CHINESE_SURNAME_FREQ_MIN
-            and abbreviation.isalpha()
-            and 2 <= len(abbreviation) <= 3  # noqa: PLR2004
-            and not self._normalizer.is_attested_remapped_given_syllable(abbreviation)
-            and not any(character in "aeiou" for character in folded_abbreviation),
+            and self._normalizer.is_vowelless_compact_initial(abbreviation),
         )
 
     @staticmethod

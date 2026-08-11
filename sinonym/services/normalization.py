@@ -13,7 +13,11 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Literal
 
 from sinonym.chinese_names_data import VALID_CHINESE_RIMES
-from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE, fold_internal_name_joiners
+from sinonym.name_punctuation import (
+    ROMAN_HYPHEN_LIKE,
+    fold_internal_name_joiners,
+    fold_spaced_transliteration_apostrophes,
+)
 from sinonym.text_processing import CompoundDetector, TextNormalizer, TextPreprocessor
 from sinonym.text_processing.text_normalizer import strip_name_variation_selectors
 from sinonym.utils.string_manipulation import StringManipulationUtils
@@ -49,16 +53,18 @@ class LazyNormalizationMap:
         object.__setattr__(self, "_normalizer", normalizer)
         object.__setattr__(self, "_cache", ThreadLocalCache())
 
-    def get(self, token: str, default: str | None = None):
-        """Get normalized value for token, computing lazily with thread-local cache."""
+    def get(self, token: str, default: str | None = None) -> str | None:
+        """Return a normalized member value, or ``default`` for a missing key."""
+        if token not in self:
+            return default
+        return self[token]
+
+    def __getitem__(self, token: str) -> str:
+        """Normalize any key lazily, preserving the legacy indexing contract."""
         return self._cache.get_or_compute(
             token,
             lambda: self._normalizer._text_normalizer.normalize_token(token),
         )
-
-    def __getitem__(self, token: str) -> str:
-        """Dict-like access."""
-        return self.get(token)
 
     def __contains__(self, token: str) -> bool:
         """Check if token is in the original tokens."""
@@ -169,6 +175,16 @@ class NormalizationService:
         mapped = self.norm(token)
         return bool(self._data and mapped != light and self._data.is_given_name(mapped))
 
+    def is_vowelless_compact_initial(self, token: str) -> bool:
+        """Return whether ``token`` has the reviewed 2-3 letter initial shape."""
+        folded = self.norm_light(token)
+        return bool(
+            token.isalpha()
+            and 2 <= len(folded) <= 3
+            and not any(character in "aeiou" for character in folded)
+            and not self.is_attested_remapped_given_syllable(token),
+        )
+
     def contains_cjk(self, text: str) -> bool:
         """Return whether text contains any configured CJK character."""
         return bool(self._config.cjk_pattern.search(text))
@@ -231,6 +247,7 @@ class NormalizationService:
 
         # Phase 4: Preserve authored name joiners before the generic separator pass.
         cleaned = fold_internal_name_joiners(cleaned, self._config.roman_punctuation_fold_tr)
+        cleaned = fold_spaced_transliteration_apostrophes(cleaned)
         raw_tokens = self._config.sep_pattern.sub(" ", cleaned).split()
         tokens = tuple(t for t in raw_tokens if t and not all(c in string.punctuation for c in t))
 
@@ -279,6 +296,10 @@ class NormalizationService:
                 return None
         return tokens
 
+    def _is_supported_roman_letter(self, character: str) -> bool:
+        """Return whether one character belongs to the configured Roman ranges."""
+        return character.isalpha() and not self._config.clean_roman_pattern.search(character)
+
     def _process_mixed_tokens(self, tokens: list[str], is_all_chinese: bool = False) -> list[str]:
         """Extract existing mixed token processing logic with enhanced all-Chinese support."""
         mix = []
@@ -287,7 +308,7 @@ class NormalizationService:
         cjk_cache = {}
 
         for token in tokens:
-            if self._config.cjk_pattern.search(token) and self._config.ascii_alpha_pattern.search(token):
+            if self._config.cjk_pattern.search(token) and any(self._is_supported_roman_letter(c) for c in token):
                 has_compact_mixed_token = True
                 # Split into contiguous script runs so source order survives
                 # romanization (for example, both ``张Wei`` and ``Wei张``).
@@ -298,7 +319,7 @@ class NormalizationService:
                         cjk_cache[c] = bool(self._config.cjk_pattern.search(c))
 
                     is_han = cjk_cache[c]
-                    if not is_han and not (c.isascii() and c.isalpha()):
+                    if not is_han and not self._is_supported_roman_letter(c):
                         continue
                     if current_run and is_han != current_run_is_han:
                         mix.append("".join(current_run))

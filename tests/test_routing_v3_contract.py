@@ -19,6 +19,7 @@ from sinonym.timo.interface import RoutedPaperPredictionV3
 from sinonym.timo.routing_v3 import (
     ResolvedAuthorFields,
     RoutingInstanceV3,
+    RoutingV3Model,
     SourceAuthorFields,
     merge_resolved_suffix,
 )
@@ -93,6 +94,34 @@ def test_v3_json_schemas_match_the_nullable_runtime_contract() -> None:
     assert {resolved_properties[name]["type"] for name in ("first_name", "middle_names", "last_name")} == {
         "string",
     }
+
+
+def test_v3_nullable_reference_schemas_use_any_of() -> None:
+    """Nullable enum and nested-model fields generate valid reference schemas."""
+
+    class NullableEnumModel(RoutingV3Model):
+        reason: ResolutionReason | None = None
+
+    class NullableNestedModel(RoutingV3Model):
+        source: SourceAuthorFields | None = None
+
+    enum_property = NullableEnumModel.schema()["properties"]["reason"]
+    nested_property = NullableNestedModel.schema()["properties"]["source"]
+
+    assert enum_property == {
+        "anyOf": [
+            {"$ref": "#/definitions/ResolutionReason"},
+            {"type": "null"},
+        ],
+    }
+    assert nested_property == {
+        "anyOf": [
+            {"$ref": "#/definitions/SourceAuthorFields"},
+            {"type": "null"},
+        ],
+    }
+    assert NullableEnumModel(reason=ResolutionReason.HANDLED_EVIDENCE_FAILURE).reason is not None
+    assert NullableNestedModel(source=None).source is None
 
 
 def test_full_name_matches_current_flattening_and_excludes_suffix() -> None:

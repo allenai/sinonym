@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from pydantic import BaseModel, BaseSettings, Field, root_validator
 
@@ -20,6 +20,9 @@ from sinonym.timo.routing_v3 import (
     routed_components_leak_cjk,
     serialize_enum_values,
 )
+
+if TYPE_CHECKING:
+    from sinonym.services.batch_analysis import RelatedBatchParseResult
 
 
 class _PoolPreconditionError(ValueError):
@@ -660,6 +663,35 @@ class Predictor:
             message = "vys_pool_names must start with the paper's authors: vys_pool_names[:len(pp_names)] == pp_names"
             raise _PoolPreconditionError(message)
 
+    def _analyze_routing_instances(
+        self,
+        instances: list[RoutingInstance],
+    ) -> tuple[list["RelatedBatchParseResult"], list[tuple[int, int]], list[int]]:
+        """Analyze nonempty V1/V2 routing instances through one shared schedule."""
+        requests: list[tuple[list[str], list[str] | None]] = []
+        plans: list[tuple[int, int]] = []
+        empty_indices: list[int] = []
+        for instance_index, instance in enumerate(instances):
+            if not instance.pp_names:
+                empty_indices.append(instance_index)
+                continue
+
+            vys_pool_names = instance.vys_pool_names or None
+            if vys_pool_names is not None:
+                self._validate_vys_pool_names(instance.pp_names, vys_pool_names)
+            plans.append((instance_index, len(requests)))
+            requests.append((instance.pp_names, vys_pool_names))
+
+        batch_results = self._detector._analyze_related_batch_requests(  # noqa: SLF001
+            requests,
+            parallel=self._config.parallel,
+            min_parallel_batches=self._config.mp_min_parallel_batches,
+            max_workers=self._config.mp_max_workers,
+            chunk_size=self._config.mp_chunk_size,
+            mp_start_method=self._config.mp_start_method,
+        )
+        return batch_results, plans, empty_indices
+
     def _route_pp_vys_batches(
         self,
         pp_batch: BatchParseResult,
@@ -795,29 +827,9 @@ class RoutingPredictor(Predictor):
         instances: list[RoutingInstance],
     ) -> list[RoutedPaperPrediction]:
         predictions: list[RoutedPaperPrediction | None] = [None] * len(instances)
-        requests: list[tuple[list[str], list[str] | None]] = []
-        plans: list[tuple[int, int]] = []
-
-        for instance_index, inst in enumerate(instances):
-            if not inst.pp_names:
-                predictions[instance_index] = RoutedPaperPrediction(authors=[])
-                continue
-
-            vys_pool_names = inst.vys_pool_names or None
-            if vys_pool_names is not None:
-                self._validate_vys_pool_names(inst.pp_names, vys_pool_names)
-            request_index = len(requests)
-            requests.append((inst.pp_names, vys_pool_names))
-            plans.append((instance_index, request_index))
-
-        batch_results = self._detector._analyze_related_batch_requests(  # noqa: SLF001
-            requests,
-            parallel=self._config.parallel,
-            min_parallel_batches=self._config.mp_min_parallel_batches,
-            max_workers=self._config.mp_max_workers,
-            chunk_size=self._config.mp_chunk_size,
-            mp_start_method=self._config.mp_start_method,
-        )
+        batch_results, plans, empty_indices = self._analyze_routing_instances(instances)
+        for instance_index in empty_indices:
+            predictions[instance_index] = RoutedPaperPrediction(authors=[])
 
         for instance_index, request_index in plans:
             instance = instances[instance_index]
@@ -1220,29 +1232,9 @@ class RoutingPredictorV2(PredictorV2):
         instances: list[RoutingInstance],
     ) -> list[RoutedPaperPredictionV2]:
         predictions: list[RoutedPaperPredictionV2 | None] = [None] * len(instances)
-        requests: list[tuple[list[str], list[str] | None]] = []
-        plans: list[tuple[int, int]] = []
-
-        for instance_index, instance in enumerate(instances):
-            if not instance.pp_names:
-                predictions[instance_index] = RoutedPaperPredictionV2(authors=[])
-                continue
-
-            vys_pool_names = instance.vys_pool_names or None
-            if vys_pool_names is not None:
-                self._validate_vys_pool_names(instance.pp_names, vys_pool_names)
-            request_index = len(requests)
-            requests.append((instance.pp_names, vys_pool_names))
-            plans.append((instance_index, request_index))
-
-        batch_results = self._detector._analyze_related_batch_requests(  # noqa: SLF001
-            requests,
-            parallel=self._config.parallel,
-            min_parallel_batches=self._config.mp_min_parallel_batches,
-            max_workers=self._config.mp_max_workers,
-            chunk_size=self._config.mp_chunk_size,
-            mp_start_method=self._config.mp_start_method,
-        )
+        batch_results, plans, empty_indices = self._analyze_routing_instances(instances)
+        for instance_index in empty_indices:
+            predictions[instance_index] = RoutedPaperPredictionV2(authors=[])
 
         for instance_index, request_index in plans:
             instance = instances[instance_index]

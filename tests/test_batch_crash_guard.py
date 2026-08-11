@@ -88,8 +88,3 @@ def test_missing_batch_service_is_an_invariant_failure(detector, monkeypatch):
 
     with pytest.raises(RuntimeError, match="batch analysis service is not initialized"):
         detector.analyze_name_batch(BATCH)
-
-
-def test_strict_public_twin_is_removed(detector):
-    """There is one public failure policy for plural batch analysis."""
-    assert not hasattr(detector, "analyze_name_batches_strict")

@@ -27,6 +27,7 @@ from sinonym.services.batch_analysis import (
     BatchCandidateEntry,
     SurnameEndpointSpan,
 )
+from tests._korean_atomic_cases import ATOMIC_KOREAN_GIVEN_CASES, AtomicKoreanGivenCase
 
 # ===================================================================
 # BATCH FORMAT DETECTION TESTS
@@ -447,23 +448,20 @@ def test_parenthetical_surname_hint_votes_without_receiving_batch_format(detecto
 
 
 @pytest.mark.parametrize(
-    ("raw_name", "expected"),
-    [
-        ("Lee Young", "Young Lee"),
-        ("So Young Yun", "Young-Yun So"),
-        ("Lee Hoon", "Hoon Lee"),
-        ("Choi Seon", "Seon Choi"),
-        ("Hana Choi", "Hana Choi"),
-        ("Choi Seungbo", "Seungbo Choi"),
-    ],
+    "case",
+    ATOMIC_KOREAN_GIVEN_CASES,
+    ids=lambda case: case.raw_name,
 )
-def test_reviewed_korean_given_tokens_remain_atomic_in_scalar_and_batch(detector, raw_name, expected):
+def test_reviewed_korean_given_tokens_remain_atomic_in_scalar_and_batch(
+    detector,
+    case: AtomicKoreanGivenCase,
+) -> None:
     """The shared formatter must not reinterpret complete Korean tokens as pinyin pieces."""
-    scalar = detector.normalize_name(raw_name)
-    batch = detector.analyze_name_batch([raw_name])
+    scalar = detector.normalize_name(case.raw_name)
+    batch = detector.analyze_name_batch([case.raw_name])
 
-    assert scalar.result == expected
-    assert batch.results[0].result == expected
+    assert scalar.result == case.formatted_name
+    assert batch.results[0].result == case.formatted_name
     assert scalar.canonical_name is not None
     assert batch.results[0].canonical_name is not None
     assert scalar.canonical_name.normalized == batch.results[0].canonical_name.normalized
@@ -493,6 +491,7 @@ def test_name_order_evidence_does_not_normalize_rejected_input():
             min_tokens_required=2,
             individual_parser=lambda _name: ParseResult.failure("unexpected individual parse"),
             input_failure=lambda _name: failure,
+            classification_input=lambda name: name,
         ),
     )
 

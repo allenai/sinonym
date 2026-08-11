@@ -336,12 +336,7 @@ class EthnicityClassificationService:
         folded = self._normalizer.norm_light(part.rstrip("."))
         return bool(
             (len(folded) == 1 and folded.isalpha())
-            or (
-                part.isalpha()
-                and 2 <= len(folded) <= 3
-                and not any(character in "aeiou" for character in folded)
-                and not self._normalizer.is_attested_remapped_given_syllable(part)
-            ),
+            or self._normalizer.is_vowelless_compact_initial(part),
         )
 
     def _has_wade_giles_apostrophe_surname(self, tokens: tuple[str, ...]) -> bool:
@@ -358,10 +353,7 @@ class EthnicityClassificationService:
         abbreviation = tokens[1]
         return bool(
             self._surname_resolver.evidence_is_dominant_surname(tokens[0])
-            and abbreviation.isalpha()
-            and 2 <= len(abbreviation) <= 3
-            and not self._normalizer.is_attested_remapped_given_syllable(abbreviation)
-            and not any(character.lower() in "aeiou" for character in abbreviation),
+            and self._normalizer.is_vowelless_compact_initial(abbreviation),
         )
 
     @staticmethod

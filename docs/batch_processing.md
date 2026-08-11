@@ -65,7 +65,6 @@ The detected direction is applied only when all of these conditions hold:
 
 - the submitted list contains at least `minimum_batch_size` names;
 - at least two eligible names cast a direction vote;
-- enough candidate-bearing participants cast a vote;
 - the direction is unambiguous and its `decision_confidence` is greater than
   `0.5`; and
 - `decision_confidence >= format_threshold`.

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 DOMINANT_CHINESE_SURNAME_FREQ_MIN = 10_000.0
+_PARSER_KEY_CACHE_SIZE = 4_096
 _WADE_GILES_APOSTROPHE_SURNAME_RE = re.compile(r"(?:ch|ts|tz|k|p|t)'[a-z]+", re.IGNORECASE)
 _APOSTROPHE_TRANSLATION = str.maketrans(
     {
@@ -41,6 +43,7 @@ class SurnameResolver:
     def __init__(self, data: NameDataStructures, normalizer: NormalizationService) -> None:
         self._data = data
         self._normalizer = normalizer
+        self._cached_parser_key = lru_cache(maxsize=_PARSER_KEY_CACHE_SIZE)(self._derive_parser_key)
 
     def parser_frequency(self, surname_tokens: Sequence[str]) -> float:
         """Return surname frequency under the parser-strict lookup policy."""
@@ -108,7 +111,10 @@ class SurnameResolver:
     def _parser_key(self, surname_tokens: Sequence[str]) -> str:
         """Derive the parser-strict surname key used by parse scoring."""
         self._require_tokens(surname_tokens)
-        cache_key = tuple(surname_tokens)
+        return self._cached_parser_key(tuple(surname_tokens))
+
+    def _derive_parser_key(self, cache_key: tuple[str, ...]) -> str:
+        """Derive an uncached parser key from an immutable token sequence."""
         if len(cache_key) == 1:
             return self._single_parser_key(cache_key[0])
         normalized_tokens = [self._normalizer.norm(token) for token in cache_key]

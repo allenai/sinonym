@@ -23,6 +23,7 @@ from sinonym.timo.interface import (
     RoutingPredictorV2,
     TimoModel,
 )
+from tests._korean_atomic_cases import ATOMIC_KOREAN_GIVEN_CASES, AtomicKoreanGivenCase
 
 V1_SCHEMA_FINGERPRINTS = {
     "Prediction": "32ec52f7cae59d443bd8c221db6a7fc8f06dd5658978e54d264f919820807775",
@@ -315,28 +316,20 @@ def test_timo_config_exposes_separate_v2_variants() -> None:
 
 
 @pytest.mark.parametrize(
-    ("raw_name", "expected_given", "expected_surname"),
-    [
-        ("Lee Young", "Young", "Lee"),
-        ("So Young Yun", "Young-Yun", "So"),
-        ("Lee Hoon", "Hoon", "Lee"),
-        ("Choi Seon", "Seon", "Choi"),
-        ("Hana Choi", "Hana", "Choi"),
-        ("Choi Seungbo", "Seungbo", "Choi"),
-    ],
+    "case",
+    ATOMIC_KOREAN_GIVEN_CASES,
+    ids=lambda case: case.raw_name,
 )
 def test_v2_keeps_reviewed_korean_given_tokens_atomic(
     predictor_v2: PredictorV2,
-    raw_name: str,
-    expected_given: str,
-    expected_surname: str,
+    case: AtomicKoreanGivenCase,
 ) -> None:
-    (result,) = predictor_v2.predict_batch([Instance(name=raw_name)])
+    (result,) = predictor_v2.predict_batch([Instance(name=case.raw_name)])
 
     assert result.success
-    assert (result.given_name, result.middle_name, result.surname) == (expected_given, None, expected_surname)
+    assert (result.given_name, result.middle_name, result.surname) == (case.formatted_given, None, case.surname)
     assert result.canonical_name is not None
     assert (result.canonical_name.normalized.given_name, result.canonical_name.normalized.surname) == (
-        expected_given,
-        expected_surname,
+        case.formatted_given,
+        case.surname,
     )

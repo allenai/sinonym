@@ -15,6 +15,7 @@ generic person normalizer's older Unicode-name oracle remains separate so
 sharing this module does not change that path's deployed behavior.
 """
 
+import re
 from collections.abc import Mapping
 
 APOSTROPHE_LIKE = frozenset(
@@ -121,6 +122,11 @@ NAME_JOINER_DELETE_TRANSLATION = str.maketrans(
     dict.fromkeys(APOSTROPHE_LIKE | _NORMALIZATION_HYPHEN_DELETE, None),
 )
 
+_SPACED_APOSTROPHE_JOIN_RE = re.compile(
+    r"(?P<prefix>[^\s']*[^\W\d_])(?P<before>\s*)'(?P<after>\s*)(?P<tail>[^\s]+)",
+    re.UNICODE,
+)
+
 
 def fold_internal_name_joiners(value: str, translation: Mapping[int, str | None]) -> str:
     """Fold configured joiners while removing paired outer delimiter runs.
@@ -142,3 +148,24 @@ def fold_internal_name_joiners(value: str, translation: Mapping[int, str | None]
                 content_end -= 1
             value = f"{value[:first_text]} {value[content_start : content_end + 1]} {value[last_text + 1 :]}"
     return value.translate(translation)
+
+
+def fold_spaced_transliteration_apostrophes(value: str) -> str:
+    """Join a separated transliteration apostrophe to its adjacent letters.
+
+    Paired quoted tokens and the standalone Dutch ``'t`` particle retain their
+    token boundaries. The caller must first fold supported apostrophe variants
+    to ASCII.
+    """
+
+    def join(match: re.Match[str]) -> str:
+        tail = match.group("tail")
+        before = match.group("before")
+        after = match.group("after")
+        if not tail[0].isalpha() or "'" in tail:
+            return match.group(0)
+        if before and not after and tail.casefold() == "t":
+            return match.group(0)
+        return f"{match.group('prefix')}'{tail}"
+
+    return _SPACED_APOSTROPHE_JOIN_RE.sub(join, value)

@@ -21,6 +21,7 @@ from sinonym.timo.routing_v3 import (
     SourceAuthorFields,
     reviewed_initials_comma_reversal,
 )
+from tests._korean_atomic_cases import ATOMIC_KOREAN_GIVEN_CASES, AtomicKoreanGivenCase
 
 
 @pytest.fixture
@@ -237,25 +238,18 @@ def test_atomic_korean_token_repair_does_not_change_a_longer_hyphenated_name(
 
 
 @pytest.mark.parametrize(
-    ("source", "expected_first", "expected_last"),
-    [
-        (SourceAuthorFields(first_name="Young", last_name="Lee"), "Young", "Lee"),
-        (SourceAuthorFields(first_name="Young Yun", last_name="So"), "Young Yun", "So"),
-        (SourceAuthorFields(first_name="Hoon", last_name="Lee"), "Hoon", "Lee"),
-        (SourceAuthorFields(first_name="Seon", last_name="Choi"), "Seon", "Choi"),
-        (SourceAuthorFields(first_name="Hana", last_name="Choi"), "Hana", "Choi"),
-        (SourceAuthorFields(first_name="SeungBo", last_name="Choi"), "SeungBo", "Choi"),
-    ],
+    "case",
+    ATOMIC_KOREAN_GIVEN_CASES,
+    ids=lambda case: case.raw_name,
 )
 def test_v3_uses_the_shared_atomic_korean_given_tokens(
     predictor: RoutingPredictorV3,
-    source: SourceAuthorFields,
-    expected_first: str,
-    expected_last: str,
+    case: AtomicKoreanGivenCase,
 ) -> None:
+    source = SourceAuthorFields(first_name=case.source_given, last_name=case.surname)
     (result,) = _route(predictor, [source])
 
-    assert (result.resolved_fields.first_name, result.resolved_fields.last_name) == (expected_first, expected_last)
+    assert (result.resolved_fields.first_name, result.resolved_fields.last_name) == (case.source_given, case.surname)
 
 
 @pytest.mark.parametrize(
