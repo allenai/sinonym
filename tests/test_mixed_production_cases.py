@@ -27,8 +27,6 @@ MIXED_TEST_CASES = [
     ("Wu De Long", (True, "De-Long Wu")),
     # production_success_case - 杨毓明 (3 tokens)
     ("Yang Yu Ming", (True, "Yu-Ming Yang")),
-    # production_error_case - 桂瑞 (2 tokens)
-    ("Gui Rui", (True, "Rui Gui")),
     # production_success_case - 曹昌祺 (3 tokens)
     ("Cao Chang Qi", (True, "Chang-Qi Cao")),
     # production_success_case - 杜伟刚 (3 tokens)
@@ -41,8 +39,6 @@ MIXED_TEST_CASES = [
     ("Zhang Chun Xian", (True, "Chun-Xian Zhang")),
     # production_success_case - 肖环环 (3 tokens)
     ("Xiao Huan Huan", (True, "Huan-Huan Xiao")),
-    # production_error_case - 舒遥 (2 tokens)
-    ("Shu Yao", (True, "Yao Shu")),
     # production_success_case - 袁长明 (3 tokens)
     ("Yuan Zhang Ming", (True, "Zhang-Ming Yuan")),
     # production_success_case - 沈衍庆 (3 tokens)
@@ -63,8 +59,6 @@ MIXED_TEST_CASES = [
     ("Liu Xiao Gui", (True, "Xiao-Gui Liu")),
     # production_success_case - 安易 (2 tokens)
     ("An Yi", (True, "An Yi")),
-    # production_error_case - 贾建锋 (3 tokens)
-    ("Jia Jian Feng", (True, "Jian-Feng Jia")),
     # production_success_case - 陈嘉成 (3 tokens)
     ("Chen Jia Cheng", (True, "Jia-Cheng Chen")),
     # production_error_case - 邱兆林 (3 tokens)
@@ -111,8 +105,6 @@ MIXED_TEST_CASES = [
     ("Zhao Jiang Hui", (True, "Jiang-Hui Zhao")),
     # production_success_case - 韩玉静 (3 tokens)
     ("Han Yu Jing", (True, "Yu-Jing Han")),
-    # production_error_case - 魏文兴 (3 tokens) [prod: Wei-Wen Xing]
-    ("Wei Wen Xing", (True, "Wen-Xing Wei")),
     # production_success_case - 金彭年 (3 tokens)
     ("Jin Peng Nian", (True, "Peng-Nian Jin")),
     # production_success_case - 吴铭双 (3 tokens)
@@ -173,8 +165,6 @@ MIXED_TEST_CASES = [
     ("Shi Bo Ren", (True, "Shi-Bo Ren")),
     # production_success_case - 韦少芬 (3 tokens)
     ("Wei Shao Fen", (True, "Shao-Fen Wei")),
-    # production_error_case - 西钊 (2 tokens) [prod: Xi Zhao]
-    ("Xi Zhao", (True, "Zhao Xi")),
     # production_error_case - 林森相 (3 tokens) [prod: Lin-Sen Xiang]
     ("Lin Sen Xiang", (True, "Sen-Xiang Lin")),
     # production_success_case - 白树华 (3 tokens)

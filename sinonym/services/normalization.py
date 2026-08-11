@@ -13,7 +13,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Literal
 
 from sinonym.chinese_names_data import VALID_CHINESE_RIMES
-from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
+from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE, fold_internal_name_joiners
 from sinonym.text_processing import CompoundDetector, TextNormalizer, TextPreprocessor
 from sinonym.text_processing.text_normalizer import strip_name_variation_selectors
 from sinonym.utils.string_manipulation import StringManipulationUtils
@@ -163,6 +163,12 @@ class NormalizationService:
         """
         return self._text_normalizer.normalize_token_light(token)
 
+    def is_attested_remapped_given_syllable(self, token: str) -> bool:
+        """Return whether romanization remaps ``token`` to an attested given syllable."""
+        light = self.norm_light(token)
+        mapped = self.norm(token)
+        return bool(self._data and mapped != light and self._data.is_given_name(mapped))
+
     def contains_cjk(self, text: str) -> bool:
         """Return whether text contains any configured CJK character."""
         return bool(self._config.cjk_pattern.search(text))
@@ -206,7 +212,9 @@ class NormalizationService:
         # Phase 1: Give Unicode hyphens the same structural treatment as ASCII
         # before camel-case and concatenated-surname decisions run. Apostrophes
         # retain their existing later fold point.
-        structural_name = semantic_name if semantic_name.isascii() else semantic_name.translate(self._structural_hyphen_tr)
+        structural_name = (
+            semantic_name if semantic_name.isascii() else fold_internal_name_joiners(semantic_name, self._structural_hyphen_tr)
+        )
         cleaned, from_camel_case_pair, surname_first_parenthetical_hint = self._text_preprocessor.preprocess_input(
             structural_name,
             self._data,
@@ -222,7 +230,7 @@ class NormalizationService:
         is_all_chinese = self._text_preprocessor.is_all_chinese_input(cleaned)
 
         # Phase 4: Preserve authored name joiners before the generic separator pass.
-        cleaned = cleaned.translate(self._config.roman_punctuation_fold_tr)
+        cleaned = fold_internal_name_joiners(cleaned, self._config.roman_punctuation_fold_tr)
         raw_tokens = self._config.sep_pattern.sub(" ", cleaned).split()
         tokens = tuple(t for t in raw_tokens if t and not all(c in string.punctuation for c in t))
 

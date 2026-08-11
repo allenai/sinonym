@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
 
 
@@ -99,6 +101,25 @@ def test_explicit_family_first_comma_is_rendered_in_canonical_order(detector):
     assert canonical.normalized.order == ("given", "middle", "surname", "suffix")
 
 
+def test_failed_scalar_reuses_its_chinese_result_for_canonical_attachment(detector, monkeypatch):
+    original = detector._normalize_chinese_name  # noqa: SLF001
+    calls = 0
+
+    def counted(raw_name):
+        nonlocal calls
+        calls += 1
+        return original(raw_name)
+
+    monkeypatch.setattr(detector, "_normalize_chinese_name", counted)
+
+    result = detector.normalize_name("John Smith")
+
+    assert not result.success
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "John Smith"
+    assert calls == 1
+
+
 def test_chinese_result_canonical_name_matches_selected_parse(detector):
     result = detector.normalize_name("Wei Zhu Ge Ming")
 
@@ -121,6 +142,91 @@ def test_chinese_canonical_source_preserves_fused_token_lineage(detector):
     assert result.canonical_name.source.surname_tokens == ("Wang",)
     assert result.canonical_name.source.order == ("surname", "given")
     assert result.canonical_name.normalized.given_tokens == ("Wei", "Ming")
+
+
+def test_chinese_canonical_source_excludes_dropped_leading_citation_tokens(detector):
+    result = detector.normalize_name("Et al. zHaNg wEi")
+
+    assert result.success
+    assert result.canonical_name is not None
+    assert result.canonical_name.source_text == "Et al. zHaNg wEi"
+    assert result.canonical_name.source.given_tokens == ("wEi",)
+    assert result.canonical_name.source.surname_tokens == ("zHaNg",)
+    assert result.canonical_name.source.order == ("surname", "given")
+
+
+@pytest.mark.parametrize("surname", ["Li", "Wang"])
+def test_chinese_canonical_source_uses_expanded_roles_for_repeated_tokens(detector, surname):
+    """Equal source tokens inherit their positional role rather than the first match."""
+    result = detector.normalize_name(f"{surname} Wei {surname}")
+
+    assert result.success
+    assert result.canonical_name is not None
+    assert result.canonical_name.source.given_tokens == (surname, "Wei")
+    assert result.canonical_name.source.surname_tokens == (surname,)
+    assert result.canonical_name.source.order == ("given", "given", "surname")
+
+
+@pytest.mark.parametrize(
+    ("raw", "display", "expected_source"),
+    [
+        ("Ouyang Ou Yang", "Ou-Yang Ouyang", (("Ouyang",), ("Ou", "Yang"), ("surname", "given", "given"))),
+        ("Ou Yang Ouyang", "Ou-Yang Ouyang", (("Ouyang",), ("Ou", "Yang"), ("given", "given", "surname"))),
+        ("Zhuge Zhu Ge", "Zhu-Ge Zhuge", (("Zhuge",), ("Zhu", "Ge"), ("surname", "given", "given"))),
+        ("Zhu Ge Zhuge", "Zhu-Ge Zhuge", (("Zhuge",), ("Zhu", "Ge"), ("given", "given", "surname"))),
+    ],
+)
+def test_chinese_canonical_source_aligns_fused_compound_occurrences(
+    detector,
+    raw,
+    display,
+    expected_source,
+):
+    """A fused source token consumes its expanded normalized compound span."""
+    result = detector.normalize_name(raw)
+
+    assert result.success
+    assert result.result == display
+    assert result.canonical_name is not None
+    source_surname, source_given, source_order = expected_source
+    assert result.canonical_name.source.surname_tokens == source_surname
+    assert result.canonical_name.source.given_tokens == source_given
+    assert result.canonical_name.source.order == source_order
+    assert result.canonical_name.normalized.surname_tokens == source_given
+    assert result.canonical_name.normalized.given_tokens == source_given
+
+
+@pytest.mark.parametrize(
+    ("raw", "display", "expected_source"),
+    [
+        (
+            "\u4e0a\u5b98 \u5a49\u513f",
+            "Wan-Er Shang Guan",
+            (("\u4e0a\u5b98",), ("\u5a49\u513f",), ("surname", "given")),
+        ),
+        (
+            "\u529f\u534e \u5f20",
+            "Gong-Hua Zhang",
+            (("\u5f20",), ("\u529f\u534e",), ("given", "surname")),
+        ),
+        (
+            "\u6b27\u9633 \u4fee \u6587",
+            "Xiu-Wen Ou Yang",
+            (("\u6b27\u9633",), ("\u4fee", "\u6587"), ("surname", "given", "given")),
+        ),
+    ],
+)
+def test_chinese_canonical_source_keeps_generic_han_component_fallback(detector, raw, display, expected_source):
+    """Han source tokens retain parsed component order without Roman span alignment."""
+    result = detector.normalize_name(raw)
+
+    assert result.success
+    assert result.result == display
+    assert result.canonical_name is not None
+    source_surname, source_given, source_order = expected_source
+    assert result.canonical_name.source.surname_tokens == source_surname
+    assert result.canonical_name.source.given_tokens == source_given
+    assert result.canonical_name.source.order == source_order
 
 
 def test_batch_results_surface_canonical_name_after_final_selection(detector):

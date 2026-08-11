@@ -226,6 +226,7 @@ from sinonym.services.formatting import REVIEWED_UNBOUNDED_PREFIX_GIVEN_FORMS, S
 from sinonym.services.order_metadata import original_component_order
 from sinonym.services.person_name_normalization import (
     DropReason,
+    PersonNameNormalizationResult,
     PersonNameNormalizationService,
     PersonNameOutcome,
 )
@@ -440,6 +441,8 @@ class ChineseNameDetector:
         given_tokens: list[str],
         normalized_input: NormalizedInput,
         original_order: list[str],
+        *,
+        original_compound_format: str | None = None,
     ) -> ParseResult:
         """Format parsed components and attach stable structured name fields."""
         given_tokens = self._native_bound_given_tokens(normalized_input, given_tokens)
@@ -454,6 +457,7 @@ class ChineseNameDetector:
                 given_tokens,
                 normalized_input.norm_map,
                 normalized_input.compound_metadata,
+                original_compound_format=original_compound_format,
                 allow_surname_like_given_split=self._allows_surname_like_given_split(normalized_input),
                 syllabic_single_letter_tokens=self._native_single_letter_given_tokens(
                     normalized_input,
@@ -485,6 +489,7 @@ class ChineseNameDetector:
         )
         return ParseResult.success_with_name(
             formatted_name,
+            original_compound_surname=original_compound_format,
             parsed=parsed,
             parsed_original_order=parsed_original_order,
         )
@@ -1208,13 +1213,14 @@ class ChineseNameDetector:
                     normalized_input.spaced_compound_spans,
                 )
                 if direct_parse is not None:
-                    surname_tokens, given_tokens, _original_compound_surname = direct_parse
+                    surname_tokens, given_tokens, original_compound_surname = direct_parse
                     best_candidate = {
                         "surname_tokens": surname_tokens,
                         "given_tokens": given_tokens,
                         "score": 0.0,
                         "order_tokens": original_tokens,
                         "used_original": True,
+                        "original_compound_format": original_compound_surname,
                     }
 
             if best_candidate is None:
@@ -1251,6 +1257,7 @@ class ChineseNameDetector:
                         "score": score,
                         "order_tokens": order_tokens,
                         "used_original": used_original,
+                        "original_compound_format": original_compound_surname,
                     }
 
                     if (
@@ -1286,7 +1293,13 @@ class ChineseNameDetector:
                 original_is_given_first = is_surname_last_in_this_order if used_original else is_surname_first_in_this_order
                 original_order = ["given", "surname"] if original_is_given_first else ["surname", "given"]
                 try:
-                    return self._format_parse_result(surname_tokens, given_tokens, normalized_input, original_order)
+                    return self._format_parse_result(
+                        surname_tokens,
+                        given_tokens,
+                        normalized_input,
+                        original_order,
+                        original_compound_format=best_candidate["original_compound_format"],
+                    )
                 except ValueError as e:
                     return ParseResult.failure(str(e))
 
@@ -1314,15 +1327,15 @@ class ChineseNameDetector:
         except ValueError as error:
             return ParseResult.failure(str(error))
 
-    def _chinese_classification_input(self, raw_name: str) -> str:
-        """Remove only an audited leading ``Et al.`` citation contaminant."""
+    def _leading_et_al_normalization(self, raw_name: str) -> PersonNameNormalizationResult | None:
+        """Return the audited normalization for one exact leading citation marker."""
         prefix = raw_name.lstrip()
         marker = "et al."
         if len(prefix) <= len(marker) or prefix[: len(marker)].casefold() != marker or not prefix[len(marker)].isspace():
-            return raw_name
+            return None
         normalized = self._person_name_normalizer.normalize_text(raw_name)
         if normalized.canonical_name is None or len(normalized.dropped_tokens) < LEADING_ET_AL_TOKEN_COUNT:
-            return raw_name
+            return None
         first, second = normalized.dropped_tokens[:LEADING_ET_AL_TOKEN_COUNT]
         has_exact_prefix = (
             first.text.casefold() == "et"
@@ -1330,7 +1343,15 @@ class ChineseNameDetector:
             and first.reason is DropReason.CONNECTOR
             and second.reason is DropReason.CONNECTOR
         )
-        return normalized.canonical_name.text if has_exact_prefix else raw_name
+        return normalized if has_exact_prefix else None
+
+    def _chinese_classification_input(self, raw_name: str) -> str:
+        """Remove only an audited leading ``Et al.`` citation contaminant."""
+        normalized = self._leading_et_al_normalization(raw_name)
+        if normalized is None:
+            return raw_name
+        assert normalized.canonical_name is not None
+        return normalized.canonical_name.text
 
     @staticmethod
     def _canonical_components_from_parsed(parsed: ParsedName) -> NameComponents:
@@ -1421,6 +1442,20 @@ class ChineseNameDetector:
         normalized: NameComponents,
     ) -> NameComponents:
         """Preserve raw Latin token boundaries while retaining parsed roles."""
+        citation_normalization = self._leading_et_al_normalization(raw_name)
+        if citation_normalization is not None:
+            assert citation_normalization.canonical_name is not None
+            source_tokens = self._ordered_component_tokens(citation_normalization.canonical_name.source)
+            source = self._source_components_from_tokens(
+                source_tokens[LEADING_ET_AL_TOKEN_COUNT:],
+                parsed_original,
+                normalized,
+                require_unique_roles=False,
+                source_aligned_fallback=True,
+            )
+            assert source is not None
+            return source
+
         simple_tokens = self._simple_source_tokens(raw_name)
         if simple_tokens is not None:
             simple_source = self._source_components_from_tokens(
@@ -1431,6 +1466,15 @@ class ChineseNameDetector:
             )
             if simple_source is not None:
                 return simple_source
+            aligned_source = self._source_components_from_tokens(
+                simple_tokens,
+                parsed_original,
+                normalized,
+                require_unique_roles=False,
+                source_aligned_fallback=True,
+            )
+            assert aligned_source is not None
+            return aligned_source
 
         source_result = self._person_name_normalizer.normalize_text(raw_name)
         if source_result.canonical_name is None:
@@ -1451,6 +1495,40 @@ class ChineseNameDetector:
         """Return already-clean ASCII source tokens, or abstain."""
         return self._normalizer.simple_latin_tokens(raw_name)
 
+    def _source_aligned_fallback_roles(
+        self,
+        ordered_tokens: list[str] | tuple[str, ...],
+        parsed_original: ParsedName,
+    ) -> list[str]:
+        """Align source tokens to parsed roles while allowing fused source tokens."""
+        parsed_components = self._canonical_components_from_parsed(parsed_original)
+        normalized_tokens = self._ordered_component_tokens(parsed_components)
+        normalized_roles = list(parsed_components.order)
+        fallback_roles: list[str] = []
+        normalized_index = 0
+
+        for source_index, source_token in enumerate(ordered_tokens):
+            if normalized_index >= len(normalized_roles):
+                fallback_roles.append("given")
+                continue
+
+            role = normalized_roles[normalized_index]
+            fallback_roles.append(role)
+            remaining_source = len(ordered_tokens) - source_index - 1
+            max_end = len(normalized_tokens) - remaining_source
+            matched_end = None
+            source_key = self._component_token_key(source_token)
+            for end in range(normalized_index + 1, max_end + 1):
+                if normalized_roles[end - 1] != role:
+                    break
+                normalized_key = self._component_token_key("".join(normalized_tokens[normalized_index:end]))
+                if normalized_key == source_key:
+                    matched_end = end
+                    break
+            normalized_index = matched_end if matched_end is not None else normalized_index + 1
+
+        return fallback_roles
+
     def _source_components_from_tokens(
         self,
         ordered_tokens: list[str] | tuple[str, ...],
@@ -1458,6 +1536,7 @@ class ChineseNameDetector:
         normalized: NameComponents,
         *,
         require_unique_roles: bool,
+        source_aligned_fallback: bool = False,
     ) -> NameComponents | None:
         """Assign source tokens to normalized roles without changing token text."""
         normalized_by_role = {
@@ -1474,16 +1553,24 @@ class ChineseNameDetector:
             for role, tokens in normalized_by_role.items()
             if tokens
         }
-        fallback_roles = [role for role in parsed_original.order if role in normalized_by_role]
+        fallback_roles: list[str] | None = None
         assigned: list[tuple[str, str]] = []
         for index, token in enumerate(ordered_tokens):
             key = self._component_token_key(token)
             candidates = [role for role, keys in role_keys.items() if key and key in keys]
             if require_unique_roles and len(candidates) != 1:
                 return None
+            if len(candidates) == 1:
+                assigned.append((candidates[0], token))
+                continue
+            if fallback_roles is None:
+                fallback_roles = (
+                    self._source_aligned_fallback_roles(ordered_tokens, parsed_original)
+                    if source_aligned_fallback
+                    else [role for role in parsed_original.order if role in normalized_by_role]
+                )
             fallback = fallback_roles[index] if index < len(fallback_roles) else "given"
-            role = candidates[0] if len(candidates) == 1 else fallback
-            assigned.append((role, token))
+            assigned.append((fallback, token))
 
         tokens_by_role = {
             role: tuple(token for assigned_role, token in assigned if assigned_role == role) for role in normalized_by_role
@@ -1508,6 +1595,14 @@ class ChineseNameDetector:
         requiring the legacy Chinese recognizer to succeed. Invalid or obvious
         non-person inputs return ``None``.
         """
+        return self._normalize_person_name_with_chinese_result(raw_name, None)
+
+    def _normalize_person_name_with_chinese_result(
+        self,
+        raw_name: str,
+        chinese_result: ParseResult | None,
+    ) -> CanonicalName | None:
+        """Normalize one person while reusing an already-computed Chinese result."""
         if not raw_name or len(raw_name) > self._config.max_name_length:
             return None
         if all(character in string.punctuation + string.whitespace for character in raw_name):
@@ -1520,12 +1615,18 @@ class ChineseNameDetector:
         normalized = self._person_name_normalizer.normalize_text(raw_name)
         if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
             return None
-        return self._canonical_person_name_from_baseline(raw_name, normalized.canonical_name)
+        return self._canonical_person_name_from_baseline(
+            raw_name,
+            normalized.canonical_name,
+            chinese_result=chinese_result,
+        )
 
     def _canonical_person_name_from_baseline(
         self,
         raw_name: str,
         baseline: CanonicalName,
+        *,
+        chinese_result: ParseResult | None = None,
     ) -> CanonicalName:
         """Apply hard identity evidence, then Chinese and soft order policy."""
         routing_surface = self._east_asian_routing_surface(raw_name, baseline)
@@ -1544,7 +1645,11 @@ class ChineseNameDetector:
         if self._east_asian_name_order._is_reviewed_japanese_given_first_exact_surface(routing_surface):
             return baseline
 
-        chinese = self._canonical_chinese_name_with_source(raw_name, baseline.source)
+        chinese = self._canonical_chinese_name_with_source(
+            raw_name,
+            baseline.source,
+            result=chinese_result,
+        )
         if chinese is not None:
             return chinese
         if decision is None:
@@ -1555,15 +1660,20 @@ class ChineseNameDetector:
         self,
         raw_name: str,
         source: NameComponents,
+        *,
+        result: ParseResult | None = None,
     ) -> CanonicalName | None:
-        """Return affirmative Chinese normalization with caller-owned lineage."""
-        result = self._normalize_chinese_name(raw_name)
-        if not self._is_affirmative_chinese_canonical_input(raw_name, result):
+        """Return affirmative Chinese normalization without reviving citation tokens."""
+        classification_input = self._chinese_classification_input(raw_name)
+        if result is None:
+            result = self._normalize_chinese_name(classification_input)
+        if not self._is_affirmative_chinese_canonical_input(classification_input, result):
             return None
         canonical = self._canonical_name_from_chinese_result(raw_name, result)
         if canonical is None:
             return None
-        return replace(canonical, source=source)
+        canonical_source = canonical.source if classification_input != raw_name else source
+        return replace(canonical, source=canonical_source)
 
     def _is_affirmative_chinese_canonical_input(
         self,
@@ -2022,7 +2132,7 @@ class ChineseNameDetector:
         if canonical_name is None:
             canonical_name = self._canonical_name_from_chinese_result(raw_name, result)
         if canonical_name is None:
-            canonical_name = self.normalize_person_name(raw_name)
+            canonical_name = self._normalize_person_name_with_chinese_result(raw_name, result)
         return canonical_name
 
     def normalize_name(self, raw_name: str) -> ParseResult:

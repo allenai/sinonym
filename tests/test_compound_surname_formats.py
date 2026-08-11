@@ -108,3 +108,34 @@ def test_metadata_only_parsing_keeps_legacy_spaced_compound_support(detector):
 
     surname_options = [surname_tokens for surname_tokens, _given_tokens, _original_format in parses]
     assert ["Au", "Yeung"] in surname_options
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Wei Ming Ou Yang", "Wei-Ming Ou Yang"),
+        ("Wei Ming Au Yeung", "Wei-Ming Au Yeung"),
+        ("Wei Zhu Ge Ming", "Wei-Ming Zhu Ge"),
+    ],
+)
+def test_spaced_compound_parsing_uses_the_attested_source_occurrence(detector, raw, expected):
+    """A spaced compound may occur at any position without reversing its parts."""
+    assert_normalized_name(detector, raw, (True, expected))
+
+
+@pytest.mark.parametrize("raw", ["Ou Yang Ouyang", "Ouyang Ou Yang"])
+def test_selected_compound_occurrence_controls_output_format(detector, raw):
+    """Unselected occurrence metadata must not alter the selected surname format."""
+    assert_normalized_name(detector, raw, (True, "Ou-Yang Ouyang"))
+
+
+def test_selected_compound_occurrence_controls_batch_output_format(detector):
+    """Batch formatting carries the selected compound occurrence through rendering."""
+    names = ["Ou Yang Ouyang", "Wei Ming Ouyang", "Xiangru Sima"]
+    batch = detector.analyze_name_batch(names).results
+
+    assert [result.result for result in batch] == [
+        "Ou-Yang Ouyang",
+        "Wei-Ming Ouyang",
+        "Xiang-Ru Sima",
+    ]

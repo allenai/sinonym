@@ -27,6 +27,10 @@ if TYPE_CHECKING:
 
 REVIEWED_UNBOUNDED_PREFIX_GIVEN_FORMS = frozenset({"alei"})
 
+# Complete Korean given tokens that the Chinese concatenated-name splitter
+# otherwise fragments into unrelated pinyin syllables (for example, Young -> You-Ng).
+REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS = frozenset({"hana", "hoon", "seon", "seungbo", "woong", "young"})
+
 # The only Mandarin syllables spelled with a single Roman letter. A lone "a"/"e"
 # may therefore be a real syllable rather than an initial.
 SINGLE_LETTER_PINYIN_SYLLABLES = frozenset({"a", "e"})
@@ -56,6 +60,7 @@ class NameFormattingService:
         normalized_cache: dict[str, str] | None = None,
         compound_metadata: dict[str, CompoundMetadata] | None = None,
         *,
+        original_compound_format: str | None = None,
         allow_surname_like_given_split: bool = True,
         syllabic_single_letter_tokens: frozenset[str] | None = None,
     ) -> tuple[str, list[str], list[str], str, str, list[str]]:
@@ -114,6 +119,10 @@ class NameFormattingService:
                     parts.extend(token)
                 else:
                     parts.append(token)
+                continue
+
+            if token.casefold() in REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS:
+                parts.append(token)
                 continue
 
             if self._data.is_given_name(normalized_token):
@@ -198,6 +207,10 @@ class NameFormattingService:
                 )
                 formatted_part_tokens.append(capitalized_parts)
                 initial_parts.append(False)
+            elif clean_part.casefold() in REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS:
+                formatted_part_tokens.append([clean_part])
+                formatted_parts.append(clean_part)
+                initial_parts.append(False)
             elif "-" in clean_part:
                 sub_parts = StringManipulationUtils.split_and_clean_hyphens(clean_part)
                 capitalized_parts, _subpart_initials = self._format_bound_given_parts(sub_parts, syllabic_keys)
@@ -232,7 +245,9 @@ class NameFormattingService:
 
         # Surname formatting
         if len(surname_tokens) > 1:
-            if compound_metadata:
+            if original_compound_format:
+                surname_str = self._format_compound_from_source(surname_tokens, original_compound_format)
+            elif compound_metadata:
                 surname_str = self._format_compound_with_metadata(surname_tokens, compound_metadata)
             else:
                 capitalized_tokens = [StringManipulationUtils.capitalize_name_part(t) for t in surname_tokens]
@@ -311,8 +326,21 @@ class NameFormattingService:
             self._data.get_surname_freq_as_written(surname_key) >= DOMINANT_CHINESE_SURNAME_FREQ_MIN
             and abbreviation.isalpha()
             and 2 <= len(abbreviation) <= 3  # noqa: PLR2004
+            and not self._normalizer.is_attested_remapped_given_syllable(abbreviation)
             and not any(character in "aeiou" for character in folded_abbreviation),
         )
+
+    @staticmethod
+    def _format_compound_from_source(surname_tokens: list[str], source_format: str) -> str:
+        """Format a compound surname from the selected source occurrence."""
+        capitalized = [StringManipulationUtils.capitalize_name_part(token) for token in surname_tokens]
+        if " " in source_format:
+            return StringManipulationUtils.join_with_spaces(capitalized)
+        if "-" in source_format:
+            return StringManipulationUtils.join_with_hyphens(capitalized)
+        if any(character.isupper() for character in source_format[1:]) and not source_format.isupper():
+            return StringManipulationUtils.format_camel_case_compound(surname_tokens, source_format)
+        return StringManipulationUtils.capitalize_name_part(source_format)
 
     @staticmethod
     def _initial_letter(token: str) -> str | None:

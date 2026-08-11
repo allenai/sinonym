@@ -340,6 +340,7 @@ class EthnicityClassificationService:
                 part.isalpha()
                 and 2 <= len(folded) <= 3
                 and not any(character in "aeiou" for character in folded)
+                and not self._normalizer.is_attested_remapped_given_syllable(part)
             ),
         )
 
@@ -359,6 +360,7 @@ class EthnicityClassificationService:
             self._surname_resolver.evidence_is_dominant_surname(tokens[0])
             and abbreviation.isalpha()
             and 2 <= len(abbreviation) <= 3
+            and not self._normalizer.is_attested_remapped_given_syllable(abbreviation)
             and not any(character.lower() in "aeiou" for character in abbreviation),
         )
 
@@ -496,7 +498,7 @@ class EthnicityClassificationService:
             return split_tokens
 
         candidate_given_sequences = []
-        if surname_type in {"korean_only", "korean_overlapping", "none"}:
+        if surname_type != "chinese_only":
             candidate_given_sequences.append(split_given_tokens(tokens[1:]))
 
         last_token = StringManipulationUtils.remove_spaces(tokens[-1]).lower() if tokens else ""

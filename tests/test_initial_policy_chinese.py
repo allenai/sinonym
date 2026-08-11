@@ -54,6 +54,35 @@ def test_reviewed_chinese_compact_initial_bundle_reaches_canonical_api(detector,
     assert _canonical_fields(canonical)[:3] == ("B.-C. Wang", "B.-C.", "")
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Lee Tsz", "Tsz Lee"),
+        ("Tsz Lee", "Tsz Lee"),
+        ("LEE TSZ", "Tsz Lee"),
+        ("Lee Jyh", "Jyh Lee"),
+        ("Jyh Lee", "Jyh Lee"),
+        ("LEE JYH", "Jyh Lee"),
+        ("Lee Ng", "Ng Lee"),
+        ("Ng Lee", "Ng Lee"),
+        ("LEE NG", "Ng Lee"),
+    ],
+)
+def test_attested_remapped_short_given_syllable_remains_atomic(detector, raw, expected):
+    """Romanization aliases attested as syllables must not become initials."""
+    result = detector.normalize_name(raw)
+
+    assert result.success
+    assert result.result == expected
+    assert result.parsed.given_tokens == [expected.split()[0]]
+    assert result.parsed.middle_tokens == []
+
+
+def test_dotted_short_bundle_remains_initial_only_evidence(detector):
+    """Explicit punctuation retains initial semantics despite a matching letter run."""
+    assert not detector.normalize_name("Lee T.S.Z.").success
+
+
 def test_undelimited_unrecognized_letters_remain_atomic(detector):
     legacy = detector.normalize_name("AD Wang")
     canonical = detector.normalize_person_name("AD Wang")

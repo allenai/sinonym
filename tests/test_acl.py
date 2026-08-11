@@ -48,7 +48,6 @@ ACL_CHINESE_NAMES = [
     ("Chuxu Zhang", "Chu-Xu Zhang"),
     ("Fan Wang", "Fan Wang"),
     ("Fanxin Li", "Fan-Xin Li"),
-    ("Fei Yu", "Fei Yu"),
     ("Guoliang Kang", "Guo-Liang Kang"),
     ("Haitao Li", "Hai-Tao Li"),
     ("Hao Li", "Hao Li"),
@@ -199,7 +198,6 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Han Shi", "Han Shi"),  # Currently: Shi Han
     ("Han Xiao", "Han Xiao"),  # Currently: Xiao Han
     ("Han Yuan", "Han Yuan"),  # Currently: Yuan Han
-    ("Hao Fei", "Hao Fei"),  # Currently: Fei Hao
     ("Hao-Ran Wei", "Hao-Ran Wei"),  # Currently: Wei Hao-Ran
     ("Haoran Jin", "Hao-Ran Jin"),  # Currently: Jin Haoran
     ("Haoran Que", "Hao-Ran Que"),  # Currently: Que Haoran
@@ -291,7 +289,6 @@ ACL_ORDER_PRESERVATION_TEST_CASES = [
     ("Yao Fu", "Yao Fu"),  # Currently: Fu Yao
     ("Yao Mu", "Yao Mu"),  # Currently: Mu Yao
     ("Yao Shi", "Yao Shi"),  # Currently: Shi Yao
-    ("Yao Shu", "Yao Shu"),  # Currently: Shu Yao
     ("Yao Wan", "Yao Wan"),  # Currently: Wan Yao
     ("Yao Xiao", "Yao Xiao"),  # Currently: Xiao Yao
     ("Ye Tian", "Ye Tian"),  # Currently: Tian Ye

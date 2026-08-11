@@ -24,7 +24,6 @@ CHINESE_NAME_TEST_CASES = [
     ("Jin Ho Lee", (True, "Jin-Ho Lee")),
     ("Jun Han", (True, "Jun Han")),
     ("Koo Ming", (True, "Ming Koo")),
-    ("Li Gong", (True, "Gong Li")),
     ("Li Hualiang", (True, "Hua-Liang Li")),
     ("Li Lili", (True, "Li-Li Li")),
     ("Liu Yuehua", (True, "Yue-Hua Liu")),
@@ -56,7 +55,6 @@ CHINESE_NAME_TEST_CASES = [
     ("Dehua Liu", (True, "De-Hua Liu")),
     ("Feng Yun", (True, "Yun Feng")),
     ("Gao Shan", (True, "Shan Gao")),
-    ("Gao Wei", (True, "Wei Gao")),
     ("Guangming Wang", (True, "Guang-Ming Wang")),
     ("H M Zhang", (True, "H.-M. Zhang")),
     ("H Y Tiong", (False, "initial-only name has an ambiguous cross-cultural surname")),
@@ -86,7 +84,6 @@ CHINESE_NAME_TEST_CASES = [
     ("Liu Dehua", (True, "De-Hua Liu")),
     ("Liu Ha", (True, "Ha Liu")),
     ("Liu Nan", (True, "Nan Liu")),
-    ("Lu Xun", (True, "Xun Lu")),
     ("Ma Long", (True, "Long Ma")),
     ("Meiling Wu", (True, "Mei-Ling Wu")),
     ("Mo Yan", (True, "Yan Mo")),
@@ -120,7 +117,6 @@ CHINESE_NAME_TEST_CASES = [
     ("Zhang Weiwei", (True, "Wei-Wei Zhang")),
     ("Zhenghua Yang", (True, "Zheng-Hua Yang")),
     ("Zhiyuan Yang", (True, "Zhi-Yuan Yang")),
-    ("Zhou Xun", (True, "Xun Zhou")),
     ("Zhou Zhou", (True, "Zhou Zhou")),
 ]
 

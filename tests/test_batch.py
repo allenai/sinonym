@@ -431,6 +431,54 @@ def test_name_order_evidence_exposes_all_caps_cue(detector):
     assert evidence.batch_applied is False
 
 
+def test_parenthetical_surname_hint_votes_without_receiving_batch_format(detector):
+    """Explicit parenthetical order evidence must not be reversed by peers."""
+    names = ["Li(Peter)Chen", "Wei Zhang(Michael)", "Ming Li"]
+
+    batch = detector.analyze_name_batch(names)
+
+    assert batch.format_pattern.dominant_format is NameFormat.GIVEN_FIRST
+    assert batch.format_pattern.threshold_met
+    assert batch.format_pattern.surname_first_count == 1
+    assert batch.results[0].result == "Chen Li"
+    assert batch.name_order_evidence[0].batch_participant is True
+    assert batch.name_order_evidence[0].batch_applied is False
+    assert batch.name_order_evidence[0].batch_changed_format is False
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("Lee Young", "Young Lee"),
+        ("So Young Yun", "Young-Yun So"),
+        ("Lee Hoon", "Hoon Lee"),
+        ("Choi Seon", "Seon Choi"),
+        ("Hana Choi", "Hana Choi"),
+        ("Choi Seungbo", "Seungbo Choi"),
+    ],
+)
+def test_reviewed_korean_given_tokens_remain_atomic_in_scalar_and_batch(detector, raw_name, expected):
+    """The shared formatter must not reinterpret complete Korean tokens as pinyin pieces."""
+    scalar = detector.normalize_name(raw_name)
+    batch = detector.analyze_name_batch([raw_name])
+
+    assert scalar.result == expected
+    assert batch.results[0].result == expected
+    assert scalar.canonical_name is not None
+    assert batch.results[0].canonical_name is not None
+    assert scalar.canonical_name.normalized == batch.results[0].canonical_name.normalized
+
+
+def test_batch_context_does_not_replace_an_existing_failure_reason(detector):
+    """Whether peers meet the format threshold must not rewrite a focal failure."""
+    individual = detector.analyze_name_batch(["Zhang"])
+    contextual = detector.analyze_name_batch(["Zhang", "Wei Zhang", "Ming Li"])
+
+    assert individual.results[0].error_message == "no valid parse found"
+    assert contextual.format_pattern.threshold_met
+    assert contextual.results[0].error_message == individual.results[0].error_message
+
+
 def test_name_order_evidence_does_not_normalize_rejected_input():
     """Rejected inputs keep evidence aligned without re-running normalization."""
     failure = ParseResult(

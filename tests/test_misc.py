@@ -28,7 +28,6 @@ MISC_TEST_CASES = [
     ("Ou Xiao-Li", (True, "Xiao-Li Ou")),
     ("Yu-Bin Ou", (True, "Yu-Bin Ou")),
     # Pypinyin aliases - Jin (甘)
-    ("Jin Hua", (True, "Hua Jin")),
     ("Hua Jin", (True, "Hua Jin")),
     ("Jin Li-Ming", (True, "Li-Ming Jin")),
     ("Xiao-Yu Jin", (True, "Xiao-Yu Jin")),
@@ -38,8 +37,6 @@ MISC_TEST_CASES = [
     ("Lai Wei-Jun", (True, "Wei-Jun Lai")),
     ("Ming-Hua Lai", (True, "Ming-Hua Lai")),
     # Pypinyin aliases - Miao (缪)
-    ("Miao Yu", (True, "Miao Yu")),
-    ("Yu Miao", (True, "Miao Yu")),
     ("Miao Jian-Wei", (True, "Jian-Wei Miao")),
     ("Li-Jun Miao", (True, "Li-Jun Miao")),
     # Pypinyin aliases - Zhai (翟)

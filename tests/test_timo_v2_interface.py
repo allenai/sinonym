@@ -312,3 +312,31 @@ def test_timo_config_exposes_separate_v2_variants() -> None:
     assert "sinonym_routing_v2:" in config
     assert "prediction: sinonym.timo.interface.RoutedPaperPredictionV2" in config
     assert "predictor: sinonym.timo.interface.RoutingPredictorV2" in config
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_given", "expected_surname"),
+    [
+        ("Lee Young", "Young", "Lee"),
+        ("So Young Yun", "Young-Yun", "So"),
+        ("Lee Hoon", "Hoon", "Lee"),
+        ("Choi Seon", "Seon", "Choi"),
+        ("Hana Choi", "Hana", "Choi"),
+        ("Choi Seungbo", "Seungbo", "Choi"),
+    ],
+)
+def test_v2_keeps_reviewed_korean_given_tokens_atomic(
+    predictor_v2: PredictorV2,
+    raw_name: str,
+    expected_given: str,
+    expected_surname: str,
+) -> None:
+    (result,) = predictor_v2.predict_batch([Instance(name=raw_name)])
+
+    assert result.success
+    assert (result.given_name, result.middle_name, result.surname) == (expected_given, None, expected_surname)
+    assert result.canonical_name is not None
+    assert (result.canonical_name.normalized.given_name, result.canonical_name.normalized.surname) == (
+        expected_given,
+        expected_surname,
+    )

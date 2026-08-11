@@ -164,6 +164,20 @@ def test_leading_et_al_contamination_is_removed_before_chinese_classification(
     assert (result.parsed.given_name, result.parsed.surname) == ("Bi-Quan", "Mo")
 
 
+def test_leading_et_al_uses_cleaned_surface_for_person_chinese_affirmation(
+    detector: ChineseNameDetector,
+) -> None:
+    canonical = detector.normalize_person_name("et al. Zhang Wei")
+
+    assert canonical is not None
+    assert canonical.source_text == "et al. Zhang Wei"
+    assert canonical.text == "Wei Zhang"
+    assert canonical.normalized.given_name == "Wei"
+    assert canonical.normalized.surname == "Zhang"
+    assert canonical.source.given_tokens == ("Wei",)
+    assert canonical.source.surname_tokens == ("Zhang",)
+
+
 def test_leading_et_al_contamination_has_dropped_token_audit() -> None:
     normalized = PersonNameNormalizationService().normalize_text("Et al. Biquan Mo")
     structured = PersonNameNormalizationService().normalize_components(
@@ -194,7 +208,6 @@ def test_leading_et_al_contamination_has_dropped_token_audit() -> None:
         "Etienne Al",
         "Et Al Biquan Mo",
         "Biquan et al. Mo",
-        "Biquan Mo et al.",
         "Et Albright Mo",
     ],
 )
@@ -206,6 +219,32 @@ def test_et_al_cleanup_requires_exact_leading_citation_prefix(
 
     assert not normalized.dropped_tokens
     assert not detector.normalize_name(raw_name).success
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected"),
+    [
+        ("Biquan Mo et al.", "Biquan Mo"),
+        ("Zhang, Wei et al.", "Wei Zhang"),
+    ],
+)
+def test_exact_trailing_et_al_is_removed_from_canonical_person(
+    detector: ChineseNameDetector,
+    raw_name: str,
+    expected: str,
+) -> None:
+    normalized = PersonNameNormalizationService().normalize_text(raw_name)
+    detected = detector.normalize_name(raw_name)
+
+    assert normalized.outcome is PersonNameOutcome.PERSON
+    assert normalized.canonical_name is not None
+    assert normalized.canonical_name.text == expected
+    assert [(item.text, item.reason) for item in normalized.dropped_tokens] == [
+        ("et", DropReason.CONNECTOR),
+        ("al.", DropReason.CONNECTOR),
+    ]
+    assert not detected.success
+    assert detected.canonical_name == normalized.canonical_name
 
 
 @pytest.mark.parametrize(
