@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from sinonym.services.normalization import CompoundMetadata
 
 LOW_FREQUENCY_SURNAME_MAX = 500.0
-GIVEN_FIRST_SURNAME_FREQ_RATIO_MIN = 50.0
+DOMINANT_SURNAME_FREQ_RATIO_MIN = 50.0
 GIVEN_FIRST_ORDER_PRESERVATION_BONUS = 4.0
 # Unattested-vs-attested ambiguity ceiling: an unattested token can plausibly tie
 # with a modest surname, but not with a dominant one (see _is_ambiguous_case and
@@ -36,7 +36,7 @@ UNATTESTED_AMBIGUITY_SURNAME_FREQ_MAX = 5000.0
 # still saturates the cap).
 GIVEN_POSITION_DEADBAND = 1.5
 GIVEN_POSITION_MAGNITUDE_CAP = 1.5
-RARE_TRAILING_OVERLAPPING_SURNAME_MAX = 100.0
+RARE_TRAILING_SURNAME_MAX = 100.0
 # Romanization-conditional surname discount: log(target_share) for a spelling
 # whose surname mass is reachable only via romanization remapping and that is
 # missing from surname_romanizations.csv (open-ended Wade-Giles prefix/suffix
@@ -552,6 +552,17 @@ class NameParsingService:
 
                 if is_ambiguous:
                     order_preservation_bonus = 1.0
+            # Preserve surname-first order when the leading surname dominates a rare competitor.
+            elif (
+                surname_tokens[0] == tokens[0]
+                and given_tokens[0] == tokens[1]
+                and self._has_guarded_dominant_surname_ratio(
+                    surname_tokens[0],
+                    given_tokens[0],
+                    competing_surname_max=RARE_TRAILING_SURNAME_MAX,
+                )
+            ):
+                order_preservation_bonus = 0.5
             # Check if this parse maintains the original given-surname order (given first, surname last)
             elif not surname_first_parenthetical_hint and given_tokens[0] == tokens[0] and surname_tokens[0] == tokens[1]:
                 # This maintains the original order - check if case is ambiguous
@@ -566,10 +577,9 @@ class NameParsingService:
 
                 if is_ambiguous or self._surname_resolver.parser_is_wade_giles_initial_remapped_surname(surname_tokens[0]):
                     order_preservation_bonus = 1.0
-                elif allow_guarded_given_first_bonus and self._has_guarded_given_first_surname_ratio(
+                elif allow_guarded_given_first_bonus and self._has_guarded_dominant_surname_ratio(
                     surname_tokens[0],
                     given_tokens[0],
-                    normalized_cache,
                 ):
                     order_preservation_bonus = GIVEN_FIRST_ORDER_PRESERVATION_BONUS
         if not is_all_chinese and len(tokens) == 3 and len(surname_tokens) == 1 and len(given_tokens) == 2:
@@ -607,7 +617,7 @@ class NameParsingService:
                     and first_is_given
                     and second_is_given
                     and first_surname_freq > last_surname_freq
-                    and 0 < last_surname_freq <= RARE_TRAILING_OVERLAPPING_SURNAME_MAX
+                    and 0 < last_surname_freq <= RARE_TRAILING_SURNAME_MAX
                     and StringManipulationUtils.remove_spaces(last_norm) in OVERLAPPING_KOREAN_SURNAMES
                     and second_has_korean_given_signal
                 ):
@@ -756,29 +766,31 @@ class NameParsingService:
         freq_ratio = max(surname_freq, given_freq) / min(surname_freq, given_freq)
         return freq_ratio < 5.0  # Ambiguous if frequencies are within 5x of each other
 
-    def _has_guarded_given_first_surname_ratio(
+    def _has_guarded_dominant_surname_ratio(
         self,
         surname_token: str,
-        given_token: str,
-        normalized_cache: dict[str, str],
+        competing_token: str,
+        *,
+        competing_surname_max: float = LOW_FREQUENCY_SURNAME_MAX,
     ) -> bool:
-        """Return whether surname frequencies strongly support given-first order."""
-        if self._is_compound_surname_token(given_token, normalized_cache):
+        """Return whether surname frequencies strongly favor one parse."""
+        if self._is_compound_surname_token(competing_token):
             return False
 
         if not (
-            self._surname_resolver.parser_is_surname([surname_token]) and self._surname_resolver.parser_is_surname([given_token])
+            self._surname_resolver.parser_is_surname([surname_token])
+            and self._surname_resolver.parser_is_surname([competing_token])
         ):
             return False
 
-        given_surname_freq = self._surname_resolver.parser_frequency([given_token])
+        competing_surname_freq = self._surname_resolver.parser_frequency([competing_token])
         surname_freq = self._surname_resolver.parser_frequency([surname_token])
-        if not (0 < given_surname_freq < LOW_FREQUENCY_SURNAME_MAX):
+        if not (0 < competing_surname_freq < competing_surname_max):
             return False
 
-        return surname_freq / given_surname_freq > GIVEN_FIRST_SURNAME_FREQ_RATIO_MIN
+        return surname_freq / competing_surname_freq > DOMINANT_SURNAME_FREQ_RATIO_MIN
 
-    def _is_compound_surname_token(self, token: str, _normalized_cache: dict[str, str]) -> bool:
+    def _is_compound_surname_token(self, token: str) -> bool:
         """Return whether a single token is a curated compact or hyphenated compound surname."""
         token_key = token.strip().lower()
         if token_key in COMPOUND_VARIANTS:

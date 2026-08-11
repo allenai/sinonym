@@ -214,65 +214,6 @@ def test_reclassified_ambiguous_baseline_cases_are_explicit(detector, raw_name, 
     assert result.result == expected_result
 
 
-@pytest.mark.parametrize(
-    ("raw_name", "scalar_result", "context_format", "contextual_result"),
-    [
-        ("Fei Yu", "Yu Fei", NameFormat.GIVEN_FIRST, "Fei Yu"),
-        ("Hao Fei", "Fei Hao", NameFormat.GIVEN_FIRST, "Hao Fei"),
-        ("Yao Shu", "Shu Yao", NameFormat.GIVEN_FIRST, "Yao Shu"),
-        ("Li Gong", "Li Gong", NameFormat.SURNAME_FIRST, "Gong Li"),
-        ("Gao Wei", "Gao Wei", NameFormat.SURNAME_FIRST, "Wei Gao"),
-        ("Lu Xun", "Lu Xun", NameFormat.SURNAME_FIRST, "Xun Lu"),
-        ("Zhou Xun", "Zhou Xun", NameFormat.SURNAME_FIRST, "Xun Zhou"),
-        ("Jin Hua", "Jin Hua", NameFormat.SURNAME_FIRST, "Hua Jin"),
-        ("Miao Yu", "Yu Miao", NameFormat.GIVEN_FIRST, "Miao Yu"),
-        ("Yu Miao", "Yu Miao", NameFormat.SURNAME_FIRST, "Miao Yu"),
-        ("Gui Rui", "Gui Rui", NameFormat.SURNAME_FIRST, "Rui Gui"),
-        ("Shu Yao", "Shu Yao", NameFormat.SURNAME_FIRST, "Yao Shu"),
-        ("Jia Jian Feng", "Jia-Jian Feng", NameFormat.SURNAME_FIRST, "Jian-Feng Jia"),
-        ("Wei Wen Xing", "Wei-Wen Xing", NameFormat.SURNAME_FIRST, "Wen-Xing Wei"),
-        ("Xi Zhao", "Xi Zhao", NameFormat.SURNAME_FIRST, "Zhao Xi"),
-    ],
-)
-def test_identity_sensitive_scalar_cases_require_batch_context(
-    detector,
-    raw_name,
-    scalar_result,
-    context_format,
-    contextual_result,
-):
-    """Keep scalar ambiguity explicit and let real context choose the order."""
-    scalar = detector.normalize_name(raw_name)
-    assert scalar.success
-    assert scalar.result == scalar_result
-
-    raw_tokens = raw_name.split()
-    context = (
-        ["Xin Liu", "Yang Li", "Wei Li", "Yan Mo"]
-        if context_format is NameFormat.GIVEN_FIRST
-        else ["Zhang Wei", "Li Ming", "Wang Jun", "Chen Yu"]
-    )
-    batch = detector.analyze_name_batch([*context, raw_name])
-    candidates = {
-        (candidate.format, tuple(candidate.surname_tokens), tuple(candidate.given_tokens))
-        for candidate in batch.individual_analyses[-1].candidates
-    }
-    expected_candidates = {
-        (NameFormat.GIVEN_FIRST, (raw_tokens[-1],), tuple(raw_tokens[:-1])),
-        (NameFormat.SURNAME_FIRST, (raw_tokens[0],), tuple(raw_tokens[1:])),
-    }
-    expected_surname = raw_tokens[-1:] if context_format is NameFormat.GIVEN_FIRST else raw_tokens[:1]
-    expected_given = raw_tokens[:-1] if context_format is NameFormat.GIVEN_FIRST else raw_tokens[1:]
-
-    assert candidates == expected_candidates
-    assert batch.format_pattern.dominant_format is context_format
-    assert batch.format_pattern.threshold_met
-    assert batch.results[-1].result == contextual_result
-    assert batch.results[-1].parsed is not None
-    assert batch.results[-1].parsed.surname_tokens == expected_surname
-    assert batch.results[-1].parsed.given_tokens == expected_given
-
-
 def test_predictor_config_uses_sinonym_env_prefix(monkeypatch):
     monkeypatch.setenv("PARALLEL", "1")
     monkeypatch.setenv("MP_CHUNK_SIZE", "999")

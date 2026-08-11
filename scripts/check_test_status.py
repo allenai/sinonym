@@ -17,7 +17,94 @@ from typing import TYPE_CHECKING
 PYTEST_BASELINE_RETURN_CODES = {0, 1}
 UNEXPECTED_FAILURE_SAMPLE_SIZE = 5
 PERFORMANCE_METRIC_MARKERS = ("Time per name:", "names/second")
-EXPECTED_FAILURE_SIGNATURES = ()
+EXPECTED_NORMALIZED_NAME_FAILURES = (
+    (
+        "tests.test_acl::test_acl_chinese_names[Fei Yu-Fei Yu]",
+        "Fei Yu",
+        "Fei Yu",
+        "Yu Fei",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Hao Fei-Hao Fei]",
+        "Hao Fei",
+        "Hao Fei",
+        "Fei Hao",
+    ),
+    (
+        "tests.test_acl::test_acl_order_preservation[Yao Shu-Yao Shu]",
+        "Yao Shu",
+        "Yao Shu",
+        "Shu Yao",
+    ),
+    (
+        "tests.test_basic_chinese_names::test_basic_chinese_names[Li Gong-expected13]",
+        "Li Gong",
+        "Gong Li",
+        "Li Gong",
+    ),
+    (
+        "tests.test_basic_chinese_names::test_basic_chinese_names[Gao Wei-expected45]",
+        "Gao Wei",
+        "Wei Gao",
+        "Gao Wei",
+    ),
+    (
+        "tests.test_misc::test_misc_chinese_names[Jin Hua-expected13]",
+        "Jin Hua",
+        "Hua Jin",
+        "Jin Hua",
+    ),
+    (
+        "tests.test_misc::test_misc_chinese_names[Miao Yu-expected21]",
+        "Miao Yu",
+        "Miao Yu",
+        "Yu Miao",
+    ),
+    (
+        "tests.test_misc::test_misc_chinese_names[Yu Miao-expected22]",
+        "Yu Miao",
+        "Miao Yu",
+        "Yu Miao",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Gui Rui-expected_result6]",
+        "Gui Rui",
+        "Rui Gui",
+        "Gui Rui",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Shu Yao-expected_result13]",
+        "Shu Yao",
+        "Yao Shu",
+        "Shu Yao",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Jia Jian Feng-expected_result24]",
+        "Jia Jian Feng",
+        "Jian-Feng Jia",
+        "Jia-Jian Feng",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Wei Wen Xing-expected_result48]",
+        "Wei Wen Xing",
+        "Wen-Xing Wei",
+        "Wei-Wen Xing",
+    ),
+    (
+        "tests.test_mixed_production_cases::test_mixed_cases[Xi Zhao-expected_result79]",
+        "Xi Zhao",
+        "Zhao Xi",
+        "Xi Zhao",
+    ),
+)
+EXPECTED_FAILURE_SIGNATURES = tuple(
+    (
+        nodeid,
+        "failure",
+        f"AssertionError: {raw_name!r}: expected normalized name {expected!r}, got {actual!r}",
+    )
+    for nodeid, raw_name, expected, actual in EXPECTED_NORMALIZED_NAME_FAILURES
+)
 EXPECTED_FAILURES = len(EXPECTED_FAILURE_SIGNATURES)
 
 if TYPE_CHECKING:

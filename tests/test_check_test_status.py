@@ -123,8 +123,10 @@ def test_status_fails_on_junit_error():
     assert "JUnit XML" in message
 
 
-def test_status_detects_regressions_beyond_expected_baseline():
+def test_status_detects_regressions_beyond_expected_baseline(monkeypatch: pytest.MonkeyPatch):
+    expected_failure = _install_synthetic_failure_baseline(monkeypatch)
     failures = [
+        expected_failure,
         check_test_status.FailureDetail(
             "tests.test_new_regression::test_extra_failure",
             "failure",
@@ -222,7 +224,9 @@ def test_status_fails_when_expected_baseline_failure_is_missing(monkeypatch: pyt
     assert "EXPECTED_FAILURES" not in message
 
 
-def test_status_passes_when_all_tests_pass():
+def test_status_passes_when_all_tests_pass_with_empty_baseline(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(check_test_status, "EXPECTED_FAILURE_SIGNATURES", ())
+    monkeypatch.setattr(check_test_status, "EXPECTED_FAILURES", 0)
     exit_code, message = check_test_status.status_exit_decision(
         total_failures=0,
         perf_passed=True,
