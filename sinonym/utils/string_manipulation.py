@@ -20,7 +20,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING
 
 # Import at module level to avoid repeated imports in hot paths
-from sinonym.chinese_names_data import COMPOUND_VARIANTS, HIGH_CONFIDENCE_ANCHORS
+from sinonym.chinese_names_data import COMPOUND_VARIANTS, HIGH_CONFIDENCE_ANCHORS, REVIEWED_ATOMIC_GIVEN_FORMS
 from sinonym.name_punctuation import APOSTROPHE_LIKE
 
 if TYPE_CHECKING:
@@ -396,6 +396,13 @@ class StringManipulationUtils:
             if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, camel[0], camel[1]):
                 return _joined_given(camel[0], camel[1], camel_side)
 
+        # A reviewed complete regional given name is not evidence for an
+        # inferred pinyin boundary. Explicit hyphens, apostrophes, and authored
+        # CamelCase were handled above and retain precedence. Do not cache this
+        # refusal: the cache is case-insensitive, while CamelCase is evidence.
+        if normalizer.norm_light(token) in REVIEWED_ATOMIC_GIVEN_FORMS:
+            return None
+
         # ================================================================
         # TIERED CONFIDENCE VALIDATION: Brute-force split with quality ranking
         # ================================================================
@@ -417,6 +424,14 @@ class StringManipulationUtils:
                 continue
 
             side = _single_letter_side(a, b)
+
+            # ``Ng`` is an atomic Cantonese surname spelling, not evidence for
+            # an inferred boundary inside another author-supplied token. Its
+            # whole-token alias (``ng -> wu``) otherwise turns Vietnamese
+            # ``Huong`` into the invented ``Huo-Ng``. Explicit boundaries are
+            # handled above and remain eligible for regional normalization.
+            if a.casefold() == "ng" or b.casefold() == "ng":
+                continue
 
             # Inline normalization for hot path performance
             if normalized_cache:

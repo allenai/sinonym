@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from sinonym.chinese_names_data import ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES
+from sinonym.chinese_names_data import ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES, REVIEWED_ATOMIC_GIVEN_FORMS
 from sinonym.coretypes import NameFormat, ParsedName, ParseResult
 from sinonym.services.name_lookup import DOMINANT_CHINESE_SURNAME_FREQ_MIN, SurnameResolver
 from sinonym.services.order_metadata import original_component_order
@@ -30,13 +30,15 @@ if TYPE_CHECKING:
 
 REVIEWED_UNBOUNDED_PREFIX_GIVEN_FORMS = frozenset({"alei"})
 
-# Complete Korean given tokens that the Chinese concatenated-name splitter
-# otherwise fragments into unrelated pinyin syllables (for example, Young -> You-Ng).
-REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS = frozenset({"hana", "hoon", "seon", "seungbo", "woong", "young"})
+# Authored compound surfaces with a reviewed regional syllable that is not in
+# the Mandarin lexicon. Preserve their explicit boundary without requiring an
+# invented split through the standalone ``Ng`` surname alias.
+REVIEWED_EXPLICIT_BOUND_GIVEN_FORMS = frozenset({"chung-chieng"})
 
 # The only Mandarin syllables spelled with a single Roman letter. A lone "a"/"e"
 # may therefore be a real syllable rather than an initial.
 SINGLE_LETTER_PINYIN_SYLLABLES = frozenset({"a", "e"})
+EXPLICIT_HYPHEN_SINGLE_LETTER_SYLLABLES = SINGLE_LETTER_PINYIN_SYLLABLES | {"i"}
 
 
 class NameFormattingService:
@@ -55,6 +57,12 @@ class NameFormattingService:
             self._normalizer = normalizer
             self._data = data
         self._surname_resolver = SurnameResolver(self._data, self._normalizer)
+
+    def _is_reviewed_atomic_given_form(self, token: str) -> bool:
+        """Match reviewed atomics case-insensitively and with tone marks folded."""
+        return token.casefold() in REVIEWED_ATOMIC_GIVEN_FORMS or (
+            token.isalpha() and self._normalizer.norm_light(token) in REVIEWED_ATOMIC_GIVEN_FORMS
+        )
 
     def materialize_parse_result(  # noqa: PLR0913 - formatter inputs are independent policy evidence
         self,
@@ -146,7 +154,10 @@ class NameFormattingService:
         )
         if (
             not all(
-                token in apostrophe_lineage or self._normalizer.is_valid_given_name_token(token, normalized_cache)
+                token in apostrophe_lineage
+                or self._is_reviewed_atomic_given_form(token)
+                or token.casefold() in REVIEWED_EXPLICIT_BOUND_GIVEN_FORMS
+                or self._normalizer.is_valid_given_name_token(token, normalized_cache)
                 for token in given_tokens
             )
             and not compact_initial
@@ -176,7 +187,11 @@ class NameFormattingService:
                     parts.append(token)
                 continue
 
-            if token.casefold() in REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS:
+            if self._is_reviewed_atomic_given_form(token):
+                parts.append(token)
+                continue
+
+            if token.casefold() in REVIEWED_EXPLICIT_BOUND_GIVEN_FORMS:
                 parts.append(token)
                 continue
 
@@ -262,14 +277,18 @@ class NameFormattingService:
                 )
                 formatted_part_tokens.append(capitalized_parts)
                 initial_parts.append(False)
-            elif clean_part.casefold() in REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS:
+            elif self._is_reviewed_atomic_given_form(clean_part):
                 capitalized = StringManipulationUtils.capitalize_name_part(clean_part)
                 formatted_part_tokens.append([capitalized])
                 formatted_parts.append(capitalized)
                 initial_parts.append(False)
             elif "-" in clean_part:
                 sub_parts = StringManipulationUtils.split_and_clean_hyphens(clean_part)
-                capitalized_parts, _subpart_initials = self._format_bound_given_parts(sub_parts, syllabic_keys)
+                capitalized_parts, _subpart_initials = self._format_bound_given_parts(
+                    sub_parts,
+                    syllabic_keys,
+                    single_letter_syllables=EXPLICIT_HYPHEN_SINGLE_LETTER_SYLLABLES,
+                )
                 formatted_part_tokens.append(capitalized_parts)
                 formatted_parts.append(StringManipulationUtils.join_with_hyphens(capitalized_parts))
                 # An explicit hyphen binds every subpart into the first name.
@@ -327,6 +346,8 @@ class NameFormattingService:
         self,
         parts: list[str],
         syllabic_keys: set[str],
+        *,
+        single_letter_syllables: frozenset[str] = SINGLE_LETTER_PINYIN_SYLLABLES,
     ) -> tuple[list[str], list[bool]]:
         """Format explicitly bound given-name parts without manufacturing initials."""
         all_initial_parts = bool(parts) and all(self._initial_letter(part) is not None for part in parts)
@@ -336,7 +357,7 @@ class NameFormattingService:
             letter = self._initial_letter(part)
             key = part.casefold().rstrip(".")
             is_syllable = key in syllabic_keys or (
-                not all_initial_parts and key in SINGLE_LETTER_PINYIN_SYLLABLES and "." not in part
+                not all_initial_parts and key in single_letter_syllables and "." not in part
             )
             is_initial = letter is not None and not is_syllable
             formatted.append(f"{letter}." if is_initial else StringManipulationUtils.capitalize_name_part(part))

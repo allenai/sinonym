@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from sinonym.chinese_names_data import COMPOUND_VARIANTS
+from sinonym.chinese_names_data import COMPOUND_VARIANTS, REVIEWED_ATOMIC_GIVEN_FORMS
 from sinonym.coretypes import NameFormat, ParseCandidate
 from sinonym.resources import open_csv_reader, resource_path
 from sinonym.services import ethnicity
@@ -311,6 +311,171 @@ def test_given_context_gold_split_keeps_ambiguous_non_gold_tokens_unsplit(detect
             )
             is None
         )
+
+
+@pytest.mark.parametrize("token", ["cuong", "huong", "luong", "tuong"])
+def test_vietnamese_given_tokens_do_not_split_through_internal_ng_alias(detector, token):
+    """An inferred fragment cannot borrow the whole-token ``Ng`` surname alias."""
+    normalized = detector._normalizer.apply(token)
+
+    assert (
+        StringManipulationUtils.split_concatenated_name(
+            token,
+            normalized.norm_map,
+            detector._data,
+            detector._normalizer,
+            detector._config,
+        )
+        is None
+    )
+
+
+def test_explicit_ng_boundary_remains_splittable(detector):
+    """The inferred-boundary guard must not erase author-supplied structure."""
+    normalized = detector._normalizer.apply("Huo-Ng")
+
+    assert StringManipulationUtils.split_concatenated_name(
+        "Huo-Ng",
+        normalized.norm_map,
+        detector._data,
+        detector._normalizer,
+        detector._config,
+    ) == ["Huo", "Ng"]
+
+
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [
+        ("Kafai", ["Ka", "fai"]),
+        ("Siuming", ["Siu", "ming"]),
+        ("Chiuming", ["Chiu", "ming"]),
+        ("Ngaiming", ["Ngai", "ming"]),
+    ],
+)
+def test_internal_ng_guard_preserves_compact_regional_given_splits(detector, token, expected):
+    """The narrow ``Ng`` guard must not disable other regional aliases."""
+    assert (
+        StringManipulationUtils.split_concatenated_name(
+            token,
+            None,
+            detector._data,
+            detector._normalizer,
+            detector._config,
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize("token", sorted(REVIEWED_ATOMIC_GIVEN_FORMS))
+def test_reviewed_atomic_given_forms_refuse_inferred_boundaries(detector, token):
+    """A reviewed complete regional token must not be split by pinyin coincidence."""
+    cache = StringManipulationUtils._get_thread_cache()
+    cache.discard(token)
+    normalized = detector._normalizer.apply(token)
+
+    try:
+        assert (
+            StringManipulationUtils.split_concatenated_name(
+                token,
+                normalized.norm_map,
+                detector._data,
+                detector._normalizer,
+                detector._config,
+            )
+            is None
+        )
+        assert token not in cache
+    finally:
+        cache.discard(token)
+
+
+@pytest.mark.parametrize("token", ["ho\u00e0i", "to\u00e0n"])
+def test_reviewed_vietnamese_atomic_forms_fold_tone_marks(detector, token):
+    """Vietnamese tone marks must not bypass the reviewed atomic lookup."""
+    cache = StringManipulationUtils._get_thread_cache()
+    cache.discard(token)
+
+    try:
+        assert (
+            StringManipulationUtils.split_concatenated_name(
+                token,
+                None,
+                detector._data,
+                detector._normalizer,
+                detector._config,
+            )
+            is None
+        )
+        assert token not in cache
+    finally:
+        cache.discard(token)
+
+
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [
+        ("Ho-Ai", ["Ho", "Ai"]),
+        ("Ho'Ai", ["Ho", "Ai"]),
+        ("HoAi", ["Ho", "Ai"]),
+        ("To-An", ["To", "An"]),
+        ("To'An", ["To", "An"]),
+        ("ToAn", ["To", "An"]),
+    ],
+)
+def test_authored_boundaries_override_reviewed_atomic_forms(detector, token, expected):
+    """Explicit punctuation and CamelCase remain stronger than the atomic veto."""
+    normalized = detector._normalizer.apply(token)
+
+    assert (
+        StringManipulationUtils.split_concatenated_name(
+            token,
+            normalized.norm_map,
+            detector._data,
+            detector._normalizer,
+            detector._config,
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("atomic", "camel", "expected"),
+    [
+        ("hana", "HaNa", ["Ha", "Na"]),
+        ("hoai", "HoAi", ["Ho", "Ai"]),
+        ("hoon", "HoOn", ["Ho", "On"]),
+        ("seon", "SeOn", ["Se", "On"]),
+        ("seungbo", "SeungBo", ["Seung", "Bo"]),
+        ("toan", "ToAn", ["To", "An"]),
+        ("woong", "WooNg", ["Woo", "Ng"]),
+        ("young", "YouNg", ["You", "Ng"]),
+    ],
+)
+def test_reviewed_atomic_refusal_does_not_mask_later_camel_case(detector, atomic, camel, expected):
+    """A lowercase refusal must not enter the case-insensitive unsplittable cache."""
+    cache = StringManipulationUtils._get_thread_cache()
+    cache.discard(atomic)
+
+    try:
+        assert (
+            StringManipulationUtils.split_concatenated_name(
+                atomic,
+                None,
+                detector._data,
+                detector._normalizer,
+                detector._config,
+            )
+            is None
+        )
+        assert StringManipulationUtils.split_concatenated_name(
+            camel,
+            None,
+            detector._data,
+            detector._normalizer,
+            detector._config,
+        ) == expected
+    finally:
+        cache.discard(atomic)
 
 
 def test_two_token_format_alignment_tie_break_is_directional(detector):

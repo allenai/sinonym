@@ -173,9 +173,6 @@ from typing import Literal
 from sinonym.chinese_names_data import (
     COMPOUND_VARIANTS,
     HAN_SURNAME_POSITION_READINGS,
-    NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES,
-    OVERLAPPING_KOREAN_SURNAMES,
-    OVERLAPPING_VIETNAMESE_SURNAMES,
 )
 from sinonym.coretypes import (
     BatchFormatPattern,
@@ -220,6 +217,7 @@ from sinonym.services.east_asian_name_order import (
     EastAsianNameOrderPreservation,
     EastAsianNameOrderService,
 )
+from sinonym.services.ethnicity import INITIAL_ONLY_CROSS_CULTURAL_SURNAMES
 from sinonym.services.formatting import REVIEWED_UNBOUNDED_PREFIX_GIVEN_FORMS, SINGLE_LETTER_PINYIN_SYLLABLES
 from sinonym.services.person_name_normalization import (
     DropReason,
@@ -461,9 +459,7 @@ class ChineseNameDetector:
         except ValueError as error:
             return ParseResult.failure(str(error))
 
-        selected_format = (
-            NameFormat.GIVEN_FIRST if original_order and original_order[0] == "given" else NameFormat.SURNAME_FIRST
-        )
+        selected_format = NameFormat.GIVEN_FIRST if original_order and original_order[0] == "given" else NameFormat.SURNAME_FIRST
         return self._formatting_service.materialize_parse_result(
             surname_tokens,
             given_tokens,
@@ -1620,9 +1616,6 @@ class ChineseNameDetector:
             return True
         normalized_input = self._normalizer.apply(raw_name)
         surname_key = self._normalizer.norm_light(result.parsed.surname)
-        ambiguous_surnames = (
-            NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES | OVERLAPPING_KOREAN_SURNAMES | OVERLAPPING_VIETNAMESE_SURNAMES
-        )
         given_source_tokens = self._source_given_tokens_for_chinese_result(normalized_input, result.parsed)
         compact_initial_bundle = bool(
             len(given_source_tokens) == 1
@@ -1635,7 +1628,7 @@ class ChineseNameDetector:
         )
         if compact_initial_bundle:
             return True
-        if surname_key in ambiguous_surnames:
+        if surname_key in INITIAL_ONLY_CROSS_CULTURAL_SURNAMES:
             return (
                 bool(given_source_tokens)
                 and any(len(token) > 1 for token in given_source_tokens)
@@ -1968,11 +1961,32 @@ class ChineseNameDetector:
                 decision.reason,
             )
             return None
-        return replace(
+        canonical = replace(
             routed.canonical_name,
             source_text=baseline.source_text,
             source=self._routed_source_components(baseline, decision),
         )
+        if decision.reason is EastAsianEvidenceReason.IDENTITY_BACKED_EXACT_FULL_SURFACE and len(decision.given_tokens) > 1:
+            normalized = canonical.normalized
+            normalized = replace(
+                normalized,
+                given_name="-".join(normalized.given_tokens),
+            )
+            canonical = replace(
+                canonical,
+                text=" ".join(
+                    part
+                    for part in (
+                        normalized.given_name,
+                        normalized.middle_name,
+                        normalized.surname,
+                        normalized.suffix,
+                    )
+                    if part
+                ),
+                normalized=normalized,
+            )
+        return canonical
 
     def normalize_person_name_components(
         self,

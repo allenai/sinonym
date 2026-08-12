@@ -34,6 +34,17 @@ def test_ambiguous_initial_only_surnames_use_generic_canonical(detector, raw_nam
     assert components[2] in {"Lee", "Lim", "Tan"}
 
 
+@pytest.mark.parametrize("raw_name", ["J I Yi", "J. I. Yi", "J.I.Yi"])
+def test_yi_initial_only_variants_use_generic_canonical(detector, raw_name: str) -> None:
+    """Yi is cross-cultural, so initials alone do not establish Chinese identity."""
+    legacy = detector.normalize_name(raw_name)
+    canonical = detector.normalize_person_name(raw_name)
+
+    assert not legacy.success
+    assert legacy.error_message == "initial-only name has an ambiguous cross-cultural surname"
+    assert _canonical_components(canonical) == ("J.", "I.", "Yi")
+
+
 @pytest.mark.parametrize(
     ("raw_name", "given", "surname"),
     [("L Han", "L.", "Han"), ("A. Lee", "A.", "Lee")],
@@ -79,6 +90,52 @@ def test_structured_canonical_routing_matches_raw_policy(
     canonical = detector.normalize_person_name_components(first_name=first_name, last_name=last_name)
 
     assert _canonical_components(canonical) == expected
+
+
+@pytest.mark.parametrize(
+    "components",
+    [
+        {"first_name": "J.", "middle_name": "I.", "last_name": "Yi"},
+        {"first_name": "J. I.", "last_name": "Yi"},
+        {"first_name": "J I", "last_name": "Yi"},
+    ],
+)
+def test_structured_yi_initial_only_variants_use_generic_canonical(
+    detector,
+    components: dict[str, str],
+) -> None:
+    """Structured punctuation does not supply affirmative culture evidence."""
+    canonical = detector.normalize_person_name_components(**components)
+
+    assert _canonical_components(canonical) == ("J.", "I.", "Yi")
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "legacy_success", "expected"),
+    [
+        ("Jong Il Yi", False, ("Jong", "Il", "Yi")),
+        ("Ke Yi", True, ("Ke", "", "Yi")),
+        ("Zhang Yi", True, ("Yi", "", "Zhang")),
+    ],
+)
+def test_noninitial_yi_names_are_unchanged(
+    detector,
+    raw_name: str,
+    legacy_success: bool,
+    expected: tuple[str, str, str],
+) -> None:
+    """The narrow initial-only gate does not broadly reclassify Yi tokens."""
+    assert detector.normalize_name(raw_name).success is legacy_success
+    assert _canonical_components(detector.normalize_person_name(raw_name)) == expected
+
+
+def test_unambiguous_chinese_initials_remain_compound(detector) -> None:
+    """The new Yi ambiguity does not weaken affirmative Chinese surname evidence."""
+    legacy = detector.normalize_name("A S Wang")
+
+    assert legacy.success
+    assert legacy.result == "A.-S. Wang"
+    assert _canonical_components(detector.normalize_person_name("A S Wang")) == ("A.-S.", "", "Wang")
 
 
 def test_native_alignment_overrides_ambiguous_roman_surname(detector) -> None:
@@ -145,6 +202,7 @@ def test_structured_hard_identity_evidence_precedes_heuristic_chinese_canonical(
         (SourceAuthorFields(first_name="A S", last_name="Lee"), ("A.", "S.", "Lee")),
         (SourceAuthorFields(first_name="A. S.", last_name="Wang"), ("A.-S.", "", "Wang")),
         (SourceAuthorFields(first_name="A S", last_name="Wang"), ("A.-S.", "", "Wang")),
+        (SourceAuthorFields(first_name="J.", middle_names="I.", last_name="Yi"), ("J. I.", "", "Yi")),
         (SourceAuthorFields(first_name="Wei M.", last_name="Wang"), ("Wei", "M.", "Wang")),
     ],
 )

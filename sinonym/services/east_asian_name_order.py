@@ -132,6 +132,7 @@ VIETNAMESE_GIVEN_FIRST_CONFLICT_SURFACES = frozenset(
 # cannot be inferred safely from token-level lexicons. Broad interior-surname
 # and spaced-compound rules both fail on mostly-correct control populations.
 IDENTITY_BACKED_EXACT_ROLES = {
+    "huong yong ting": ("given", "given", "surname"),
     "ming hsien ou yang": ("given", "middle", "surname", "surname"),
     "shiu lun au yeung": ("given", "middle", "surname", "surname"),
     "thuong le thi": ("given", "surname", "middle"),
@@ -444,6 +445,17 @@ def _native_lookup_text(value: str) -> str:
     return strip_name_variation_selectors(value.translate(_COMPATIBILITY_FOLD_TABLE))
 
 
+def _japanese_classifier_input(surface: str) -> str:
+    """Return the deployed classifier's exact native-script input surface.
+
+    Compatibility ideographs and variation selectors are lookup-only, while
+    authored spacing is deliberately retained. Changing that representation
+    requires a separately measured classifier migration rather than an
+    incidental name-order rule change.
+    """
+    return _native_lookup_text(surface)
+
+
 def _fold(value: str) -> str:
     if value.isascii():
         return value.casefold()
@@ -560,7 +572,7 @@ def _clears_japanese_classifier(
 ) -> bool:
     """Validate one classifier response and apply the frozen Japanese gate."""
     probability = japanese_probability(
-        _native_lookup_text(surface),
+        _japanese_classifier_input(surface),
     )
     if not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
         message = f"Japanese classifier returned invalid probability {probability!r}"
@@ -773,12 +785,43 @@ class EastAsianNameOrderService:
         if not self._japanese_given_first_plausible(surface):
             return False
         if self._japanese_order_vote(surface) != "surname_first":
-            return True
+            return not self._has_strong_chinese_surname_first_context(surface, paper_names, focal_index)
         return self._has_given_first_context(
             paper_names,
             focal_index,
             self._japanese_order_vote,
         )
+
+    @staticmethod
+    def _has_strong_chinese_surname_first_context(
+        surface: str,
+        paper_names: list[str],
+        focal_index: int,
+    ) -> bool:
+        """Return whether two peer endpoints override the broad Japanese veto."""
+        focal_tokens = surface.split()
+        if (
+            len(focal_tokens) != MIN_ROMANIZED_TOKENS
+            or not all(token.isascii() and token.isalpha() for token in focal_tokens)
+            or _endpoint_key(focal_tokens[0]) not in NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES
+        ):
+            return False
+
+        surname_first = 0
+        given_first = 0
+        for index, name in enumerate(paper_names):
+            if index == focal_index:
+                continue
+            tokens = _normalized_surface(name).split()
+            if len(tokens) < MIN_ROMANIZED_TOKENS:
+                continue
+            first_is_surname = _endpoint_key(tokens[0]) in NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES
+            last_is_surname = _endpoint_key(tokens[-1]) in NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES
+            if first_is_surname == last_is_surname:
+                continue
+            surname_first += first_is_surname
+            given_first += last_is_surname
+        return surname_first >= 2 and surname_first > given_first  # noqa: PLR2004
 
     @staticmethod
     def _reverses_endpoints(tokens: list[str], selected: NameComponents) -> bool:
@@ -939,7 +982,7 @@ class EastAsianNameOrderService:
         self,
         surface: str,
         japanese_probability: Callable[[str], float],
-    ) -> EastAsianNameOrderDecision | None:
+    ) -> EastAsianNameOrderDecision | EastAsianNameOrderPreservation | None:
         if _is_hangul(surface):
             if len(surface) != KOREAN_NATIVE_TOKEN_LENGTH:
                 return None
@@ -978,7 +1021,7 @@ class EastAsianNameOrderService:
     def _infer_spaced_japanese_native(
         surface: str,
         japanese_probability: Callable[[str], float],
-    ) -> EastAsianNameOrderDecision | None:
+    ) -> EastAsianNameOrderDecision | EastAsianNameOrderPreservation | None:
         """Route a SPACED two-token kanji/kana name family-first when the native
         dictionary supports it ("佐藤 優" -> surname 佐藤, given 優).
 
@@ -1018,6 +1061,13 @@ class EastAsianNameOrderService:
         last_given = _contains(lexicons.japanese_given_names, last_key)
         surname_first = first_surname and last_given
         reverse_plausible = first_given and last_surname
+        strict_surname_first = surname_first and not first_given and not last_surname
+        strict_given_first = reverse_plausible and not first_surname and not last_given
+        if strict_given_first:
+            return EastAsianNameOrderPreservation(
+                surface=surface,
+                reason=EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST,
+            )
         if not surname_first:
             if reverse_plausible:
                 return None
@@ -1031,7 +1081,11 @@ class EastAsianNameOrderService:
             middle_tokens=(),
             surname_tokens=(first,),
             source_order=("surname", "given"),
-            reason=EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_DICTIONARY,
+            reason=(
+                EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_STRICT_FAMILY_FIRST
+                if strict_surname_first
+                else EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_DICTIONARY
+            ),
         )
 
     @staticmethod

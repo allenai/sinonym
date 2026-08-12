@@ -556,6 +556,7 @@ class BatchAnalysisService:
         if format_pattern.total_count > 0 and format_pattern.threshold_met:
             results = self._apply_batch_format(
                 focal_format_entries,
+                focal_individual_entries,
                 format_pattern.dominant_format,
                 formatting_service,
             )
@@ -878,7 +879,8 @@ class BatchAnalysisService:
 
     def _apply_batch_format(
         self,
-        name_candidates: list[BatchCandidateEntry],
+        format_entries: list[BatchCandidateEntry],
+        individual_entries: list[BatchCandidateEntry],
         target_format: NameFormat,
         formatting_service,
     ) -> list[ParseResult]:
@@ -886,20 +888,20 @@ class BatchAnalysisService:
         results = []
 
         # Process all names in one pass and apply the target format.
-        for entry in name_candidates:
-            if not self._batch_format_applies_to_entry(entry):
-                results.append(self._materialize_individual_result(entry, formatting_service))
+        for format_entry, individual_entry in zip(format_entries, individual_entries, strict=True):
+            if not self._batch_format_applies_to_entry(format_entry):
+                results.append(self._materialize_individual_result(individual_entry, formatting_service))
                 continue
 
             # Participation guarantees a non-empty candidate list and a best_candidate,
             # so a candidate is always selected below.
-            matching_candidates = [c for c in entry.candidates if c.format == target_format]
-            selected_candidate = matching_candidates[0] if matching_candidates else entry.best_candidate
+            matching_candidates = [c for c in format_entry.candidates if c.format == target_format]
+            selected_candidate = matching_candidates[0] if matching_candidates else format_entry.best_candidate
 
             result = self._candidate_to_parse_result(
                 selected_candidate,
                 formatting_service,
-                entry.compound_metadata,
+                format_entry.compound_metadata,
             )
             results.append(result)
 

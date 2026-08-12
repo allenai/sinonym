@@ -248,12 +248,14 @@ def test_every_resolution_reason_has_one_complete_decision_spec() -> None:
         },
         (ResolutionProvenance.SCALAR, ResolutionAction.PRESERVE_INPUT): {
             ResolutionReason.KOREAN_WESTERN_CONFLICT_PRESERVE_INPUT,
+            ResolutionReason.JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST_PRESERVE_INPUT,
             ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT,
             ResolutionReason.VIETNAMESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT,
             ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT,
         },
         (ResolutionProvenance.SCALAR, ResolutionAction.ASSIGN): {
             ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT,
+            ResolutionReason.JAPANESE_NATIVE_SPACED_STRICT_ASSIGNMENT,
             ResolutionReason.IDENTITY_BACKED_EXACT_ASSIGNMENT,
             ResolutionReason.SCALAR_BASELINE,
         },
@@ -283,6 +285,12 @@ def test_every_east_asian_evidence_reason_has_one_hard_resolution_disposition() 
             ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT
         ),
         EastAsianEvidenceReason.JAPANESE_ITERATION_MARK_DUAL_EXCLUSIVE: (ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT),
+        EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_STRICT_FAMILY_FIRST: (
+            ResolutionReason.JAPANESE_NATIVE_SPACED_STRICT_ASSIGNMENT
+        ),
+        EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST: (
+            ResolutionReason.JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST_PRESERVE_INPUT
+        ),
         EastAsianEvidenceReason.IDENTITY_BACKED_EXACT_FULL_SURFACE: ResolutionReason.IDENTITY_BACKED_EXACT_ASSIGNMENT,
         EastAsianEvidenceReason.KOREAN_WESTERN_SUFFIX_CONFLICT: (ResolutionReason.KOREAN_WESTERN_CONFLICT_PRESERVE_INPUT),
     }
@@ -394,11 +402,21 @@ def test_hard_scalar_constraints_accept_the_closed_assignment_and_preservation_s
         canonical_name=_canonical("Thuong", "Le"),
         evidence_reason=EastAsianEvidenceReason.IDENTITY_BACKED_EXACT_FULL_SURFACE,
     )
+    native_assignment = ApplyAssignment(
+        canonical_name=_canonical("優", "佐藤"),
+        evidence_reason=EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_STRICT_FAMILY_FIRST,
+    )
     preservation = PreserveBaseline(canonical_name=_canonical("Kim", "Stene-Larsen"))
+    native_preservation = PreserveBaseline(
+        canonical_name=_canonical("優", "佐藤"),
+        evidence_reason=EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST,
+    )
 
     assert assignment.reason is ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT
     assert exact_assignment.reason is ResolutionReason.IDENTITY_BACKED_EXACT_ASSIGNMENT
+    assert native_assignment.reason is ResolutionReason.JAPANESE_NATIVE_SPACED_STRICT_ASSIGNMENT
     assert preservation.reason is ResolutionReason.KOREAN_WESTERN_CONFLICT_PRESERVE_INPUT
+    assert native_preservation.reason is ResolutionReason.JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST_PRESERVE_INPUT
 
 
 def test_hard_assignment_rejects_other_east_asian_rules() -> None:

@@ -589,6 +589,14 @@ CANTONESE_SURNAMES = {
 
 ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES = frozenset({"horng", "hsien"})
 
+# Complete regional given-name tokens that the Chinese concatenated-name
+# splitter would otherwise fragment at an inferred pinyin boundary. Keep the
+# reviewed source groups separate so consumers can apply a narrower policy
+# when ethnicity-specific source preservation matters.
+REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS = frozenset({"hana", "hoon", "seon", "seungbo", "woong", "young"})
+REVIEWED_ATOMIC_VIETNAMESE_GIVEN_FORMS = frozenset({"hoai", "toan"})
+REVIEWED_ATOMIC_GIVEN_FORMS = REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS | REVIEWED_ATOMIC_VIETNAMESE_GIVEN_FORMS
+
 
 # Sanity check: Ensure no inconsistencies between SYLLABLE_RULES and CANTONESE_SURNAMES
 def _check_surname_mapping_consistency():

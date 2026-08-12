@@ -290,8 +290,8 @@ name.
 
 Initials do not themselves establish that a name is Chinese. In particular, an
 initials-only name with a cross-cultural surname spelling such as `Lee`, `Lim`,
-or `Tan` stays on the non-Chinese fallback unless native script, identity data,
-or other affirmative evidence establishes the Chinese path.
+`Tan`, or `Yi` stays on the non-Chinese fallback unless native script, identity
+data, or other affirmative evidence establishes the Chinese path.
 
 ### Routed writer integration
 
@@ -306,6 +306,11 @@ direct evidence. See the [TIMO writer contract](docs/timo.md) for a
 runnable example, wire shapes, missing-value rules, decisions, and failure
 semantics.
 
+That reviewed tier includes guarded two- and three-component CJK
+transliterations packed into a last field with an authored middle dot. The
+delimiter boundary is preserved without treating every middle dot, or every
+source-field label, as semantic role evidence.
+
 TIMO clients select `sinonym` for terminal writer-ready fields.
 
 ### Conservative East Asian routing
@@ -319,6 +324,12 @@ Vietnamese names and guarded, reviewed bare-ASCII Vietnamese family-first
 forms; and two-token Japanese romanizations whose surname/given dictionaries
 support only the family-first direction. Ambiguous or unsupported names retain
 the generic input-order normalization.
+
+For spaced native Japanese names, mutually exclusive dictionary evidence is a
+hard writer decision: strict family-first evidence assigns the exchanged
+endpoints, while strict given-first evidence preserves them. TIMO applies those
+decisions before PP/VYS candidates. One-sided or conflicting dictionary shapes
+remain soft and retain the existing conservative arbitration.
 
 The East Asian assets are primarily component lexicons. The Roman asset also
 contains a small, provenance-backed exact full-name tier for reviewed routing

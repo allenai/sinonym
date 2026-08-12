@@ -983,6 +983,28 @@ def test_possible_japanese_surname_respects_strong_family_first_paper_context() 
     assert reason is None
 
 
+@pytest.mark.parametrize(
+    "paper_names",
+    [
+        ["Ma Kai", "Zhang Wei"],
+        ["Ma Kai", "Zhang Wei", "Wei Zhang"],
+        ["Akira Suzuki", "Ma Kai", "Yuki Takeuchi"],
+    ],
+    ids=["one-chinese-peer", "tied-chinese-votes", "japanese-context"],
+)
+def test_ma_kai_chinese_context_bypass_requires_two_strict_majority_peers(paper_names: list[str]) -> None:
+    focal_index = paper_names.index("Ma Kai")
+
+    reason = EastAsianNameOrderService().reorder_conflict_reason(
+        "Ma Kai",
+        NameComponents(given_name="Kai", surname="Ma"),
+        paper_names=paper_names,
+        focal_index=focal_index,
+    )
+
+    assert reason is ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
+
+
 def test_possible_japanese_surname_uses_given_first_paper_context_for_conflict() -> None:
     service = EastAsianNameOrderService()
 

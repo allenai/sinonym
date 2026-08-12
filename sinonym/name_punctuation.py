@@ -130,6 +130,7 @@ _TRANSLITERATION_APOSTROPHE_PAIRS = frozenset(
     {
         ("cui", "e"),
         ("ma", "ayan"),
+        ("o", "Brart"),
         ("o", "connor"),
         ("p", "eng"),
         ("sa", "di"),
@@ -172,7 +173,7 @@ def fold_spaced_transliteration_apostrophes(value: str) -> str:
     def join(match: re.Match[str]) -> str:
         prefix = match.group("prefix")
         tail = match.group("tail")
-        if tail != tail.lower() or (prefix.casefold(), tail) not in _TRANSLITERATION_APOSTROPHE_PAIRS:
+        if (prefix.casefold(), tail) not in _TRANSLITERATION_APOSTROPHE_PAIRS:
             return match.group(0)
         return f"{prefix}'"
 

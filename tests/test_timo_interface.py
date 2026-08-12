@@ -285,6 +285,52 @@ def test_pp_only_abstain_is_a_terminal_input_order_decision(
 
 
 @pytest.mark.parametrize(
+    "source",
+    [
+        SourceAuthorFields(first_name="Huong Yong", last_name="Ting"),
+        SourceAuthorFields(first_name="Huong", middle_names="Yong", last_name="Ting"),
+        SourceAuthorFields(last_name="Huong Yong Ting"),
+    ],
+    ids=["compound-first", "split-first-middle", "packed-last"],
+)
+def test_identity_backed_huong_yong_ting_writes_atomic_fields(
+    predictor: Predictor,
+    source: SourceAuthorFields,
+) -> None:
+    (result,) = _route(predictor, [source])
+
+    assert (result.first_name, result.middle_names, result.last_name, result.suffix) == (
+        "Huong-Yong",
+        "",
+        "Ting",
+        None,
+    )
+    assert result.resolution_provenance is ResolutionProvenance.SCALAR
+    assert result.resolution_action is ResolutionAction.ASSIGN
+    assert result.resolution_reason is ResolutionReason.IDENTITY_BACKED_EXACT_ASSIGNMENT
+
+
+@pytest.mark.parametrize(
+    ("source_given", "expected_given"),
+    [
+        ("Hoai", "Hoai"),
+        ("Toan", "Toan"),
+        ("Ho\u00e0i", "Hoai"),
+        ("To\u00e0n", "Toan"),
+    ],
+)
+def test_timo_preserves_reviewed_vietnamese_atomic_given_fields(
+    predictor: Predictor,
+    source_given: str,
+    expected_given: str,
+) -> None:
+    source = SourceAuthorFields(first_name=source_given, last_name="Wang")
+    (result,) = _route(predictor, [source])
+
+    assert (result.first_name, result.middle_names, result.last_name) == (expected_given, "", "Wang")
+
+
+@pytest.mark.parametrize(
     "hyphen",
     sorted(ROMAN_HYPHEN_LIKE, key=ord),
     ids=lambda character: f"U+{ord(character):04X}",

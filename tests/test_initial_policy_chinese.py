@@ -143,6 +143,17 @@ def test_chinese_mixed_spelled_and_initial_components(  # noqa: PLR0913 - explic
     [
         ("Wang Guang-y", "Guang-Y. Wang"),
         ("Guang-y Wang", "Guang-Y. Wang"),
+        ("Wang I-Hsiang", "I-Hsiang Wang"),
+        ("Ping-I Lin", "Ping-I Lin"),
+        ("Lin Pi-I", "Pi-I Lin"),
+        ("I-Yuan Chen", "I-Yuan Chen"),
+        ("I-Ching Lee", "I-Ching Lee"),
+        ("Hen-I Lin", "Hen-I Lin"),
+        ("Ping-I. Hsu", "Ping-I Hsu"),
+        ("Chung-I. Wu", "Chung-I Wu"),
+        ("Chung-I. Tan", "Chung-I Tan"),
+        ("Song-I. Yang", "Song-I Yang"),
+        ("G-I Zhu", "G.-I. Zhu"),
     ],
 )
 def test_explicit_hyphen_binds_given_parts_while_true_initials_remain_dotted(detector, raw, expected):

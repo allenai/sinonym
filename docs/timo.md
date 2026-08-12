@@ -158,6 +158,12 @@ the action, not ad hoc interpretation of reason strings, to decide whether to
 write the author. The authoritative enum and mapping live in
 [`sinonym/coretypes/routing_resolution.py`](../sinonym/coretypes/routing_resolution.py).
 
+Strict spaced-native Japanese evidence is terminal scalar evidence rather than
+a batch preference. Family-first assignments use
+`japanese_native_spaced_strict_assignment`; strict given-first preservation
+uses `japanese_native_spaced_strict_given_first_preserve_input`. Broader
+one-sided or conflicting Japanese dictionary shapes remain nonterminal.
+
 ## How structured fields are used
 
 For ordinary inference, source component labels provide lossless boundaries
@@ -177,6 +183,14 @@ resolves to `first_name="R."`, `middle_names="A."`, and
 `last_name="Masterov"`, with reason
 `structured_surname_initial_tail_assignment`. This exception is narrow;
 callers should submit source fields as received rather than anticipating it.
+
+The same source-pattern tier recognizes a last-field-only Western
+transliteration whose authored components are separated by U+00B7. It accepts
+only two or three nonempty, person-like components with CJK content, preserving
+their script and assigning them as given/surname or given/middle/surname. This
+is not a global middle-dot split: populated first/middle fields, Latin-only
+text, four-or-more components, organization markers, and malformed segments
+remain outside the rule.
 
 ## `not_person` is not automatically suppression
 

@@ -97,6 +97,58 @@ def test_vietnamese_thi_veto_precedes_chinese_surname_evidence(
     assert result.error_message == "appears to be Vietnamese name"
 
 
+def test_identity_backed_huong_yong_ting_keeps_huong_atomic(
+    detector: ChineseNameDetector,
+) -> None:
+    raw_name = "Huong Yong Ting"
+    scalar = detector.normalize_name(raw_name)
+    canonical = detector.normalize_person_name(raw_name)
+
+    assert not scalar.success
+    assert scalar.error_message == "given name tokens are not plausibly Chinese"
+    assert canonical is not None
+    assert scalar.canonical_name == canonical
+    assert canonical.text == "Huong-Yong Ting"
+    assert (
+        canonical.normalized.given_name,
+        canonical.normalized.middle_name,
+        canonical.normalized.surname,
+    ) == ("Huong-Yong", "", "Ting")
+    assert canonical.normalized.given_tokens == ("Huong", "Yong")
+
+
+@pytest.mark.parametrize(
+    ("source_given", "expected_given"),
+    [
+        ("Hoai", "Hoai"),
+        ("Toan", "Toan"),
+        ("Ho\u00e0i", "Hoai"),
+        ("To\u00e0n", "Toan"),
+    ],
+)
+def test_reviewed_vietnamese_given_forms_stay_atomic_in_public_outputs(
+    detector: ChineseNameDetector,
+    source_given: str,
+    expected_given: str,
+) -> None:
+    raw_name = f"{source_given} Wang"
+    expected_name = f"{expected_given} Wang"
+    scalar = detector.normalize_name(raw_name)
+    canonical = detector.normalize_person_name(raw_name)
+
+    assert scalar.success
+    assert scalar.result == expected_name
+    assert scalar.canonical_name is not None
+    assert scalar.canonical_name.text == expected_name
+    assert scalar.canonical_name.normalized.given_name == expected_given
+    assert scalar.canonical_name.normalized.given_tokens == (expected_given,)
+    assert canonical is not None
+    assert canonical.text == raw_name
+    assert canonical.normalized.given_name == source_given
+    assert canonical.normalized.surname == "Wang"
+    assert canonical.normalized.given_tokens == (source_given,)
+
+
 @pytest.mark.parametrize(
     ("raw_name", "expected"),
     [

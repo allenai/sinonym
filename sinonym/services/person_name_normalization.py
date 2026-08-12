@@ -145,7 +145,9 @@ _CREDENTIAL_KEYS = frozenset(
     {
         "ba",
         "bs",
+        "bsn",
         "bsc",
+        "ccrn",
         "dds",
         "dmd",
         "do",

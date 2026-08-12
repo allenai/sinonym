@@ -49,10 +49,69 @@ CONTEXTUAL_TAIWAN_GIVEN_PARTS = {
 KOREAN_DIRECTIONAL_SURNAMES = frozenset(
     NAME_ORDER_ROUTING_KOREAN_SURNAMES | KOREAN_ONLY_SURNAMES | OVERLAPPING_KOREAN_SURNAMES,
 )
-AMBIGUOUS_INITIAL_ONLY_SURNAMES = frozenset(
+INITIAL_ONLY_CROSS_CULTURAL_SURNAMES = frozenset(
     NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES
     | OVERLAPPING_KOREAN_SURNAMES
-    | OVERLAPPING_VIETNAMESE_SURNAMES,
+    | OVERLAPPING_VIETNAMESE_SURNAMES
+    | {"yi"},
+)
+# A generated Pinyin pair is not sufficient proof of Chinese identity: Japanese
+# names such as 裕 吉川 and 中山 和貴 happen to begin with ``yu ji`` and
+# ``zhong shan``.  This closed native-script inventory retains the intended
+# rescue only when the authored Han surface itself begins with a recognized
+# Chinese compound family name.
+CHINESE_COMPOUND_SURNAMES_HAN = frozenset(
+    {
+        "欧阳",
+        "歐陽",
+        "司马",
+        "司馬",
+        "司徒",
+        "上官",
+        "诸葛",
+        "諸葛",
+        "夏侯",
+        "皇甫",
+        "申屠",
+        "司空",
+        "司寇",
+        "澹台",
+        "闻人",
+        "聞人",
+        "西门",
+        "西門",
+        "鲜于",
+        "鮮于",
+        "轩辕",
+        "軒轅",
+        "尉迟",
+        "尉遲",
+        "宇文",
+        "慕容",
+        "东方",
+        "東方",
+        "公孙",
+        "公孫",
+        "令狐",
+        "南宫",
+        "南宮",
+        "钟离",
+        "鍾離",
+        "鐘離",
+        "第五",
+        "长孙",
+        "長孫",
+        "独孤",
+        "獨孤",
+        "拓跋",
+        "端木",
+        "百里",
+        "东郭",
+        "東郭",
+        "南门",
+        "南門",
+        "呼延",
+    },
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -146,9 +205,16 @@ class EthnicityClassificationService:
         self,
         tokens: tuple[str, ...],
         normalized_cache: dict[str, str],
+        source_text: str,
     ) -> bool:
-        """Return whether tokens begin with a recognized Chinese compound surname."""
+        """Return whether authored Han and Pinyin agree on a compound surname."""
         if len(tokens) < MIN_COMPOUND_SURNAME_TOKEN_COUNT:
+            return False
+
+        compact_source = self._normalizer._text_preprocessor.compact_all_chinese_input(source_text)
+        if not compact_source or not any(
+            compact_source.startswith(surname) and len(compact_source) > len(surname) for surname in CHINESE_COMPOUND_SURNAMES_HAN
+        ):
             return False
 
         first_two = [self._normalizer.get_normalized(token, normalized_cache) for token in tokens[:2]]
@@ -194,7 +260,7 @@ class EthnicityClassificationService:
             if ml_result.success is False:
                 if ml_result.error_message != JAPANESE_CLASSIFIER_REJECTION:
                     return ml_result
-                if not self._starts_with_chinese_compound_surname(tokens, normalized_cache):
+                if not self._starts_with_chinese_compound_surname(tokens, normalized_cache, folded_text):
                     return ParseResult.failure("Japanese name detected by ML classifier")
 
         # Prepare expanded keys for pattern matching
@@ -318,14 +384,10 @@ class EthnicityClassificationService:
 
         for surname_index in (0, len(tokens) - 1):
             surname = StringManipulationUtils.remove_spaces(tokens[surname_index]).lower()
-            if surname not in AMBIGUOUS_INITIAL_ONLY_SURNAMES:
+            if surname not in INITIAL_ONLY_CROSS_CULTURAL_SURNAMES:
                 continue
             personal_parts = [
-                part
-                for index, token in enumerate(tokens)
-                if index != surname_index
-                for part in token.split("-")
-                if part
+                part for index, token in enumerate(tokens) if index != surname_index for part in token.split("-") if part
             ]
             if personal_parts and all(self._is_initial_only_surface_part(part) for part in personal_parts):
                 return True
@@ -335,8 +397,7 @@ class EthnicityClassificationService:
         """Recognize explicit initials and reviewed compact-initial shapes."""
         folded = self._normalizer.norm_light(part.rstrip("."))
         return bool(
-            (len(folded) == 1 and folded.isalpha())
-            or self._normalizer.is_vowelless_compact_initial(part),
+            (len(folded) == 1 and folded.isalpha()) or self._normalizer.is_vowelless_compact_initial(part),
         )
 
     def _has_wade_giles_apostrophe_surname(self, tokens: tuple[str, ...]) -> bool:

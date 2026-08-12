@@ -358,6 +358,21 @@ def test_batch_evidence_uses_actual_individual_format_for_guarded_given_first(de
     assert result.individual_analyses[0].best_candidate.format == NameFormat.GIVEN_FIRST
 
 
+def test_nonparticipant_uses_guarded_individual_view_in_thresholded_batch(detector):
+    """A row excluded from batch formatting must keep its standalone winner."""
+    names = ["Lu Chen", "Yuanyuan Ma", "Zhipeng SHAO", "Mu CHEN"]
+
+    result = detector.analyze_name_batch(names)
+    focal = result.name_order_evidence[3]
+
+    assert result.format_pattern.threshold_met
+    assert result.results[3].result == "Mu Chen"
+    assert focal.batch_participant is False
+    assert focal.batch_applied is False
+    assert focal.individual_format is NameFormat.GIVEN_FIRST
+    assert focal.selected_format is NameFormat.GIVEN_FIRST
+
+
 def test_name_order_evidence_uses_selected_compound_surname_span_frequency(detector):
     """Spaced compound selected surnames use the whole surname span for frequency evidence."""
     names = ["Zhu Ge Liang", "Ou Yang Wei"]

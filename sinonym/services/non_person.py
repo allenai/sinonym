@@ -142,6 +142,9 @@ CJK_NON_PERSON_SUFFIX_MARKERS = STRONG_CJK_NON_PERSON_MARKERS
 
 REVIEWED_CREDENTIAL_ONLY_TOKENS = frozenset(
     {
+        "A-GNP",
+        "AOCNP",
+        "ARNP",
         "BEng",
         "BSc",
         "CTRS",

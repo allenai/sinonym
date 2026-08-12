@@ -43,6 +43,8 @@ class EastAsianEvidenceReason(str, Enum):
     KOREAN_NATIVE_THREE_SYLLABLE = "korean_native_three_syllable"
     JAPANESE_NATIVE_DICTIONARY = "japanese_native_dictionary"
     JAPANESE_NATIVE_SPACED_DICTIONARY = "japanese_native_spaced_dictionary"
+    JAPANESE_NATIVE_SPACED_STRICT_FAMILY_FIRST = "japanese_native_spaced_strict_family_first"
+    JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST = "japanese_native_spaced_strict_given_first"
     VIETNAMESE_GIVEN_FIRST_EXACT_SURFACE = "vietnamese_given_first_exact_surface"
     VIETNAMESE_UNICODE_SURNAME_FIRST = "vietnamese_unicode_surname_first"
     KOREAN_COMPACT_GIVEN_UNIQUE_SPLIT = "korean_compact_given_unique_split"
@@ -62,10 +64,12 @@ class ResolutionReason(str, Enum):
     STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT = "structured_surname_initial_tail_assignment"
 
     JAPANESE_ITERATION_MARK_ASSIGNMENT = "japanese_iteration_mark_assignment"
+    JAPANESE_NATIVE_SPACED_STRICT_ASSIGNMENT = "japanese_native_spaced_strict_assignment"
     IDENTITY_BACKED_EXACT_ASSIGNMENT = "identity_backed_exact_assignment"
     REVIEWED_EXACT_SOURCE_ASSIGNMENT = "reviewed_exact_source_assignment"
     REVIEWED_SOURCE_PATTERN_ASSIGNMENT = "reviewed_source_pattern_assignment"
     KOREAN_WESTERN_CONFLICT_PRESERVE_INPUT = "korean_western_conflict_preserve_input"
+    JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST_PRESERVE_INPUT = "japanese_native_spaced_strict_given_first_preserve_input"
     JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT = "japanese_given_first_reorder_veto_preserve_input"
     VIETNAMESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT = "vietnamese_given_first_reorder_veto_preserve_input"
     INITIALS_COMMA_REORDER_VETO_PRESERVE_INPUT = "initials_comma_reorder_veto_preserve_input"
@@ -119,12 +123,14 @@ _RESOLUTION_REASON_GROUPS = {
     (ResolutionProvenance.SOURCE, ResolutionAction.SUPPRESS): (ResolutionReason.REVIEWED_NON_PERSON_PATTERN,),
     (ResolutionProvenance.SCALAR, ResolutionAction.PRESERVE_INPUT): (
         ResolutionReason.KOREAN_WESTERN_CONFLICT_PRESERVE_INPUT,
+        ResolutionReason.JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST_PRESERVE_INPUT,
         ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT,
         ResolutionReason.VIETNAMESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT,
         ResolutionReason.CONTEXT_SUPPORTED_REORDER_VETO_PRESERVE_INPUT,
     ),
     (ResolutionProvenance.SCALAR, ResolutionAction.ASSIGN): (
         ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT,
+        ResolutionReason.JAPANESE_NATIVE_SPACED_STRICT_ASSIGNMENT,
         ResolutionReason.IDENTITY_BACKED_EXACT_ASSIGNMENT,
         ResolutionReason.SCALAR_BASELINE,
     ),
@@ -157,6 +163,12 @@ EAST_ASIAN_EVIDENCE_RESOLUTION_REASONS = MappingProxyType(
             ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT
         ),
         EastAsianEvidenceReason.JAPANESE_ITERATION_MARK_DUAL_EXCLUSIVE: (ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT),
+        EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_STRICT_FAMILY_FIRST: (
+            ResolutionReason.JAPANESE_NATIVE_SPACED_STRICT_ASSIGNMENT
+        ),
+        EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST: (
+            ResolutionReason.JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST_PRESERVE_INPUT
+        ),
         EastAsianEvidenceReason.IDENTITY_BACKED_EXACT_FULL_SURFACE: ResolutionReason.IDENTITY_BACKED_EXACT_ASSIGNMENT,
         EastAsianEvidenceReason.KOREAN_WESTERN_SUFFIX_CONFLICT: (ResolutionReason.KOREAN_WESTERN_CONFLICT_PRESERVE_INPUT),
     },
@@ -192,7 +204,7 @@ class ApplyAssignment:
 
 @dataclass(frozen=True, slots=True)
 class PreserveBaseline:
-    """Keep the current path's baseline after the proven Korean conflict veto."""
+    """Keep the current path's baseline after a proven order-preservation veto."""
 
     canonical_name: CanonicalName
     evidence_reason: EastAsianEvidenceReason = EastAsianEvidenceReason.KOREAN_WESTERN_SUFFIX_CONFLICT
@@ -201,7 +213,7 @@ class PreserveBaseline:
         """Enforce the closed evidence set: the mapped reason must preserve."""
         reason = EAST_ASIAN_EVIDENCE_RESOLUTION_REASONS.get(self.evidence_reason)
         if reason is None or resolution_decision_spec(reason).action is not ResolutionAction.PRESERVE_INPUT:
-            message = "PreserveBaseline is reserved for the Korean/Western conflict hard decision"
+            message = f"unsupported hard scalar preservation: {self.evidence_reason!r}"
             raise ValueError(message)
 
     @property

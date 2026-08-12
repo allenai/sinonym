@@ -15,6 +15,7 @@ from sinonym.coretypes.routing_resolution import (
     ResolutionReason,
 )
 from sinonym.timo._resolution import (
+    REVIEWED_EXACT_EMPTY_SUFFIX_ENDPOINT_REORDERS,
     reviewed_exact_source_assignment,
     reviewed_exact_source_reversal,
     reviewed_fullwidth_katakana_alias_assignment,
@@ -129,6 +130,86 @@ def _source(parts: _SourceParts) -> SourceAuthorFields:
             ("Min-Fu", "", "Tsan"),
             id="min-fu-tsan-split-given-name",
         ),
+        pytest.param(
+            ("Albert", "Guillén i", "Fàbregas"),
+            ("Albert", "", "Guillén i Fàbregas"),
+            id="catalan-conjunction-compound-surname",
+        ),
+        pytest.param(
+            ("Ernest", "Bladé i", "Castellet"),
+            ("Ernest", "", "Bladé i Castellet"),
+            id="catalan-lowercase-i-compound-surname",
+        ),
+        pytest.param(
+            ("Jordi", "Feu i", "Gelis"),
+            ("Jordi", "", "Feu i Gelis"),
+            id="catalan-feu-i-gelis",
+        ),
+        pytest.param(
+            ("Jaime", "Lluis y", "Navas"),
+            ("Jaime", "", "Lluis y Navas"),
+            id="spanish-lowercase-y-compound-surname",
+        ),
+        pytest.param(
+            ("Alvaro", "d' Ors y", "Pérez-Peix"),
+            ("Alvaro", "", "d'Ors y Pérez-Peix"),
+            id="spanish-apostrophe-particle-compound-surname",
+        ),
+        pytest.param(
+            ("B.", "Ó", "Fearraigh"),
+            ("B.", "", "Ó Fearraigh"),
+            id="irish-o-particle-compound-surname",
+        ),
+        pytest.param(
+            ("Olaru", "", "C. C."),
+            ("C.", "C.", "Olaru"),
+            id="surname-first-initials-olaru",
+        ),
+        pytest.param(
+            ("Tran", "D", "Huong"),
+            ("Huong", "D.", "Tran"),
+            id="vietnamese-surname-first-initial",
+        ),
+        pytest.param(
+            ("I", "Ketut", "Junitha"),
+            ("I", "Ketut", "Junitha"),
+            id="balinese-i-ketut",
+        ),
+        pytest.param(
+            ("I", "", "GedeNyomanFajarAnugrahWinartaPutra"),
+            ("I", "", "GedeNyomanFajarAnugrahWinartaPutra"),
+            id="balinese-i-fused-given-sequence",
+        ),
+        pytest.param(
+            ("I", "Made", "Kamiana"),
+            ("I", "Made", "Kamiana"),
+            id="balinese-i-made",
+        ),
+        pytest.param(
+            ("I", "Dewa Putu", "Pramantara"),
+            ("I", "Dewa Putu", "Pramantara"),
+            id="balinese-i-dewa-putu",
+        ),
+        pytest.param(
+            ("I D G A", "", "Subagia"),
+            ("I", "D G A", "Subagia"),
+            id="balinese-expanded-initial-elements",
+        ),
+        pytest.param(
+            ("35", "", "W.M.Song"),
+            ("W.", "M.", "Song"),
+            id="numeric-affiliation-prefix",
+        ),
+        pytest.param(
+            ("G.", "", "D Andrea"),
+            ("G.", "", "D'Andrea"),
+            id="detached-apostrophe-surname",
+        ),
+        pytest.param(
+            ("Graeme", "", "Woodfield (Chairman)"),
+            ("Graeme", "", "Woodfield"),
+            id="parenthetical-role-suffix",
+        ),
     ],
 )
 def test_reviewed_exact_source_assignments_are_terminal(
@@ -145,6 +226,51 @@ def test_reviewed_exact_source_assignments_are_terminal(
     assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
     assert resolved.resolution_action is ResolutionAction.ASSIGN
     assert resolved.resolution_reason is ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT
+
+
+@pytest.mark.parametrize(
+    "source_key",
+    sorted(REVIEWED_EXACT_EMPTY_SUFFIX_ENDPOINT_REORDERS),
+)
+def test_full_corpus_reviewed_compact_endpoint_reorders(
+    predictor: Predictor,
+    source_key: tuple[str, str, str],
+) -> None:
+    first, middle, last = source_key
+    source = SourceAuthorFields(
+        first_name=first.title(),
+        middle_names=middle or None,
+        last_name=last.title(),
+    )
+
+    selected = reviewed_exact_source_assignment(source)
+    resolved = _route(predictor, source)
+
+    assert selected == NameComponents(given_name=source.last_name or "", surname=source.first_name or "")
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.ASSIGN
+    assert resolved.resolution_reason is ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT
+    assert resolved.last_name == source.first_name
+    if last not in {"a.v.", "b", "s-c"}:
+        assert (resolved.first_name, resolved.middle_names) == (source.last_name, "")
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (SourceAuthorFields(first_name="Lee", last_name="B"), ("B.", "", "Lee")),
+        (SourceAuthorFields(first_name="Kazantsev", last_name="A.V."), ("A.", "V.", "Kazantsev")),
+        (SourceAuthorFields(first_name="Kang", last_name="S-C"), ("S.-C.", "", "Kang")),
+    ],
+)
+def test_full_corpus_reviewed_punctuated_abbreviations_use_canonical_initials(
+    predictor: Predictor,
+    source: SourceAuthorFields,
+    expected: tuple[str, str, str],
+) -> None:
+    resolved = _route(predictor, source)
+
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == expected
 
 
 @pytest.mark.parametrize(
@@ -171,9 +297,61 @@ def test_source_non_assignments_preserve_initial_spelling_byte_exact(reason: Res
 @pytest.mark.parametrize(
     "source",
     [
+        SourceAuthorFields(first_name="I", middle_names="Ketut", last_name="Junitha", suffix="PhD"),
+        SourceAuthorFields(first_name="Other", middle_names="Ketut", last_name="Junitha"),
+        SourceAuthorFields(first_name="I", middle_names="Other", last_name="Junitha"),
+        SourceAuthorFields(first_name="I", middle_names="Ketut", last_name="Other"),
+        SourceAuthorFields(first_name="Olaru", last_name="C. C.", suffix="Jr."),
+        SourceAuthorFields(first_name="Tran", middle_names="D", last_name="Huong", suffix="PhD"),
+        SourceAuthorFields(first_name="Lee", last_name="Sh", suffix="PhD"),
+        SourceAuthorFields(first_name="Lee", middle_names="A", last_name="Sh"),
+    ],
+)
+def test_pr_diff_exact_assignments_require_the_closed_empty_suffix_key(source: SourceAuthorFields) -> None:
+    assert reviewed_exact_source_assignment(source) is None
+
+
+def test_reviewed_rn_msn_prefix_recovers_packed_two_token_name(predictor: Predictor) -> None:
+    source = SourceAuthorFields(first_name="Rn", middle_names="Msn", last_name="Susan Berends")
+
+    resolved = _route(predictor, source)
+
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("Susan", "", "Berends")
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.ASSIGN
+    assert resolved.resolution_reason is ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        SourceAuthorFields(first_name="Rn", middle_names="Other", last_name="Susan Berends"),
+        SourceAuthorFields(first_name="Rn", middle_names="Msn", last_name="Susan L Berends"),
+        SourceAuthorFields(first_name="Rn", middle_names="Msn", last_name="Susan Berends", suffix="PhD"),
+    ],
+)
+def test_reviewed_rn_msn_prefix_declines_nearby_shapes(predictor: Predictor, source: SourceAuthorFields) -> None:
+    resolved = _route(predictor, source)
+
+    assert resolved.resolution_reason is not ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT
+
+
+def test_all_nonempty_nursing_credential_fields_are_suppressed(predictor: Predictor) -> None:
+    source = SourceAuthorFields(first_name="ARNP", middle_names="A-GNP", last_name="AOCNP")
+
+    resolved = _route(predictor, source)
+
+    assert resolved.resolution_reason is ResolutionReason.REVIEWED_NON_PERSON_PATTERN
+    assert resolved.resolution_action is ResolutionAction.SUPPRESS
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
         SourceAuthorFields(first_name="Kai", last_name="Zenger"),
         SourceAuthorFields(first_name="Masaki", last_name="Morishige"),
         SourceAuthorFields(first_name="Miki", last_name="Toyota"),
+        SourceAuthorFields(first_name="Shi", middle_names="(Tracy)", last_name="Xu"),
         SourceAuthorFields(first_name="Shinsei", last_name="Ryu"),
     ],
 )
@@ -185,7 +363,7 @@ def test_reviewed_exact_reversals_preserve_source_order(
 
     assert (resolved.first_name, resolved.middle_names, resolved.last_name) == (
         source.first_name,
-        "",
+        source.middle_names or "",
         source.last_name,
     )
     assert resolved.resolution_provenance is ResolutionProvenance.SOURCE

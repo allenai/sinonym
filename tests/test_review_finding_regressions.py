@@ -19,6 +19,7 @@ from sinonym.services.person_name_normalization import PersonNameNormalizationSe
         ("Cui 'e Zheng", "Cui'e Zheng"),
         ("P 'eng Wang", "P'eng Wang"),
         ("SA 'di Ahmed", "SA'di Ahmed"),
+        ("Naomi A O \u2019 Brart", "Naomi A. O'Brart"),
     ],
 )
 def test_spaced_transliteration_apostrophes_join_the_preceding_token(raw_name: str, expected: str) -> None:
@@ -28,6 +29,62 @@ def test_spaced_transliteration_apostrophes_join_the_preceding_token(raw_name: s
     assert result.outcome is PersonNameOutcome.PERSON
     assert result.canonical_name is not None
     assert result.canonical_name.text == expected
+
+
+def test_reviewed_nursing_credentials_are_removed_from_wrapped_name() -> None:
+    normalizer = PersonNameNormalizationService()
+    results = [
+        normalizer.normalize_text("Rn Ccrn Stacy L Davis Bsn"),
+        normalizer.normalize_components(
+            first_name="Rn",
+            middle_name="Ccrn Stacy L",
+            last_name="Davis Bsn",
+        ),
+    ]
+
+    for result in results:
+        assert result.outcome is PersonNameOutcome.PERSON
+        assert result.canonical_name is not None
+        assert result.canonical_name.text == "Stacy L. Davis"
+        assert [token.text for token in result.dropped_tokens] == ["Rn", "Ccrn", "Bsn"]
+
+
+def test_bsn_prefix_is_removed_from_independently_reviewed_name() -> None:
+    result = PersonNameNormalizationService().normalize_components(
+        first_name="BSN",
+        last_name="Linda S. Rivard",
+    )
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "Linda S. Rivard"
+    assert [token.text for token in result.dropped_tokens] == ["BSN"]
+
+
+def test_internal_dotted_bsn_letters_are_not_dropped_as_a_credential() -> None:
+    result = PersonNameNormalizationService().normalize_components(
+        first_name="Charlene",
+        middle_name="J. B.S.N.",
+        last_name="Lueck",
+    )
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "Charlene J. B. S. N. Lueck"
+    assert result.dropped_tokens == ()
+
+
+def test_msn_blocks_generic_structured_wrapper_cleanup() -> None:
+    result = PersonNameNormalizationService().normalize_components(
+        first_name="Rn",
+        middle_name="Msn",
+        last_name="Susan Berends",
+    )
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.text == "Msn Susan Berends"
+    assert [token.text for token in result.dropped_tokens] == ["Rn"]
 
 
 @pytest.mark.parametrize(

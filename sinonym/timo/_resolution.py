@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, StrictStr, root_validator
 
+from sinonym.chinese_names_data import REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS
 from sinonym.coretypes import NameComponents
 from sinonym.coretypes.routing_resolution import (
     ApplyAssignment,
@@ -33,8 +34,11 @@ from sinonym.coretypes.routing_resolution import (
 )
 from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
 from sinonym.pipeline.name_order_routing import pp_abstain_parsed
-from sinonym.services.formatting import REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS
-from sinonym.services.non_person import REVIEWED_HANGUL_ORGANIZATION_MARKERS, reviewed_non_person_source_pattern
+from sinonym.services.non_person import (
+    CJK_NON_PERSON_SUFFIX_MARKERS,
+    REVIEWED_HANGUL_ORGANIZATION_MARKERS,
+    reviewed_non_person_source_pattern,
+)
 from sinonym.services.person_name_normalization import (
     PersonNameNormalizationService,
     PersonNameOutcome,
@@ -89,6 +93,8 @@ _REVIEWED_JR_ORGANIZATION_WORDS = frozenset(
         "university",
     },
 )
+_MIDDLE_DOT = "\u00b7"
+_MIDDLE_DOT_PERSON_PUNCTUATION = frozenset({"'", "\u2019", "-", "\u2010", "\u2011", "."})
 _REVIEWED_JR_FAMILY_PARTICLES = frozenset(
     {
         "al",
@@ -126,6 +132,53 @@ _REVIEWED_JR_FAMILY_PARTICLES = frozenset(
 )
 _UNICODE_LETTER_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
 _MULTI_INITIAL_TOKEN_RE = re.compile(r"(?:[^\W\d_]\.){2,}[^\W\d_]?\.?$", re.UNICODE)
+_ASCII_WORD_RE = re.compile(r"[A-Za-z]+")
+_ASCII_HYPHENATED_WORD_RE = re.compile(r"[A-Za-z]+(?:-[A-Za-z]+)*")
+_ASCII_INITIAL_RE = re.compile(r"[A-Za-z]\.?")
+_DOTTED_INITIAL_RE = re.compile(r"[^\W\d_]\.", re.UNICODE)
+_JOINED_UPPERCASE_SURNAME_RE = re.compile(r"([A-Z]{2,})([A-Z][a-z]+(?:-[a-z]+)*)")
+_TITLED_GIVEN_RE = re.compile(r"(?:Dr\.|Prof\.) ([^\s]+)")
+_TRAILING_AFFILIATION_SURNAME_RE = re.compile(r"[A-Z][a-z]+a")
+_MIN_DOTTED_SOURCE_INITIALS = 2
+_MAX_DOTTED_SOURCE_INITIALS = 3
+_DETACHED_ACUTE = "\u00b4"
+_DETACHED_TILDE = "\u02dc"
+_DETACHED_DIACRITIC_TOKEN_RE = re.compile(rf"(?<!\S)[{_DETACHED_ACUTE}{_DETACHED_TILDE}](?!\S)")
+_DETACHED_DIACRITIC_SPAN_RE = re.compile(
+    rf"(?P<head>[^\W\d_]+)\s+(?P<mark>[{_DETACHED_ACUTE}{_DETACHED_TILDE}])\s+(?P<tail>[^\W\d_]+)",
+    re.UNICODE,
+)
+_DETACHED_DIACRITIC_SPECS = {
+    _DETACHED_ACUTE: ("\u0301", frozenset("aeiouy")),
+    _DETACHED_TILDE: ("\u0303", frozenset("ano")),
+}
+_DETACHED_DIACRITIC_TRANSLITERATION_CONTROLS = frozenset(
+    {
+        ("cui", "e"),
+        ("ma", "ayan"),
+        ("o", "connor"),
+        ("p", "eng"),
+        ("sa", "di"),
+        ("ts", "ai"),
+    },
+)
+_REVIEWED_TRAILING_AFFILIATION_ROSTERS = frozenset(
+    {
+        (
+            ("su-sui", "", "lina"),
+            ("wei-shen", "", "taia"),
+            ("kwo-ting", "", "fanga"),
+        ),
+        (
+            ("ing", "", "zhanga"),
+            ("yuan", "", "hua"),
+            ("lei", "", "songa"),
+            ("hongdian", "", "lua"),
+            ("jian", "", "wanga"),
+            ("qingqing", "", "liua"),
+        ),
+    },
+)
 _REVIEWED_CLEANUP_PREFIX_CREDENTIAL_KEYS = frozenset({"dnb"})
 _CYRILLIC_NAME_TOKEN_RE = re.compile(r"[\u0410-\u042f\u0401][\u0410-\u044f\u0401\u0451'\u2019-]+")
 _FEMININE_CYRILLIC_SURNAME_SUFFIXES = (
@@ -354,6 +407,189 @@ REVIEWED_EXACT_SOURCE_LITERAL_ASSIGNMENTS = {
     ),
 }
 
+# Exact empty-suffix corrections found by the PR29/PR30 manual-diff audit.
+# These rows need semantic fields that cannot be expressed by the older
+# endpoint-only tables. Keys use the same whitespace/case contract as
+# ``_source_component_key``.
+REVIEWED_EXACT_EMPTY_SUFFIX_ASSIGNMENTS = {
+    ("35", "", "w.m.song"): NameComponents(
+        given_name="W.",
+        middle_name="M.",
+        surname="Song",
+    ),
+    ("g.", "", "d andrea"): NameComponents(
+        given_name="G.",
+        surname="D'Andrea",
+    ),
+    ("graeme", "", "woodfield (chairman)"): NameComponents(
+        given_name="Graeme",
+        surname="Woodfield",
+    ),
+    ("albert", "guillén i", "fàbregas"): NameComponents(
+        given_name="Albert",
+        surname="Guillén i Fàbregas",
+    ),
+    ("ernest", "bladé i", "castellet"): NameComponents(
+        given_name="Ernest",
+        surname="Bladé i Castellet",
+    ),
+    ("jordi", "feu i", "gelis"): NameComponents(
+        given_name="Jordi",
+        surname="Feu i Gelis",
+    ),
+    ("jaime", "lluis y", "navas"): NameComponents(
+        given_name="Jaime",
+        surname="Lluis y Navas",
+    ),
+    ("alvaro", "d' ors y", "pérez-peix"): NameComponents(
+        given_name="Alvaro",
+        surname="d'Ors y Pérez-Peix",
+    ),
+    ("b.", "ó", "fearraigh"): NameComponents(
+        given_name="B.",
+        surname="Ó Fearraigh",
+    ),
+    ("olaru", "", "c. c."): NameComponents(
+        given_name="C. C.",
+        surname="Olaru",
+    ),
+    ("tran", "d", "huong"): NameComponents(
+        given_name="Huong",
+        middle_name="D",
+        surname="Tran",
+    ),
+    ("l.", "s.", "lauria de cidre"): NameComponents(
+        given_name="L.",
+        middle_name="S.",
+        surname="Lauria de Cidre",
+    ),
+    ("y.", "", "pépin dubois"): NameComponents(
+        given_name="Y.",
+        surname="Pépin Dubois",
+    ),
+    ("r", "", "uribe elías"): NameComponents(
+        given_name="R.",
+        surname="Uribe Elías",
+    ),
+    ("m.", "", "ravonel salzgeber"): NameComponents(
+        given_name="M.",
+        surname="Ravonel Salzgeber",
+    ),
+    ("j", "", "robles barba"): NameComponents(
+        given_name="J.",
+        surname="Robles Barba",
+    ),
+    ("d.", "", "paredes hernandez"): NameComponents(
+        given_name="D.",
+        surname="Paredes Hernandez",
+    ),
+    ("v", "", "sánchez margalet"): NameComponents(
+        given_name="V.",
+        surname="Sánchez Margalet",
+    ),
+    ("r", "k", "chew"): NameComponents(
+        given_name="R.-K.",
+        surname="Chew",
+    ),
+    ("\u589e\u5174", "", "\u6e38"): NameComponents(
+        given_name="Zeng-Xing",
+        surname="You",
+    ),
+    ("\u5149", "", "\u5f69\u4e43"): NameComponents(
+        given_name="\u5f69\u4e43",
+        surname="\u5149",
+    ),
+    ("\u5742\u53e3", "", "\u5e73"): NameComponents(
+        given_name="\u5e73",
+        surname="\u5742\u53e3",
+    ),
+}
+
+# Every occurrence of these compact surname-first tuples was inspected in the
+# 691,008,961-author source corpus. Endpoint exchange is safe, but expanding a
+# compact source form such as ``Sh`` into invented initials is not.
+REVIEWED_EXACT_EMPTY_SUFFIX_ENDPOINT_REORDERS = frozenset(
+    {
+        ("chen", "", "mh"),
+        ("chen", "", "pj"),
+        ("chen", "", "xr"),
+        ("chen", "", "yj"),
+        ("chen", "", "zb"),
+        ("chang", "", "jn"),
+        ("chan", "", "mc"),
+        ("chan", "", "nk"),
+        ("guo", "", "wh"),
+        ("kazantsev", "", "a.v."),
+        ("kang", "", "s-c"),
+        ("lee", "", "b"),
+        ("lee", "", "ds"),
+        ("lee", "", "kh"),
+        ("lee", "", "ls"),
+        ("lee", "", "sh"),
+        ("lee", "", "sl"),
+        ("lee", "", "wr"),
+        ("li", "", "cl"),
+        ("li", "", "sh"),
+        ("li", "", "zh"),
+        ("liu", "", "pt"),
+        ("liu", "", "zh"),
+        ("sun", "", "cy"),
+        ("sun", "", "hq"),
+        ("wang", "", "hl"),
+        ("wang", "", "jp"),
+        ("wang", "", "kq"),
+        ("wang", "", "sl"),
+        ("wang", "", "yy"),
+        ("wang", "", "zm"),
+        ("wu", "", "ch"),
+        ("wu", "", "wn"),
+        ("yang", "", "dx"),
+        ("zhang", "", "ds"),
+        ("zhang", "", "jz"),
+        ("zhou", "", "xg"),
+        ("xu", "", "br"),
+        ("xu", "", "lz"),
+    },
+)
+
+# These reviewed assignments require exact component text. They must bypass
+# ordinary source-assignment initial formatting, which would add punctuation
+# to semantic bare initials or repartition a deliberately grouped given name.
+REVIEWED_EXACT_BARE_PERSONAL_ASSIGNMENTS = {
+    ("i", "", "gedenyomanfajaranugrahwinartaputra"): NameComponents(
+        given_name="I",
+        surname="GedeNyomanFajarAnugrahWinartaPutra",
+    ),
+    ("i", "ketut", "junitha"): NameComponents(
+        given_name="I",
+        middle_name="Ketut",
+        surname="Junitha",
+    ),
+    ("i", "made", "kamiana"): NameComponents(
+        given_name="I",
+        middle_name="Made",
+        surname="Kamiana",
+    ),
+    ("i", "dewa putu", "pramantara"): NameComponents(
+        given_name="I",
+        middle_name="Dewa Putu",
+        surname="Pramantara",
+    ),
+    ("i d g a", "", "subagia"): NameComponents(
+        given_name="I",
+        middle_name="D G A",
+        surname="Subagia",
+    ),
+    ("a", "", "fernandez ajó"): NameComponents(
+        given_name="A",
+        surname="Fernandez Ajó",
+    ),
+    ("j.", "i.", "yi"): NameComponents(
+        given_name="J. I.",
+        surname="Yi",
+    ),
+}
+
 # Exact Korean tuples manually adjudicated from frozen audit and paper-roster
 # evidence. Each value is the count of leading source-middle tokens belonging
 # to the given name. Zero preserves a fused source given name. Assignments take
@@ -425,6 +661,7 @@ REVIEWED_EXACT_SOURCE_REORDER_VETOES = frozenset(
         ("kai", "", "zenger"),
         ("masaki", "", "morishige"),
         ("miki", "", "toyota"),
+        ("shi", "(tracy)", "xu"),
         ("shinsei", "", "ryu"),
     },
 )
@@ -612,9 +849,74 @@ def reviewed_fullwidth_katakana_alias_assignment(
     return NameComponents(given_name=given, surname=family)
 
 
+def _is_middle_dot_person_segment(segment: str) -> bool:
+    """Accept one conservative authored component around U+00B7."""
+    has_letter = False
+    for character in segment:
+        category = unicodedata.category(character)
+        if category.startswith("L"):
+            has_letter = True
+            continue
+        if category.startswith("M") or character.isspace() or character in _MIDDLE_DOT_PERSON_PUNCTUATION:
+            continue
+        return False
+    if not has_letter:
+        return False
+
+    words = {match.group().casefold() for match in _UNICODE_LETTER_WORD_RE.finditer(segment)}
+    if words & _REVIEWED_JR_ORGANIZATION_WORDS:
+        return False
+    organization_markers = (*CJK_NON_PERSON_SUFFIX_MARKERS, *REVIEWED_HANGUL_ORGANIZATION_MARKERS)
+    return not any(marker in segment for marker in organization_markers)
+
+
+def _punctuate_bare_latin_initial(segment: str) -> str:
+    """Add the canonical period to a single authored Latin letter."""
+    return f"{segment}." if len(segment) == 1 and _is_latin_letter(segment) else segment
+
+
+def reviewed_middle_dot_packed_transliteration_assignment(
+    source: SourceAuthorFields,
+) -> NameComponents | None:
+    """Split a guarded last-field-only CJK transliteration at U+00B7.
+
+    A middle dot is not globally a personal-name delimiter. This rule claims
+    only the reviewed two- or three-component transliteration shape and keeps
+    every authored script and spelling unchanged.
+    """
+    if (source.first_name or "").strip() or (source.middle_names or "").strip() or (source.suffix or "").strip():
+        return None
+
+    raw = source.last_name or ""
+    segments = tuple(segment.strip() for segment in raw.split(_MIDDLE_DOT))
+    if (
+        len(segments) not in {2, 3}
+        or any(not segment for segment in segments)
+        or any(not _is_middle_dot_person_segment(segment) for segment in segments)
+        or not any(_is_cjk_letter(character) for segment in segments for character in segment)
+    ):
+        return None
+
+    given, *remainder = (_punctuate_bare_latin_initial(segment) for segment in segments)
+    if len(remainder) == 1:
+        return NameComponents(given_name=given, surname=remainder[0])
+    return NameComponents(given_name=given, middle_name=remainder[0], surname=remainder[1])
+
+
 def reviewed_exact_source_assignment(source: SourceAuthorFields) -> NameComponents | None:
     """Apply one manually reviewed assignment keyed to normalized source fields."""
     source_key = _source_component_key(source)
+    if not (source.suffix or "").strip():
+        empty_suffix_assignment = REVIEWED_EXACT_BARE_PERSONAL_ASSIGNMENTS.get(
+            source_key,
+        ) or REVIEWED_EXACT_EMPTY_SUFFIX_ASSIGNMENTS.get(source_key)
+        if empty_suffix_assignment is None and source_key in REVIEWED_EXACT_EMPTY_SUFFIX_ENDPOINT_REORDERS:
+            empty_suffix_assignment = NameComponents(
+                given_name=source.last_name or "",
+                surname=(source.first_name or "").rstrip(",ØŒ"),
+            )
+        if empty_suffix_assignment is not None:
+            return empty_suffix_assignment
     literal_assignment = REVIEWED_EXACT_SOURCE_LITERAL_ASSIGNMENTS.get(source_key)
     if literal_assignment is not None:
         return literal_assignment
@@ -854,7 +1156,322 @@ class SourceAuthorFields(_Model):
         return " ".join(part for part in (self.first_name or "", self.middle_names or "", self.last_name or "") if part).strip()
 
 
-def _reviewed_leading_title_or_credential_assignment(
+def _normalized_exact_endpoints(
+    normalizer: PersonNameNormalizationService,
+    *,
+    given_name: str,
+    surname: str,
+) -> NameComponents | None:
+    """Normalize two proven endpoints without permitting a role rewrite."""
+    normalized = normalizer.normalize_components(first_name=given_name, last_name=surname)
+    if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
+        return None
+    selected = normalized.canonical_name.normalized
+    if (
+        selected.middle_name
+        or selected.suffix
+        or selected.given_name.casefold() != given_name.casefold()
+        or selected.surname.casefold() != surname.casefold()
+    ):
+        return None
+    return selected
+
+
+def _reviewed_repeated_full_name_row(source: SourceAuthorFields) -> NameComponents | None:
+    """Remove a source-last duplicate of the two retained atomic fields."""
+    first = (source.first_name or "").strip()
+    surname = (source.middle_names or "").strip()
+    repeated = " ".join((source.last_name or "").split())
+    if (
+        (source.suffix or "").strip()
+        or not first.isascii()
+        or not surname.isascii()
+        or not first.isalpha()
+        or not surname.isalpha()
+        or first.casefold() == surname.casefold()
+        or repeated != f"{first} {surname}"
+    ):
+        return None
+    return NameComponents(given_name=first, surname=surname)
+
+
+def _reviewed_repeated_full_name_assignment(
+    source: SourceAuthorFields,
+    paper_authors: list[SourceAuthorFields],
+) -> NameComponents | None:
+    """Repair a duplicated full-name column only under complete-paper consensus."""
+    selected = _reviewed_repeated_full_name_row(source)
+    if selected is None or len(paper_authors) < 2:  # noqa: PLR2004
+        return None
+    return selected if all(_reviewed_repeated_full_name_row(peer) is not None for peer in paper_authors) else None
+
+
+def _reviewed_titled_given_row(
+    source: SourceAuthorFields,
+    normalizer: PersonNameNormalizationService,
+) -> NameComponents | None:
+    """Flip one exact source-family plus dotted-title/given shape."""
+    family = (source.first_name or "").strip()
+    middle = (source.middle_names or "").strip()
+    source_last = (source.last_name or "").strip()
+    match = _TITLED_GIVEN_RE.fullmatch(source_last)
+    if (
+        middle
+        or (source.suffix or "").strip()
+        or not family
+        or len(family.split()) != 1
+        or family in {"Dr.", "Prof."}
+        or match is None
+    ):
+        return None
+    return _normalized_exact_endpoints(normalizer, given_name=match.group(1), surname=family)
+
+
+def _reviewed_titled_given_assignment(
+    source: SourceAuthorFields,
+    paper_authors: list[SourceAuthorFields],
+    normalizer: PersonNameNormalizationService,
+) -> NameComponents | None:
+    """Apply titled-given inversion only when every multi-author row agrees."""
+    selected = _reviewed_titled_given_row(source, normalizer)
+    if selected is None or len(paper_authors) < 2:  # noqa: PLR2004
+        return None
+    return selected if all(_reviewed_titled_given_row(peer, normalizer) is not None for peer in paper_authors) else None
+
+
+def _reviewed_dotted_surname_initial_row(source: SourceAuthorFields) -> NameComponents | None:
+    """Rotate one source-family plus two-or-three separately dotted initials row."""
+    family = (source.first_name or "").strip()
+    initials = (source.last_name or "").split()
+    if (
+        (source.middle_names or "").strip()
+        or (source.suffix or "").strip()
+        or len(family) <= 1
+        or not family.isalpha()
+        or not _MIN_DOTTED_SOURCE_INITIALS <= len(initials) <= _MAX_DOTTED_SOURCE_INITIALS
+        or not all(_DOTTED_INITIAL_RE.fullmatch(token) for token in initials)
+    ):
+        return None
+    return NameComponents(
+        given_name=initials[0],
+        middle_name=" ".join(initials[1:]),
+        surname=family,
+    )
+
+
+def _reviewed_paper_wide_dotted_surname_initial_assignment(
+    source: SourceAuthorFields,
+    paper_authors: list[SourceAuthorFields],
+) -> NameComponents | None:
+    """Rotate dotted citation initials only under a uniform paper schema."""
+    selected = _reviewed_dotted_surname_initial_row(source)
+    if selected is None or len(paper_authors) < 2:  # noqa: PLR2004
+        return None
+    return selected if all(_reviewed_dotted_surname_initial_row(peer) is not None for peer in paper_authors) else None
+
+
+def _reviewed_trailing_affiliation_row(
+    source: SourceAuthorFields,
+    normalizer: PersonNameNormalizationService,
+    surname_is_recognized: Callable[[str], bool],
+) -> NameComponents | None:
+    """Remove one paper-wide lowercase ``a`` affiliation marker."""
+    given = (source.first_name or "").strip()
+    source_last = (source.last_name or "").strip()
+    if (
+        (source.middle_names or "").strip()
+        or (source.suffix or "").strip()
+        or _ASCII_HYPHENATED_WORD_RE.fullmatch(given) is None
+        or _TRAILING_AFFILIATION_SURNAME_RE.fullmatch(source_last) is None
+    ):
+        return None
+    surname = source_last[:-1]
+    if not surname_is_recognized(surname):
+        return None
+    return _normalized_exact_endpoints(normalizer, given_name=given, surname=surname)
+
+
+def _reviewed_paper_wide_trailing_affiliation_assignment(
+    source: SourceAuthorFields,
+    paper_authors: list[SourceAuthorFields],
+    normalizer: PersonNameNormalizationService,
+    surname_is_recognized: Callable[[str], bool],
+) -> NameComponents | None:
+    """Repair a leaked trailing ``a`` only on a fully reviewed paper roster."""
+    roster_key = tuple(_source_component_key(peer) for peer in paper_authors)
+    if roster_key not in _REVIEWED_TRAILING_AFFILIATION_ROSTERS:
+        return None
+    selected = _reviewed_trailing_affiliation_row(source, normalizer, surname_is_recognized)
+    if selected is None:
+        return None
+    return (
+        selected
+        if all(_reviewed_trailing_affiliation_row(peer, normalizer, surname_is_recognized) is not None for peer in paper_authors)
+        else None
+    )
+
+
+def _detached_diacritic_span_is_repairable(match: re.Match[str]) -> bool:
+    """Return whether one detached marker span has the reviewed accent meaning."""
+    head = match.group("head")
+    mark = match.group("mark")
+    tail = match.group("tail")
+    if not tail[0].islower():
+        return False
+    if (head.casefold(), tail.casefold()) in _DETACHED_DIACRITIC_TRANSLITERATION_CONTROLS:
+        return False
+    _combining, allowed_next = _DETACHED_DIACRITIC_SPECS[mark]
+    return tail[0].casefold() in allowed_next
+
+
+def _repair_detached_diacritic_spans(value: str) -> tuple[str, int]:
+    """Compose every detached marker span admitted by the reviewed grammar."""
+    repair_count = 0
+
+    def replace_span(match: re.Match[str]) -> str:
+        nonlocal repair_count
+        if not _detached_diacritic_span_is_repairable(match):
+            return match.group(0)
+        head = match.group("head")
+        mark = match.group("mark")
+        tail = match.group("tail")
+        combining, _allowed_next = _DETACHED_DIACRITIC_SPECS[mark]
+        accented = unicodedata.normalize("NFC", f"{tail[0]}{combining}")
+        repair_count += 1
+        return f"{head}{accented}{tail[1:]}"
+
+    previous = None
+    while previous != value:
+        previous, value = value, _DETACHED_DIACRITIC_SPAN_RE.sub(replace_span, value)
+    return value, repair_count
+
+
+def _reviewed_detached_diacritic_row(
+    source: SourceAuthorFields,
+    normalizer: PersonNameNormalizationService,
+) -> NameComponents | None:
+    """Repair one intrinsically valid detached accent source row."""
+    if (source.suffix or "").strip():
+        return None
+    middle = source.middle_names or ""
+    if (
+        not _DETACHED_DIACRITIC_TOKEN_RE.search(middle)
+        or _DETACHED_DIACRITIC_TOKEN_RE.search(source.first_name or "")
+        or _DETACHED_DIACRITIC_TOKEN_RE.search(source.last_name or "")
+    ):
+        return None
+    raw_name = source.full_name()
+    marker_count = len(_DETACHED_DIACRITIC_TOKEN_RE.findall(raw_name))
+    matches = list(_DETACHED_DIACRITIC_SPAN_RE.finditer(raw_name))
+    if (
+        marker_count == 0
+        or len(matches) != marker_count
+        or not all(_detached_diacritic_span_is_repairable(match) for match in matches)
+    ):
+        return None
+    repaired, repair_count = _repair_detached_diacritic_spans(raw_name)
+    if repair_count != marker_count or _DETACHED_DIACRITIC_TOKEN_RE.search(repaired):
+        return None
+    normalized = normalizer.normalize_text(repaired)
+    if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
+        return None
+    selected = normalized.canonical_name.normalized
+    return selected if selected.surname else None
+
+
+def _reviewed_detached_diacritic_assignment(
+    source: SourceAuthorFields,
+    paper_authors: list[SourceAuthorFields],
+    normalizer: PersonNameNormalizationService,
+) -> NameComponents | None:
+    """Repair detached accents with two independently valid paper rows."""
+    selected = _reviewed_detached_diacritic_row(source, normalizer)
+    if selected is None:
+        return None
+    valid_count = 0
+    for peer in paper_authors:
+        valid_count += _reviewed_detached_diacritic_row(peer, normalizer) is not None
+        if valid_count >= 2:  # noqa: PLR2004
+            return selected
+    return None
+
+
+def _reviewed_joined_uppercase_surname_assignment(
+    source: SourceAuthorFields,
+    paper_authors: list[SourceAuthorFields],
+    surname_is_recognized: Callable[[str], bool],
+) -> NameComponents | None:
+    """Split an uppercase surname prefix under peer-supported source casing."""
+    if (source.first_name or "").strip() or (source.middle_names or "").strip() or (source.suffix or "").strip():
+        return None
+    focal_match = _JOINED_UPPERCASE_SURNAME_RE.fullmatch(source.last_name or "")
+    if focal_match is None or not surname_is_recognized(focal_match.group(1)):
+        return None
+    recognized_rows = 0
+    for peer in paper_authors:
+        if (peer.first_name or "").strip() or (peer.middle_names or "").strip() or (peer.suffix or "").strip():
+            continue
+        peer_match = _JOINED_UPPERCASE_SURNAME_RE.fullmatch(peer.last_name or "")
+        if peer_match is not None and surname_is_recognized(peer_match.group(1)):
+            recognized_rows += 1
+    if recognized_rows < 2:  # noqa: PLR2004
+        return None
+    surname, given = focal_match.groups()
+    return NameComponents(given_name=given, surname=surname.title())
+
+
+def _joined_uppercase_roles_match(selected: NameComponents, expected: NameComponents) -> bool:
+    """Compare joined-uppercase semantic roles while ignoring bound separators."""
+
+    def role_key(value: str) -> str:
+        return "".join(
+            character.casefold() for character in value if not character.isspace() and character not in ROMAN_HYPHEN_LIKE
+        )
+
+    return role_key(f"{selected.given_name}{selected.middle_name}") == role_key(expected.given_name) and role_key(
+        selected.surname,
+    ) == role_key(expected.surname)
+
+
+def _south_indian_terminal_initial_row(source: SourceAuthorFields, *, focal: bool) -> bool:
+    """Match one role in the reviewed three-author terminal-initial schema."""
+    first = (source.first_name or "").strip()
+    last_tokens = (source.last_name or "").split()
+    if (
+        (source.middle_names or "").strip()
+        or (source.suffix or "").strip()
+        or len(first) <= 1
+        or _ASCII_WORD_RE.fullmatch(first) is None
+    ):
+        return False
+    if focal:
+        return (
+            len(last_tokens) == 2  # noqa: PLR2004
+            and len(last_tokens[0]) > 1
+            and _ASCII_WORD_RE.fullmatch(last_tokens[0]) is not None
+            and _ASCII_INITIAL_RE.fullmatch(last_tokens[1]) is not None
+        )
+    return len(last_tokens) == 1 and _ASCII_INITIAL_RE.fullmatch(last_tokens[0]) is not None
+
+
+def _reviewed_south_indian_terminal_initial_context(
+    source: SourceAuthorFields,
+    paper_authors: list[SourceAuthorFields],
+    focal_index: int,
+) -> bool:
+    """Identify the one closed triad where scalar should beat source repartition."""
+    return (
+        len(paper_authors) == 3  # noqa: PLR2004
+        and _south_indian_terminal_initial_row(source, focal=True)
+        and all(
+            _south_indian_terminal_initial_row(peer, focal=False)
+            for index, peer in enumerate(paper_authors)
+            if index != focal_index
+        )
+    )
+
+
+def _reviewed_leading_title_or_credential_assignment(  # noqa: PLR0911 - closed source grammars fail independently.
     source: SourceAuthorFields,
     normalizer: PersonNameNormalizationService,
 ) -> NameComponents | None:
@@ -867,7 +1484,12 @@ def _reviewed_leading_title_or_credential_assignment(
 
     retained_first: str | None = None
     retained_middle: str | None = None
-    if first in {"Er.", "M.Pd"} and len(middle.split()) == 1 and len(last.split()) == 1:
+    if first.casefold() == "rn" and middle.casefold() == "msn":
+        packed_name = last.split()
+        if len(packed_name) != 2 or not all(token.isalpha() for token in packed_name):  # noqa: PLR2004
+            return None
+        retained_first, last = packed_name
+    elif first in {"Er.", "M.Pd"} and len(middle.split()) == 1 and len(last.split()) == 1:
         retained_first = middle
     elif first.startswith("MUDr.") and first != "MUDr." and not middle and len(last.split()) == 1:
         attached_name = first.removeprefix("MUDr.")
@@ -1237,11 +1859,27 @@ class _Resolver:
         row a higher-precedence rule already claims.
         """
         pattern_reason = ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT
+        source_key = _source_component_key(source)
+        if not (source.suffix or "").strip():
+            bare_personal_assignment = REVIEWED_EXACT_BARE_PERSONAL_ASSIGNMENTS.get(source_key)
+            if bare_personal_assignment is not None:
+                return ResolvedAuthorFields.from_selected_components(
+                    source=source,
+                    selected=bare_personal_assignment,
+                    reason=ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT,
+                )
         hangul_assignment = reviewed_hangul_affiliation_person_assignment(source)
         if hangul_assignment is not None:
             return self._source_assignment_resolution(
                 source=source,
                 selected=hangul_assignment,
+                reason=pattern_reason,
+            )
+        middle_dot_assignment = reviewed_middle_dot_packed_transliteration_assignment(source)
+        if middle_dot_assignment is not None:
+            return ResolvedAuthorFields.from_selected_components(
+                source=source,
+                selected=middle_dot_assignment,
                 reason=pattern_reason,
             )
         if (
@@ -1251,6 +1889,28 @@ class _Resolver:
             return self._source_resolution(source, ResolutionReason.REVIEWED_NON_PERSON_PATTERN)
         assignment_rules: tuple[tuple[Callable[[], NameComponents | None], ResolutionReason], ...] = (
             (lambda: reviewed_exact_source_assignment(source), ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT),
+            (
+                lambda: _reviewed_detached_diacritic_assignment(source, paper_authors, self._source_normalizer),
+                pattern_reason,
+            ),
+            (lambda: _reviewed_repeated_full_name_assignment(source, paper_authors), pattern_reason),
+            (
+                lambda: _reviewed_titled_given_assignment(source, paper_authors, self._source_normalizer),
+                pattern_reason,
+            ),
+            (
+                lambda: _reviewed_paper_wide_dotted_surname_initial_assignment(source, paper_authors),
+                ResolutionReason.STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT,
+            ),
+            (
+                lambda: _reviewed_paper_wide_trailing_affiliation_assignment(
+                    source,
+                    paper_authors,
+                    self._source_normalizer,
+                    lambda surname: self._detector._require_surname_resolver().parser_is_surname((surname,)),  # noqa: SLF001
+                ),
+                pattern_reason,
+            ),
             (
                 lambda: _reviewed_leading_title_or_credential_assignment(source, self._source_normalizer),
                 pattern_reason,
@@ -1359,6 +2019,7 @@ class _Resolver:
             ):
                 return self._materialize_selected_candidate(
                     source=source,
+                    paper_authors=paper_authors,
                     raw_name=raw_name,
                     paper_names=paper_names,
                     focal_index=focal_index,
@@ -1402,6 +2063,7 @@ class _Resolver:
         if parsed is not None and parsed.surname:
             return self._materialize_selected_candidate(
                 source=source,
+                paper_authors=paper_authors,
                 raw_name=raw_name,
                 paper_names=paper_names,
                 focal_index=focal_index,
@@ -1434,7 +2096,11 @@ class _Resolver:
                 source,
                 scalar_canonical.normalized,
             )
-            if source_surname_candidate is not None:
+            if source_surname_candidate is not None and not _reviewed_south_indian_terminal_initial_context(
+                source,
+                paper_authors,
+                focal_index,
+            ):
                 return self._source_assignment_resolution(
                     source=source,
                     selected=source_surname_candidate,
@@ -1442,6 +2108,7 @@ class _Resolver:
                 )
             return self._materialize_selected_candidate(
                 source=source,
+                paper_authors=paper_authors,
                 raw_name=raw_name,
                 paper_names=paper_names,
                 focal_index=focal_index,
@@ -1466,6 +2133,7 @@ class _Resolver:
         self,
         *,
         source: SourceAuthorFields,
+        paper_authors: list[SourceAuthorFields],
         raw_name: str,
         paper_names: list[str],
         focal_index: int,
@@ -1487,6 +2155,20 @@ class _Resolver:
                 ResolutionReason.REVIEWED_EXACT_SOURCE_REORDER_VETO_PRESERVE_INPUT,
             )
         selected = _preserve_reviewed_atomic_korean_source_given(source, selected)
+        joined_uppercase_assignment = _reviewed_joined_uppercase_surname_assignment(
+            source,
+            paper_authors,
+            lambda surname: self._detector._require_surname_resolver().parser_is_surname((surname,)),  # noqa: SLF001
+        )
+        if joined_uppercase_assignment is not None and not _joined_uppercase_roles_match(
+            selected,
+            joined_uppercase_assignment,
+        ):
+            return self._source_assignment_resolution(
+                source=source,
+                selected=joined_uppercase_assignment,
+                reason=ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
+            )
         selected, conflict_reason = self._detector.routing_reorder_veto(
             raw_name,
             selected,
