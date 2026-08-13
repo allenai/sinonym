@@ -1985,6 +1985,12 @@ class ChineseNameDetector:
             source_text=baseline.source_text,
             source=self._routed_source_components(baseline, decision),
         )
+        if decision.reason is EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_DICTIONARY:
+            canonical = replace(
+                canonical,
+                text=baseline.text,
+                normalized=replace(canonical.normalized, order=canonical.source.order),
+            )
         if decision.reason is EastAsianEvidenceReason.IDENTITY_BACKED_EXACT_FULL_SURFACE and len(decision.given_tokens) > 1:
             normalized = canonical.normalized
             normalized = replace(

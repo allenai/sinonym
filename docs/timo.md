@@ -162,7 +162,9 @@ Strict spaced-native Japanese evidence is terminal scalar evidence rather than
 a batch preference. Family-first assignments use
 `japanese_native_spaced_strict_assignment`; strict given-first preservation
 uses `japanese_native_spaced_strict_given_first_preserve_input`. Broader
-one-sided or conflicting Japanese dictionary shapes remain nonterminal.
+one-sided or conflicting Japanese dictionary shapes remain nonterminal. Their
+canonical sidecar preserves authored display order while retaining the inferred
+semantic roles, making the displayed canonical text a fixed point.
 
 A PP-only abstention normally retains its PP input assignment. For an
 all-native authored surface that contains a real component boundary, TIMO

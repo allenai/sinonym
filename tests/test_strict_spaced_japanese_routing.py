@@ -97,6 +97,62 @@ def test_broad_spaced_native_routes_remain_soft(
     assert isinstance(scalar, CanonicalName)
 
 
+@pytest.mark.parametrize(
+    ("surface", "expected_given", "expected_surname"),
+    [
+        ("伊吹 香織", "香織", "伊吹"),
+        ("香織 伊吹", "伊吹", "香織"),
+    ],
+)
+def test_soft_spaced_native_assignment_preserves_authored_display(
+    detector: ChineseNameDetector,
+    surface: str,
+    expected_given: str,
+    expected_surname: str,
+) -> None:
+    first_name, last_name = surface.split()
+    canonical = detector.normalize_person_name(surface)
+    sidecar = detector.normalize_name(surface).canonical_name
+    structured = detector.normalize_person_name_components(first_name=first_name, last_name=last_name)
+
+    for result in (canonical, sidecar, structured):
+        assert result is not None
+        assert result.text == surface
+        assert result.normalized.given_name == expected_given
+        assert result.normalized.surname == expected_surname
+        assert result.normalized.order == ("surname", "given")
+
+
+def test_spaced_native_gold_canonical_text_is_a_fixed_point(
+    detector: ChineseNameDetector,
+) -> None:
+    payload = json.loads(SPACED_CJK_GOLD.read_text(encoding="utf-8"))
+    soft_count = 0
+    drifts: list[tuple[str, str, str | None]] = []
+
+    for item in payload["items"]:
+        surface = item["name"]
+        resolution = detector._east_asian_name_order.infer_resolution(  # noqa: SLF001
+            surface,
+            japanese_probability=detector._ethnicity_service.japanese_probability,  # noqa: SLF001
+        )
+        if (
+            isinstance(resolution, EastAsianNameOrderDecision)
+            and resolution.reason is EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_DICTIONARY
+        ):
+            soft_count += 1
+
+        canonical = detector.normalize_person_name(surface)
+        if canonical is None:
+            continue
+        repeated = detector.normalize_person_name(canonical.text)
+        if repeated is None or repeated.text != canonical.text:
+            drifts.append((surface, canonical.text, repeated.text if repeated is not None else None))
+
+    assert soft_count == 203
+    assert drifts == []
+
+
 def test_strict_hard_slices_remain_perfect_on_frozen_blind_gold(
     detector: ChineseNameDetector,
 ) -> None:

@@ -340,7 +340,9 @@ endpoints, while strict given-first evidence preserves them. TIMO applies those
 decisions before PP/VYS candidates, and the public canonical APIs apply every
 terminal mapped decision before a competing Chinese interpretation. One-sided
 or conflicting dictionary shapes remain soft and retain the existing
-conservative arbitration.
+conservative arbitration. Soft Japanese dictionary assignments preserve the
+authored display order while recording the inferred semantic roles, so feeding
+their canonical text through the API again is stable.
 
 The East Asian assets are primarily component lexicons. The Roman asset also
 contains a small, provenance-backed exact full-name tier for reviewed routing
