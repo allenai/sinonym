@@ -123,11 +123,16 @@ def _is_reviewed_hangul_organization(fields: tuple[str, str, str]) -> bool:
 
 STRONG_CJK_NON_PERSON_MARKERS = (
     "大学",
+    "大學",
     "学院",
+    "學院",
     "研究所",
     "实验室",
+    "實驗室",
     "编辑部",
+    "編輯部",
     "科学院",
+    "科學院",
     "公司",
     "有限公司",
     "研究中心",
@@ -135,6 +140,7 @@ STRONG_CJK_NON_PERSON_MARKERS = (
     "国家实验室",
     "物理系",
     "学部",
+    "學部",
 )
 
 STANDALONE_CJK_NON_PERSON_MARKERS = frozenset(STRONG_CJK_NON_PERSON_MARKERS)

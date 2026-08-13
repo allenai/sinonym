@@ -1116,14 +1116,23 @@ def test_non_person_inputs_are_rejected_before_parsing(detector):
     [
         "\u7269\u7406\u7cfb",
         "\u5b9e\u9a8c\u5ba4",
+        "實驗室",
         "\u7814\u7a76\u6240",
         "\u5b66\u9662",
+        "學院",
         "\u5927\u5b66",
+        "大學",
+        "編輯部",
+        "科學院",
+        "學部",
         "\u516c\u53f8",
         "\u5317\u4eac\u5927\u5b66",
         "\u6e05\u534e\u5927\u5b66",
         "\u5f20\u4f1f\u5927\u5b66",
         "\u5f20\u4f1f(\u7269\u7406\u7cfb)",
+        "香港大學",
+        "香港重點實驗室",
+        "香港國家實驗室",
     ],
 )
 def test_short_standalone_cjk_non_person_markers_are_rejected(detector, raw_name):

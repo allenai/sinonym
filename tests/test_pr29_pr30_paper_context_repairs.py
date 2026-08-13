@@ -278,6 +278,25 @@ def test_peer_supported_joined_uppercase_surname_prefix_is_assigned(predictor: P
         _assert_source_assignment(row)
 
 
+def test_joined_uppercase_rule_accepts_one_independent_matching_peer(predictor: Predictor) -> None:
+    """The focal row plus one recognized peer satisfy the reviewed source convention."""
+    resolved = _route_paper(
+        predictor,
+        [SourceAuthorFields(last_name="LEEAnn"), SourceAuthorFields(last_name="WANGXiao")],
+    )
+
+    assert (resolved[0].first_name, resolved[0].middle_names, resolved[0].last_name) == ("Ann", "", "Lee")
+    _assert_source_assignment(resolved[0])
+    assert (resolved[1].first_name, resolved[1].middle_names, resolved[1].last_name) == ("Xiao", "", "Wang")
+
+
+def test_joined_uppercase_rule_declines_a_recognized_singleton(predictor: Predictor) -> None:
+    """A focal match without an independently matching peer is insufficient."""
+    resolved = _route_paper(predictor, [SourceAuthorFields(last_name="LEEAnn")])[0]
+
+    assert resolved.resolution_reason is not ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT
+
+
 def test_joined_uppercase_rule_requires_recognized_peer_prefixes(predictor: Predictor) -> None:
     resolved = _route_paper(
         predictor,

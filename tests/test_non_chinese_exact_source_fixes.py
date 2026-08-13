@@ -16,6 +16,7 @@ from sinonym.coretypes.routing_resolution import (
 )
 from sinonym.timo._resolution import (
     REVIEWED_EXACT_EMPTY_SUFFIX_ENDPOINT_REORDERS,
+    _endpoint_reorder_assignment,
     reviewed_exact_source_assignment,
     reviewed_exact_source_reversal,
     reviewed_fullwidth_katakana_alias_assignment,
@@ -253,6 +254,22 @@ def test_full_corpus_reviewed_compact_endpoint_reorders(
     assert resolved.last_name == source.first_name
     if last not in {"a.v.", "b", "s-c"}:
         assert (resolved.first_name, resolved.middle_names) == (source.last_name, "")
+
+
+@pytest.mark.parametrize(
+    ("first_name", "expected_surname"),
+    [
+        ("Ali,", "Ali"),
+        ("Ali\u060c", "Ali"),
+        ("SØ", "SØ"),
+        ("SŒ", "SŒ"),
+    ],
+)
+def test_endpoint_reorder_strips_only_catalog_commas(first_name: str, expected_surname: str) -> None:
+    """Endpoint repair must not treat mojibake lookalikes as punctuation."""
+    selected = _endpoint_reorder_assignment(SourceAuthorFields(first_name=first_name, last_name="Given"))
+
+    assert selected == NameComponents(given_name="Given", surname=expected_surname)
 
 
 @pytest.mark.parametrize(

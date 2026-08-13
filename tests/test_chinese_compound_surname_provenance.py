@@ -20,6 +20,8 @@ def test_generated_pinyin_pair_does_not_override_confident_japanese(detector, ra
         ("上官 婉儿", "Wan-Er Shang Guan"),
         ("欧阳 伟", "Wei Ou Yang"),
         ("司马 光", "Guang Si Ma"),
+        ("赫连勃勃", "Bo-Bo He Lian"),
+        ("赫連勃勃", "Bo-Bo He Lian"),
     ],
 )
 def test_authored_han_compound_surname_retains_chinese_rescue(

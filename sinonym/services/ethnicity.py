@@ -111,6 +111,8 @@ CHINESE_COMPOUND_SURNAMES_HAN = frozenset(
         "南门",
         "南門",
         "呼延",
+        "赫连",
+        "赫連",
     },
 )
 

@@ -881,8 +881,9 @@ def reviewed_middle_dot_packed_transliteration_assignment(
     """Split a guarded last-field-only CJK transliteration at U+00B7.
 
     A middle dot is not globally a personal-name delimiter. This rule claims
-    only the reviewed two- or three-component transliteration shape and keeps
-    every authored script and spelling unchanged.
+    only the reviewed two- or three-component transliteration shape. It keeps
+    authored component boundaries and scripts while canonicalizing bare Latin
+    initials.
     """
     if (source.first_name or "").strip() or (source.middle_names or "").strip() or (source.suffix or "").strip():
         return None
@@ -903,6 +904,14 @@ def reviewed_middle_dot_packed_transliteration_assignment(
     return NameComponents(given_name=given, middle_name=remainder[0], surname=remainder[1])
 
 
+def _endpoint_reorder_assignment(source: SourceAuthorFields) -> NameComponents:
+    """Exchange reviewed endpoints and remove an authored catalog comma."""
+    return NameComponents(
+        given_name=source.last_name or "",
+        surname=(source.first_name or "").rstrip(",\u060c"),
+    )
+
+
 def reviewed_exact_source_assignment(source: SourceAuthorFields) -> NameComponents | None:
     """Apply one manually reviewed assignment keyed to normalized source fields."""
     source_key = _source_component_key(source)
@@ -911,10 +920,7 @@ def reviewed_exact_source_assignment(source: SourceAuthorFields) -> NameComponen
             source_key,
         ) or REVIEWED_EXACT_EMPTY_SUFFIX_ASSIGNMENTS.get(source_key)
         if empty_suffix_assignment is None and source_key in REVIEWED_EXACT_EMPTY_SUFFIX_ENDPOINT_REORDERS:
-            empty_suffix_assignment = NameComponents(
-                given_name=source.last_name or "",
-                surname=(source.first_name or "").rstrip(",ØŒ"),
-            )
+            empty_suffix_assignment = _endpoint_reorder_assignment(source)
         if empty_suffix_assignment is not None:
             return empty_suffix_assignment
     literal_assignment = REVIEWED_EXACT_SOURCE_LITERAL_ASSIGNMENTS.get(source_key)
@@ -933,10 +939,7 @@ def reviewed_exact_source_assignment(source: SourceAuthorFields) -> NameComponen
             surname=surname,
         )
     if source_key in REVIEWED_EXACT_SOURCE_ENDPOINT_REORDERS:
-        return NameComponents(
-            given_name=source.last_name or "",
-            surname=(source.first_name or "").rstrip(",،"),
-        )
+        return _endpoint_reorder_assignment(source)
 
     selectors = REVIEWED_EXACT_SOURCE_ROLE_ASSIGNMENTS.get(source_key)
     if selectors is None:
@@ -1401,7 +1404,7 @@ def _reviewed_joined_uppercase_surname_assignment(
     paper_authors: list[SourceAuthorFields],
     surname_is_recognized: Callable[[str], bool],
 ) -> NameComponents | None:
-    """Split an uppercase surname prefix under peer-supported source casing."""
+    """Split an uppercase surname prefix with one other recognized peer row."""
     if (source.first_name or "").strip() or (source.middle_names or "").strip() or (source.suffix or "").strip():
         return None
     focal_match = _JOINED_UPPERCASE_SURNAME_RE.fullmatch(source.last_name or "")

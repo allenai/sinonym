@@ -80,6 +80,35 @@ def test_middle_dot_rule_declines_near_misses(
 
 
 @pytest.mark.parametrize(
+    "organization",
+    [
+        "香港大學",
+        "香港學院",
+        "香港實驗室",
+        "香港編輯部",
+        "香港科學院",
+        "香港學部",
+        "香港重點實驗室",
+        "香港國家實驗室",
+    ],
+)
+def test_middle_dot_rule_declines_traditional_organizations(
+    predictor: Predictor,
+    organization: str,
+) -> None:
+    """Traditional organization markers cannot become personal-name fields."""
+    source = SourceAuthorFields(last_name=f"陳大文·{organization}")
+
+    assert reviewed_middle_dot_packed_transliteration_assignment(source) is None
+    resolved = _route(predictor, source)
+
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("", "", source.last_name)
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.PRESERVE_INPUT
+    assert resolved.resolution_reason is ResolutionReason.NON_PERSON_SOURCE_PASSTHROUGH
+
+
+@pytest.mark.parametrize(
     ("audit_id", "source", "expected"),
     [
         (
