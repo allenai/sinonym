@@ -402,6 +402,26 @@ def test_ml_classifier_runtime_failure_is_not_cached():
     assert scorer.calls == 2
 
 
+def test_ml_classifier_probability_cache_is_bounded():
+    from sinonym.services import ethnicity
+
+    classifier = ethnicity._MLJapaneseClassifier(confidence_threshold=0.8)
+    classifier._available = True
+    classifier._scorer = ConstantJapaneseProbabilityScorer()
+
+    for index in range(ethnicity.ML_JAPANESE_PROBABILITY_CACHE_MAXSIZE * 2):
+        name = f"{chr(0x4E00 + index // 1024)}{chr(0x4E00 + index % 1024)}"
+        classifier.classify_all_chinese_name(name)
+
+    cache_info = classifier._cached_japanese_probability.cache_info()
+    assert cache_info.currsize == ethnicity.ML_JAPANESE_PROBABILITY_CACHE_MAXSIZE
+
+
+class ConstantJapaneseProbabilityScorer:
+    def japanese_probability(self, _name):
+        return 0.01
+
+
 def test_han_only_batch_success_reports_full_structural_confidence(detector):
     batch = detector.analyze_name_batch(["\u5de9\u4fd0"])
     result = batch.results[0]
@@ -483,8 +503,8 @@ def test_capitalize_name_part_all_combining_marks_does_not_crash():
     indexed [0] into the empty string and raised IndexError. It must now return '' instead."""
     from sinonym.utils.string_manipulation import StringManipulationUtils
 
-    assert StringManipulationUtils.capitalize_name_part("́") == ""           # lone combining acute
-    assert StringManipulationUtils.capitalize_name_part("\U000E0100") == ""       # ideographic variation selector
+    assert StringManipulationUtils.capitalize_name_part("́") == ""  # lone combining acute
+    assert StringManipulationUtils.capitalize_name_part("\U000e0100") == ""  # ideographic variation selector
     # real names are unaffected (still stripped + capitalized)
     assert StringManipulationUtils.capitalize_name_part("josé") == "Jose"
     assert StringManipulationUtils.capitalize_name_part("ou-yang") == "Ou-Yang"
@@ -493,18 +513,18 @@ def test_capitalize_name_part_all_combining_marks_does_not_crash():
 def test_normalize_name_with_embedded_variation_selector_does_not_crash(detector):
     """Integration regression: a corpus name with an embedded ideographic variation selector
     (U+E0100, seen on paper_id 274957019) crashed normalize_name via the capitalize step."""
-    result = detector.normalize_name("彬人 樽\U000E0100井")  # 彬人 樽󠄀井
+    result = detector.normalize_name("彬人 樽\U000e0100井")  # 彬人 樽󠄀井
     assert result is not None  # no exception raised; the classification value is out of scope here
 
 
 @pytest.mark.parametrize(
     "raw_name",
     [
-        "Shin -Ichi Hara",   # space + leading-hyphen token (117 of 124 prod failures)
+        "Shin -Ichi Hara",  # space + leading-hyphen token (117 of 124 prod failures)
         "O -P Sairanen",
         "Yang -Gyu Jei",
-        "KU 'TSAO-CHUEN",    # space + leading-apostrophe token
-        "O --Sl",            # double hyphen
+        "KU 'TSAO-CHUEN",  # space + leading-apostrophe token
+        "O --Sl",  # double hyphen
     ],
 )
 def test_leading_hyphen_or_apostrophe_token_does_not_crash(detector, raw_name):

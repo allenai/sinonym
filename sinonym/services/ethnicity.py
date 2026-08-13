@@ -33,11 +33,11 @@ from sinonym.chinese_names_data import (
 from sinonym.coretypes import ParseResult
 from sinonym.services.name_lookup import SurnameResolver
 from sinonym.utils.string_manipulation import StringManipulationUtils
-from sinonym.utils.thread_cache import ThreadLocalCache
 
 MIN_COMPOUND_SURNAME_TOKEN_COUNT = 3
 JAPANESE_CLASSIFIER_REJECTION = "japanese"
 JAPANESE_CLASSIFIER_RUNTIME_ERROR = "ML Japanese classifier failed"
+ML_JAPANESE_PROBABILITY_CACHE_MAXSIZE = 4096
 MIN_DIRECTIONAL_KOREAN_TOKENS = 2
 MAX_DIRECTIONAL_KOREAN_TOKENS = 3
 MIN_CONTEXTUAL_TAIWAN_SURNAME_FREQUENCY = 100.0
@@ -126,8 +126,6 @@ class _MLJapaneseClassifier:
         self._confidence_threshold = confidence_threshold
         self._scorer = None
         self._available = True
-        # Thread-local cache for ML classification results
-        self._cache = ThreadLocalCache()
 
         try:
             from sinonym.ml_fast_scorer import FastJapaneseScorer  # noqa: PLC0415
@@ -137,6 +135,9 @@ class _MLJapaneseClassifier:
         except Exception as e:  # noqa: BLE001 - optional classifier load failure disables the ML path.
             LOGGER.warning("Failed to load ML Japanese classifier: %s", e)
             self._available = False
+        self._cached_japanese_probability = lru_cache(maxsize=ML_JAPANESE_PROBABILITY_CACHE_MAXSIZE)(
+            self._uncached_japanese_probability,
+        )
 
     def is_available(self) -> bool:
         """Check if ML classifier is available and loaded."""
@@ -147,31 +148,27 @@ class _MLJapaneseClassifier:
         if not self.is_available():
             return ParseResult.success_with_name("")  # Default to allowing through
 
-        cached = self._cache.get(name)
-        if cached is not None:
-            return cached
-
         try:
-            jp_probability = self._scorer.japanese_probability(name)
+            jp_probability = self._cached_japanese_probability(name)
 
             # Only reject as Japanese if we're very confident
             if jp_probability > 0.5 and jp_probability >= self._confidence_threshold:
-                result = ParseResult.failure(JAPANESE_CLASSIFIER_REJECTION)
-            else:
-                result = ParseResult.success_with_name("")
+                return ParseResult.failure(JAPANESE_CLASSIFIER_REJECTION)
+            return ParseResult.success_with_name("")
         except Exception as e:  # noqa: BLE001 - scorer failures must surface without being cached.
             LOGGER.warning("ML Japanese classifier error for %r: %s", name, e, exc_info=True)
             return ParseResult.failure(JAPANESE_CLASSIFIER_RUNTIME_ERROR)
-        else:
-            self._cache.set(name, result)
-            return result
+
+    def _uncached_japanese_probability(self, name: str) -> float:
+        """Score one surface; ``lru_cache`` deliberately does not retain failures."""
+        return self._scorer.japanese_probability(name)
 
     def japanese_probability(self, name: str) -> float:
         """Return the Japanese-class probability."""
         if not self.is_available():
             return 0.0
 
-        return self._scorer.japanese_probability(name)
+        return self._cached_japanese_probability(name)
 
 
 class EthnicityClassificationService:

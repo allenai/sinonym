@@ -85,6 +85,7 @@ class BatchCandidateEntry:
     raw_tokens: tuple[str, ...] = field(kw_only=True)
     spaced_compound_spans: tuple[SpacedCompoundSpan, ...] = field(default=(), kw_only=True)
     batch_format_locked: bool = field(default=False, kw_only=True)
+    individual_result: ParseResult | None = field(default=None, kw_only=True)
     input_failure: ParseResult | None = None
     individual_failure: ParseResult | None = None
 
@@ -92,7 +93,11 @@ class BatchCandidateEntry:
     def participates(self) -> bool:
         """Return whether this entry votes in Latin batch format detection."""
         return bool(
-            self.vote_eligible and self.candidates and self.best_candidate and self.representation == LATIN_ONLY_REPRESENTATION,
+            self.vote_eligible
+            and self.candidates
+            and self.best_candidate
+            and self.best_candidate.format is not NameFormat.MIXED
+            and self.representation == LATIN_ONLY_REPRESENTATION,
         )
 
 
@@ -130,6 +135,7 @@ class _PreparedName:
     format_candidates: tuple[_PreparedCandidate, ...]
     individual_candidates: tuple[_PreparedCandidate, ...]
     batch_format_locked: bool = False
+    individual_result: ParseResult | None = None
     input_failure: ParseResult | None = None
     individual_failure: ParseResult | None = None
 
@@ -354,15 +360,31 @@ class BatchAnalysisService:
         normalized_input = normalizer.apply(classification_input)
         contextual_taiwan = self._is_contextual_taiwan_name(normalized_input.roman_tokens)
         representation = self._script_representation(normalizer, normalized_input)
+        has_authoritative_structure = bool(
+            normalized_input.authoritative_source_format is not None or normalized_input.from_camel_case_pair,
+        )
+        parsed_individual = self._individual_parser(name) if has_authoritative_structure else None
+        individual_result = parsed_individual if parsed_individual is not None and parsed_individual.success else None
+        authoritative_candidate = self._authoritative_structural_candidate(normalized_input, individual_result)
         common = {
             "name": name,
             "representation": representation,
             "vote_eligible": self._batch_vote_eligible(normalized_input),
-            "batch_format_locked": normalized_input.surname_first_parenthetical_hint or contextual_taiwan,
-            "raw_tokens": tuple(normalized_input.roman_tokens),
+            "batch_format_locked": (
+                normalized_input.surname_first_parenthetical_hint or contextual_taiwan or authoritative_candidate is not None
+            ),
+            "individual_result": individual_result,
+            "raw_tokens": normalized_input.authored_roman_tokens or tuple(normalized_input.roman_tokens),
             "compound_metadata": tuple(normalized_input.compound_metadata.items()),
             "spaced_compound_spans": normalized_input.spaced_compound_spans,
         }
+        if authoritative_candidate is not None:
+            candidates = (authoritative_candidate,)
+            return _PreparedName(
+                format_candidates=candidates,
+                individual_candidates=candidates,
+                **common,
+            )
         if not self._is_batch_format_participant(representation):
             return _PreparedName(format_candidates=(), individual_candidates=(), **common)
 
@@ -376,6 +398,31 @@ class BatchAnalysisService:
             individual_candidates=individual_candidates,
             individual_failure=failure,
             **common,
+        )
+
+    def _authoritative_structural_candidate(
+        self,
+        normalized_input,
+        individual_result: ParseResult | None,
+    ) -> _PreparedCandidate | None:
+        """Return one locked candidate when source structure decides the scalar parse."""
+        if not (normalized_input.authoritative_source_format is not None or normalized_input.from_camel_case_pair):
+            return None
+        if individual_result is None or not individual_result.success or individual_result.parsed is None:
+            return None
+
+        selected_format = normalized_input.authoritative_source_format or self._format_from_parse_result(
+            individual_result,
+        )
+        if selected_format is NameFormat.MIXED:
+            return None
+        parsed = individual_result.parsed
+        return _PreparedCandidate(
+            surname_tokens=tuple(parsed.surname_tokens),
+            given_tokens=tuple(parsed.given_tokens),
+            score=0.0,
+            format=selected_format,
+            original_compound_format=individual_result.original_compound_surname,
         )
 
     def _prepare_candidate_views(
@@ -503,6 +550,7 @@ class BatchAnalysisService:
                 "representation": prepared.representation,
                 "vote_eligible": prepared.vote_eligible,
                 "batch_format_locked": prepared.batch_format_locked,
+                "individual_result": prepared.individual_result,
                 "raw_tokens": prepared.raw_tokens,
                 "spaced_compound_spans": prepared.spaced_compound_spans,
             }
@@ -562,7 +610,7 @@ class BatchAnalysisService:
             )
             improvements = self._find_improvements(focal_individual_entries, results)
         else:
-            results = self._materialize_individual_results(focal_individual_entries, formatting_service)
+            results = self._materialize_individual_results(focal_individual_entries)
             improvements = []
 
         return BatchParseResult(
@@ -582,30 +630,26 @@ class BatchAnalysisService:
     def _materialize_individual_results(
         self,
         entries: list[BatchCandidateEntry],
-        formatting_service,
     ) -> list[ParseResult]:
-        """Materialize standalone results without repeating preparation work."""
-        return [self._materialize_individual_result(entry, formatting_service) for entry in entries]
+        """Materialize standalone results through the authoritative scalar policy."""
+        return [self._materialize_individual_result(entry) for entry in entries]
 
     def _materialize_individual_result(
         self,
         entry: BatchCandidateEntry,
-        formatting_service,
     ) -> ParseResult:
         """Materialize one row without applying a peer-derived format."""
         if entry.input_failure is not None:
             return entry.input_failure
+        if entry.individual_result is not None:
+            return entry.individual_result
         if not self._is_batch_format_participant(entry.representation):
             return self._locked_representation_result(entry.name)
         if self._is_contextual_taiwan_name(entry.raw_tokens):
             return self._locked_representation_result(entry.name)
         if entry.best_candidate is None:
             return entry.individual_failure or ParseResult.failure("no valid parse found")
-        return self._format_best_candidate(
-            entry.best_candidate,
-            formatting_service,
-            entry.compound_metadata,
-        )
+        return self._individual_parser(entry.name)
 
     def _promote_guarded_given_first_batch_votes(
         self,
@@ -745,16 +789,16 @@ class BatchAnalysisService:
         if not surname_tokens or not original_tokens:
             return NameFormat.SURNAME_FIRST
 
-        # Compare the complete surname slice so repeated endpoint text cannot
-        # transfer lineage from another occurrence (for example,
-        # ``Au Au Yeung``).  Expanded compact/hyphenated surnames deliberately
-        # fall through to their narrower representation-specific handling.
-        surname_first = surname_tokens == original_tokens[: len(surname_tokens)]
-        given_first = surname_tokens == original_tokens[-len(surname_tokens) :]
-        if surname_first and not given_first:
-            return NameFormat.SURNAME_FIRST
-        if given_first and not surname_first:
-            return NameFormat.GIVEN_FIRST
+        # Rebuild the whole token stream so equal endpoint text cannot transfer
+        # lineage from a different occurrence (for example, ``Li Wei Li``).
+        # Expanded compact/hyphenated surnames deliberately fall through to
+        # their narrower representation-specific handling.
+        surname_first = [*surname_tokens, *_given_tokens] == original_tokens
+        given_first = [*_given_tokens, *surname_tokens] == original_tokens
+        if surname_first != given_first:
+            return NameFormat.SURNAME_FIRST if surname_first else NameFormat.GIVEN_FIRST
+        if surname_first and given_first:
+            return NameFormat.MIXED
 
         # Compact compound surname: parsed surname tokens may be sub-tokens of a
         # single original token (e.g. ['Ou', 'yang'] from 'Ouyang').
@@ -890,7 +934,7 @@ class BatchAnalysisService:
         # Process all names in one pass and apply the target format.
         for format_entry, individual_entry in zip(format_entries, individual_entries, strict=True):
             if not self._batch_format_applies_to_entry(format_entry):
-                results.append(self._materialize_individual_result(individual_entry, formatting_service))
+                results.append(self._materialize_individual_result(individual_entry))
                 continue
 
             # Participation guarantees a non-empty candidate list and a best_candidate,
@@ -990,19 +1034,6 @@ class BatchAnalysisService:
     ) -> ParseResult:
         """Return a structural individual parse for records outside the Latin batch cohort."""
         return self._individual_parser(name)
-
-    def _format_best_candidate(
-        self,
-        best_candidate: ParseCandidate | None,
-        formatting_service,
-        compound_metadata,
-    ) -> ParseResult:
-        """Format the best candidate from an individual analysis."""
-        return self._candidate_to_parse_result(
-            best_candidate,
-            formatting_service,
-            compound_metadata,
-        )
 
     def _candidate_to_parse_result(
         self,

@@ -9,7 +9,7 @@ instance and reuses it for all subsequent chunks.
 from __future__ import annotations
 
 import pickle
-from collections.abc import Callable  # noqa: TC003 - required for runtime get_type_hints().
+from collections.abc import Callable, Sequence  # noqa: TC003 - required for runtime get_type_hints().
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from multiprocessing import get_all_start_methods, get_context
@@ -157,7 +157,7 @@ class PersistentMultiprocessNormalizer:
         chunk_size: int = 64,
         mp_start_method: str = "spawn",
         detector_config: ChineseNameConfig | None = None,
-        detector_weights: list[float] | None = None,
+        detector_weights: Sequence[float] | None = None,
     ) -> None:
         validate_multiprocess_options(
             max_workers=max_workers,
@@ -331,7 +331,7 @@ def normalize_names_multiprocess(  # noqa: PLR0913
     chunk_size: int = 64,
     mp_start_method: str = "spawn",
     detector_config: ChineseNameConfig | None = None,
-    detector_weights: list[float] | None = None,
+    detector_weights: Sequence[float] | None = None,
 ) -> list[ParseResult]:
     """Normalize one batch in a temporary multi-process pool."""
     with PersistentMultiprocessNormalizer(

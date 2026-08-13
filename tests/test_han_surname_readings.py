@@ -60,7 +60,9 @@ def test_contextual_surname_reading_reaches_batch_results(detector, raw_name, ex
         (SourceAuthorFields(last_name="\u66fe\u663e\u658c"), ("Xian-Bin", "", "Zeng")),
         (SourceAuthorFields(last_name="\u660e\u66fe"), ("Ming", "", "Zeng")),
         (SourceAuthorFields(last_name="\u9648\u66fe\u660e"), ("Ceng-Ming", "", "Chen")),
-        (SourceAuthorFields(first_name="\u66fd", last_name="\u5c1a\u6587"), ("Shang-Wen", "", "Ceng")),
+        (SourceAuthorFields(first_name="\u66fe", last_name="\u5c1a\u6587"), ("Shang-Wen", "", "Zeng")),
+        (SourceAuthorFields(first_name="\u4ec7", last_name="\u6d2a\u51b0"), ("Hong-Bing", "", "Qiu")),
+        (SourceAuthorFields(first_name="\u6d2a\u51b0", last_name="\u4ec7"), ("Hong-Bing", "", "Qiu")),
         (SourceAuthorFields(last_name="\u4ec7\u6d2a\u51b0"), ("Hong-Bing", "", "Qiu")),
     ],
 )

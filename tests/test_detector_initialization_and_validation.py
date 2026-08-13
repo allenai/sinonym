@@ -2,11 +2,14 @@
 
 import math
 import threading
+from dataclasses import replace
 
 import pytest
 
 from sinonym import ChineseNameDetector
+from sinonym.coretypes import ChineseNameConfig
 from sinonym.services.normalization import NormalizationService
+from sinonym.services.parsing import DEFAULT_WEIGHTS, NameParsingService
 
 
 def test_lazy_initialization_retries_after_post_data_failure(monkeypatch):
@@ -59,6 +62,62 @@ def test_lazy_initialization_retries_after_context_injection_failure(monkeypatch
 
     assert attempts == 2
     assert result.success
+
+
+@pytest.mark.parametrize(
+    ("weights", "error_type"),
+    [
+        ([0.0] * 7, ValueError),
+        ([0.0] * 10, ValueError),
+        ([math.nan] * 9, ValueError),
+        ([math.inf] * 9, ValueError),
+        ([True] * 9, TypeError),
+        (["1.0"] * 9, TypeError),
+    ],
+)
+def test_detector_rejects_invalid_weight_vectors_before_initialization(weights, error_type):
+    """Malformed public weight configuration must never reach lazy fallback."""
+    with pytest.raises(error_type, match="weights must contain exactly 8 or 9"):
+        ChineseNameDetector(weights=weights)
+
+
+def test_eight_weight_vector_is_copied_and_padded_immutably():
+    """The supported legacy shape receives only the documented ninth default."""
+    supplied = [0.0] * 8
+    detector = ChineseNameDetector(weights=supplied)
+    supplied[0] = 99.0
+
+    assert detector._weights == (*([0.0] * 8), DEFAULT_WEIGHTS[8])  # noqa: SLF001
+    assert isinstance(detector._weights, tuple)  # noqa: SLF001
+
+
+def test_direct_parsing_service_construction_reuses_weight_validation(detector):
+    """Internal direct construction cannot bypass the configuration boundary."""
+    with pytest.raises(ValueError, match="weights must contain exactly 8 or 9"):
+        NameParsingService(detector._config, detector._normalizer, detector._data, weights=[0.0] * 7)  # noqa: SLF001
+
+
+@pytest.mark.parametrize("min_tokens_required", [1, 0, -1, True, 2.5])
+def test_config_rejects_invalid_minimum_token_count(min_tokens_required):
+    """The parsing minimum is an integer lower bound of at least two."""
+    with pytest.raises(ValueError, match="min_tokens_required"):
+        replace(ChineseNameConfig.create_default(), min_tokens_required=min_tokens_required)
+
+
+@pytest.mark.parametrize(
+    ("min_tokens_required", "raw_name", "discarded_result"),
+    [(3, "\u5f20\u4f1f\u660e", "Wei Zhang"), (4, "\u5f20\u4f1f\u660e\u534e", "Wei Zhang")],
+)
+def test_custom_minimum_token_count_never_truncates_han_input(
+    min_tokens_required,
+    raw_name,
+    discarded_result,
+):
+    """A minimum token count must not masquerade as the exact two-Han arity."""
+    config = replace(ChineseNameConfig.create_default(), min_tokens_required=min_tokens_required)
+    result = ChineseNameDetector(config=config).normalize_name(raw_name)
+
+    assert not result.success or result.result != discarded_result
 
 
 def test_concurrent_lazy_initialization_never_exposes_partial_readiness(monkeypatch):

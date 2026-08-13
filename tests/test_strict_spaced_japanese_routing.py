@@ -11,12 +11,16 @@ import pytest
 
 from sinonym.coretypes import CanonicalName
 from sinonym.coretypes.routing_resolution import (
+    EAST_ASIAN_EVIDENCE_RESOLUTION_REASONS,
     ApplyAssignment,
     EastAsianEvidenceReason,
+    HardScalarMaterializationFailure,
     PreserveBaseline,
     ResolutionAction,
     ResolutionProvenance,
     ResolutionReason,
+    east_asian_evidence_resolution_reason,
+    resolution_decision_spec,
 )
 from sinonym.services.east_asian_name_order import (
     EastAsianNameOrderDecision,
@@ -29,6 +33,14 @@ if TYPE_CHECKING:
     from sinonym.detector import ChineseNameDetector
 
 SPACED_CJK_GOLD = Path(__file__).parent / "data" / "spaced_cjk_name_order_gold.json"
+TERMINAL_EAST_ASIAN_EVIDENCE_REASONS = (
+    EastAsianEvidenceReason.JAPANESE_ITERATION_MARK_ONE_SIDED_EXCLUSIVE,
+    EastAsianEvidenceReason.JAPANESE_ITERATION_MARK_DUAL_EXCLUSIVE,
+    EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_STRICT_FAMILY_FIRST,
+    EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST,
+    EastAsianEvidenceReason.IDENTITY_BACKED_EXACT_FULL_SURFACE,
+    EastAsianEvidenceReason.KOREAN_WESTERN_SUFFIX_CONFLICT,
+)
 
 
 def test_strict_spaced_native_directions_return_typed_hard_evidence() -> None:
@@ -167,3 +179,112 @@ def test_detector_materializes_the_strict_evidence_as_hard_constraints(
     assert family_first.reason is ResolutionReason.JAPANESE_NATIVE_SPACED_STRICT_ASSIGNMENT
     assert isinstance(given_first, PreserveBaseline)
     assert given_first.reason is ResolutionReason.JAPANESE_NATIVE_SPACED_STRICT_GIVEN_FIRST_PRESERVE_INPUT
+
+
+@pytest.mark.parametrize(
+    ("raw_name", "expected_text", "expected_given", "expected_surname"),
+    [
+        ("黒澤 明", "明 黒澤", "明", "黒澤"),
+        ("植松 康", "康 植松", "康", "植松"),
+        ("浩 吉田", "浩 吉田", "浩", "吉田"),
+        ("晶 首藤", "晶 首藤", "晶", "首藤"),
+    ],
+)
+def test_terminal_japanese_evidence_precedes_chinese_across_public_ingress(
+    detector: ChineseNameDetector,
+    raw_name: str,
+    expected_text: str,
+    expected_given: str,
+    expected_surname: str,
+) -> None:
+    first_name, last_name = raw_name.split()
+    direct = detector.normalize_person_name(raw_name)
+    sidecar = detector.normalize_name(raw_name).canonical_name
+    structured = detector.normalize_person_name_components(first_name=first_name, last_name=last_name)
+
+    for canonical in (direct, sidecar, structured):
+        assert canonical is not None
+        assert canonical.text == expected_text
+        assert canonical.normalized.given_name == expected_given
+        assert canonical.normalized.surname == expected_surname
+
+
+@pytest.mark.parametrize(
+    "evidence_reason",
+    TERMINAL_EAST_ASIAN_EVIDENCE_REASONS,
+    ids=lambda reason: reason.value,
+)
+def test_every_mapped_terminal_evidence_reason_uses_the_shared_materializer(
+    detector: ChineseNameDetector,
+    evidence_reason: EastAsianEvidenceReason,
+) -> None:
+    assert set(TERMINAL_EAST_ASIAN_EVIDENCE_REASONS) == {
+        reason for reason, resolution_reason in EAST_ASIAN_EVIDENCE_RESOLUTION_REASONS.items() if resolution_reason is not None
+    }
+    baseline = detector._person_name_baseline("Family Given")  # noqa: SLF001
+    assert baseline is not None
+    resolution_reason = east_asian_evidence_resolution_reason(evidence_reason)
+    assert resolution_reason is not None
+
+    if resolution_decision_spec(resolution_reason).action is ResolutionAction.ASSIGN:
+        resolution = EastAsianNameOrderDecision(
+            surface="Family Given",
+            given_tokens=("Given",),
+            middle_tokens=(),
+            surname_tokens=("Family",),
+            source_order=("surname", "given"),
+            reason=evidence_reason,
+        )
+        expected_type = ApplyAssignment
+    else:
+        resolution = EastAsianNameOrderPreservation(
+            surface="Given Family",
+            reason=evidence_reason,
+        )
+        expected_type = PreserveBaseline
+
+    materialized = detector._materialize_terminal_east_asian_resolution(  # noqa: SLF001
+        baseline,
+        resolution,
+    )
+
+    assert isinstance(materialized, expected_type)
+    assert materialized.evidence_reason is evidence_reason
+
+
+def test_failed_terminal_assignment_preserves_public_baselines_and_remains_typed_for_timo(
+    detector: ChineseNameDetector,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw_name = "黒澤 明"
+    baseline = detector._person_name_baseline(raw_name)  # noqa: SLF001
+    assert baseline is not None
+    resolution = EastAsianNameOrderDecision(
+        surface=raw_name,
+        given_tokens=("明",),
+        middle_tokens=(),
+        surname_tokens=("黒澤",),
+        source_order=("surname", "given"),
+        reason=EastAsianEvidenceReason.JAPANESE_NATIVE_SPACED_STRICT_FAMILY_FIRST,
+    )
+    monkeypatch.setattr(
+        detector,
+        "_infer_east_asian_name_order_resolution",
+        lambda _surface, *, legacy_raw_name: resolution,
+    )
+    monkeypatch.setattr(detector, "_canonical_name_from_order_decision", lambda _baseline, _resolution: None)
+    monkeypatch.setattr(
+        detector,
+        "_canonical_chinese_name_with_source",
+        lambda *_args, **_kwargs: pytest.fail("direct canonicalization fell through to Chinese"),
+    )
+    monkeypatch.setattr(
+        detector,
+        "_canonical_name_from_chinese_result",
+        lambda *_args, **_kwargs: pytest.fail("canonical sidecar fell through to Chinese"),
+    )
+
+    assert detector.normalize_person_name(raw_name) == baseline
+    assert detector.normalize_name(raw_name).canonical_name == baseline
+    with pytest.raises(HardScalarMaterializationFailure):
+        detector.routing_scalar_resolution(raw_name)

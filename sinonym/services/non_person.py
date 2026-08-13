@@ -104,6 +104,8 @@ def reviewed_non_person_text_pattern(raw_name: str) -> str | None:
     literal_pattern = _reviewed_literal_pattern(surface)
     if literal_pattern is not None:
         return literal_pattern
+    if _is_reviewed_hangul_organization_surface(surface):
+        return "hangul_organization_marker"
     words = set(ASCII_ALNUM_WORD_RE.findall(surface.casefold()))
     if words & REVIEWED_ORGANIZATION_TOKENS:
         return "organization_token"
@@ -112,13 +114,18 @@ def reviewed_non_person_text_pattern(raw_name: str) -> str | None:
     return None
 
 
-def _is_reviewed_hangul_organization(fields: tuple[str, str, str]) -> bool:
-    """Match an organization-only Hangul source shape with no person token."""
-    hangul_tokens = fields[2].split()
+def _is_reviewed_hangul_organization_surface(raw_name: str) -> bool:
+    """Match a surface made entirely of reviewed Hangul organization tokens."""
+    hangul_tokens = unicodedata.normalize("NFKC", raw_name).split()
     all_tokens_are_organizational = all(
         any(token.endswith(marker) for marker in REVIEWED_HANGUL_ORGANIZATION_SUFFIXES) for token in hangul_tokens
     )
-    return bool(not fields[0] and not fields[1] and hangul_tokens and all_tokens_are_organizational)
+    return bool(hangul_tokens and all_tokens_are_organizational)
+
+
+def _is_reviewed_hangul_organization(fields: tuple[str, str, str]) -> bool:
+    """Match an organization-only Hangul source shape with no person token."""
+    return bool(not fields[0] and not fields[1] and _is_reviewed_hangul_organization_surface(fields[2]))
 
 
 STRONG_CJK_NON_PERSON_MARKERS = (
@@ -145,6 +152,19 @@ STRONG_CJK_NON_PERSON_MARKERS = (
 
 STANDALONE_CJK_NON_PERSON_MARKERS = frozenset(STRONG_CJK_NON_PERSON_MARKERS)
 CJK_NON_PERSON_SUFFIX_MARKERS = STRONG_CJK_NON_PERSON_MARKERS
+
+
+def _is_reviewed_last_field_han_institution(fields: tuple[str, str, str]) -> bool:
+    """Match a last-only structured source field containing a strong Han institution marker."""
+    if fields[0] or fields[1] or not fields[2]:
+        return False
+    last_name = unicodedata.normalize("NFKC", fields[2])
+    # Exact U+00B7 marks an already-reviewed packed source surface, which may
+    # combine a person with an affiliation and is not institution-only evidence.
+    if "\u00b7" in last_name:
+        return False
+    return any(marker in last_name for marker in STRONG_CJK_NON_PERSON_MARKERS)
+
 
 REVIEWED_CREDENTIAL_ONLY_TOKENS = frozenset(
     {
@@ -246,8 +266,13 @@ def reviewed_non_person_source_pattern(  # noqa: C901 - one branch per reviewed 
     if nonempty_fields and all(field in REVIEWED_CREDENTIAL_ONLY_TOKENS for field in nonempty_fields):
         return "credential_only"
 
+    organization_pattern = None
     if _is_reviewed_hangul_organization(fields):
-        return "hangul_organization_marker"
+        organization_pattern = "hangul_organization_marker"
+    elif _is_reviewed_last_field_han_institution(fields):
+        organization_pattern = "han_institution_marker"
+    if organization_pattern is not None:
+        return organization_pattern
 
     raw_name = " ".join(_collapse_whitespace(value) for value in fields if value)
     literal_pattern = reviewed_non_person_text_pattern(raw_name)

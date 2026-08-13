@@ -25,6 +25,8 @@ from sinonym.patterns import (
     HAN_ROMAN_SPLITTER,
 )
 
+MIN_PARSING_TOKENS = 2
+
 
 @dataclass(frozen=True, slots=True)
 class _FrozenTranslationTable(Mapping[int, str | None]):
@@ -94,7 +96,14 @@ class ChineseNameConfig:
     poor_score_threshold: float  # Score below which parsing is considered poor
 
     def __post_init__(self) -> None:
-        """Copy translation tables into pickle-safe immutable mappings."""
+        """Validate scalar invariants and freeze translation mappings."""
+        if (
+            isinstance(self.min_tokens_required, bool)
+            or not isinstance(self.min_tokens_required, int)
+            or self.min_tokens_required < MIN_PARSING_TOKENS
+        ):
+            message = "min_tokens_required must be an integer >= 2"
+            raise ValueError(message)
         if not isinstance(self.hyphens_apostrophes_tr, _FrozenTranslationTable):
             object.__setattr__(
                 self,

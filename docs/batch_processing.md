@@ -9,6 +9,14 @@ then vote for surname-first or given-first order. If the batch signal clears the
 application gate, that order is applied to eligible ambiguous names. Names that
 do not participate keep their own parsing.
 
+Authored structure is retained separately from parser token order. Explicit
+`Last, First` rows and accepted compact CamelCase pairs cast their authoritative
+source-order vote but are locked against peer reversal. When identical endpoint
+spellings make both full role reconstructions possible (for example,
+`Yang Yang`), the row is `mixed`, does not vote, and cannot receive a batch
+override. With no applicable batch context, materialization is exactly the
+scalar result.
+
 ## Choose an API
 
 | Method | Input | Output | Use it when |

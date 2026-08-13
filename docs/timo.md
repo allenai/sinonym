@@ -164,6 +164,17 @@ a batch preference. Family-first assignments use
 uses `japanese_native_spaced_strict_given_first_preserve_input`. Broader
 one-sided or conflicting Japanese dictionary shapes remain nonterminal.
 
+A PP-only abstention normally retains its PP input assignment. For an
+all-native authored surface that contains a real component boundary, TIMO
+instead defers to scalar evidence only when the existing Japanese classifier is
+affirmative at its `0.8` threshold on the exact space-preserving surface. This
+narrow exception prevents a PP abstention from relabeling preserved native
+Japanese or Korean-Hanja fields as pinyin; ordinary Chinese controls remain on
+the PP path. A spaced Han row also remains on PP when its parse actually applies
+a reviewed surname-position reading to the assigned source character (for
+example, `曾` as `Zeng` or `仇` as `Qiu`); that contextual assignment is
+stronger than the broad Japanese probability alone.
+
 ## How structured fields are used
 
 For ordinary inference, source component labels provide lossless boundaries
@@ -203,6 +214,10 @@ parser failure is not a writer deletion decision.
 Only `resolution_action="suppress"` tells a writer to omit an author. It is
 reserved for a reviewed semantic non-person pattern. The response keeps the
 source-shaped slot so diagnostics and positional alignment remain intact.
+Reviewed patterns include suffix-free, last-field-only Han institutions whose
+text contains an established strong organization marker. Raw Hangul
+organization surfaces use a separate all-token suffix grammar rather than
+broadening Han/CJK parsing primitives.
 
 ## Validation and failures
 

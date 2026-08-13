@@ -9,6 +9,8 @@ validation patterns.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence  # noqa: TC003 - public annotations are inspected at runtime.
+from numbers import Real
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS, KOREAN_GIVEN_PATTERNS, OVERLAPPING_KOREAN_SURNAMES
@@ -59,10 +61,38 @@ DEFAULT_WEIGHTS = (
 )
 
 
+def validate_parsing_weights(weights: Sequence[Real] | None) -> tuple[float, ...]:
+    """Return a validated immutable parsing-weight vector.
+
+    Eight-element vectors are the supported legacy shape and receive the
+    documented trailing default. Invalid configuration must fail at the
+    construction boundary instead of silently selecting unrelated defaults.
+    """
+    if weights is None:
+        return DEFAULT_WEIGHTS
+    if len(weights) not in (8, 9):
+        message = "weights must contain exactly 8 or 9 finite real numbers"
+        raise ValueError(message)
+
+    normalized: list[float] = []
+    for weight in weights:
+        if isinstance(weight, bool) or not isinstance(weight, Real):
+            message = "weights must contain exactly 8 or 9 finite real numbers"
+            raise TypeError(message)
+        numeric_weight = float(weight)
+        if not math.isfinite(numeric_weight):
+            message = "weights must contain exactly 8 or 9 finite real numbers"
+            raise ValueError(message)
+        normalized.append(numeric_weight)
+
+    normalized.extend(DEFAULT_WEIGHTS[len(normalized) :])
+    return tuple(normalized)
+
+
 class NameParsingService:
     """Service for parsing Chinese names into surname and given name components."""
 
-    def __init__(self, context_or_config, normalizer=None, data=None, *, weights: list[float] | None = None):
+    def __init__(self, context_or_config, normalizer=None, data=None, *, weights: Sequence[Real] | None = None):
         # Support both old interface (config, normalizer, data) and new context interface
         if hasattr(context_or_config, "config"):
             # New context interface
@@ -76,13 +106,7 @@ class NameParsingService:
             self._data = data
         self._surname_resolver = SurnameResolver(self._data, self._normalizer)
 
-        # Weight parameters - can be overridden. Legacy shorter vectors (e.g. from
-        # pickled configs or process-pool workers) get the default coefficients for
-        # the newer trailing features appended, keeping index order stable.
-        if weights and len(weights) in (8, 9):
-            self._weights = list(weights) + list(DEFAULT_WEIGHTS[len(weights) :])
-        else:
-            self._weights = list(DEFAULT_WEIGHTS)
+        self._weights = validate_parsing_weights(weights)
 
     def parse_name_order(
         self,

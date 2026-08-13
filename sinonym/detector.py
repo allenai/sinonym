@@ -219,6 +219,8 @@ from sinonym.services.east_asian_name_order import (
 )
 from sinonym.services.ethnicity import INITIAL_ONLY_CROSS_CULTURAL_SURNAMES
 from sinonym.services.formatting import REVIEWED_UNBOUNDED_PREFIX_GIVEN_FORMS, SINGLE_LETTER_PINYIN_SYLLABLES
+from sinonym.services.non_person import reviewed_non_person_source_pattern
+from sinonym.services.parsing import validate_parsing_weights
 from sinonym.services.person_name_normalization import (
     DropReason,
     PersonNameNormalizationResult,
@@ -302,6 +304,7 @@ class ChineseNameDetector:
     """Main Chinese name detection and normalization service."""
 
     def __init__(self, config: ChineseNameConfig | None = None, weights: list[float] | None = None):
+        self._weights = validate_parsing_weights(weights)
         self._config = config or ChineseNameConfig.create_default()
         self._cache_service = PinyinCacheService(self._config)
         self._normalizer = NormalizationService(self._config, self._cache_service)
@@ -311,8 +314,6 @@ class ChineseNameDetector:
         self._initialization_lock = threading.RLock()
         self._data: NameDataStructures | None = None
         self._surname_resolver: SurnameResolver | None = None
-        self._weights = weights  # Store weights to pass to parsing service
-
         # Service instances (initialized after data loading)
         self._ethnicity_service: EthnicityClassificationService | None = None
         self._parsing_service: NameParsingService | None = None
@@ -459,7 +460,8 @@ class ChineseNameDetector:
         except ValueError as error:
             return ParseResult.failure(str(error))
 
-        selected_format = NameFormat.GIVEN_FIRST if original_order and original_order[0] == "given" else NameFormat.SURNAME_FIRST
+        inferred_format = NameFormat.GIVEN_FIRST if original_order and original_order[0] == "given" else NameFormat.SURNAME_FIRST
+        selected_format = normalized_input.authoritative_source_format or inferred_format
         return self._formatting_service.materialize_parse_result(
             surname_tokens,
             given_tokens,
@@ -1085,7 +1087,7 @@ class ChineseNameDetector:
             if grouped_result is not None:
                 return grouped_result
 
-        if is_all_chinese and len(normalized_input.roman_tokens) == self._config.min_tokens_required:
+        if is_all_chinese and len(normalized_input.roman_tokens) == TWO_TOKEN_NAME_COUNT:
             # For all-Chinese 2-token inputs, ALWAYS assume surname-first order
             # Two-character Chinese names are always (surname, given_name)
             tokens = list(normalized_input.roman_tokens)
@@ -1559,17 +1561,16 @@ class ChineseNameDetector:
     ) -> CanonicalName:
         """Apply hard identity evidence, then Chinese and soft order policy."""
         routing_surface = self._east_asian_routing_surface(raw_name, baseline)
-        decision = self._infer_east_asian_name_order_decision(
+        resolution = self._infer_east_asian_name_order_resolution(
             routing_surface,
             legacy_raw_name=raw_name,
         )
-        if decision is not None and east_asian_evidence_resolution_reason(decision.reason) in {
-            ResolutionReason.JAPANESE_ITERATION_MARK_ASSIGNMENT,
-            ResolutionReason.IDENTITY_BACKED_EXACT_ASSIGNMENT,
-        }:
-            routed = self._canonical_name_from_order_decision(baseline, decision)
-            if routed is not None:
-                return routed
+        try:
+            terminal = self._materialize_terminal_east_asian_resolution(baseline, resolution)
+        except HardScalarMaterializationFailure:
+            return baseline
+        if terminal is not None:
+            return terminal.canonical_name
 
         if self._east_asian_name_order._is_reviewed_japanese_given_first_exact_surface(routing_surface):
             return baseline
@@ -1581,9 +1582,9 @@ class ChineseNameDetector:
         )
         if chinese is not None:
             return chinese
-        if decision is None:
+        if not isinstance(resolution, EastAsianNameOrderDecision):
             return baseline
-        return self._canonical_name_from_order_decision(baseline, decision) or baseline
+        return self._canonical_name_from_order_decision(baseline, resolution) or baseline
 
     def _canonical_chinese_name_with_source(
         self,
@@ -1791,21 +1792,13 @@ class ChineseNameDetector:
             routing_surface,
             japanese_probability=self._ethnicity_service.japanese_probability,
         )
+        resolution = self._east_asian_resolution_after_chinese_yield(raw_name, resolution)
+        terminal = self._materialize_terminal_east_asian_resolution(baseline, resolution)
+        if terminal is not None:
+            return terminal
 
-        if isinstance(resolution, EastAsianNameOrderPreservation):
-            return PreserveBaseline(canonical_name=baseline, evidence_reason=resolution.reason)
-
-        decision = resolution
-        if self._korean_compact_split_yields_to_chinese(raw_name, decision):
-            decision = None
-
-        if decision is not None:
-            routed = self._canonical_name_from_order_decision(baseline, decision)
-            if east_asian_evidence_resolution_reason(decision.reason) is not None:
-                if routed is None:
-                    message = f"hard scalar assignment could not be materialized for {raw_name!r}"
-                    raise HardScalarMaterializationFailure(message)
-                return ApplyAssignment(canonical_name=routed, evidence_reason=decision.reason)
+        if isinstance(resolution, EastAsianNameOrderDecision):
+            routed = self._canonical_name_from_order_decision(baseline, resolution)
             return routed or baseline
 
         return baseline
@@ -1833,13 +1826,13 @@ class ChineseNameDetector:
             raise RuntimeError(message)
         return cleaned_input, reason
 
-    def _infer_east_asian_name_order_decision(
+    def _infer_east_asian_name_order_resolution(
         self,
         routing_surface: str,
         *,
         legacy_raw_name: str,
-    ) -> EastAsianNameOrderDecision | None:
-        """Return one canonical order decision while surfacing evidence failure."""
+    ) -> EastAsianNameOrderDecision | EastAsianNameOrderPreservation | None:
+        """Return one order resolution while handling public-API evidence failure."""
         if self._ethnicity_service is None:
             return None
         try:
@@ -1854,10 +1847,36 @@ class ChineseNameDetector:
                 error,
             )
             return None
-        decision = resolution if isinstance(resolution, EastAsianNameOrderDecision) else None
-        if decision is None or self._korean_compact_split_yields_to_chinese(legacy_raw_name, decision):
+        return self._east_asian_resolution_after_chinese_yield(legacy_raw_name, resolution)
+
+    def _east_asian_resolution_after_chinese_yield(
+        self,
+        raw_name: str,
+        resolution: EastAsianNameOrderDecision | EastAsianNameOrderPreservation | None,
+    ) -> EastAsianNameOrderDecision | EastAsianNameOrderPreservation | None:
+        """Retain typed order evidence unless the Korean compact rule yields."""
+        if isinstance(resolution, EastAsianNameOrderDecision) and self._korean_compact_split_yields_to_chinese(
+            raw_name,
+            resolution,
+        ):
             return None
-        return decision
+        return resolution
+
+    def _materialize_terminal_east_asian_resolution(
+        self,
+        baseline: CanonicalName,
+        resolution: EastAsianNameOrderDecision | EastAsianNameOrderPreservation | None,
+    ) -> HardScalarConstraint | None:
+        """Materialize mapped terminal evidence without yielding to later policy."""
+        if resolution is None or east_asian_evidence_resolution_reason(resolution.reason) is None:
+            return None
+        if isinstance(resolution, EastAsianNameOrderPreservation):
+            return PreserveBaseline(canonical_name=baseline, evidence_reason=resolution.reason)
+        routed = self._canonical_name_from_order_decision(baseline, resolution)
+        if routed is None:
+            message = f"hard scalar assignment could not be materialized for {baseline.source_text!r}"
+            raise HardScalarMaterializationFailure(message)
+        return ApplyAssignment(canonical_name=routed, evidence_reason=resolution.reason)
 
     def _korean_compact_split_yields_to_chinese(
         self,
@@ -2009,6 +2028,8 @@ class ChineseNameDetector:
         )
         if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
             return None
+        if reviewed_non_person_source_pattern(first_name, middle_name, last_name, suffix) is not None:
+            return None
         baseline = normalized.canonical_name
         selected = self._canonical_person_name_from_baseline(baseline.source_text, baseline)
         return replace(selected, source=baseline.source)
@@ -2061,9 +2082,21 @@ class ChineseNameDetector:
         """Return the canonical sidecar used by scalar normalization."""
         if result.canonical_name is not None:
             return result.canonical_name
-        canonical_name = self._canonical_name_from_iteration_mark(raw_name)
-        if canonical_name is None:
-            canonical_name = self._canonical_name_from_chinese_result(raw_name, result)
+        baseline = self._person_name_baseline(raw_name)
+        if baseline is not None:
+            routing_surface = self._east_asian_routing_surface(raw_name, baseline)
+            resolution = self._infer_east_asian_name_order_resolution(
+                routing_surface,
+                legacy_raw_name=raw_name,
+            )
+            try:
+                terminal = self._materialize_terminal_east_asian_resolution(baseline, resolution)
+            except HardScalarMaterializationFailure:
+                return baseline
+            if terminal is not None:
+                return terminal.canonical_name
+
+        canonical_name = self._canonical_name_from_chinese_result(raw_name, result)
         if canonical_name is None:
             canonical_name = self._normalize_person_name_with_chinese_result(raw_name, result)
         return canonical_name

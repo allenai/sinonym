@@ -13,6 +13,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Literal
 
 from sinonym.chinese_names_data import VALID_CHINESE_RIMES
+from sinonym.coretypes import NameFormat
 from sinonym.name_punctuation import (
     ROMAN_HYPHEN_LIKE,
     fold_internal_name_joiners,
@@ -120,6 +121,8 @@ class NormalizedInput:
     from_camel_case_pair: bool = False
     surname_first_parenthetical_hint: bool = False
     spaced_compound_spans: tuple[SpacedCompoundSpan, ...] = ()
+    authored_roman_tokens: tuple[str, ...] = ()
+    authoritative_source_format: NameFormat | None = None
 
     @classmethod
     def empty(cls, raw: str = "") -> NormalizedInput:
@@ -236,11 +239,17 @@ class NormalizationService:
             self._data,
         )
 
-        # Phase 2: Handle "LAST, First" format (common in academic/professional contexts)
+        # Phase 2: Handle "LAST, First" format (common in academic/professional contexts).
+        # Parsing keeps the established given-first rewrite, while the authored
+        # representation remains available for source metadata and batch voting.
+        authored_cleaned = cleaned
+        authoritative_source_format = None
         if "," in cleaned:
             parts = [part.strip() for part in cleaned.split(",")]
             if len(parts) == 2 and all(parts):  # Exactly 2 non-empty parts
+                authored_cleaned = StringManipulationUtils.join_with_spaces(parts)
                 cleaned = StringManipulationUtils.join_with_spaces(parts[::-1])  # Reverse order: "Last, First" -> "First Last"
+                authoritative_source_format = NameFormat.SURNAME_FIRST
 
         # Phase 3: Detect all-Chinese input for special processing
         is_all_chinese = self._text_preprocessor.is_all_chinese_input(cleaned)
@@ -256,6 +265,22 @@ class NormalizationService:
 
         # Phase 5: Process mixed Han/Roman tokens (enhanced for all-Chinese inputs)
         roman_tokens = tuple(self._process_mixed_tokens(list(tokens), is_all_chinese))
+
+        if authoritative_source_format is None:
+            authored_roman_tokens = roman_tokens
+        else:
+            authored_cleaned = fold_internal_name_joiners(
+                authored_cleaned,
+                self._config.roman_punctuation_fold_tr,
+            )
+            authored_cleaned = fold_spaced_transliteration_apostrophes(authored_cleaned)
+            authored_raw_tokens = self._config.sep_pattern.sub(" ", authored_cleaned).split()
+            authored_tokens = tuple(
+                token
+                for token in authored_raw_tokens
+                if token and not all(character in string.punctuation for character in token)
+            )
+            authored_roman_tokens = tuple(self._process_mixed_tokens(list(authored_tokens), is_all_chinese))
 
         if not roman_tokens:
             return NormalizedInput.empty(raw_name)
@@ -279,6 +304,8 @@ class NormalizationService:
             from_camel_case_pair=from_camel_case_pair,
             surname_first_parenthetical_hint=surname_first_parenthetical_hint,
             spaced_compound_spans=spaced_compound_spans,
+            authored_roman_tokens=authored_roman_tokens,
+            authoritative_source_format=authoritative_source_format,
         )
 
     @staticmethod

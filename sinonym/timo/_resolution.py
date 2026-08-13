@@ -11,6 +11,7 @@ evidence.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import unicodedata
 from dataclasses import replace
@@ -19,8 +20,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, StrictStr, root_validator
 
-from sinonym.chinese_names_data import REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS
-from sinonym.coretypes import NameComponents
+from sinonym.chinese_names_data import HAN_SURNAME_POSITION_READINGS, REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS
+from sinonym.coretypes import NameComponents, ParseResult
 from sinonym.coretypes.routing_resolution import (
     ApplyAssignment,
     EvidenceFailure,
@@ -34,6 +35,7 @@ from sinonym.coretypes.routing_resolution import (
 )
 from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
 from sinonym.pipeline.name_order_routing import pp_abstain_parsed
+from sinonym.services.east_asian_name_order import JAPANESE_ML_THRESHOLD
 from sinonym.services.non_person import (
     CJK_NON_PERSON_SUFFIX_MARKERS,
     REVIEWED_HANGUL_ORGANIZATION_MARKERS,
@@ -1096,6 +1098,47 @@ def _is_latin_letter(character: str) -> bool:
     return unicodedata.category(character).startswith("L") and "LATIN" in unicodedata.name(character, "")
 
 
+def _pp_only_native_abstain_prefers_scalar(
+    surface: str,
+    japanese_probability: Callable[[str], float],
+) -> bool:
+    """Return whether spaced native-script evidence overrides a PP-only abstain parse."""
+    if not any(character.isspace() for character in surface):
+        return False
+    if not surface or any(not character.isspace() and not _is_cjk_letter(character) for character in surface):
+        return False
+
+    probability = japanese_probability(surface)
+    if not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
+        message = f"Japanese classifier returned invalid probability {probability!r}"
+        raise EvidenceFailure(message)
+    return probability >= JAPANESE_ML_THRESHOLD
+
+
+def _pp_parse_uses_contextual_han_surname_reading(surface: str, result: ParseResult) -> bool:
+    """Return whether PP applied a reviewed reading to its assigned Han surname."""
+    original = result.parsed_original_order if result.success else None
+    if original is None or not original.order:
+        return False
+
+    groups = surface.split()
+    if original.order[0] == "surname":
+        source_surname = groups[0] if groups else ""
+    elif original.order[-1] == "surname":
+        source_surname = groups[-1] if groups else ""
+    else:
+        return False
+    if len(source_surname) != len(original.surname_tokens):
+        return False
+    for source_character, surname_token in zip(source_surname, original.surname_tokens, strict=True):
+        if any(
+            mapped_character == source_character and target.casefold() == surname_token.casefold()
+            for (mapped_character, _source_reading), target in HAN_SURNAME_POSITION_READINGS.items()
+        ):
+            return True
+    return False
+
+
 def canonical_name_leaks_mixed_script(canonical_name) -> bool:
     """Return whether a normalized surname retains CJK beside Latin components."""
     if canonical_name is None:
@@ -1423,17 +1466,23 @@ def _reviewed_joined_uppercase_surname_assignment(
     return NameComponents(given_name=given, surname=surname.title())
 
 
-def _joined_uppercase_roles_match(selected: NameComponents, expected: NameComponents) -> bool:
-    """Compare joined-uppercase semantic roles while ignoring bound separators."""
+def _joined_uppercase_candidate_adds_normalization(
+    selected: NameComponents,
+    expected: NameComponents,
+) -> bool:
+    """Return whether an aligned candidate adds information beyond the source split."""
 
     def role_key(value: str) -> str:
         return "".join(
             character.casefold() for character in value if not character.isspace() and character not in ROMAN_HYPHEN_LIKE
         )
 
-    return role_key(f"{selected.given_name}{selected.middle_name}") == role_key(expected.given_name) and role_key(
-        selected.surname,
-    ) == role_key(expected.surname)
+    roles_match = role_key(f"{selected.given_name}{selected.middle_name}") == role_key(
+        expected.given_name,
+    ) and role_key(selected.surname) == role_key(expected.surname)
+    selected_fields = (selected.given_name, selected.middle_name, selected.surname, selected.suffix)
+    expected_fields = (expected.given_name, expected.middle_name, expected.surname, expected.suffix)
+    return roles_match and selected_fields != expected_fields
 
 
 def _south_indian_terminal_initial_row(source: SourceAuthorFields, *, focal: bool) -> bool:
@@ -2163,7 +2212,7 @@ class _Resolver:
             paper_authors,
             lambda surname: self._detector._require_surname_resolver().parser_is_surname((surname,)),  # noqa: SLF001
         )
-        if joined_uppercase_assignment is not None and not _joined_uppercase_roles_match(
+        if joined_uppercase_assignment is not None and not _joined_uppercase_candidate_adds_normalization(
             selected,
             joined_uppercase_assignment,
         ):
@@ -2256,6 +2305,16 @@ class _Resolver:
             if _structural_roman_hyphen_key(source.last_name) in REVIEWED_TRAILING_HYPHENATED_COMPOUND_SURNAMES:
                 parsed = None
                 batch_reason = ResolutionReason.PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME
+            elif (
+                self._detector._ethnicity_service is not None  # noqa: SLF001
+                and not _pp_parse_uses_contextual_han_surname_reading(raw_name, result)
+                and _pp_only_native_abstain_prefers_scalar(
+                    raw_name,
+                    self._detector._ethnicity_service.japanese_probability,  # noqa: SLF001
+                )
+            ):
+                parsed = None
+                batch_reason = ResolutionReason.PP_ONLY_ABSTAIN_INPUT
             else:
                 parsed = pp_abstain_parsed(result, row)
                 batch_reason = ResolutionReason.PP_ONLY_ABSTAIN_INPUT

@@ -15,7 +15,10 @@ from sinonym.coretypes.routing_resolution import (
 )
 from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
 from sinonym.services.batch_analysis import RelatedBatchParseResult
-from sinonym.timo._resolution import reviewed_initials_comma_reversal
+from sinonym.timo._resolution import (
+    _pp_only_native_abstain_prefers_scalar,
+    reviewed_initials_comma_reversal,
+)
 from sinonym.timo.interface import Instance, Predictor, PredictorConfig, SourceAuthorFields
 from tests._korean_atomic_cases import ATOMIC_KOREAN_GIVEN_CASES, AtomicKoreanGivenCase
 
@@ -55,6 +58,19 @@ def test_reviewed_non_person_pattern_is_a_terminal_writer_decision(
 
     resolved = result
     assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("STADT", "", "NÜRNBERG")
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.SUPPRESS
+    assert resolved.resolution_reason is ResolutionReason.REVIEWED_NON_PERSON_PATTERN
+
+
+@pytest.mark.parametrize("last_name", ["北京大学", "國立臺灣大學"])
+def test_last_only_han_institution_is_a_terminal_writer_suppression(
+    predictor: Predictor,
+    last_name: str,
+) -> None:
+    (resolved,) = _route(predictor, [SourceAuthorFields(last_name=last_name)])
+
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("", "", last_name)
     assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
     assert resolved.resolution_action is ResolutionAction.SUPPRESS
     assert resolved.resolution_reason is ResolutionReason.REVIEWED_NON_PERSON_PATTERN
@@ -282,6 +298,50 @@ def test_pp_only_abstain_is_a_terminal_input_order_decision(
     assert resolved.resolution_provenance is ResolutionProvenance.PP
     assert resolved.resolution_action is ResolutionAction.PRESERVE_INPUT
     assert resolved.resolution_reason is ResolutionReason.PP_ONLY_ABSTAIN_INPUT
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(SourceAuthorFields(first_name="王", last_name="伟"), ("Wei", "Wang"), id="wang-wei-chinese"),
+        pytest.param(SourceAuthorFields(first_name="张", last_name="伟"), ("Wei", "Zhang"), id="zhang-wei-chinese"),
+        pytest.param(SourceAuthorFields(first_name="金", last_name="正日"), ("正日", "金"), id="kim-jong-il-korean-hanja"),
+        pytest.param(SourceAuthorFields(first_name="濱", last_name="定史"), ("定史", "濱"), id="hama-sadahumi-japanese"),
+    ],
+)
+def test_pp_only_native_abstain_uses_non_chinese_scalar_evidence(
+    predictor: Predictor,
+    source: SourceAuthorFields,
+    expected: tuple[str, str],
+) -> None:
+    """Chinese controls keep PP while Japanese/Korean-Hanja rows keep native script."""
+    (resolved,) = _route(predictor, [source])
+
+    assert (resolved.first_name, resolved.last_name) == expected
+    if source.first_name in {"王", "张"}:
+        assert resolved.resolution_provenance is ResolutionProvenance.PP
+        assert resolved.resolution_reason is ResolutionReason.PP_ONLY_ABSTAIN_INPUT
+    else:
+        assert resolved.resolution_provenance is ResolutionProvenance.SCALAR
+        assert resolved.resolution_reason is ResolutionReason.SCALAR_BASELINE
+
+
+def test_pp_only_native_abstain_gate_scores_the_space_preserving_surface() -> None:
+    scorer_inputs: list[str] = []
+
+    assert _pp_only_native_abstain_prefers_scalar(
+        "金 正日",
+        lambda surface: scorer_inputs.append(surface) or 0.8,
+    )
+    assert scorer_inputs == ["金 正日"]
+
+
+@pytest.mark.parametrize("surface", ["金John", "金 John", "金正日"])
+def test_pp_only_native_abstain_gate_rejects_mixed_or_unspaced_surfaces(surface: str) -> None:
+    def unexpected_score(_surface: str) -> float:
+        pytest.fail("ineligible surfaces must not reach the Japanese classifier")
+
+    assert not _pp_only_native_abstain_prefers_scalar(surface, unexpected_score)
 
 
 @pytest.mark.parametrize(

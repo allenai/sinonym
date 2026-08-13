@@ -286,7 +286,16 @@ preserves that input in `canonical_name.source`, and may update
 `canonical_name.normalized` through the same culture-specific initial and
 East Asian routing policies used for raw names. Unsupported inputs keep the
 generic canonical assignment; invalid and non-person inputs have no canonical
-name.
+name. Reviewed source-only metadata, credential rows, and last-field-only Han
+institutions are rejected at this structured boundary. Raw Hangul surfaces
+whose every token has a reviewed organization suffix are likewise non-person
+inputs; ordinary Hangul person names are unaffected.
+
+Optional detector parsing weights must contain eight or nine finite real
+numbers (booleans are not coefficients). Eight-element vectors receive the
+documented ninth default. Invalid vectors raise during construction, before
+service initialization. A custom `ChineseNameConfig.min_tokens_required` is a
+lower bound and must be an integer of at least two.
 
 Initials do not themselves establish that a name is Chinese. In particular, an
 initials-only name with a cross-cultural surname spelling such as `Lee`, `Lim`,
@@ -328,8 +337,10 @@ the generic input-order normalization.
 For spaced native Japanese names, mutually exclusive dictionary evidence is a
 hard writer decision: strict family-first evidence assigns the exchanged
 endpoints, while strict given-first evidence preserves them. TIMO applies those
-decisions before PP/VYS candidates. One-sided or conflicting dictionary shapes
-remain soft and retain the existing conservative arbitration.
+decisions before PP/VYS candidates, and the public canonical APIs apply every
+terminal mapped decision before a competing Chinese interpretation. One-sided
+or conflicting dictionary shapes remain soft and retain the existing
+conservative arbitration.
 
 The East Asian assets are primarily component lexicons. The Roman asset also
 contains a small, provenance-backed exact full-name tier for reviewed routing
