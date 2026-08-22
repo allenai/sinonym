@@ -84,7 +84,7 @@ class Predictor:
                 row=row,
                 pp_result=pp_batch.results[index],
                 vys_result=pool.results[index],
-            )
+            ).copy(update={"chinese_detected": pp_batch.results[index].success})
             for index, (source, row) in enumerate(zip(sources, rows, strict=True))
         ]
 
@@ -108,7 +108,7 @@ class Predictor:
                 focal_index=index,
                 row=row,
                 result=pp_batch.results[index],
-            )
+            ).copy(update={"chinese_detected": pp_batch.results[index].success})
             for index, (source, row) in enumerate(zip(sources, rows, strict=True))
         ]
 

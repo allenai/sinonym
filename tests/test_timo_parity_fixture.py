@@ -41,6 +41,14 @@ def _terminal_occurrences(records: list[dict]) -> list[dict]:
     ]
 
 
+def _terminal_dict(prediction: Prediction) -> dict:
+    """Compare only the fixture's terminal fields; ``chinese_detected`` is unpinned."""
+    result = prediction.dict()
+    for author in result["authors"]:
+        author.pop("chinese_detected", None)
+    return result
+
+
 def test_timo_parity_fixture_is_content_addressed_and_well_formed() -> None:
     manifest = json.loads((FIXTURE_DIR / "manifest.json").read_text(encoding="utf-8"))
     fixture_bytes = (FIXTURE_DIR / manifest["fixture_file"]).read_bytes()
@@ -74,7 +82,7 @@ def test_timo_parity_fixture_round_trips_the_wire_contract() -> None:
         expected = Prediction(**record["expected"])
 
         assert request.dict() == record["request"]
-        assert expected.dict() == record["expected"]
+        assert _terminal_dict(expected) == record["expected"]
 
 
 def test_timo_matches_the_occurrence_keyed_field_parity_oracle() -> None:
@@ -86,7 +94,7 @@ def test_timo_matches_the_occurrence_keyed_field_parity_oracle() -> None:
 
     assert len(predictions) == len(records)
     for record, prediction in zip(records, predictions, strict=True):
-        assert prediction.dict() == record["expected"], record["case_id"]
+        assert _terminal_dict(prediction) == record["expected"], record["case_id"]
 
 
 def test_source_passthrough_materializer_preserves_the_two_juan_boundaries() -> None:
@@ -100,4 +108,4 @@ def test_source_passthrough_materializer_preserves_the_two_juan_boundaries() -> 
             source,
             reason=ResolutionReason(expected["resolution_reason"]),
         )
-        assert Prediction(authors=[resolved]).dict() == record["expected"]
+        assert _terminal_dict(Prediction(authors=[resolved])) == record["expected"]

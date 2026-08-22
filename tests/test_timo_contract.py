@@ -316,7 +316,7 @@ def test_selected_components_materialize_final_suffix_and_plain_enum_values() ->
         reason=ResolutionReason.SCALAR_BASELINE,
     )
 
-    assert resolved.dict() == {
+    assert {k: v for k, v in resolved.dict().items() if k != "chinese_detected"} == {
         "first_name": "Steve",
         "middle_names": "",
         "last_name": "Blando",
@@ -356,7 +356,7 @@ def test_suppression_keeps_an_aligned_source_slot_for_writer_diagnostics() -> No
         reason=ResolutionReason.REVIEWED_NON_PERSON_PATTERN,
     )
 
-    assert resolved.dict() == {
+    assert {k: v for k, v in resolved.dict().items() if k != "chinese_detected"} == {
         "first_name": "STADT",
         "middle_names": "",
         "last_name": "NÜRNBERG",

@@ -35,6 +35,19 @@ def _route(
     return paper.authors
 
 
+def test_source_provenance_result_still_carries_chinese_detected(
+    predictor: Predictor,
+) -> None:
+    (resolved,) = _route(
+        predictor,
+        [SourceAuthorFields(first_name="Ka-Fai", last_name="Au-Yeung")],
+    )
+
+    assert resolved.resolution_provenance is ResolutionProvenance.SOURCE
+    assert resolved.resolution_action is ResolutionAction.PRESERVE_INPUT
+    assert resolved.chinese_detected is True
+
+
 def test_duplicate_names_remain_positionally_aligned(
     predictor: Predictor,
 ) -> None:
@@ -731,7 +744,7 @@ def test_present_empty_vys_cannot_change_pp_only_semantic_result(
     (pp_only,) = _route(predictor, [source])
     (present_vys,) = _route(predictor, [source], vys_other_names=[])
 
-    assert set(pp_only.dict()) == {
+    assert set(pp_only.dict()) - {"chinese_detected"} == {
         "first_name",
         "middle_names",
         "last_name",
