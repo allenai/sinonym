@@ -1645,12 +1645,15 @@ class ResolvedAuthorFields(_Model):
     structure or one exact reviewed source tuple.
     PP/VYS materialization may also assign source tokens to output fields. The
     suffix is already final, so an application must not merge it again.
+    ``chinese_detected`` is the per-name Chinese recognition (batch parse
+    success), stamped at the TIMO boundary independently of the resolution path.
     """
 
     first_name: StrictStr
     middle_names: StrictStr
     last_name: StrictStr
     suffix: StrictStr | None = None
+    chinese_detected: bool = False
     resolution_provenance: ResolutionProvenance
     resolution_action: ResolutionAction
     resolution_reason: ResolutionReason

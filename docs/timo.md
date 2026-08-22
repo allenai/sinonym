@@ -119,7 +119,8 @@ aligned author object for each `pp_authors` entry:
       "suffix": null,
       "resolution_provenance": "pp",
       "resolution_action": "assign",
-      "resolution_reason": "pp_selected"
+      "resolution_reason": "pp_selected",
+      "chinese_detected": true
     },
     {
       "first_name": "John",
@@ -128,11 +129,16 @@ aligned author object for each `pp_authors` entry:
       "suffix": null,
       "resolution_provenance": "scalar",
       "resolution_action": "assign",
-      "resolution_reason": "scalar_baseline"
+      "resolution_reason": "scalar_baseline",
+      "chinese_detected": false
     }
   ]
 }
 ```
+
+`chinese_detected` reports the per-name Chinese recognition (the batch parse
+success), stamped independently of the resolution path — a source-preserved
+author can still carry `chinese_detected: true`.
 
 The writer rule is intentionally small:
 
