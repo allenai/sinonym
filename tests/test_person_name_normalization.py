@@ -2918,3 +2918,42 @@ def test_single_token_with_suffix_goes_to_surname(
     assert normalized.given_name == ""
     assert normalized.surname == "Malcolm"
     assert normalized.suffix == "X"
+
+
+@pytest.mark.parametrize(
+    ("first", "last", "expected_first"),
+    [
+        ("‪Ralph", "Miranda-Castillo", "Ralph"),      # LEFT-TO-RIGHT EMBEDDING
+        ("‬Rana", "Keyhanmanesh", "Rana"),            # POP DIRECTIONAL FORMATTING
+        ("‏Hasan", "ALdrraji", "Hasan"),              # RIGHT-TO-LEFT MARK
+        ("‎Yifat", "Fundoiano-Hershcovitz", "Yifat"),  # LEFT-TO-RIGHT MARK
+        ("Marc﻿us", "Redemann", "Marcus"),            # BOM mid-word
+        ("⁠Sri", "Poernomo", "Sri"),                  # WORD JOINER
+    ],
+)
+def test_invisible_markup_does_not_make_a_person_a_non_person(
+    normalizer: PersonNameNormalizationService,
+    first: str,
+    last: str,
+    expected_first: str,
+) -> None:
+    """Bidi and zero-width marks are markup, not name content.
+
+    They previously reached `_allowed_name_character`, which rejected them, so the whole name
+    resolved as a non-person: 24,933 rows of `paper_authors_full` carry one, and all 11 in the
+    ORCID-bearing sample with a leading bidi mark were affected.
+    """
+    result = normalizer.normalize_components(first_name=first, last_name=last)
+
+    assert result.outcome is PersonNameOutcome.PERSON
+    assert result.canonical_name is not None
+    assert result.canonical_name.normalized.given_name == expected_first
+
+
+def test_zero_width_non_joiner_is_preserved(
+    normalizer: PersonNameNormalizationService,
+) -> None:
+    """U+200C is orthographically required in Persian and Devanagari, so it is NOT stripped."""
+    result = normalizer.normalize_components(first_name="أ‌.", last_name="bint Abdulrahman")
+
+    assert result.outcome is not PersonNameOutcome.PERSON or "‌" in str(result.canonical_name)

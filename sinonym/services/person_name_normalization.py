@@ -16,6 +16,7 @@ from enum import Enum
 
 from sinonym.coretypes import CanonicalName, NameComponents
 from sinonym.name_punctuation import (
+    INVISIBLE_MARKUP_DELETE_TRANSLATION,
     PERSON_JOINER_FOLD_TRANSLATION,
     fold_internal_name_joiners,
     fold_spaced_transliteration_apostrophes,
@@ -2173,6 +2174,12 @@ class PersonNameNormalizationService:
 
     @staticmethod
     def _clean_name_token(token: str) -> str:
+        # Invisible markup carries no name content, but `_allowed_name_character` rejects it, so
+        # `_invalid_token_reason` reports "unsupported character in name token" and the whole
+        # name resolves as NON_PERSON_SOURCE_PASSTHROUGH -- a real author marked a non-person.
+        # 24,933 rows of `paper_authors_full` carry one, and every one of the 11 in the
+        # ORCID-bearing sample with a LEADING bidi character resolved that way.
+        token = token.translate(INVISIBLE_MARKUP_DELETE_TRANSLATION)
         if PersonNameNormalizationService._is_parenthesized_name_token(token):
             return token
         if len(token) > _TWO_COMPONENTS and token.startswith("'") and token.endswith("'"):
