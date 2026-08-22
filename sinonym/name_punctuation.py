@@ -111,6 +111,36 @@ PERSON_HYPHEN_LIKE = frozenset(
 )
 
 
+# Invisible markup that carries no name content. These survive `clean_roman_pattern` (they are
+# neither Roman letters nor punctuation), leave the token unmatched by the tokenizer, and the
+# name then resolves as NON_PERSON_SOURCE_PASSTHROUGH -- so a real author is marked a non-person.
+# 24,933 rows of `paper_authors_full` carry one; a LEADING one also becomes the first initial in
+# scholar's `cluster_block_key`, because that key slices the raw first name.
+#
+# Deliberately EXCLUDED, per the measured split:
+#   U+200C ZERO WIDTH NON-JOINER -- orthographically required in Persian and Devanagari, so
+#       folding it changes real names. Left alone.
+#   U+00AD, U+0088, U+007F, U+FFFD -- symptoms of mojibake (UTF-8 read as Latin-1); stripping
+#       them yields a plausible-looking WRONG name (`MarÃ­a` stays wrong), so the record should
+#       be flagged upstream rather than silently cleaned here. U+00AD is also already handled as
+#       a hyphen by _LEGACY_COMPARISON_ONLY_HYPHENS.
+#   Private Use Area (Co) -- font-specific glyphs surviving PDF extraction, no recoverable text.
+INVISIBLE_MARKUP = frozenset(
+    "\u200b"      # ZERO WIDTH SPACE
+    "\u200d"      # ZERO WIDTH JOINER
+    "\u200e"      # LEFT-TO-RIGHT MARK
+    "\u200f"      # RIGHT-TO-LEFT MARK
+    "\u202a"      # LEFT-TO-RIGHT EMBEDDING
+    "\u202b"      # RIGHT-TO-LEFT EMBEDDING
+    "\u202c"      # POP DIRECTIONAL FORMATTING
+    "\u202d"      # LEFT-TO-RIGHT OVERRIDE
+    "\u202e"      # RIGHT-TO-LEFT OVERRIDE
+    "\u2060"      # WORD JOINER
+    "\u2066\u2067\u2068\u2069"  # LRI / RLI / FSI / PDI
+    "\ufeff",     # ZERO WIDTH NO-BREAK SPACE (BOM)
+)
+INVISIBLE_MARKUP_DELETE_TRANSLATION = str.maketrans(dict.fromkeys(INVISIBLE_MARKUP, None))
+
 APOSTROPHE_FOLD_TRANSLATION = str.maketrans(dict.fromkeys(APOSTROPHE_LIKE, "'"))
 HYPHEN_FOLD_TRANSLATION = str.maketrans(
     dict.fromkeys(ROMAN_HYPHEN_LIKE | _POST_PREPROCESSING_SAFETY_HYPHENS, "-"),

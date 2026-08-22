@@ -14,6 +14,7 @@ from types import MappingProxyType
 
 from sinonym.chinese_names_data import VALID_CHINESE_ONSETS
 from sinonym.name_punctuation import (
+    INVISIBLE_MARKUP_DELETE_TRANSLATION,
     APOSTROPHE_FOLD_TRANSLATION,
     HYPHEN_FOLD_TRANSLATION,
     NAME_JOINER_DELETE_TRANSLATION,
@@ -137,7 +138,9 @@ class ChineseNameConfig:
             clean_pattern=CLEAN_PATTERN,
             forbidden_patterns_regex=FORBIDDEN_PATTERNS_REGEX,
             hyphens_apostrophes_tr=NAME_JOINER_DELETE_TRANSLATION,
-            roman_punctuation_fold_tr=APOSTROPHE_FOLD_TRANSLATION | HYPHEN_FOLD_TRANSLATION,
+            roman_punctuation_fold_tr=APOSTROPHE_FOLD_TRANSLATION
+            | HYPHEN_FOLD_TRANSLATION
+            | INVISIBLE_MARKUP_DELETE_TRANSLATION,
             sorted_chinese_onsets=tuple(sorted(VALID_CHINESE_ONSETS, key=len, reverse=True)),
             default_surname_logp=-15.0,
             default_given_logp=-15.0,
