@@ -68,9 +68,9 @@ MISC_TEST_CASES = [
     ("Zhai Hong-Yu", (True, "Hong-Yu Zhai")),
     ("Mo Rui-Xin", (True, "Rui-Xin Mo")),
     ("Wen Mei-Li", (True, "Mei-Li Wen")),
-    # Edge cases with initials
-    ("L Han", (True, "L Han")),
-    ("X F Han", (True, "X-F Han")),
+    # Initials alone do not disambiguate a cross-cultural surname.
+    ("L Han", (False, "")),
+    ("X F Han", (False, "")),
     # Spacing variations
     ("Dan Dan Zhang", (True, "Dan-Dan Zhang")),
     # CamelCase variations

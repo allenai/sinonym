@@ -9,18 +9,21 @@ validation patterns.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence  # noqa: TC003 - public annotations are inspected at runtime.
+from numbers import Real
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import COMPOUND_VARIANTS, KOREAN_GIVEN_PATTERNS, OVERLAPPING_KOREAN_SURNAMES
 from sinonym.coretypes import ParseResult
 from sinonym.services.name_lookup import SurnameResolver
+from sinonym.services.normalization import SpacedCompoundSpan
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
     from sinonym.services.normalization import CompoundMetadata
 
 LOW_FREQUENCY_SURNAME_MAX = 500.0
-GIVEN_FIRST_SURNAME_FREQ_RATIO_MIN = 50.0
+DOMINANT_SURNAME_FREQ_RATIO_MIN = 50.0
 GIVEN_FIRST_ORDER_PRESERVATION_BONUS = 4.0
 # Unattested-vs-attested ambiguity ceiling: an unattested token can plausibly tie
 # with a modest surname, but not with a dominant one (see _is_ambiguous_case and
@@ -35,7 +38,7 @@ UNATTESTED_AMBIGUITY_SURNAME_FREQ_MAX = 5000.0
 # still saturates the cap).
 GIVEN_POSITION_DEADBAND = 1.5
 GIVEN_POSITION_MAGNITUDE_CAP = 1.5
-RARE_TRAILING_OVERLAPPING_SURNAME_MAX = 100.0
+RARE_TRAILING_SURNAME_MAX = 100.0
 # Romanization-conditional surname discount: log(target_share) for a spelling
 # whose surname mass is reachable only via romanization remapping and that is
 # missing from surname_romanizations.csv (open-ended Wade-Giles prefix/suffix
@@ -58,10 +61,38 @@ DEFAULT_WEIGHTS = (
 )
 
 
+def validate_parsing_weights(weights: Sequence[Real] | None) -> tuple[float, ...]:
+    """Return a validated immutable parsing-weight vector.
+
+    Eight-element vectors are the supported legacy shape and receive the
+    documented trailing default. Invalid configuration must fail at the
+    construction boundary instead of silently selecting unrelated defaults.
+    """
+    if weights is None:
+        return DEFAULT_WEIGHTS
+    if len(weights) not in (8, 9):
+        message = "weights must contain exactly 8 or 9 finite real numbers"
+        raise ValueError(message)
+
+    normalized: list[float] = []
+    for weight in weights:
+        if isinstance(weight, bool) or not isinstance(weight, Real):
+            message = "weights must contain exactly 8 or 9 finite real numbers"
+            raise TypeError(message)
+        numeric_weight = float(weight)
+        if not math.isfinite(numeric_weight):
+            message = "weights must contain exactly 8 or 9 finite real numbers"
+            raise ValueError(message)
+        normalized.append(numeric_weight)
+
+    normalized.extend(DEFAULT_WEIGHTS[len(normalized) :])
+    return tuple(normalized)
+
+
 class NameParsingService:
     """Service for parsing Chinese names into surname and given name components."""
 
-    def __init__(self, context_or_config, normalizer=None, data=None, *, weights: list[float] | None = None):
+    def __init__(self, context_or_config, normalizer=None, data=None, *, weights: Sequence[Real] | None = None):
         # Support both old interface (config, normalizer, data) and new context interface
         if hasattr(context_or_config, "config"):
             # New context interface
@@ -75,22 +106,20 @@ class NameParsingService:
             self._data = data
         self._surname_resolver = SurnameResolver(self._data, self._normalizer)
 
-        # Weight parameters - can be overridden. Legacy shorter vectors (e.g. from
-        # pickled configs or process-pool workers) get the default coefficients for
-        # the newer trailing features appended, keeping index order stable.
-        if weights and len(weights) in (8, 9):
-            self._weights = list(weights) + list(DEFAULT_WEIGHTS[len(weights) :])
-        else:
-            self._weights = list(DEFAULT_WEIGHTS)
+        self._weights = validate_parsing_weights(weights)
 
     def parse_name_order(
         self,
         order: list[str],
         normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...] | None = None,
     ) -> ParseResult:
         """Parse and return ParseResult for compatibility with external callers."""
-        parsed = self.parse_name_order_tokens(order, normalized_cache, compound_metadata)
+        if len(order) < self._config.min_tokens_required:
+            return ParseResult.failure(f"needs at least {self._config.min_tokens_required} tokens")
+
+        parsed = self.parse_name_order_tokens(order, normalized_cache, compound_metadata, spaced_compound_spans)
         if parsed is None:
             return ParseResult.failure("surname not recognised")
 
@@ -102,10 +131,14 @@ class NameParsingService:
         order: list[str],
         normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...] | None = None,
     ) -> tuple[list[str], list[str], str | None] | None:
         """Fast internal parse path that avoids ParseResult object construction."""
+        if len(order) < self._config.min_tokens_required:
+            return None
+
         # Try probabilistic parsing first
-        best_parse = self._best_parse_tokens(order, normalized_cache, compound_metadata)
+        best_parse = self._best_parse_tokens(order, normalized_cache, compound_metadata, spaced_compound_spans)
         if best_parse is not None:
             return best_parse
 
@@ -127,58 +160,15 @@ class NameParsingService:
         tokens: list[str],
         normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...] | None = None,
     ) -> list[tuple[list[str], list[str], str | None]]:
         """Return possible surname/given parses for batch-level scoring."""
-        return self._generate_all_parses_with_format(tokens, normalized_cache, compound_metadata)
-
-    def _try_fallback_parse(
-        self,
-        order: list[str],
-        surname_pos: int,
-        given_slice: slice,
-        normalized_cache: dict[str, str],
-    ) -> ParseResult:
-        """Try a single fallback parse configuration - pure function"""
-        surname_token = order[surname_pos]
-        normalized_surname = self._normalizer.get_normalized(surname_token, normalized_cache)
-
-        if (
-            len(surname_token) > 1  # Don't treat single letters as surnames
-            and StringManipulationUtils.remove_spaces(normalized_surname) in self._data.surnames_normalized
-        ):
-            surname_tokens = [surname_token]
-            given_tokens = order[given_slice]
-            if given_tokens:
-                # Check if this parse would have a reasonable score
-                score = self.calculate_parse_score(
-                    surname_tokens,
-                    given_tokens,
-                    order,
-                    normalized_cache,
-                    is_all_chinese=False,
-                )
-
-                # Western name detection pattern
-                has_single_letter_given = any(len(token) == 1 for token in given_tokens)
-                has_multi_syllable_tokens = any(len(token) > 3 for token in order)
-
-                # Check if any multi-syllable token is a known Chinese surname
-                has_chinese_surname_in_tokens = any(
-                    len(token) > 3 and self._surname_resolver.parser_is_surname([token]) for token in order
-                )
-
-                if (
-                    has_single_letter_given
-                    and has_multi_syllable_tokens
-                    and score < self._config.poor_score_threshold
-                    and not has_chinese_surname_in_tokens
-                ):
-                    # This looks like a Western name where single letters are initials
-                    return ParseResult.failure("Western name pattern detected")
-
-                return ParseResult.success_with_parse(surname_tokens, given_tokens, None)
-
-        return ParseResult.failure("No valid surname found")
+        return self._generate_all_parses_with_format(
+            tokens,
+            normalized_cache,
+            compound_metadata,
+            spaced_compound_spans,
+        )
 
     def _try_fallback_parse_tokens(
         self,
@@ -221,120 +211,12 @@ class NameParsingService:
 
         return None
 
-    def _best_parse(
-        self,
-        tokens: list[str],
-        normalized_cache: dict[str, str],
-        compound_metadata: dict[str, CompoundMetadata],
-    ) -> ParseResult:
-        """Find the best parse using probabilistic scoring."""
-        if len(tokens) < self._config.min_tokens_required:
-            return ParseResult.failure(f"needs at least {self._config.min_tokens_required} tokens")
-
-        parses_with_format = self._generate_all_parses_with_format(
-            tokens,
-            normalized_cache,
-            compound_metadata,
-        )
-        parses = [(surname, given) for surname, given, _ in parses_with_format]
-        if not parses:
-            return ParseResult.failure("surname not recognised")
-
-        # Score all parses with early validation filtering
-        scored_parses = []
-        # Pre-compute expensive checks once for all parses
-        has_multi_syllable_tokens = any(len(token) > 3 for token in tokens)
-        has_chinese_surname_in_tokens = None  # Lazy evaluation
-        score_cache = {"given_key": {}, "ambiguous": {}}
-
-        for surname_tokens, given_tokens, original_compound_format in parses_with_format:
-            # Early validation: reject parses where single letters are used as given names
-            # when there are multi-syllable alternatives available (likely Western names)
-            has_single_letter_given = any(len(token) == 1 for token in given_tokens)
-
-            if has_single_letter_given and has_multi_syllable_tokens:
-                # Lazy evaluation of expensive Chinese surname check
-                if has_chinese_surname_in_tokens is None:
-                    has_chinese_surname_in_tokens = any(
-                        len(token) > 3 and self._surname_resolver.parser_is_surname([token]) for token in tokens
-                    )
-
-                # Quick score check before expensive full scoring
-                if not has_chinese_surname_in_tokens:
-                    # Do a quick surname validity check before full scoring
-                    quick_score_estimate = self._surname_resolver.parser_logp(
-                        surname_tokens,
-                        self._config.default_surname_logp,
-                    )
-                    if quick_score_estimate < self._config.poor_score_threshold:
-                        # This looks like a Western name where single letters are initials
-                        continue
-
-            # Full scoring for remaining candidates
-            score = self.calculate_parse_score(
-                surname_tokens,
-                given_tokens,
-                tokens,
-                normalized_cache,
-                is_all_chinese=False,
-                original_compound_format=original_compound_format,
-                score_cache=score_cache,
-            )
-
-            if score > float("-inf"):
-                scored_parses.append((surname_tokens, given_tokens, score, original_compound_format))
-
-        if not scored_parses:
-            return ParseResult.failure("no valid parse found")
-
-        # Find best scoring parse with deterministic tie-breaking.
-        # Tie-break metadata is computed lazily only when scores tie.
-        best_parse_result = None
-        best_score = float("-inf")
-        best_format_alignment = 0.0
-        best_secondary_key = ""
-        tie_break_ready = False
-        for candidate in scored_parses:
-            surname_tokens, given_tokens, score, _original_compound_format = candidate
-            if best_parse_result is None or score > best_score:
-                best_parse_result = candidate
-                best_score = score
-                tie_break_ready = False
-                continue
-            if score < best_score:
-                continue
-
-            if not tie_break_ready:
-                best_surname_tokens, best_given_tokens, _best_score, _best_original_compound = best_parse_result
-                best_format_alignment = self._calculate_format_alignment_bonus(
-                    best_surname_tokens,
-                    best_given_tokens,
-                    tokens,
-                )
-                best_secondary_key = f"{best_surname_tokens}|{best_given_tokens}"
-                tie_break_ready = True
-
-            format_alignment = self._calculate_format_alignment_bonus(surname_tokens, given_tokens, tokens)
-            if format_alignment > best_format_alignment:
-                best_parse_result = candidate
-                best_format_alignment = format_alignment
-                best_secondary_key = f"{surname_tokens}|{given_tokens}"
-                continue
-            if format_alignment < best_format_alignment:
-                continue
-
-            secondary_key = f"{surname_tokens}|{given_tokens}"
-            if secondary_key > best_secondary_key:
-                best_parse_result = candidate
-                best_secondary_key = secondary_key
-
-        return ParseResult.success_with_parse(best_parse_result[0], best_parse_result[1], best_parse_result[3])
-
     def _best_parse_tokens(
         self,
         tokens: list[str],
         normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...] | None = None,
     ) -> tuple[list[str], list[str], str | None] | None:
         """Token-only best-parse path for internal hot loops."""
         if len(tokens) < self._config.min_tokens_required:
@@ -344,10 +226,15 @@ class NameParsingService:
             tokens,
             normalized_cache,
             compound_metadata,
+            spaced_compound_spans,
         )
-        parses = [(surname, given) for surname, given, _ in parses_with_format]
-        if not parses:
+        if not parses_with_format:
             return None
+        if len(parses_with_format) == 1:
+            surname_tokens, given_tokens, original_compound_format = parses_with_format[0]
+            needs_initial_guard = any(len(token) == 1 for token in given_tokens) and any(len(token) > 3 for token in tokens)
+            if not needs_initial_guard:
+                return surname_tokens, given_tokens, original_compound_format
 
         scored_parses = []
         has_multi_syllable_tokens = any(len(token) > 3 for token in tokens)
@@ -387,88 +274,60 @@ class NameParsingService:
         if not scored_parses:
             return None
 
-        best_parse_result = None
-        best_score = float("-inf")
-        best_format_alignment = 0.0
-        best_secondary_key = ""
-        tie_break_ready = False
-        for candidate in scored_parses:
-            surname_tokens, given_tokens, score, _original_compound_format = candidate
-            if best_parse_result is None or score > best_score:
-                best_parse_result = candidate
-                best_score = score
-                tie_break_ready = False
-                continue
-            if score < best_score:
-                continue
-
-            if not tie_break_ready:
-                best_surname_tokens, best_given_tokens, _best_score, _best_original_compound = best_parse_result
-                best_format_alignment = self._calculate_format_alignment_bonus(
-                    best_surname_tokens,
-                    best_given_tokens,
-                    tokens,
-                )
-                best_secondary_key = f"{best_surname_tokens}|{best_given_tokens}"
-                tie_break_ready = True
-
-            format_alignment = self._calculate_format_alignment_bonus(surname_tokens, given_tokens, tokens)
-            if format_alignment > best_format_alignment:
-                best_parse_result = candidate
-                best_format_alignment = format_alignment
-                best_secondary_key = f"{surname_tokens}|{given_tokens}"
-                continue
-            if format_alignment < best_format_alignment:
-                continue
-
-            secondary_key = f"{surname_tokens}|{given_tokens}"
-            if secondary_key > best_secondary_key:
-                best_parse_result = candidate
-                best_secondary_key = secondary_key
+        best_parse_result = max(
+            scored_parses,
+            key=lambda candidate: self.candidate_rank_key(
+                candidate[0],
+                candidate[1],
+                candidate[2],
+                tokens,
+            ),
+        )
 
         return best_parse_result[0], best_parse_result[1], best_parse_result[3]
+
+    def candidate_rank_key(
+        self,
+        surname_tokens: list[str] | tuple[str, ...],
+        given_tokens: list[str] | tuple[str, ...],
+        score: float,
+        original_tokens: list[str],
+    ) -> tuple[float, float, str]:
+        """Return the deterministic rank shared by scalar and batch parsing."""
+        return (
+            score,
+            self._calculate_format_alignment_bonus(list(surname_tokens), list(given_tokens), original_tokens),
+            f"{list(surname_tokens)}|{list(given_tokens)}",
+        )
 
     def _generate_all_parses_with_format(
         self,
         tokens: list[str],
         _normalized_cache: dict[str, str],
         compound_metadata: dict[str, CompoundMetadata],
+        spaced_compound_spans: tuple[SpacedCompoundSpan, ...] | None,
     ) -> list[tuple[list[str], list[str], str | None]]:
         """Generate all possible (surname, given_name) parses for the tokens."""
         if len(tokens) < 2:
             return []
 
+        if spaced_compound_spans is None:
+            spaced_compound_spans = self._legacy_spaced_compound_spans(tokens, compound_metadata)
+
         parses = []
         # 1. Check compound surnames using centralized metadata
         if len(tokens) >= 3:
-            # Check first two tokens for compound
-            first_meta = compound_metadata.get(tokens[0])
-            second_meta = compound_metadata.get(tokens[1])
-            if (
-                first_meta
-                and first_meta.is_compound
-                and second_meta
-                and second_meta.is_compound
-                and first_meta.compound_target == second_meta.compound_target
-            ):
-                # This is a multi-token compound at the beginning
-                original_format = self._get_compound_original_format(first_meta, tokens[0:2])
-                parses.append((tokens[0:2], tokens[2:], original_format))
-
-            # Check second and third tokens for compound (surname in middle)
-            if len(tokens) >= 3:
-                second_meta = compound_metadata.get(tokens[1])
-                third_meta = compound_metadata.get(tokens[2])
-                if (
-                    second_meta
-                    and second_meta.is_compound
-                    and third_meta
-                    and third_meta.is_compound
-                    and second_meta.compound_target == third_meta.compound_target
-                ):
-                    # This is a multi-token compound in the middle
-                    original_format = self._get_compound_original_format(second_meta, tokens[1:3])
-                    parses.append((tokens[1:3], tokens[0:1], original_format))
+            # Spaced compounds are occurrence facts, not token-text facts. A
+            # repeated value elsewhere in the name must not inherit this span.
+            for span in spaced_compound_spans:
+                source_tokens = tokens[span.start : span.end]
+                source_key = StringManipulationUtils.lowercase_join_with_spaces(source_tokens)
+                if COMPOUND_VARIANTS.get(source_key, source_key) != span.compound_target:
+                    continue
+                given_tokens = [*tokens[: span.start], *tokens[span.end :]]
+                if given_tokens:
+                    original_format = StringManipulationUtils.join_with_spaces(source_tokens)
+                    parses.append((source_tokens, given_tokens, original_format))
 
         # 2. Single-token surnames - only at beginning or end (contiguous sequences only)
         # Surname-first pattern: surname + given_names
@@ -529,6 +388,37 @@ class NameParsingService:
 
         return parses
 
+    @staticmethod
+    def _legacy_spaced_compound_spans(
+        tokens: list[str],
+        compound_metadata: dict[str, CompoundMetadata],
+    ) -> tuple[SpacedCompoundSpan, ...]:
+        """Recover pre-span behavior for metadata-only compatibility callers.
+
+        New normalization paths pass an explicit occurrence tuple, including
+        an empty tuple when no spaced compounds exist. Only callers that omit
+        the new argument receive token-keyed legacy inference.
+        """
+        spans: list[SpacedCompoundSpan] = []
+        index = 0
+        while index < len(tokens) - 1:
+            first = compound_metadata.get(tokens[index])
+            second = compound_metadata.get(tokens[index + 1])
+            if (
+                first
+                and second
+                and first.is_compound
+                and second.is_compound
+                and first.format_type == second.format_type == "spaced"
+                and first.compound_target
+                and first.compound_target == second.compound_target
+            ):
+                spans.append(SpacedCompoundSpan(index, index + 2, first.compound_target))
+                index += 2
+            else:
+                index += 1
+        return tuple(spans)
+
     def _get_compound_original_format(self, compound_meta: CompoundMetadata, tokens: list[str]) -> str | None:
         """Get the original format for a compound surname from centralized metadata."""
         if not compound_meta.is_compound:
@@ -536,11 +426,11 @@ class NameParsingService:
 
         # For single-token compounds (compact/camelCase), return the original token
         if len(tokens) == 1:
-            return tokens[0].lower()
+            return tokens[0]
 
         # For multi-token compounds (spaced), return the spaced format
         if len(tokens) == 2:
-            return StringManipulationUtils.lowercase_join_with_spaces(tokens)
+            return StringManipulationUtils.join_with_spaces(tokens)
 
         return None
 
@@ -671,6 +561,17 @@ class NameParsingService:
 
                 if is_ambiguous:
                     order_preservation_bonus = 1.0
+            # Preserve surname-first order when the leading surname dominates a rare competitor.
+            elif (
+                surname_tokens[0] == tokens[0]
+                and given_tokens[0] == tokens[1]
+                and self._has_guarded_dominant_surname_ratio(
+                    surname_tokens[0],
+                    given_tokens[0],
+                    competing_surname_max=RARE_TRAILING_SURNAME_MAX,
+                )
+            ):
+                order_preservation_bonus = 0.5
             # Check if this parse maintains the original given-surname order (given first, surname last)
             elif not surname_first_parenthetical_hint and given_tokens[0] == tokens[0] and surname_tokens[0] == tokens[1]:
                 # This maintains the original order - check if case is ambiguous
@@ -685,10 +586,9 @@ class NameParsingService:
 
                 if is_ambiguous or self._surname_resolver.parser_is_wade_giles_initial_remapped_surname(surname_tokens[0]):
                     order_preservation_bonus = 1.0
-                elif allow_guarded_given_first_bonus and self._has_guarded_given_first_surname_ratio(
+                elif allow_guarded_given_first_bonus and self._has_guarded_dominant_surname_ratio(
                     surname_tokens[0],
                     given_tokens[0],
-                    normalized_cache,
                 ):
                     order_preservation_bonus = GIVEN_FIRST_ORDER_PRESERVATION_BONUS
         if not is_all_chinese and len(tokens) == 3 and len(surname_tokens) == 1 and len(given_tokens) == 2:
@@ -726,7 +626,7 @@ class NameParsingService:
                     and first_is_given
                     and second_is_given
                     and first_surname_freq > last_surname_freq
-                    and 0 < last_surname_freq <= RARE_TRAILING_OVERLAPPING_SURNAME_MAX
+                    and 0 < last_surname_freq <= RARE_TRAILING_SURNAME_MAX
                     and StringManipulationUtils.remove_spaces(last_norm) in OVERLAPPING_KOREAN_SURNAMES
                     and second_has_korean_given_signal
                 ):
@@ -875,29 +775,31 @@ class NameParsingService:
         freq_ratio = max(surname_freq, given_freq) / min(surname_freq, given_freq)
         return freq_ratio < 5.0  # Ambiguous if frequencies are within 5x of each other
 
-    def _has_guarded_given_first_surname_ratio(
+    def _has_guarded_dominant_surname_ratio(
         self,
         surname_token: str,
-        given_token: str,
-        normalized_cache: dict[str, str],
+        competing_token: str,
+        *,
+        competing_surname_max: float = LOW_FREQUENCY_SURNAME_MAX,
     ) -> bool:
-        """Return whether surname frequencies strongly support given-first order."""
-        if self._is_compound_surname_token(given_token, normalized_cache):
+        """Return whether surname frequencies strongly favor one parse."""
+        if self._is_compound_surname_token(competing_token):
             return False
 
         if not (
-            self._surname_resolver.parser_is_surname([surname_token]) and self._surname_resolver.parser_is_surname([given_token])
+            self._surname_resolver.parser_is_surname([surname_token])
+            and self._surname_resolver.parser_is_surname([competing_token])
         ):
             return False
 
-        given_surname_freq = self._surname_resolver.parser_frequency([given_token])
+        competing_surname_freq = self._surname_resolver.parser_frequency([competing_token])
         surname_freq = self._surname_resolver.parser_frequency([surname_token])
-        if not (0 < given_surname_freq < LOW_FREQUENCY_SURNAME_MAX):
+        if not (0 < competing_surname_freq < competing_surname_max):
             return False
 
-        return surname_freq / given_surname_freq > GIVEN_FIRST_SURNAME_FREQ_RATIO_MIN
+        return surname_freq / competing_surname_freq > DOMINANT_SURNAME_FREQ_RATIO_MIN
 
-    def _is_compound_surname_token(self, token: str, _normalized_cache: dict[str, str]) -> bool:
+    def _is_compound_surname_token(self, token: str) -> bool:
         """Return whether a single token is a curated compact or hyphenated compound surname."""
         token_key = token.strip().lower()
         if token_key in COMPOUND_VARIANTS:

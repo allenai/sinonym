@@ -1,0 +1,50 @@
+{
+  "case_count": 19,
+  "case_kind_counts": {
+    "contract_synthetic": 11,
+    "production_replay": 8
+  },
+  "fixture_file": "requests.jsonl",
+  "fixture_sha256": "cd5e45c089a5c103193ac2492e40828b406cb8ca421daa614155aa84a38c45ea",
+  "occurrence_count": 37,
+  "production_paper_ids": [
+    1654190,
+    81987,
+    259966700,
+    76379090,
+    111810252,
+    35773584,
+    56166639,
+    248247190
+  ],
+  "request_set_sha256": "abaf1343c874731d812f119fa7c4b27d605c5c7587b433e1fda1a341b2ba009e",
+  "schema_version": 2,
+  "source_artifacts": {
+    "candidate_run": {
+      "bytes": 25876036,
+      "path": "scratch/pr26_gradient/next_205_loop/exact_205_production/candidate/run.jsonl",
+      "sha256": "20db5deb0de51f63637209a4e814d4fae63d73367a1228405cfc49dfc01ce348"
+    },
+    "context_v3_shadow": {
+      "bytes": 1620040,
+      "path": "scratch/pr26_gradient/next_205_loop/exact_205_production/v3_context_veto_run/workers/v3-shadow.jsonl",
+      "sha256": "1a001ca5b622fa861e1fca1ff020d4da658515100b398e5affa7d18fd1b21382"
+    },
+    "frozen_requests": {
+      "bytes": 4416258,
+      "path": "scratch/pr26_gradient/next_205_loop/exact_205_production/frozen/requests.jsonl",
+      "sha256": "0bcd030f609b92d9c0076bc5f2e055fbd380669b9194f0721a8789cfa07be1f1"
+    }
+  },
+  "source_checkout": {
+    "git_diff_sha256": "575c342b7c3efa3fc87dce5b54eafbf30594628cb593c9a8b8d704ba3a8de9d7",
+    "git_head": "366137fbf789fe8c592bba1eae760505849ac666",
+    "package_tree_sha256": "b97b1001f0b7879c3671c70cf09fbc3570a5581c1039858451e6edfa688607cc"
+  },
+  "source_limitations": [
+    "The May 2026 authors.parquet schema has no suffix column; production-derived source and output suffixes are null.",
+    "The replay manifest recorded the 7,077,451,895-byte authors.parquet size but not its SHA-256; the frozen request file is the committed subset authority.",
+    "Synthetic cases specify contract behavior and are not estimates of corpus prevalence."
+  ],
+  "terminal_occurrence_sha256": "347bd45913039f01edcc107afda5d1d66575eeac5fcaffab099055a7b9c8f733"
+}

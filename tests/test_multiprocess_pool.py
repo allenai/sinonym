@@ -47,11 +47,18 @@ def _batch_decision_signatures(batch_results):
     return [_decision_signatures(results) for results in batch_results]
 
 
-def test_process_pool_public_annotations_resolve_at_runtime():
-    """Public process-pool APIs should support runtime type introspection."""
-    hints = typing.get_type_hints(process_pool.normalize_names_multiprocess)
+@pytest.mark.parametrize(
+    "target",
+    [
+        process_pool.normalize_names_multiprocess,
+        process_pool._analyze_related_name_batches_chunk,  # noqa: SLF001
+        process_pool.PersistentMultiprocessNormalizer._analyze_related_batch_requests,  # noqa: SLF001
+    ],
+)
+def test_process_pool_annotations_resolve_at_runtime(target):
+    """Process-pool APIs should support runtime type introspection."""
+    hints = typing.get_type_hints(target)
 
-    assert "detector_config" in hints
     assert "return" in hints
 
 
@@ -171,6 +178,57 @@ def test_persistent_multiprocess_pool_analyzes_batches_with_batch_evidence(detec
     )
 
 
+def test_persistent_pool_preserves_occurrence_based_compound_votes(detector):
+    """Occurrence spans and frozen configuration must survive worker pickling."""
+    names = ["Au Au Yeung", "Ming Au Yeung", "Li Jin"]
+    expected = detector.analyze_name_batch(names)
+
+    with detector.create_persistent_multiprocess_pool(max_workers=1, chunk_size=1) as pool:
+        (actual,) = pool.analyze_name_batches([names])
+
+    assert actual.format_pattern == expected.format_pattern
+    assert _decision_signatures(actual.results) == _decision_signatures(expected.results)
+
+
+def test_persistent_pool_analysis_matches_local_analysis_exactly(detector):
+    """The pool dispatcher preserves full fail-fast batch results exactly."""
+    batches = [
+        ["Wang An", "Yan Li", "Wu Gang", "Li Bao"],
+        TEST_NAMES[:5],
+    ]
+    expected = detector.analyze_name_batches(batches, parallel="never")
+
+    with detector.create_persistent_multiprocess_pool(max_workers=2, chunk_size=1) as pool:
+        actual = pool.analyze_name_batches(batches)
+
+    assert actual == expected
+
+
+def test_persistent_pool_related_analysis_matches_local_analysis(detector):
+    """Related PP/VYS work items must remain picklable and exact under spawn."""
+    requests = [
+        (["Wang An", "Yan Li"], ["Wang An", "Yan Li", "Wu Gang", "Li Bao"]),
+        (["Bian Li"], None),
+    ]
+    expected = detector._analyze_related_batch_requests(requests, parallel="never")  # noqa: SLF001
+
+    with detector.create_persistent_multiprocess_pool(max_workers=2, chunk_size=1) as pool:
+        actual = pool._analyze_related_batch_requests(requests)  # noqa: SLF001
+
+    assert actual == expected
+
+
+def test_persistent_pool_related_analysis_preserves_remote_validation_error(detector):
+    """Related analysis exposes the worker's validation type and message."""
+    requests = [(["Li Wei"], ["Wrong Person"])]
+
+    with detector.create_persistent_multiprocess_pool(max_workers=1, chunk_size=1) as pool:
+        with pytest.raises(ValueError, match="VYS pool must start with the PP names"):
+            pool._analyze_related_batch_requests(requests)  # noqa: SLF001
+
+        assert pool.closed
+
+
 def test_persistent_multiprocess_pool_process_name_batches_handles_empty_outer_list(detector):
     """Persistent batch processing should return no results for no submitted batches."""
     with detector.create_persistent_multiprocess_pool(max_workers=2, chunk_size=1) as pool:
@@ -235,6 +293,62 @@ def test_detector_process_name_batches_auto_uses_pool_above_threshold(detector, 
     assert captured["minimum_batch_size"] == CUSTOM_MINIMUM_BATCH_SIZE
     assert captured["pool_kwargs"]["max_workers"] == TEMP_POOL_WORKERS
     assert captured["pool_kwargs"]["chunk_size"] == TEMP_POOL_CHUNK_SIZE
+    assert captured["closed"]
+
+
+def test_detector_related_batch_parallel_path_propagates_worker_failures(detector, monkeypatch):
+    """The related pool path propagates worker failures without fallback rows."""
+    captured = {}
+
+    class FakePool:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            captured["closed"] = True
+
+        @staticmethod
+        def _analyze_related_batch_requests(_requests, **_kwargs):
+            message = "synthetic worker failure"
+            raise RuntimeError(message)
+
+    monkeypatch.setattr(detector, "create_persistent_multiprocess_pool", lambda **_kwargs: FakePool())
+
+    with pytest.raises(RuntimeError, match="synthetic worker failure"):
+        detector._analyze_related_batch_requests(  # noqa: SLF001
+            [(["Li Wei"], None)],
+            parallel="always",
+            max_workers=2,
+        )
+
+    assert captured["closed"]
+
+
+def test_detector_batch_parallel_path_propagates_worker_failures(detector, monkeypatch):
+    """The public pool path must propagate worker failures."""
+    captured = {}
+
+    class FakePool:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            captured["closed"] = True
+
+        @staticmethod
+        def analyze_name_batches(_batches, **_kwargs):
+            message = "synthetic worker failure"
+            raise RuntimeError(message)
+
+    monkeypatch.setattr(detector, "create_persistent_multiprocess_pool", lambda **_kwargs: FakePool())
+
+    with pytest.raises(RuntimeError, match="synthetic worker failure"):
+        detector.analyze_name_batches(
+            [["Li Wei"]],
+            parallel="always",
+            max_workers=2,
+        )
+
     assert captured["closed"]
 
 
@@ -331,6 +445,41 @@ def test_persistent_multiprocess_pool_wraps_worker_task_errors(detector):
 
     with pytest.raises(RuntimeError, match="closed"):
         pool.process_name_batches([["Li Wei"]])
+
+
+@pytest.mark.parametrize(
+    "submit",
+    [
+        lambda pool: pool.analyze_name_batches([["Li Wei"]]),
+        lambda pool: pool._analyze_related_batch_requests([(["Li Wei"], None)]),  # noqa: SLF001
+    ],
+    ids=["independent", "related"],
+)
+def test_analysis_pool_preserves_worker_task_errors(detector, submit):
+    """Analysis paths close the executor without hiding the worker failure."""
+
+    class _FailingExecutor:
+        def __init__(self):
+            self.shutdown_calls = []
+
+        def map(self, *_args, **_kwargs):
+            message = "worker invariant detail"
+            raise ValueError(message)
+
+        def shutdown(self, **kwargs):
+            self.shutdown_calls.append(kwargs)
+
+    pool = detector.create_persistent_multiprocess_pool(max_workers=2, chunk_size=2)
+    pool.close()
+    pool._closed = False  # noqa: SLF001 - force the injected executor path.
+    failing_executor = _FailingExecutor()
+    pool._executor = failing_executor  # noqa: SLF001 - inject failing executor.
+
+    with pytest.raises(ValueError, match="worker invariant detail"):
+        submit(pool)
+
+    assert pool.closed
+    assert failing_executor.shutdown_calls == [{"wait": False, "cancel_futures": True}]
 
 
 def test_persistent_multiprocess_pool_surfaces_broken_pool_causes(detector):

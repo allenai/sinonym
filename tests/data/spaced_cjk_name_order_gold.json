@@ -1,0 +1,5252 @@
+{
+ "description": "Blind gold labels for two-token spaced-CJK author names: which whitespace token is the family name. Judges saw the raw string only, never any sinonym output, so the labels score any routing rule or lexicon asset without buying a new judge round. 'family' is the consensus verdict; 'class' names the lexicon-evidence sub-class the family-first router keys on, recomputed with the rule's real gate; 'occ' is corpus author-row occurrences of that name string.",
+ "provenance": {
+  "judged": "2026-07-28",
+  "items": 520,
+  "judges": 8,
+  "protocol": "5 single-judge shards of 92 plus a 60-item overlap judged by 3 judges with different personas; ids opaque; items shuffled across strata",
+  "agreement": "60/60 unanimous on the overlap, 100% pairwise; 20/20 attention checks",
+  "population": "2,511,133 name strings / 17,466,455 occ: every two-token Han/kana corpus name whose live normalize_name() FAILS, i.e. the non-Chinese stratum where canonical_name.normalized decides the surname. Chinese-detected rows are excluded because production takes the routed trio for them.",
+  "sampling": "stratified by lexicon-evidence sub-class, occ-weighted and uniform draws per class, so class shares here do NOT match corpus shares - weight by class_population when projecting"
+ },
+ "class_population": {
+  "A: t0 sur, t1 unknown": {
+   "names": 180720,
+   "occ": 1066124
+  },
+  "AMBIG(both surnames)": {
+   "names": 1058,
+   "occ": 5043
+  },
+  "B: t1 giv, t0 unknown": {
+   "names": 435875,
+   "occ": 2676285
+  },
+  "BLOCKED(gate rejects a char)": {
+   "names": 452,
+   "occ": 1799
+  },
+  "C: both given-plausible": {
+   "names": 32090,
+   "occ": 185299
+  },
+  "D: neither known": {
+   "names": 258656,
+   "occ": 1016577
+  },
+  "D: neither known/kata": {
+   "names": 122477,
+   "occ": 203340
+  },
+  "FLIP(shipped)": {
+   "names": 1169352,
+   "occ": 11157904
+  },
+  "REV(t0 giv, t1 sur)": {
+   "names": 310453,
+   "occ": 1154084
+  }
+ },
+ "items": [
+  {
+   "name": "アウグスティン マルティン",
+   "family": "first",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Augustin Martin; both usable either way, family-first record order"
+  },
+  {
+   "name": "アミン アクラン",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 3,
+   "note": "Amin Akran; Arabic/Turkish, Amin likely given"
+  },
+  {
+   "name": "アリアンドロ デイジアンフィリッポ",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Aleandro Di Gianfilippo; Italian surname second"
+  },
+  {
+   "name": "イズメイロフ ラウフ",
+   "family": "first",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 2,
+   "note": "Izmeylov Rauf; Russian/Tatar, family name first"
+  },
+  {
+   "name": "ウェイ リュウ",
+   "family": "second",
+   "language": "chinese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 7,
+   "note": "Wei Liu; Liu (リュウ) is the surname, Wei a given name"
+  },
+  {
+   "name": "ウクセリ リシア",
+   "family": "first",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Katakana Ukseli/Uccelli Licia; Licia is given, leading token family"
+  },
+  {
+   "name": "ウディ アレン",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 6,
+   "note": "Woody Allen in katakana"
+  },
+  {
+   "name": "ウネ コウジ",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 16,
+   "note": "Une Koji in katakana; ウネ surname"
+  },
+  {
+   "name": "オレグ ベリック",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Oleg Belik; Oleg Slavic given"
+  },
+  {
+   "name": "カオル ナカタニ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 39,
+   "note": "Kaoru Nakatani; katakana, Nakatani surname"
+  },
+  {
+   "name": "カリガン ブレント",
+   "family": "first",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Brent Culligan reversed; Brent given"
+  },
+  {
+   "name": "ケンジ タケウチ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 5,
+   "note": "Kenji Takeuchi; Kenji given"
+  },
+  {
+   "name": "コウイチ サトウ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 12,
+   "note": "Koichi Sato in katakana; サトウ surname"
+  },
+  {
+   "name": "シャノン フォン",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 4,
+   "note": "Shannon (English given) + Fong/Von as family"
+  },
+  {
+   "name": "シュトラウス イェアク",
+   "family": "first",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "German Strauss Jorg; Jorg is given"
+  },
+  {
+   "name": "ショイリング ベルンハルト",
+   "family": "first",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Bernhard Scheuerling reversed; Bernhard German given"
+  },
+  {
+   "name": "ショウゴ ヤマダ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 4,
+   "note": "Shogo Yamada; katakana, Yamada surname last"
+  },
+  {
+   "name": "シンクレア フランク",
+   "family": "first",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 12,
+   "note": "Frank Sinclair reversed; Sinclair surname, Frank given"
+  },
+  {
+   "name": "ジョン スミス",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 2,
+   "note": "John Smith; Western order"
+  },
+  {
+   "name": "スダルサン アルジュン",
+   "family": "first",
+   "language": "other",
+   "judges": 3,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Katakana Indian name; Arjun clearly given, Sudarsan in family slot"
+  },
+  {
+   "name": "ステファン アウスト",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Stefan Aust in katakana; German given + surname"
+  },
+  {
+   "name": "スンギップ キャロライン",
+   "family": "first",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Sungip Caroline; Caroline is given, so leading token is family"
+  },
+  {
+   "name": "ツトム マスダ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 3,
+   "note": "Tsutomu Masuda; Tsutomu given"
+  },
+  {
+   "name": "トオル モリハラ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Toru Morihara; katakana, Morihara surname last"
+  },
+  {
+   "name": "トマス ネッシュ",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 2,
+   "note": "Thomas Nesch; Western given-family order"
+  },
+  {
+   "name": "トミロウ ハシモト",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 3,
+   "note": "Tomiro Hashimoto in katakana; reversed"
+  },
+  {
+   "name": "トモコ フクダ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 35,
+   "note": "Tomoko Fukuda; Tomoko given"
+  },
+  {
+   "name": "ドゥケック ラルフ",
+   "family": "first",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "German Duqueck Ralf; Ralf is given"
+  },
+  {
+   "name": "ノボル シモムラ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 4,
+   "note": "Noboru Shimomura; katakana, given name first"
+  },
+  {
+   "name": "ノリオ サイトウ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Norio Saito; katakana, Saito surname"
+  },
+  {
+   "name": "ババ タカシ",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 4,
+   "note": "Baba Takashi in katakana; native order"
+  },
+  {
+   "name": "パトリック シャポン",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 2,
+   "note": "Patrick Chapon; French given-family order"
+  },
+  {
+   "name": "ヘック エルンスト",
+   "family": "first",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 2,
+   "note": "German Heck Ernst; Ernst is given"
+  },
+  {
+   "name": "ヘルトライン ハラルト",
+   "family": "first",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 3,
+   "note": "Hertlein Harald; German, family name written first"
+  },
+  {
+   "name": "ベン ホジソン",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Ben Hodgson; English given+surname"
+  },
+  {
+   "name": "ペテル ロンヒェン",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Peter + Ronchen; European given-family order"
+  },
+  {
+   "name": "ペルビン ムンムン",
+   "family": "first",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Katakana Pervin Munmun; Bengali/Turkish, likely family-first record order"
+  },
+  {
+   "name": "マイケル モンテムッロ",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 6,
+   "note": "Michael Montemurro in katakana; Western order"
+  },
+  {
+   "name": "マサタカ ヒガシ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 14,
+   "note": "Masataka Higashi; Masataka given, Higashi surname"
+  },
+  {
+   "name": "マサヒロ タニグチ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Masahiro Taniguchi in katakana; reversed order"
+  },
+  {
+   "name": "マリア ガルシア",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 0,
+   "note": "Maria Garcia; Spanish given+surname"
+  },
+  {
+   "name": "マリア ワシレウスカ",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Maria Wasilewska; Polish feminine surname"
+  },
+  {
+   "name": "マリコ フジモト",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Mariko Fujimoto in katakana; reversed"
+  },
+  {
+   "name": "ミチコ カミタ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 2,
+   "note": "Michiko Kamita; katakana, given name first"
+  },
+  {
+   "name": "ミチタカ チュウジョウ",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 4,
+   "note": "Michitaka Chujo; チュウジョウ=中条 surname, ミチタカ given"
+  },
+  {
+   "name": "ミッチェル マレック",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 1,
+   "note": "Mitchell Marek in katakana; Western given + surname"
+  },
+  {
+   "name": "ミヒャエル ヴァルツ",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 4,
+   "note": "Michael Walz in katakana; German, Western order"
+  },
+  {
+   "name": "モハン チャンドラセカラン",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 2,
+   "note": "Mohan Chandrasekaran; Indian given + surname"
+  },
+  {
+   "name": "ラグハバン メナクシサンダラム",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 2,
+   "note": "Raghavan Meenakshisundaram; Tamil, order ambiguous"
+  },
+  {
+   "name": "ラジュ モハン",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 4,
+   "note": "Raju Mohan; Indian, written given + family"
+  },
+  {
+   "name": "ワン チェン",
+   "family": "unsure",
+   "language": "chinese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 6,
+   "note": "Wang and Chen are both common surnames; order undecidable"
+  },
+  {
+   "name": "ヴォルフガング ミヒェル",
+   "family": "second",
+   "language": "other",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known/kata",
+   "occ": 96,
+   "note": "Wolfgang Michel; German given first"
+  },
+  {
+   "name": "一ノ瀬 喜美子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 2,
+   "note": "Ichinose Kimiko"
+  },
+  {
+   "name": "一泰 中谷",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 3,
+   "note": "Kazuyasu Nakatani; 一泰 given, 中谷 surname"
+  },
+  {
+   "name": "一郎 田中",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 29,
+   "note": "Ichiro Tanaka; 一郎 given, 田中 surname"
+  },
+  {
+   "name": "三上 建治",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 3,
+   "note": "Mikami Kenji; 三上 surname"
+  },
+  {
+   "name": "三宅 康ニ",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Miyake Koji; 康ニ = 康二 given"
+  },
+  {
+   "name": "三谷 奈々",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 2,
+   "note": "Mitani Nana; 奈々 female given"
+  },
+  {
+   "name": "三間 圀興",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 1085,
+   "note": "Mitsuma Kunioki; 圀興 given"
+  },
+  {
+   "name": "上山 亨",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 5,
+   "note": "Ueyama Toru; 亨 given"
+  },
+  {
+   "name": "上林 純一",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 57,
+   "note": "Uebayashi Junichi; 純一 given"
+  },
+  {
+   "name": "上河 浩",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Uekawa Hiroshi; 上河 surname"
+  },
+  {
+   "name": "上田 官治",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Ueda Kanji; 上田 surname"
+  },
+  {
+   "name": "上野 格",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 35,
+   "note": "Ueno Itaru; 格 given name"
+  },
+  {
+   "name": "下山 美徳",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 9,
+   "note": "Shimoyama Yoshinori"
+  },
+  {
+   "name": "下岡 聡行",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 3,
+   "note": "Shimooka Toshiyuki; 下岡 is a surname, 聡行 a given name"
+  },
+  {
+   "name": "下川 聖實",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Shimokawa; 下川 surname, 聖實 given"
+  },
+  {
+   "name": "下谷 秀和",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 56,
+   "note": "Shimotani Hidekazu; 下谷 surname"
+  },
+  {
+   "name": "中井 貞雄",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 866,
+   "note": "Nakai Sadao"
+  },
+  {
+   "name": "中原 信生",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 892,
+   "note": "Nakahara Nobuo; 信生 given"
+  },
+  {
+   "name": "中原 呉郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 6,
+   "note": "Nakahara Goro; 呉郎 given"
+  },
+  {
+   "name": "中島 徳嘉",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 164,
+   "note": "Nakajima Tokuyoshi; 中島 surname"
+  },
+  {
+   "name": "中村 好充",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 2,
+   "note": "Nakamura Yoshimitsu; 好充 given"
+  },
+  {
+   "name": "中溝 和弥",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 15,
+   "note": "Nakamizo Kazuya; 中溝 surname"
+  },
+  {
+   "name": "中野 壮陛",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 13,
+   "note": "Nakano Masayasu; 中野 surname"
+  },
+  {
+   "name": "丹家 元陽",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 9,
+   "note": "Rare 丹家 as surname; 元陽 given-like"
+  },
+  {
+   "name": "久司 楢原",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 2,
+   "note": "Narahara Hisashi reversed; 楢原 surname"
+  },
+  {
+   "name": "久美代 中小路",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 31,
+   "note": "Nakakoji Kumiyo reversed; 中小路 surname"
+  },
+  {
+   "name": "亀井 祐美",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 4,
+   "note": "Kamei Yumi"
+  },
+  {
+   "name": "二村 雄次",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 802,
+   "note": "Nimura Yuji; 雄次 given"
+  },
+  {
+   "name": "井上 隆",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1014,
+   "note": "Inoue Takashi"
+  },
+  {
+   "name": "仁田 佳子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 2,
+   "note": "Nita Yoshiko"
+  },
+  {
+   "name": "仙北 俊弘",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 53,
+   "note": "Senboku Toshihiro; 俊弘 given"
+  },
+  {
+   "name": "仙田 久仁男",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 11,
+   "note": "Senda Kunio; 仙田 surname"
+  },
+  {
+   "name": "仲田 浄治郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 36,
+   "note": "Nakada Jojiro; 仲田 surname"
+  },
+  {
+   "name": "伊吹 香織",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "C: both given-plausible",
+   "occ": 1,
+   "note": "Ibuki Kaori; 香織 given"
+  },
+  {
+   "name": "伊東 良德",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Ito Yoshinori; 伊東 surname"
+  },
+  {
+   "name": "伊藤 己代子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Ito Kiyoko; 己代子 given"
+  },
+  {
+   "name": "佐原 美弥",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 2,
+   "note": "Sahara Miya"
+  },
+  {
+   "name": "佐藤 和則",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 146,
+   "note": "Sato Kazunori; 和則 given"
+  },
+  {
+   "name": "佐藤 誠",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 906,
+   "note": "Sato Makoto; 佐藤 surname"
+  },
+  {
+   "name": "佐藤 進",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 947,
+   "note": "Sato Susumu; 進 single-kanji given"
+  },
+  {
+   "name": "信之 平山",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 9,
+   "note": "Hirayama Nobuyuki reversed; 平山 surname"
+  },
+  {
+   "name": "修二 山口",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 3,
+   "note": "Yamaguchi Shuji reversed; 修二 given"
+  },
+  {
+   "name": "倉本 成一郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 7,
+   "note": "Kuramoto Seiichiro; 倉本 surname"
+  },
+  {
+   "name": "健三郎 大江",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 0,
+   "note": "Kenzaburo Oe; reversed, 大江 surname"
+  },
+  {
+   "name": "健太 中村",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 5,
+   "note": "Nakamura Kenta reversed; 健太 given"
+  },
+  {
+   "name": "優 佐藤",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 27,
+   "note": "Yu Sato; 佐藤 very common surname"
+  },
+  {
+   "name": "元 祖父江",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 189,
+   "note": "Gen Sobue; 祖父江 Sobue is the surname"
+  },
+  {
+   "name": "充代 依田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 1,
+   "note": "Yoda Michiyo reversed; 充代 female given"
+  },
+  {
+   "name": "先田 和弘",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 5,
+   "note": "Senda Kazuhiro; 先田 surname"
+  },
+  {
+   "name": "光成 和昭",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "C: both given-plausible",
+   "occ": 28,
+   "note": "Mitsunari Kazuaki; 和昭 given-like, 光成 surname"
+  },
+  {
+   "name": "児玉 奈々",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 15,
+   "note": "Kodama Nana; 児玉 surname, 奈々 given"
+  },
+  {
+   "name": "兼広 尚典",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "C: both given-plausible",
+   "occ": 2,
+   "note": "Kanehiro Naofumi; 尚典 given"
+  },
+  {
+   "name": "内田 奈々",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 8,
+   "note": "Uchida Nana; 内田 surname"
+  },
+  {
+   "name": "冨永 章子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Tominaga Akiko; 章子 female given"
+  },
+  {
+   "name": "出口 智明",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Deguchi Tomoaki; 出口 surname"
+  },
+  {
+   "name": "前原 喜彦",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 939,
+   "note": "Maehara Yoshihiko; 前原 surname"
+  },
+  {
+   "name": "前原 恵理",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Maehara Eri; 恵理 female given"
+  },
+  {
+   "name": "前崎 順亮",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 2,
+   "note": "Maezaki Junsuke; 順亮 given"
+  },
+  {
+   "name": "剛 長谷川",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 516,
+   "note": "Tsuyoshi Hasegawa; 剛 given, 長谷川 surname"
+  },
+  {
+   "name": "剱持 妥茂哉",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 2,
+   "note": "Kenmochi; 剱持 surname + given"
+  },
+  {
+   "name": "功 水庫",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 2,
+   "note": "Isao Mizukura; 功 is a given name, 水庫 rare surname"
+  },
+  {
+   "name": "功一 小清水",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 1,
+   "note": "Koichi Koshimizu; 功一 given, 小清水 surname"
+  },
+  {
+   "name": "加藤 範子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 11,
+   "note": "Kato Noriko; 加藤 surname"
+  },
+  {
+   "name": "勝守 高士",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "C: both given-plausible",
+   "occ": 6,
+   "note": "Katsumori Takashi; 勝守 surname, 高士 given"
+  },
+  {
+   "name": "北條 慶一",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 83,
+   "note": "Hojo Keiichi; 北條 surname, 慶一 given"
+  },
+  {
+   "name": "北里 宏平",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 37,
+   "note": "Kitasato Kohei"
+  },
+  {
+   "name": "南川 妙子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Minamikawa Taeko; 妙子 female given"
+  },
+  {
+   "name": "博 戸野塚",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 5,
+   "note": "Hiroshi Tonozuka; 博 given, 戸野塚 surname"
+  },
+  {
+   "name": "博 西田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 56,
+   "note": "Hiroshi Nishida; 博 given, 西田 surname"
+  },
+  {
+   "name": "厚仁 八木橋",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 31,
+   "note": "Yagihashi Atsuhito; 八木橋 surname"
+  },
+  {
+   "name": "厚地 淳司",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 7,
+   "note": "Atsuchi Junji; 淳司 given"
+  },
+  {
+   "name": "原田 真名",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Harada Mana; 原田 surname"
+  },
+  {
+   "name": "厳島 行雄",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 34,
+   "note": "Itsukushima Yukio; 行雄 given"
+  },
+  {
+   "name": "収治 久保田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 39,
+   "note": "Shuji Kubota; 久保田 surname"
+  },
+  {
+   "name": "古居 敬大",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Furui Takahiro; 古居 surname"
+  },
+  {
+   "name": "古賀 宜考",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Koga Nobutaka"
+  },
+  {
+   "name": "吉田 奎介",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 228,
+   "note": "Yoshida Keisuke; 奎介 given"
+  },
+  {
+   "name": "吉田 浩",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 814,
+   "note": "Yoshida Hiroshi; 浩 given"
+  },
+  {
+   "name": "吉田 熈生",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 79,
+   "note": "Yoshida; 吉田 surname"
+  },
+  {
+   "name": "吉行 水畑",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 2,
+   "note": "Yoshiyuki Mizuhata; 水畑 only a surname, 吉行 also viable given"
+  },
+  {
+   "name": "吉見 胤",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 2,
+   "note": "Yoshimi Tsugu; 吉見 surname"
+  },
+  {
+   "name": "名倉 奈々",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 2,
+   "note": "Nagura Nana"
+  },
+  {
+   "name": "和夫 松井",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 20,
+   "note": "Matsui Kazuo reversed; 和夫 given"
+  },
+  {
+   "name": "和夫 水鳥川",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 8,
+   "note": "Kazuo Mizutorigawa; 水鳥川 is the surname"
+  },
+  {
+   "name": "和崎 雄一郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 32,
+   "note": "Wasaki Yuichiro; 和崎 surname"
+  },
+  {
+   "name": "和明 石原",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 30,
+   "note": "Kazuaki Ishihara; 石原 surname, reversed"
+  },
+  {
+   "name": "和田 正系",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 3,
+   "note": "Wada Masatsugu; 和田 surname"
+  },
+  {
+   "name": "和田 水季",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 4,
+   "note": "Wada Mizuki; 和田 surname"
+  },
+  {
+   "name": "啓介 津久井",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 11,
+   "note": "Keisuke Tsukui; 津久井 surname"
+  },
+  {
+   "name": "啓成 青木",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 4,
+   "note": "Keisei Aoki; Aoki is the surname, reversed order"
+  },
+  {
+   "name": "啓義 久保田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 15,
+   "note": "Hiroyoshi Kubota; 久保田 surname, reversed"
+  },
+  {
+   "name": "善治 川内野",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 9,
+   "note": "Kawachino Zenji; 川内野 surname, 善治 given"
+  },
+  {
+   "name": "善甫 宣哉",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 125,
+   "note": "Zenpo Nobuya; 善甫 rare surname, 宣哉 given"
+  },
+  {
+   "name": "喜多 了祐",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 25,
+   "note": "Kita Ryoyu; 喜多 surname"
+  },
+  {
+   "name": "四塚 勝久",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 2,
+   "note": "Yotsuzuka Katsuhisa"
+  },
+  {
+   "name": "国立 大学",
+   "family": "not_a_person",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 0,
+   "note": "Kokuritsu Daigaku = 'national university'"
+  },
+  {
+   "name": "堀内 敬三",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 35,
+   "note": "Horiuchi Keizo; 堀内 surname"
+  },
+  {
+   "name": "堀田 国元",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 57,
+   "note": "Hotta Kunimoto; 堀田 surname, 国元 given"
+  },
+  {
+   "name": "堀田 知道",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 40,
+   "note": "Hotta Tomomichi; 堀田 surname"
+  },
+  {
+   "name": "塗木 徳人",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 28,
+   "note": "Nuruki Tokuhito; 徳人 given"
+  },
+  {
+   "name": "塚本 奈々子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 2,
+   "note": "Tsukamoto Nanako; 奈々子 female given name"
+  },
+  {
+   "name": "塩田 悠賀里",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 28,
+   "note": "Shiota Yukari; 悠賀里 female given"
+  },
+  {
+   "name": "塩見 達志",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 7,
+   "note": "Shiomi Tatsushi; 塩見 surname"
+  },
+  {
+   "name": "境 美智順",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 5,
+   "note": "Sakai; 境 surname, 美智順 given"
+  },
+  {
+   "name": "増渕 正彦",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 3,
+   "note": "Masubuchi Masahiko; 増渕 surname"
+  },
+  {
+   "name": "増田 芳久",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 7,
+   "note": "Masuda Yoshihisa; 増田 surname"
+  },
+  {
+   "name": "大内 肇",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 5,
+   "note": "Ouchi Hajime; 肇 single-kanji given"
+  },
+  {
+   "name": "大北 亮",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 53,
+   "note": "Okita Ryo; 大北 surname, 亮 single-kanji given"
+  },
+  {
+   "name": "大原 真由美",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 26,
+   "note": "Ohara Mayumi; 大原 surname"
+  },
+  {
+   "name": "大塚 厚ニ",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 4,
+   "note": "Otsuka Koji; 大塚 surname, 厚二 given"
+  },
+  {
+   "name": "大島 寧",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 7,
+   "note": "Oshima Yasushi"
+  },
+  {
+   "name": "大森 達也",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 93,
+   "note": "Omori Tatsuya; 大森 surname"
+  },
+  {
+   "name": "大樹 萱野",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 2,
+   "note": "Daiki Kayano; 大樹 given, 萱野 surname (reversed)"
+  },
+  {
+   "name": "大江 健三郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 390,
+   "note": "Oe Kenzaburo; 大江 surname, 健三郎 given"
+  },
+  {
+   "name": "大築 淳一",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 7,
+   "note": "Otsuki Junichi"
+  },
+  {
+   "name": "大輔 羽鳥",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 10,
+   "note": "Daisuke Hatori; 羽鳥 surname"
+  },
+  {
+   "name": "大野 耐一",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 10,
+   "note": "Ohno Taiichi; 大野 surname, 耐一 given"
+  },
+  {
+   "name": "太郎 青木",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 8,
+   "note": "Taro Aoki; Aoki is the surname, reversed"
+  },
+  {
+   "name": "奥山 利孝",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Okuyama Toshitaka; 利孝 given"
+  },
+  {
+   "name": "奥野 勝宏",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Okuno Katsuhiro; 勝宏 given"
+  },
+  {
+   "name": "孝彦 斎田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 3,
+   "note": "Saida Takahiko reversed; 孝彦 given"
+  },
+  {
+   "name": "孝昭 小金澤",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 30,
+   "note": "Koganezawa Takaaki; 小金澤 surname"
+  },
+  {
+   "name": "学 大橋",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 7,
+   "note": "Manabu Ohashi; 大橋 surname, 学 given, reversed"
+  },
+  {
+   "name": "守利 関",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 1,
+   "note": "Moritoshi Seki; 関 common surname, 守利 reads as given"
+  },
+  {
+   "name": "安田 八十五",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 69,
+   "note": "Yasuda Yasoi; 安田 surname"
+  },
+  {
+   "name": "安積 良紀",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "C: both given-plausible",
+   "occ": 61,
+   "note": "Azumi Yoshiki; 安積 surname, 良紀 given"
+  },
+  {
+   "name": "宏旭 坂井",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 8,
+   "note": "Sakai; 坂井 surname, 宏旭 given"
+  },
+  {
+   "name": "宏樹 倉石",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 1,
+   "note": "Hiroki Kuraishi; 倉石 surname"
+  },
+  {
+   "name": "宏治 荒井",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 3,
+   "note": "Arai Koji reversed; 宏治 given, 荒井 surname"
+  },
+  {
+   "name": "宏行 田中",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 8,
+   "note": "Hiroyuki Tanaka; 田中 surname"
+  },
+  {
+   "name": "宗忠 山室",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 1,
+   "note": "Munetada Yamamuro; 宗忠 given, 山室 surname"
+  },
+  {
+   "name": "宮内 清美",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Miyauchi Kiyomi; 宮内 surname"
+  },
+  {
+   "name": "宮崎 勝",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 869,
+   "note": "Miyazaki Masaru; 勝 given"
+  },
+  {
+   "name": "宮崎 友喜雄",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 26,
+   "note": "Miyazaki Tomokio; 宮崎 surname"
+  },
+  {
+   "name": "宮崎 木の実",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 3,
+   "note": "Miyazaki Kinomi; 宮崎 surname, 木の実 given"
+  },
+  {
+   "name": "宮崎 駿",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 103,
+   "note": "Miyazaki Hayao; 宮崎 surname"
+  },
+  {
+   "name": "宮川 壮平",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 2,
+   "note": "Miyagawa Sohei; 壮平 given"
+  },
+  {
+   "name": "宮戸 真美",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 3,
+   "note": "Miyato Mami; 真美 female given"
+  },
+  {
+   "name": "宮本 博",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 64,
+   "note": "Miyamoto Hiroshi; 宮本 surname"
+  },
+  {
+   "name": "富康 津田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 19,
+   "note": "Tomiyasu Tsuda; 津田 is the surname, reversed order"
+  },
+  {
+   "name": "寺西 利生",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 60,
+   "note": "Teranishi Toshio; 利生 given"
+  },
+  {
+   "name": "小堀 鐸二",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 512,
+   "note": "Kobori Takuji; 鐸二 given"
+  },
+  {
+   "name": "小堺 貴司",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 4,
+   "note": "Kozakai Takashi"
+  },
+  {
+   "name": "小塙 理紗",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Kobanawa Risa; 小塙 rare surname, 理紗 female given"
+  },
+  {
+   "name": "小寺 瑛広",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 4,
+   "note": "Kodera Akihiro"
+  },
+  {
+   "name": "小峯 知佳",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "C: both given-plausible",
+   "occ": 3,
+   "note": "Komine Chika; 佳 female given marker"
+  },
+  {
+   "name": "小川 倫子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 7,
+   "note": "Ogawa Michiko; 倫子 female given"
+  },
+  {
+   "name": "小林 正",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 955,
+   "note": "Kobayashi Tadashi; 小林 very common surname"
+  },
+  {
+   "name": "小林 礼明",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 16,
+   "note": "Kobayashi Noriaki; 小林 surname"
+  },
+  {
+   "name": "小林 誠",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 561,
+   "note": "Kobayashi Makoto"
+  },
+  {
+   "name": "小柴 寿人",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 30,
+   "note": "Koshiba Hisato; 小柴 surname"
+  },
+  {
+   "name": "小池 秀育",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Koike Hideyasu; 小池 surname"
+  },
+  {
+   "name": "小渡 良章",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Odo Yoshiaki; 小渡 Okinawan surname"
+  },
+  {
+   "name": "小瀧 歩",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 3,
+   "note": "Kotaki Ayumu"
+  },
+  {
+   "name": "小竹 彌",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 2,
+   "note": "Kotake Wataru; 小竹 surname"
+  },
+  {
+   "name": "尚 西將",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 1,
+   "note": "尚 (Hisashi/Sho) is a given name; 西將 taken as surname"
+  },
+  {
+   "name": "尾崎 公洋",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 68,
+   "note": "Ozaki Kimihiro; 尾崎 surname"
+  },
+  {
+   "name": "尾辻 省悟",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 40,
+   "note": "Otsuji Shogo; Otsuji surname + Shogo given"
+  },
+  {
+   "name": "山 雅博",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "C: both given-plausible",
+   "occ": 1,
+   "note": "Yama Masahiro; 雅博 clearly given, 山 rare 1-char surname"
+  },
+  {
+   "name": "山中 伸弥",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 125,
+   "note": "Yamanaka Shinya"
+  },
+  {
+   "name": "山中 誓次",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 5,
+   "note": "Yamanaka Seiji; 誓次 given"
+  },
+  {
+   "name": "山内 慎二",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 13,
+   "note": "Yamauchi Shinji"
+  },
+  {
+   "name": "山北 剛久",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 10,
+   "note": "Yamakita Takehisa; 山北 surname"
+  },
+  {
+   "name": "山崎 元",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 847,
+   "note": "Yamazaki Hajime"
+  },
+  {
+   "name": "山田 奈々",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 3,
+   "note": "Yamada Nana; Yamada surname"
+  },
+  {
+   "name": "山田 眞佐喜",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 2,
+   "note": "Yamada Masaki; Yamada surname"
+  },
+  {
+   "name": "山高 篤行",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 345,
+   "note": "Yamataka Atsuyuki; 山高 surname, 篤行 given"
+  },
+  {
+   "name": "岡上 将之",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Okagami Masayuki; 将之 male given"
+  },
+  {
+   "name": "岡本 皇馬",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Okamoto Koma; 岡本 surname"
+  },
+  {
+   "name": "岡治 髙見澤",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 2,
+   "note": "Takamizawa Koji reversed; 髙見澤 clear surname"
+  },
+  {
+   "name": "岡田 正",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 891,
+   "note": "Okada Tadashi; Okada surname"
+  },
+  {
+   "name": "岩崎 光徳",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 14,
+   "note": "Iwasaki Mitsunori; 岩崎 surname"
+  },
+  {
+   "name": "岩本 菜々子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 1,
+   "note": "Iwamoto Nanako; 菜々子 female given name"
+  },
+  {
+   "name": "岸田 晩節",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 11,
+   "note": "Kishida Bansetsu; 岸田 surname"
+  },
+  {
+   "name": "島岡 哲太郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 5,
+   "note": "Shimaoka Tetsutaro; -taro given"
+  },
+  {
+   "name": "島村 鉄司",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Shimamura Tetsuji; 島村 surname"
+  },
+  {
+   "name": "島田 憲次",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 181,
+   "note": "Shimada Kenji; 島田 common surname, 憲次 male given"
+  },
+  {
+   "name": "嶋宮 幸恵",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Shimamiya Yukie; 幸恵 given"
+  },
+  {
+   "name": "嶋田 正巳",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 2,
+   "note": "Shimada Masami; 嶋田 surname"
+  },
+  {
+   "name": "巌谷 薫",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Iwaya Kaoru; 巌谷 surname"
+  },
+  {
+   "name": "川中 宣明",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 16,
+   "note": "Kawanaka Nobuaki; 川中 surname"
+  },
+  {
+   "name": "川崎 七々海",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 4,
+   "note": "Kawasaki Nanami; 七々海 female given"
+  },
+  {
+   "name": "川幡 祐子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 7,
+   "note": "Kawahata Yuko; 祐子 female given name"
+  },
+  {
+   "name": "川本 三郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 844,
+   "note": "Kawamoto Saburo; 三郎 given name"
+  },
+  {
+   "name": "帰山 学士",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Kaeriyama Gakushi; 帰山 surname"
+  },
+  {
+   "name": "常見 幸司",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Tsunemi Koji; 幸司 given name"
+  },
+  {
+   "name": "平原 佐斗司",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 51,
+   "note": "Hirahara Satoshi"
+  },
+  {
+   "name": "平林 巧造",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 13,
+   "note": "Hirabayashi Kozo; 巧造 given"
+  },
+  {
+   "name": "平野 拓也",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 45,
+   "note": "Hirano Takuya; 平野 surname, 拓也 given"
+  },
+  {
+   "name": "幸恭 坂",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 8,
+   "note": "Yukiyasu Saka; 坂 surname, 幸恭 given"
+  },
+  {
+   "name": "幸明 原田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 9,
+   "note": "Yukiaki Harada; 原田 surname"
+  },
+  {
+   "name": "広川 知剛",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Hirokawa Tomotaka; 広川 surname"
+  },
+  {
+   "name": "庫大 五十嵐",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 2,
+   "note": "Igarashi is the surname; reversed order"
+  },
+  {
+   "name": "康夫 二木",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 3,
+   "note": "Yasuo Niki; 二木 surname, 康夫 given, reversed"
+  },
+  {
+   "name": "廣井 喜一",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 21,
+   "note": "Hiroi Kiichi; -ichi given-name suffix"
+  },
+  {
+   "name": "廣内 大輔",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 4,
+   "note": "Hirouchi Daisuke; 大輔 given"
+  },
+  {
+   "name": "廣治 牛島",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 7,
+   "note": "Hiroji Ushijima; 廣治 given, 牛島 surname"
+  },
+  {
+   "name": "建部 正義",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 58,
+   "note": "Takebe Masayoshi"
+  },
+  {
+   "name": "弘幸 大泉",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 25,
+   "note": "Hiroyuki Oizumi; 弘幸 given, 大泉 surname"
+  },
+  {
+   "name": "弘昭 和田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 5,
+   "note": "Hiroaki Wada; 和田 surname"
+  },
+  {
+   "name": "張木 洋寿",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 3,
+   "note": "洋寿 reads as given; 張木 rare surname"
+  },
+  {
+   "name": "彰 長谷川",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 179,
+   "note": "Akira Hasegawa; 長谷川 surname"
+  },
+  {
+   "name": "影山 潮矢",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 7,
+   "note": "Kageyama; 影山 surname, 潮矢 given"
+  },
+  {
+   "name": "後藤 丹治",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "AMBIG(both surnames)",
+   "occ": 7,
+   "note": "Goto Tanji"
+  },
+  {
+   "name": "徳住 堅治",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 83,
+   "note": "Tokuzumi Kenji; 堅治 given name"
+  },
+  {
+   "name": "志田 靖彦",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 2,
+   "note": "Shida Yasuhiko"
+  },
+  {
+   "name": "戸口 功一",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 2,
+   "note": "Toguchi Koichi; 戸口 surname"
+  },
+  {
+   "name": "戸毛 邦弘",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 62,
+   "note": "Tomo Kunihiro; 邦弘 given name"
+  },
+  {
+   "name": "戸田 洋子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 9,
+   "note": "Toda Yoko; 洋子 female given"
+  },
+  {
+   "name": "持田 貴志",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 5,
+   "note": "Mochida Takashi"
+  },
+  {
+   "name": "敏 遠藤",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 5,
+   "note": "Endo Satoshi reversed; 遠藤 surname"
+  },
+  {
+   "name": "敏英 阿波谷",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 7,
+   "note": "Toshihide Awatani; 敏英 given, 阿波谷 surname"
+  },
+  {
+   "name": "敦 中田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 3,
+   "note": "Atsushi Nakata; 敦 single-kanji given"
+  },
+  {
+   "name": "敬太 紙上",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 7,
+   "note": "Keita given (敬太); 紙上 as surname"
+  },
+  {
+   "name": "敷田 礼二",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 9,
+   "note": "Shikita Reiji"
+  },
+  {
+   "name": "文広 糸魚川",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 78,
+   "note": "Fumihiro Itoigawa; 糸魚川 surname"
+  },
+  {
+   "name": "文隆 古賀",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 10,
+   "note": "Fumitaka Koga; 文隆 given, 古賀 surname"
+  },
+  {
+   "name": "新庄 輝也",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 472,
+   "note": "Shinjo Teruya; 輝也 given"
+  },
+  {
+   "name": "日切 慶子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 3,
+   "note": "Higiri Keiko; 慶子 female given"
+  },
+  {
+   "name": "日比 之博",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Hibi Yukihiro; 日比 surname"
+  },
+  {
+   "name": "明 黒澤",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 3,
+   "note": "Akira Kurosawa; 黒澤 surname"
+  },
+  {
+   "name": "明光 和英",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "C: both given-plausible",
+   "occ": 1,
+   "note": "both ambiguous; 和英 Kazuhide reads as given"
+  },
+  {
+   "name": "明彦 松隈",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 20,
+   "note": "Akihiko Matsukuma; 松隈 surname (Kyushu), reversed"
+  },
+  {
+   "name": "星野 安三郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 169,
+   "note": "Hoshino Yasusaburo; 星野 surname"
+  },
+  {
+   "name": "春樹 村上",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 0,
+   "note": "Haruki Murakami; reversed, 村上 surname"
+  },
+  {
+   "name": "智幸 小枝",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "C: both given-plausible",
+   "occ": 5,
+   "note": "Koeda Tomoyuki reversed; 智幸 given, 小枝 surname"
+  },
+  {
+   "name": "智秀 浜田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 4,
+   "note": "Tomohide Hamada; Hamada is the surname"
+  },
+  {
+   "name": "暁雄 森信",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 19,
+   "note": "Morinobu Akio; 森信 surname, 暁雄 given"
+  },
+  {
+   "name": "暢子 長崎",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 3,
+   "note": "Nagasaki Nobuko reversed; 暢子 given"
+  },
+  {
+   "name": "有原 圭三",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 22,
+   "note": "Arihara Keizo; 圭三 given"
+  },
+  {
+   "name": "有村 義男",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Arimura Yoshio; 義男 given name"
+  },
+  {
+   "name": "有薗 克広",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Arizono Katsuhiro; 有薗 surname"
+  },
+  {
+   "name": "木方 初美",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Kikata Hatsumi; 木方 surname, 初美 given"
+  },
+  {
+   "name": "木村 俊哉",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 24,
+   "note": "Kimura Toshiya; 俊哉 given"
+  },
+  {
+   "name": "木村 剛",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 810,
+   "note": "Kimura Tsuyoshi; Kimura surname"
+  },
+  {
+   "name": "木村 尚三郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 202,
+   "note": "Kimura Shozaburo; Kimura surname"
+  },
+  {
+   "name": "未来 奈良部",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 3,
+   "note": "Narabe Miku reversed; 奈良部 surname"
+  },
+  {
+   "name": "末成 妙子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Suenari Taeko; 妙子 female given name"
+  },
+  {
+   "name": "本田 圭佑",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 3,
+   "note": "Honda Keisuke; 本田 surname"
+  },
+  {
+   "name": "本間 大資",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 9,
+   "note": "Honma Daisuke"
+  },
+  {
+   "name": "杉山 菜々",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 1,
+   "note": "Sugiyama Nana"
+  },
+  {
+   "name": "杉田 美昭",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 4,
+   "note": "Sugita Yoshiaki; 杉田 surname"
+  },
+  {
+   "name": "村上 春樹",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 307,
+   "note": "Murakami Haruki; 春樹 given"
+  },
+  {
+   "name": "村内 利光",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 12,
+   "note": "Murauchi Toshimitsu"
+  },
+  {
+   "name": "村地 輝男",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Murachi Teruo; 村地 surname"
+  },
+  {
+   "name": "村田 供爾子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 8,
+   "note": "Murata; 村田 surname, 供爾子 given"
+  },
+  {
+   "name": "村田 宏子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Murata Hiroko; 宏子 female given"
+  },
+  {
+   "name": "東京 大学",
+   "family": "not_a_person",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 0,
+   "note": "Tokyo Daigaku = University of Tokyo, institution"
+  },
+  {
+   "name": "松中 成浩",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 45,
+   "note": "Matsunaka Shigehiro; 松中 surname"
+  },
+  {
+   "name": "松井 省緯一",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Matsui; 松井 surname, garbled given"
+  },
+  {
+   "name": "松原 健祐",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 14,
+   "note": "Matsubara Kensuke; 健祐 given"
+  },
+  {
+   "name": "松尾 志郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 4,
+   "note": "Matsuo Shiro; 志郎 given"
+  },
+  {
+   "name": "松本 千代栄",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 94,
+   "note": "Matsumoto Chiyoe; 松本 common surname"
+  },
+  {
+   "name": "松永 完三",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 2,
+   "note": "Matsunaga Kanzo; 松永 surname"
+  },
+  {
+   "name": "松藤 泰典",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 811,
+   "note": "Matsufuji Yasusuke; 松藤 surname, 泰典 given"
+  },
+  {
+   "name": "松角 康彦",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 29,
+   "note": "Matsukado Yasuhiko; 康彦 given"
+  },
+  {
+   "name": "板坂 洋佑",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 5,
+   "note": "Itasaka Yosuke; 板坂 surname"
+  },
+  {
+   "name": "板垣 恵子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 14,
+   "note": "Itagaki Keiko; 恵子 female given name"
+  },
+  {
+   "name": "林 真理子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1013,
+   "note": "Hayashi Mariko; 林 surname, 真理子 given"
+  },
+  {
+   "name": "林 豊彦",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 166,
+   "note": "Hayashi Toyohiko; 豊彦 given"
+  },
+  {
+   "name": "柳澤 卓",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 6,
+   "note": "Yanagisawa Taku; 卓 given"
+  },
+  {
+   "name": "柴山 美紀根",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 13,
+   "note": "Shibayama Mikine; 柴山 surname"
+  },
+  {
+   "name": "栄治 長沢",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 14,
+   "note": "Eiji Nagasawa; 長沢 surname"
+  },
+  {
+   "name": "栗原 史郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 27,
+   "note": "Kurihara Shiro; 史郎 given"
+  },
+  {
+   "name": "栗田 眞希江",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Kurita Makie; 栗田 surname"
+  },
+  {
+   "name": "桂川 正幸",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 26,
+   "note": "Katsuragawa Masayuki; 正幸 given"
+  },
+  {
+   "name": "桃井 勉",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 64,
+   "note": "Momoi Tsutomu; 勉 given"
+  },
+  {
+   "name": "桜場 周吉",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 15,
+   "note": "Sakuraba Shukichi; 周吉 given"
+  },
+  {
+   "name": "梅山 伸二",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 22,
+   "note": "Umeyama Shinji; 梅山 surname"
+  },
+  {
+   "name": "梅本 奈々子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 1,
+   "note": "Umemoto Nanako; 奈々子 female given"
+  },
+  {
+   "name": "梅村 美由紀",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 4,
+   "note": "Umemura Miyuki"
+  },
+  {
+   "name": "梅沢 偵一郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Umezawa Teiichiro; -ichiro given name"
+  },
+  {
+   "name": "森 正樹",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 949,
+   "note": "Mori Masaki; 森 surname, 正樹 given"
+  },
+  {
+   "name": "森主 宜延",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 30,
+   "note": "Morinushi Yoshinobu"
+  },
+  {
+   "name": "森山 奈々",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 1,
+   "note": "Moriyama Nana"
+  },
+  {
+   "name": "椿 繁裕",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 7,
+   "note": "Tsubaki Shigehiro; 椿 is a surname"
+  },
+  {
+   "name": "楠原 彰",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 67,
+   "note": "Kusuhara Akira; 楠原 surname"
+  },
+  {
+   "name": "榊原 辰幸",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Sakakibara Tatsuyuki; 榊原 surname"
+  },
+  {
+   "name": "横倉 三郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 21,
+   "note": "Yokokura Saburo; 三郎 given"
+  },
+  {
+   "name": "横室 茂樹",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 61,
+   "note": "Yokomuro Shigeki; 茂樹 given"
+  },
+  {
+   "name": "横田 光広",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 49,
+   "note": "Yokota Mitsuhiro; 横田 surname, 光広 given"
+  },
+  {
+   "name": "橋口 俊則",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 24,
+   "note": "Hashiguchi Toshinori; 橋口 surname"
+  },
+  {
+   "name": "橋本 幾太",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 36,
+   "note": "Hashimoto Ikuta"
+  },
+  {
+   "name": "橋本 直人",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 115,
+   "note": "Hashimoto Naoto; 橋本 surname"
+  },
+  {
+   "name": "橋本 要",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 30,
+   "note": "Hashimoto Kaname; 要 given"
+  },
+  {
+   "name": "橋村 裕也",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 7,
+   "note": "Hashimura Yuya; 裕也 given name"
+  },
+  {
+   "name": "正岡 亜希子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Masaoka Akiko; 亜希子 female given"
+  },
+  {
+   "name": "正巳 南條",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 29,
+   "note": "Masami Nanjo; 南條 is the surname, 正巳 given"
+  },
+  {
+   "name": "正橋 寿子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Masahashi Hisako; 寿子 female given"
+  },
+  {
+   "name": "正紀 斎藤",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 3,
+   "note": "Saito Masaki reversed; 正紀 given, 斎藤 surname"
+  },
+  {
+   "name": "武 小久保",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 37,
+   "note": "Takeshi Kokubo; 小久保 is the surname"
+  },
+  {
+   "name": "武司 福田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 16,
+   "note": "Takeshi Fukuda; 福田 surname, reversed"
+  },
+  {
+   "name": "武田 泰淳",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 62,
+   "note": "Takeda Taijun; 武田 surname"
+  },
+  {
+   "name": "武美 小松原",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 284,
+   "note": "Takemi Komatsubara; Komatsubara is the surname"
+  },
+  {
+   "name": "武藤 紹士",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 9,
+   "note": "Muto Shoji; 紹士 given"
+  },
+  {
+   "name": "歩 中野渡",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 7,
+   "note": "Nakanowatari Ayumu; 中野渡 surname, 歩 given"
+  },
+  {
+   "name": "水嶋 増男",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 2,
+   "note": "Mizushima Masuo; 水嶋 surname"
+  },
+  {
+   "name": "水野 剛輔",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Mizuno Gosuke; 剛輔 given"
+  },
+  {
+   "name": "江口 垣良",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Eguchi; 江口 surname"
+  },
+  {
+   "name": "江畑 茂男",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 5,
+   "note": "Ebata Shigeo; 茂男 given"
+  },
+  {
+   "name": "池内 与志徳",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Ikeuchi Yoshinori; 池内 surname, 与志徳 given"
+  },
+  {
+   "name": "池北 宗一郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Ikekita Soichiro; 宗一郎 given"
+  },
+  {
+   "name": "池見 泰明",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 15,
+   "note": "Ikemi Yasuaki; 池見 surname"
+  },
+  {
+   "name": "河村 廣",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 901,
+   "note": "Kawamura Hiroshi; 河村 surname"
+  },
+  {
+   "name": "沼田 典司",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Numata Noriji; 典司 given"
+  },
+  {
+   "name": "泰夫 五十嵐",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 143,
+   "note": "Yasuo Igarashi; 泰夫 given, 五十嵐 surname"
+  },
+  {
+   "name": "泰央 久保田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 2,
+   "note": "Kubota Yasuo reversed; 久保田 surname"
+  },
+  {
+   "name": "津端 捷夫",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 54,
+   "note": "Tsubata Katsuo; 捷夫 -o given"
+  },
+  {
+   "name": "浜崎 理佐",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Hamasaki Risa"
+  },
+  {
+   "name": "浩 安次富",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 19,
+   "note": "Hiroshi Ajitomi; 安次富 Okinawan surname"
+  },
+  {
+   "name": "深田 久雄",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Fukada Hisao; 久雄 given"
+  },
+  {
+   "name": "清成 秀康",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "C: both given-plausible",
+   "occ": 3,
+   "note": "Kiyonari Hideyasu; 清成 attested surname, 秀康 given"
+  },
+  {
+   "name": "清水 直容",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 168,
+   "note": "Shimizu Naoyasu; 清水 common surname"
+  },
+  {
+   "name": "渋佐 隆",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 18,
+   "note": "Shibusa Takashi; 隆 given"
+  },
+  {
+   "name": "渋谷 恒蔵",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Shibuya Kozo"
+  },
+  {
+   "name": "渋谷 鎮明",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 41,
+   "note": "Shibuya Shizuaki; 渋谷 surname"
+  },
+  {
+   "name": "渡辺 京子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 102,
+   "note": "Watanabe Kyoko; 京子 female given"
+  },
+  {
+   "name": "渡辺 俊行",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 800,
+   "note": "Watanabe Toshiyuki; Watanabe surname"
+  },
+  {
+   "name": "渡辺 正良",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 2,
+   "note": "Watanabe Masayoshi"
+  },
+  {
+   "name": "渡邉 伸幸",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 7,
+   "note": "Watanabe Nobuyuki; 渡邉 surname, 伸幸 given"
+  },
+  {
+   "name": "渡部 靖憲",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 22,
+   "note": "Watanabe Yasunori"
+  },
+  {
+   "name": "湯原 里美",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 9,
+   "note": "Yuhara Satomi; 湯原 surname"
+  },
+  {
+   "name": "湯川 秀樹",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 80,
+   "note": "Yukawa Hideki; 湯川 surname"
+  },
+  {
+   "name": "湯瀬 裕昭",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 20,
+   "note": "Yuze Hiroaki; 湯瀬 surname, 裕昭 given"
+  },
+  {
+   "name": "滝安 美弘",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 8,
+   "note": "Takiyasu Yoshihiro; 美弘 given"
+  },
+  {
+   "name": "澤田 英子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 5,
+   "note": "Sawada Hideko; 英子 female given name"
+  },
+  {
+   "name": "熊澤 伸悟",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 2,
+   "note": "Kumazawa Shingo"
+  },
+  {
+   "name": "片岡 菜々",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 6,
+   "note": "Kataoka Nana; 菜々 female given"
+  },
+  {
+   "name": "牧野 満理瑛",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Makino Marie; 満理瑛 given"
+  },
+  {
+   "name": "物部 泰昌",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 30,
+   "note": "Mononobe Yasumasa; 泰昌 given"
+  },
+  {
+   "name": "玄樹 羽生田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 1,
+   "note": "Genki/Haruki Hanyuda; 羽生田 surname"
+  },
+  {
+   "name": "玉川 信夫",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Tamagawa Nobuo; 信夫 given"
+  },
+  {
+   "name": "王子 亘由",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 31,
+   "note": "Oji? 王子 plausible rare surname; 亘由 reads as given name"
+  },
+  {
+   "name": "理化学 研究所",
+   "family": "not_a_person",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 0,
+   "note": "RIKEN, 理化学研究所 institute name split"
+  },
+  {
+   "name": "田中 一郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 358,
+   "note": "Tanaka Ichiro; Tanaka surname"
+  },
+  {
+   "name": "田中 剛",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 800,
+   "note": "Tanaka Tsuyoshi; 剛 single-kanji given"
+  },
+  {
+   "name": "田中 博",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 797,
+   "note": "Tanaka Hiroshi"
+  },
+  {
+   "name": "田中 喜久雄",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 3,
+   "note": "Tanaka Kikuo; 喜久雄 male given"
+  },
+  {
+   "name": "田中 顕一郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 17,
+   "note": "Tanaka Kenichiro; 田中 surname"
+  },
+  {
+   "name": "田尾 政博",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 7,
+   "note": "Tao Masahiro; 政博 given name"
+  },
+  {
+   "name": "田淵 貴大",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 9,
+   "note": "Tabuchi Takahiro; 貴大 given"
+  },
+  {
+   "name": "町子 阿部",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 3,
+   "note": "Abe Machiko reversed; 町子 female given"
+  },
+  {
+   "name": "町田 昌彦",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 254,
+   "note": "Machida Masahiko"
+  },
+  {
+   "name": "白木 英ニ",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Shiraki Eiji; 英ニ = 英二 given (katakana ni typo)"
+  },
+  {
+   "name": "白水 和雄",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 895,
+   "note": "Shiromizu Kazuo"
+  },
+  {
+   "name": "的場 奈々",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "BLOCKED(gate rejects a char)",
+   "occ": 1,
+   "note": "Matoba Nana; 的場 surname"
+  },
+  {
+   "name": "盛内 雅寛",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 2,
+   "note": "Moriuchi Masahiro; 盛内 surname"
+  },
+  {
+   "name": "目黒 健太郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 9,
+   "note": "Meguro Kentaro; 目黒 surname"
+  },
+  {
+   "name": "直子 美濃部",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 23,
+   "note": "Naoko Minobe; 美濃部 surname"
+  },
+  {
+   "name": "直樹 比企",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 30,
+   "note": "Naoki Hiki; 比企 surname (Saitama place), 直樹 given"
+  },
+  {
+   "name": "直純 佐伯",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 4,
+   "note": "Naozumi Saeki; 佐伯 surname"
+  },
+  {
+   "name": "相馬 一亥",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 155,
+   "note": "Soma Ichigai"
+  },
+  {
+   "name": "眞野 元",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Mano Gen; 眞野 surname"
+  },
+  {
+   "name": "眞雄 富田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 9,
+   "note": "Masao Tomita; 富田 surname"
+  },
+  {
+   "name": "真也 安井",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 42,
+   "note": "Yasui Shinya reversed; 真也 given"
+  },
+  {
+   "name": "真来 省二",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 11,
+   "note": "Shoji given (省二); 真来 rare surname"
+  },
+  {
+   "name": "督雄 前川",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 3,
+   "note": "Maekawa Tadao reversed; 前川 surname"
+  },
+  {
+   "name": "石井 諭規",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Ishii Yuki; 石井 surname"
+  },
+  {
+   "name": "石原 亨",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 135,
+   "note": "Ishihara Toru; 亨 single-kanji given"
+  },
+  {
+   "name": "石原 享介",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 306,
+   "note": "Ishihara Kyosuke"
+  },
+  {
+   "name": "石尾 和央",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Ishio Kazuo; 和央 given"
+  },
+  {
+   "name": "石橋 智美",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Ishibashi Tomomi; 智美 given"
+  },
+  {
+   "name": "石見 剛",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 2,
+   "note": "Iwami Tsuyoshi; 剛 given"
+  },
+  {
+   "name": "砂原 米彦",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 18,
+   "note": "Sunahara Yonehiko; 米彦 given"
+  },
+  {
+   "name": "磯部 共伸",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 11,
+   "note": "Isobe Tomonobu"
+  },
+  {
+   "name": "神尾 正太郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 3,
+   "note": "Kamio Shotaro; -taro given name"
+  },
+  {
+   "name": "神谷 不二",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 113,
+   "note": "Kamiya Fuji; 神谷 surname"
+  },
+  {
+   "name": "福岡 卓実",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 37,
+   "note": "Fukuoka Takumi"
+  },
+  {
+   "name": "福岡 正博",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 952,
+   "note": "Fukuoka Masahiro; 福岡 surname"
+  },
+  {
+   "name": "福森 武",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 41,
+   "note": "Fukumori Takeshi; 福森 surname"
+  },
+  {
+   "name": "福田 俊弘",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 2,
+   "note": "Fukuda Toshihiro; 福田 surname"
+  },
+  {
+   "name": "福田 和也",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 932,
+   "note": "Fukuda Kazuya; 福田 surname"
+  },
+  {
+   "name": "福田 喜美雄",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 2,
+   "note": "Fukuda Kimio; 喜美雄 given"
+  },
+  {
+   "name": "秋雄 斎藤",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 1,
+   "note": "Akio Saito; 斎藤 surname"
+  },
+  {
+   "name": "種村 光代",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 48,
+   "note": "Tanemura Mitsuyo; 光代 female given name"
+  },
+  {
+   "name": "穴沢 小百合",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 6,
+   "note": "Anazawa Sayuri; 小百合 female given name"
+  },
+  {
+   "name": "立子 渡辺",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 2,
+   "note": "Tatsuko Watanabe; 立子 given, 渡辺 surname"
+  },
+  {
+   "name": "竹内 和夫",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 39,
+   "note": "Takeuchi Kazuo; 竹内 surname"
+  },
+  {
+   "name": "竹谷 是幸",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 73,
+   "note": "Taketani Yoshiyuki"
+  },
+  {
+   "name": "竹迫 紘",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 92,
+   "note": "Takesako Hiroshi; 紘 single-kanji given"
+  },
+  {
+   "name": "範夫 酒井",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 10,
+   "note": "Norio Sakai; 酒井 surname, reversed"
+  },
+  {
+   "name": "粂川 泰一",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Kumekawa Taiichi"
+  },
+  {
+   "name": "粢田 誠",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 15,
+   "note": "Rare 粢田 surname + Makoto given"
+  },
+  {
+   "name": "紋谷 暢男",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 39,
+   "note": "Monya Nobuo; 暢男 given"
+  },
+  {
+   "name": "純一 曽根田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 35,
+   "note": "Junichi Soneda; 純一 given, 曽根田 surname"
+  },
+  {
+   "name": "義之助 八十島",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 45,
+   "note": "Yasojima Yoshinosuke reversed; 八十島 surname"
+  },
+  {
+   "name": "義賢 栗栖",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 4,
+   "note": "Yoshikata Kurisu; 栗栖 surname"
+  },
+  {
+   "name": "羽原 富夫",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Habara Tomio; 富夫 male given"
+  },
+  {
+   "name": "耕治 笈田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 9,
+   "note": "Koji Oida; 笈田 Oida is the surname"
+  },
+  {
+   "name": "良夫 坪山",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 1,
+   "note": "Yoshio Tsuboyama; 良夫 given, 坪山 surname"
+  },
+  {
+   "name": "良隆 廣岡",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 25,
+   "note": "Yoshitaka Hirooka; 良隆 given, 廣岡 surname"
+  },
+  {
+   "name": "芝崎 千春",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Shibazaki Chiharu; 千春 given"
+  },
+  {
+   "name": "芝崎 智子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 32,
+   "note": "Shibazaki Tomoko; 芝崎 surname"
+  },
+  {
+   "name": "芳明 網田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 7,
+   "note": "Yoshiaki Amita; 網田 is the surname"
+  },
+  {
+   "name": "苣木 浅彦",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 27,
+   "note": "Chisaki Asahiko; 苣木 surname"
+  },
+  {
+   "name": "若宮 卓也",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Wakamiya Takuya; 卓也 given"
+  },
+  {
+   "name": "英雄 吉田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 24,
+   "note": "Hideo Yoshida; 吉田 surname"
+  },
+  {
+   "name": "菅俣 匠",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 32,
+   "note": "Sugamata Takumi; 匠 single-kanji given"
+  },
+  {
+   "name": "菅原 能生",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 40,
+   "note": "Sugawara Yoshio; 菅原 surname"
+  },
+  {
+   "name": "藤井 端恵",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 2,
+   "note": "Fujii; 藤井 common surname"
+  },
+  {
+   "name": "藤井 裕美子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Fujii Yumiko"
+  },
+  {
+   "name": "藤山 正直",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 4,
+   "note": "Fujiyama Masanao; 藤山 surname"
+  },
+  {
+   "name": "藤川 昌士",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Fujikawa Masashi; 昌士 given"
+  },
+  {
+   "name": "藤田 英俊",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 6,
+   "note": "Fujita Hidetoshi; 藤田 surname, 英俊 given"
+  },
+  {
+   "name": "西内 義雄",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 100,
+   "note": "Nishiuchi Yoshio; 義雄 given"
+  },
+  {
+   "name": "西原 定照",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 3,
+   "note": "Nishihara Sadateru; 西原 surname"
+  },
+  {
+   "name": "西山 幸伸",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 3,
+   "note": "Nishiyama Yukinobu; 西山 surname"
+  },
+  {
+   "name": "西川 靖ニ",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 2,
+   "note": "Nishikawa Seiji; 靖ニ given with katakana ni typo"
+  },
+  {
+   "name": "西本 哲也",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 81,
+   "note": "Nishimoto Tetsuya"
+  },
+  {
+   "name": "西田 留美可",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 7,
+   "note": "Nishida Rumika"
+  },
+  {
+   "name": "親 喜多崎",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 31,
+   "note": "Kitazaki Chikashi; 喜多崎 surname, 親 given"
+  },
+  {
+   "name": "謙二 小山田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 4,
+   "note": "Kenji Oyamada; 謙二 given, 小山田 surname"
+  },
+  {
+   "name": "讃井 絢子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 20,
+   "note": "Sanui Ayako; 讃井 surname"
+  },
+  {
+   "name": "谷 明勲",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 795,
+   "note": "Tani Akinori; 谷 surname"
+  },
+  {
+   "name": "谷水 正人",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 21,
+   "note": "Tanimizu Masato; 正人 given name"
+  },
+  {
+   "name": "貴仁 島田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 17,
+   "note": "Takahito Shimada; 島田 surname"
+  },
+  {
+   "name": "越智 裕紀",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 2,
+   "note": "Ochi Yuki; 越智 surname"
+  },
+  {
+   "name": "軸丸 武弘",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 3,
+   "note": "Jikumaru Takehiro; 軸丸 surname"
+  },
+  {
+   "name": "達哉 小豆畑",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 155,
+   "note": "Azuhata Tatsuya; 小豆畑 surname, 達哉 given"
+  },
+  {
+   "name": "遠藤 正之",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 29,
+   "note": "Endo Masayuki; 正之 given"
+  },
+  {
+   "name": "邦子 小田多井",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 5,
+   "note": "Kuniko Odatai; 小田多井 rare surname, 邦子 female given"
+  },
+  {
+   "name": "郁夫 高橋",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 18,
+   "note": "Takahashi Ikuo reversed; 郁夫 given"
+  },
+  {
+   "name": "郡山 辰巳",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 1,
+   "note": "Koriyama Tatsumi; 郡山 surname"
+  },
+  {
+   "name": "里内 美弥子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 158,
+   "note": "Satouchi Miyako; 美弥子 female given"
+  },
+  {
+   "name": "野口 弘道",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 27,
+   "note": "Noguchi Hiromichi; 野口 surname, 弘道 given"
+  },
+  {
+   "name": "金子 益尚",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Kaneko Masuhisa; 金子 surname"
+  },
+  {
+   "name": "鈴木 博",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 932,
+   "note": "Suzuki Hiroshi; 博 given"
+  },
+  {
+   "name": "鈴木 康之",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 854,
+   "note": "Suzuki Yasuyuki"
+  },
+  {
+   "name": "鈴木 棟一",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 566,
+   "note": "Suzuki Toichi; Suzuki surname"
+  },
+  {
+   "name": "鈴木 真ノ介",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 38,
+   "note": "Suzuki Shinnosuke; 鈴木 very common surname"
+  },
+  {
+   "name": "鈴木 花子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 0,
+   "note": "Suzuki Hanako"
+  },
+  {
+   "name": "鈴木 誠",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 942,
+   "note": "Suzuki Makoto; 誠 given"
+  },
+  {
+   "name": "鉾井 修一",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 818,
+   "note": "Hokoi Shuichi; 鉾井 surname, 修一 given"
+  },
+  {
+   "name": "鍬田 吉豊",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 3,
+   "note": "Kuwata Yoshitoyo; 鍬田 is a surname"
+  },
+  {
+   "name": "長尾 崇史夫",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Nagao surname; 崇史夫 given"
+  },
+  {
+   "name": "長橋 達郎",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 21,
+   "note": "Nagahashi Tatsuro"
+  },
+  {
+   "name": "長治 蒼平",
+   "family": "unsure",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "C: both given-plausible",
+   "occ": 1,
+   "note": "neither 長治 nor 蒼平 is a clear surname; order undecidable"
+  },
+  {
+   "name": "関口 博巨",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 11,
+   "note": "Sekiguchi Hirotaka; 関口 surname"
+  },
+  {
+   "name": "関口 頌一朗",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 5,
+   "note": "Sekiguchi Shoichiro; -ichiro given name"
+  },
+  {
+   "name": "関矢 信康",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 95,
+   "note": "Sekiya Nobuyasu; 関矢 surname"
+  },
+  {
+   "name": "阿川 佐和子",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 903,
+   "note": "Agawa Sawako; 佐和子 clearly female given name"
+  },
+  {
+   "name": "阿部 和厚",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 77,
+   "note": "Abe Kazuatsu; 阿部 surname"
+  },
+  {
+   "name": "隆 光沢",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 1,
+   "note": "Takashi Kozawa; 隆 single-kanji given"
+  },
+  {
+   "name": "隆太 雨宮",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 159,
+   "note": "Amemiya Ryuta reversed; 隆太 given"
+  },
+  {
+   "name": "隆文 田中",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 10,
+   "note": "Takafumi Tanaka; Tanaka surname"
+  },
+  {
+   "name": "隆明 大原",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 1,
+   "note": "Takaaki Ohara; 大原 surname"
+  },
+  {
+   "name": "雄大 吉田",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 9,
+   "note": "Yoshida Yudai reversed; 雄大 given"
+  },
+  {
+   "name": "雅 大塚",
+   "family": "second",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 1,
+   "note": "Masashi Otsuka; 大塚 surname, reversed"
+  },
+  {
+   "name": "雅章 平野",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 4,
+   "note": "Masaaki Hirano; 平野 surname"
+  },
+  {
+   "name": "雪山 行二",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 3,
+   "note": "Yukiyama Koji; 雪山 rare surname, 行二 clearly male given"
+  },
+  {
+   "name": "靖史 近藤",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 42,
+   "note": "Yasushi Kondo; Kondo is the surname, reversed"
+  },
+  {
+   "name": "飯井 俊行",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 53,
+   "note": "Meshii Toshiyuki; 飯井 surname"
+  },
+  {
+   "name": "飴山 実",
+   "family": "first",
+   "language": "japanese",
+   "judges": 3,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 29,
+   "note": "Ameyama Minoru; 実 single-kanji given"
+  },
+  {
+   "name": "首藤 晶",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 2,
+   "note": "Shuto Akira; 首藤 surname"
+  },
+  {
+   "name": "香織 吉住",
+   "family": "second",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "REV(t0 giv, t1 sur)",
+   "occ": 3,
+   "note": "Kaori Yoshizumi; 香織 given, 吉住 surname"
+  },
+  {
+   "name": "馬場 望",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 151,
+   "note": "Baba Nozomu"
+  },
+  {
+   "name": "高村 重明",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 7,
+   "note": "Takamura Shigeaki; 高村 surname"
+  },
+  {
+   "name": "高橋 三男",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 50,
+   "note": "Takahashi Mitsuo; 高橋 very common surname"
+  },
+  {
+   "name": "高橋 誠",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 976,
+   "note": "Takahashi Makoto; 誠 given"
+  },
+  {
+   "name": "高橋 道佳",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 6,
+   "note": "Takahashi Michika; 高橋 surname"
+  },
+  {
+   "name": "髙久 史麿",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "D: neither known",
+   "occ": 15,
+   "note": "Takaku Fumimaro; known physician"
+  },
+  {
+   "name": "鳥飼 正志",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "C: both given-plausible",
+   "occ": 29,
+   "note": "Torikai Masashi; 鳥飼 surname"
+  },
+  {
+   "name": "鹿島 茂",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 872,
+   "note": "Kashima Shigeru; 茂 given"
+  },
+  {
+   "name": "黒沢 武",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "FLIP(shipped)",
+   "occ": 1,
+   "note": "Kurosawa Takeshi; 黒沢 surname"
+  },
+  {
+   "name": "黒澤 明",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "attention_check",
+   "occ": 36,
+   "note": "Kurosawa Akira"
+  },
+  {
+   "name": "黒田 規敬",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 208,
+   "note": "Kuroda Noriyoshi; 黒田 surname"
+  },
+  {
+   "name": "齋藤 幹朗",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "A: t0 sur, t1 unknown",
+   "occ": 1,
+   "note": "Saito Mikio; 齋藤 surname"
+  },
+  {
+   "name": "龍原 毅",
+   "family": "first",
+   "language": "japanese",
+   "judges": 1,
+   "unanimous": true,
+   "class": "B: t1 giv, t0 unknown",
+   "occ": 4,
+   "note": "Tatsuhara Takeshi; 毅 is a given name"
+  }
+ ]
+}

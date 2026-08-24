@@ -20,13 +20,48 @@ from functools import lru_cache
 from typing import TYPE_CHECKING
 
 # Import at module level to avoid repeated imports in hot paths
-from sinonym.chinese_names_data import COMPOUND_VARIANTS, HIGH_CONFIDENCE_ANCHORS
+from sinonym.chinese_names_data import COMPOUND_VARIANTS, HIGH_CONFIDENCE_ANCHORS, REVIEWED_ATOMIC_GIVEN_FORMS
+from sinonym.name_punctuation import APOSTROPHE_LIKE
 
 if TYPE_CHECKING:
     from sinonym.services.normalization import CompoundMetadata
 
 MIN_SPLIT_TOKEN_LENGTH = 3
 MAX_UNBALANCED_SPLIT_REST_LENGTH = 4
+MIN_SPLIT_PART_LENGTH = 2
+
+
+def _single_letter_side(a: str, b: str) -> str | None:
+    """Which end of a candidate split is a lone letter, if either.
+
+    A one-character part is peeled into a middle initial by the formatter, so an unguarded
+    split invents an initial the input never contained. The two ends need opposite handling:
+
+    - `leading` (`Arun` -> `A`+`Run`, `Eran` -> `E`+`ran`): the letter is not a syllable of a
+      Chinese given name, and peeling it takes the given name's first initial with it, which
+      moves the cluster block key. Refuse outright — falling through to the next position only
+      produces a weaker reading (`Er`+`an`).
+    - `trailing` (`ChangE` -> `Chang`+`E`, `QingE` -> `Qing`+`E`): at an author-supplied boundary
+      the letter IS a syllable, 娥. Keep the boundary but emit one hyphenated given name
+      (`Chang-E`) so the formatter reads it as a syllable rather than an initial. With no such
+      boundary the reading is undecidable — `Yuee` is 月娥 and `Duane` is not, and nothing in the
+      token says which — so the split is taken and the letter reported as a middle initial. That
+      is wrong on the 娥 names, but it keeps the surname and the given name's first initial, so
+      the cluster block key is unaffected. Refusing it instead moves the surname into the wrong
+      field for surname-first input, which is the worse error.
+
+    Genuine initials arrive as standalone tokens (`Wei Q. Zhang`) and never reach here.
+    """
+    if len(a) < MIN_SPLIT_PART_LENGTH:
+        return "leading"
+    if len(b) < MIN_SPLIT_PART_LENGTH:
+        return "trailing"
+    return None
+
+
+def _joined_given(a: str, b: str, side: str | None) -> list[str]:
+    """Return the split, collapsing a trailing lone letter into one hyphenated given name."""
+    return [f"{a}-{b}"] if side == "trailing" else [a, b]
 
 
 class StringManipulationUtils:
@@ -107,7 +142,7 @@ class StringManipulationUtils:
     @staticmethod
     def _is_valid_component_pair(norm_a: str, norm_b: str, data_context, orig_a: str = None, orig_b: str = None) -> bool:
         """Check if both parts are valid plausible components.
-        
+
         Tries both original and normalized forms to handle cases where
         normalization changes valid components (e.g., kun -> gun).
         """
@@ -178,12 +213,14 @@ class StringManipulationUtils:
 
         return (
             # Don't split known surnames
-            is_surname or
+            is_surname
+            or
             # Don't split HIGH_CONFIDENCE_ANCHORS - they should remain intact
-            tok_normalized in HIGH_CONFIDENCE_ANCHORS or
+            tok_normalized in HIGH_CONFIDENCE_ANCHORS
+            or
             # Don't split existing valid Chinese given name components
-            data_context.is_given_name(tok_normalized) or
-            data_context.is_given_name(original_lower)
+            data_context.is_given_name(tok_normalized)
+            or data_context.is_given_name(original_lower)
         )
 
     @staticmethod
@@ -298,13 +335,35 @@ class StringManipulationUtils:
         # attempt alternative splits that cross the explicit boundary.
         if "-" in token and token.count("-") == 1:
             a, b = token.split("-")
+            side = _single_letter_side(a, b)
+            if side == "leading":
+                return None
             # Optimized normalization using helper
             norm_a, norm_b = StringManipulationUtils._get_normalized_parts(a, b, normalized_cache, normalizer)
             # Component validation with fallback to original forms
             if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
-                return [a, b]
+                return _joined_given(a, b, side)
             # Respect the explicit hyphen boundary; do not try other splits
             return None
+
+        # Pattern A2: an apostrophe carries the same syllable-boundary evidence as a hyphen.
+        # Honor that boundary when both sides are valid instead of deleting it and accepting
+        # an unrelated positional split such as `Xian` + `gan`; the formatter retains the
+        # authored apostrophe rather than changing it to a hyphen.
+        apostrophes = [index for index, char in enumerate(token) if char in APOSTROPHE_LIKE]
+        if len(apostrophes) == 1:
+            a, b = token[: apostrophes[0]], token[apostrophes[0] + 1 :]
+            if a and b:
+                side = _single_letter_side(a, b)
+                if side != "leading":
+                    norm_a, norm_b = StringManipulationUtils._get_normalized_parts(a, b, normalized_cache, normalizer)
+                    if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
+                        return _joined_given(a, b, side)
+                    if side == "trailing":
+                        return None
+            # An apostrophe can instead be a Wade-Giles aspiration marker (`Ch'inghua`).
+            # Preserve the existing transliteration and positional-split path when the
+            # author-supplied location is not itself a valid boundary.
 
         # Pattern 1: Repeated syllable patterns (e.g., "huihui" → ["hui", "hui"]) — only when no hyphen present
         raw = token.translate(config.hyphens_apostrophes_tr)
@@ -325,12 +384,24 @@ class StringManipulationUtils:
 
         # Pattern 3: CamelCase detection (e.g., "MingHua" → ["Ming", "Hua"]) — only when no hyphen present
         camel = config.camel_case_pattern.findall(raw)
-        if len(camel) == 2:
+        camel_side = _single_letter_side(camel[0], camel[1]) if len(camel) == 2 else None
+        # A one-character FIRST part is a regex artifact of an all-caps prefix, not an author
+        # boundary: `LIshan` yields ['L', 'Ishan'] when the real reading is `LI`+`shan`. Skip the
+        # camel boundary and let the positional scan decide; it handles a genuine leading lone
+        # letter (`Ahao`) on its own.
+        if len(camel) == 2 and camel_side != "leading":
             # Optimized normalization using helper
             norm_a, norm_b = StringManipulationUtils._get_normalized_parts(camel[0], camel[1], normalized_cache, normalizer)
             # Inline component validation for performance
             if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, camel[0], camel[1]):
-                return camel
+                return _joined_given(camel[0], camel[1], camel_side)
+
+        # A reviewed complete regional given name is not evidence for an
+        # inferred pinyin boundary. Explicit hyphens, apostrophes, and authored
+        # CamelCase were handled above and retain precedence. Do not cache this
+        # refusal: the cache is case-insensitive, while CamelCase is evidence.
+        if normalizer.norm_light(token) in REVIEWED_ATOMIC_GIVEN_FORMS:
+            return None
 
         # ================================================================
         # TIERED CONFIDENCE VALIDATION: Brute-force split with quality ranking
@@ -345,10 +416,21 @@ class StringManipulationUtils:
         for i in range(1, raw_len):
             a, b = raw[:i], raw[i:]
 
-            # Short-circuit: skip very unbalanced splits (optimize for common balanced cases)
-            if len(a) == 1 and len(b) > 4:  # Very unbalanced split (e.g., "W" + "eiming")
+            # A lone letter against a long rest is not a boundary at all: `Cheung`/`Leung`/`Chuan`
+            # are whole syllables, so `Cheunga` is not `Cheung`+`a`.
+            if len(a) == 1 and len(b) > MAX_UNBALANCED_SPLIT_REST_LENGTH:
                 continue
-            if len(b) == 1 and len(a) > 4:  # Very unbalanced split (e.g., "Weimi" + "g")
+            if len(b) == 1 and len(a) > MAX_UNBALANCED_SPLIT_REST_LENGTH:
+                continue
+
+            side = _single_letter_side(a, b)
+
+            # ``Ng`` is an atomic Cantonese surname spelling, not evidence for
+            # an inferred boundary inside another author-supplied token. Its
+            # whole-token alias (``ng -> wu``) otherwise turns Vietnamese
+            # ``Huong`` into the invented ``Huo-Ng``. Explicit boundaries are
+            # handled above and remain eligible for regional normalization.
+            if a.casefold() == "ng" or b.casefold() == "ng":
                 continue
 
             # Inline normalization for hot path performance
@@ -373,19 +455,26 @@ class StringManipulationUtils:
             is_b_anchor = norm_b in HIGH_CONFIDENCE_ANCHORS
 
             # Gold Standard (Anchor + Anchor)
-            if is_a_anchor and is_b_anchor:
-                return [a, b]
+            accepted = is_a_anchor and is_b_anchor
 
-            # Silver Standard (Anchor + Plausible)
-            if is_a_anchor or is_b_anchor:
-                # For Silver Standard, always check cultural plausibility regardless of length
-                if StringManipulationUtils.is_plausible_chinese_split(norm_a, norm_b, data_context, config):
-                    return [a, b]
+            # Silver Standard (Anchor + Plausible) / Bronze (Plausible + Plausible, length >= 4)
+            if not accepted and (is_a_anchor or is_b_anchor or raw_len >= 4):
+                accepted = StringManipulationUtils.is_plausible_chinese_split(norm_a, norm_b, data_context, config)
 
-            # Bronze Standard (Plausible + Plausible) - requires length >= 4
-            elif raw_len >= 4:
-                if StringManipulationUtils.is_plausible_chinese_split(norm_a, norm_b, data_context, config):
-                    return [a, b]
+            if not accepted:
+                continue
+
+            if side == "leading":
+                # This position is the boundary the token indicates, and it would peel a leading
+                # letter that is not a syllable, taking the given name's first initial with it
+                # (`Arun` -> `Run`, moving the cluster block key from `a rao` to `r rao`). Later
+                # positions are by construction weaker readings, so refuse rather than degrade to
+                # one (`Eran` -> `Er`+`an`). Deliberately not cached: the decision depends on the
+                # token's case while the cache key is lowercased, so caching `weia` here would
+                # also decline `WeiA`, whose camelCase boundary makes the letter a syllable.
+                return None
+
+            return [a, b]
 
         # No valid split found - cache this result to avoid future expensive attempts
         thread_cache.add(token_lower)
@@ -620,8 +709,7 @@ class StringManipulationUtils:
         if "-" in part:
             sub_parts = part.split("-")
             capitalized_parts = [
-                StringManipulationUtils._normalize_and_capitalize_single_part(sub_part)
-                for sub_part in sub_parts
+                StringManipulationUtils._normalize_and_capitalize_single_part(sub_part) for sub_part in sub_parts
             ]
             return "-".join(capitalized_parts)
 

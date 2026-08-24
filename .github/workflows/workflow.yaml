@@ -48,22 +48,20 @@ jobs:
       - name: Detect version change (pyproject.toml)
         id: decide
         shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
-          BEFORE_SHA="${{ github.event.before }}"
           echo "BEFORE_SHA=$BEFORE_SHA"
-          python - <<'PY'
+          uv run --no-project python - <<'PY'
           import os, subprocess, tomllib
           out = open(os.environ["GITHUB_OUTPUT"], "a")
           with open("pyproject.toml","rb") as f:
               new_version = tomllib.load(f)["project"]["version"]
           old_version = ""
-          before = os.environ.get("BEFORE_SHA")
+          before = os.environ["BEFORE_SHA"]
           if before and before != "0000000000000000000000000000000000000000":
-              try:
-                  blob = subprocess.check_output(["git","show",f"{before}:pyproject.toml"])
-                  old_version = tomllib.loads(blob.decode())["project"]["version"]
-              except subprocess.CalledProcessError:
-                  pass
+              blob = subprocess.check_output(["git","show",f"{before}:pyproject.toml"])
+              old_version = tomllib.loads(blob.decode())["project"]["version"]
           should = str(bool(new_version and new_version != old_version)).lower()
           print(f"Old version: {old_version}")
           print(f"New version: {new_version}")
@@ -92,28 +90,37 @@ jobs:
       - name: Smoke test import from sdist
         if: steps.decide.outputs.should_publish == 'true'
         run: |
-          uv pip install --system dist/*.tar.gz --force-reinstall
+          artifact="$(realpath dist/*.tar.gz)"
           cd /tmp
-          python -c "import sinonym; print('✓ sdist import OK:', sinonym.__file__)"
+          uv run --no-project --isolated --with "$artifact" python - <<'PY'
+          import importlib.util
+
+          from sinonym import ChineseNameDetector
+
+          for module in ("joblib", "requests", "sklearn", "scipy", "skops"):
+              assert importlib.util.find_spec(module) is None, module
+          assert ChineseNameDetector().normalize_name("\u738b\u4f1f").result == "Wei Wang"
+          print("sdist runtime smoke passed without training dependencies")
+          PY
 
       - name: Smoke test import from wheel + resources
         if: steps.decide.outputs.should_publish == 'true'
         run: |
-          uv pip install --system dist/*.whl --force-reinstall
+          artifact="$(realpath dist/*.whl)"
           cd /tmp
-          python - <<'PY'
-          import sys, sinonym, pypinyin
-          print("✓ Wheel import OK")
-          print("PY:", sys.executable)
-          print("sinonym from:", sinonym.__file__)
-          print("pypinyin OK:", pypinyin.__version__)
-          try:
-              import importlib.resources as ir
-              files = list((ir.files("sinonym.data")).iterdir())
-              print("✓ data files present:", [f.name for f in files][:8], "…")
-          except Exception as e:
-              print("! data access failed:", e)
-              raise
+          uv run --no-project --isolated --with "$artifact" python - <<'PY'
+          import importlib.resources as resources
+          import importlib.util
+
+          from sinonym import ChineseNameDetector
+
+          for module in ("joblib", "requests", "sklearn", "scipy", "skops"):
+              assert importlib.util.find_spec(module) is None, module
+          data_files = {path.name for path in resources.files("sinonym.data").iterdir()}
+          assert "chinese_japanese_classifier.skops" in data_files
+          assert "chinese_japanese_classifier.joblib" not in data_files
+          assert ChineseNameDetector().normalize_name("\u738b\u4f1f").result == "Wei Wang"
+          print("wheel runtime smoke passed without training dependencies")
           PY
 
       - uses: actions/upload-artifact@v4

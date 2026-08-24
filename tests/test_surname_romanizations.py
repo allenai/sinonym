@@ -211,6 +211,45 @@ def test_surname_resolver_parser_answers_match_current_parser_policy(detector):
     assert not resolver.parser_is_wade_giles_initial_remapped_surname("Chien")
 
 
+def test_surname_resolver_parser_cache_is_bounded_and_output_neutral(detector):
+    """The instance cache preserves parser answers and has a fixed upper bound."""
+    data = detector._data
+    resolver = SurnameResolver(data, detector._normalizer)
+    cases = [
+        (("Fai",), "hui"),
+        (("Chien",), "chien"),
+        (("Cha",), "zha"),
+        (("Kuang",), "kuang"),
+        (("Ou", "Yang"), "ou yang"),
+        (("zzqq",), "zzqq"),
+    ]
+
+    for surname_tokens, expected_key in cases:
+        expected = (
+            data.get_surname_freq(expected_key),
+            data.get_surname_logp(expected_key, -123.0),
+            data.get_surname_rank(expected_key, -1.0),
+        )
+        for tokens in (surname_tokens, list(surname_tokens)):
+            assert (
+                resolver.parser_frequency(tokens),
+                resolver.parser_logp(tokens, -123.0),
+                resolver.parser_rank(tokens, -1.0),
+            ) == expected
+
+    cache_info = resolver._cached_parser_key.cache_info()
+    assert cache_info.maxsize == 4_096
+    assert cache_info.currsize == len(cases)
+    assert cache_info.hits > cache_info.misses
+
+    second_resolver = SurnameResolver(data, detector._normalizer)
+    assert second_resolver._cached_parser_key.cache_info().currsize == 0
+    for index in range(cache_info.maxsize + 1):
+        resolver.parser_frequency((f"unknown-cache-key-{index}",))
+    assert resolver._cached_parser_key.cache_info().currsize == cache_info.maxsize
+    assert second_resolver._cached_parser_key.cache_info().currsize == 0
+
+
 def test_surname_resolver_evidence_answers_match_current_evidence_policy(detector):
     """Resolver evidence answers match as-written batch/routing evidence semantics."""
     data = detector._data

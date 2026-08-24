@@ -3,8 +3,6 @@ Resource loading helpers for package data files.
 
 This module provides utilities to access data files included with the sinonym package
 using importlib.resources, ensuring compatibility across all installation methods.
-
-Includes helpers to load ML artifacts persisted with joblib or skops.
 """
 
 from __future__ import annotations
@@ -36,37 +34,6 @@ def read_bytes(name: str) -> bytes:
 def read_json(name: str, encoding: str = "utf-8") -> Any:
     """Read and parse a JSON file from package resources."""
     return json.loads(read_text(name, encoding=encoding))
-
-
-def load_joblib(name: str):
-    """Load a joblib model from package resources."""
-    import joblib
-
-    with open_resource_path(name) as path:
-        return joblib.load(path)
-
-
-def load_skops(name: str, trusted: list[str] | None = None):
-    """Load a skops-serialized model from package resources.
-
-    skops>=0.10 requires an explicit list of trusted types instead of a boolean.
-    We derive the list via get_untrusted_types() and pass it back to load(),
-    effectively trusting our own artifact. Callers can override by passing a
-    specific ``trusted`` list.
-    """
-    from skops.io import get_untrusted_types, load
-
-    with open_resource_path(name) as path:
-        if trusted is None:
-            # Support different skops versions: keyword-only, positional, or no-arg.
-            try:
-                trusted = get_untrusted_types(file=path)  # skops>=0.10 keyword-only
-            except TypeError:
-                try:
-                    trusted = get_untrusted_types(path)  # older positional signature
-                except TypeError:
-                    trusted = get_untrusted_types()  # no-arg fallback
-        return load(path, trusted=trusted)
 
 
 @contextmanager

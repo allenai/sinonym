@@ -49,18 +49,6 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Gao Wei",
     ),
     (
-        "tests.test_basic_chinese_names::test_basic_chinese_names[Lu Xun-expected75]",
-        "Lu Xun",
-        "Xun Lu",
-        "Lu Xun",
-    ),
-    (
-        "tests.test_basic_chinese_names::test_basic_chinese_names[Zhou Xun-expected109]",
-        "Zhou Xun",
-        "Xun Zhou",
-        "Zhou Xun",
-    ),
-    (
         "tests.test_misc::test_misc_chinese_names[Jin Hua-expected13]",
         "Jin Hua",
         "Hua Jin",
@@ -109,7 +97,6 @@ EXPECTED_NORMALIZED_NAME_FAILURES = (
         "Xi Zhao",
     ),
 )
-EXPECTED_FAILURES = len(EXPECTED_NORMALIZED_NAME_FAILURES)
 EXPECTED_FAILURE_SIGNATURES = tuple(
     (
         nodeid,
@@ -118,7 +105,7 @@ EXPECTED_FAILURE_SIGNATURES = tuple(
     )
     for nodeid, raw_name, expected, actual in EXPECTED_NORMALIZED_NAME_FAILURES
 )
-EXPECTED_FAILURE_NODEIDS = tuple(nodeid for nodeid, *_ in EXPECTED_NORMALIZED_NAME_FAILURES)
+EXPECTED_FAILURES = len(EXPECTED_FAILURE_SIGNATURES)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

@@ -19,6 +19,7 @@ import os
 import pytest
 
 from sinonym import ChineseNameDetector
+from sinonym.timo.interface import Predictor, PredictorConfig
 
 
 @pytest.fixture(scope="session")
@@ -55,6 +56,16 @@ def detector():
         weights = [float(x) for x in parsed]
 
     return ChineseNameDetector(weights=weights)
+
+
+@pytest.fixture(scope="session")
+def predictor() -> Predictor:
+    """Session-scoped deterministic in-process TIMO predictor.
+
+    The predictor is stateless after initialization; sharing one instance
+    avoids repeating detector initialization in every TIMO test module.
+    """
+    return Predictor(PredictorConfig(parallel="never"), ".")
 
 
 @pytest.fixture(scope="session")

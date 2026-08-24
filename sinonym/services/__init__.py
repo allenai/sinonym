@@ -15,6 +15,13 @@ from sinonym.services.name_lookup import SurnameResolver
 from sinonym.services.non_person import NonPersonInputDetectionService
 from sinonym.services.normalization import LazyNormalizationMap, NormalizationService, NormalizedInput
 from sinonym.services.parsing import NameParsingService
+from sinonym.services.person_name_normalization import (
+    DroppedNameToken,
+    DropReason,
+    PersonNameNormalizationResult,
+    PersonNameNormalizationService,
+    PersonNameOutcome,
+)
 
 
 class ServiceContext:
@@ -37,6 +44,8 @@ __all__ = [
     "CacheInfo",
     "ChineseNameConfig",
     "DataInitializationService",
+    "DropReason",
+    "DroppedNameToken",
     "EthnicityClassificationService",
     "LazyNormalizationMap",
     # Data structures
@@ -47,6 +56,9 @@ __all__ = [
     "NormalizationService",
     "NormalizedInput",
     "ParseResult",
+    "PersonNameNormalizationResult",
+    "PersonNameNormalizationService",
+    "PersonNameOutcome",
     # Services
     "PinyinCacheService",
     "ServiceContext",

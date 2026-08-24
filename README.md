@@ -2,7 +2,10 @@
 
 *A Chinese name detection and normalization library.*
 
-Sinonym is a Python library designed to accurately detect and normalize Chinese names across various romanization systems. It filters out non-Chinese names (such as Western, Korean, Vietnamese, and Japanese names).
+Sinonym detects and normalizes Chinese names across several romanization
+systems. Its legacy result fields distinguish Chinese from non-Chinese names;
+the canonical APIs can also normalize recoverable person names from other
+cultures, and TIMO provides final fields for writer integrations.
 
 This was mostly written with Claude Code with extensive oversight from me... Sorry if the actual code is too AI-ish. It's fast, well-tested, and works pretty well.
 
@@ -39,10 +42,12 @@ Formatted Output
     *   The output is consistently formatted in Title Case, with the first letter of the surname and each part of the given name capitalized.
     *   **Input:** `"DAN CHEN"` → **Output:** `"Dan Chen"`
 
-*   **Given Names are Hyphenated**
-    *   Given names composed of multiple syllables are joined by a hyphen. This applies to standard names, names with initials, and reduplicated (repeated) names.
+*   **Chinese Given-Name Boundaries are Preserved**
+    *   Recognized Chinese given names composed of multiple fully written syllables are joined by a hyphen when the boundary is inferred or authored as a hyphen. An authored apostrophe remains an ASCII apostrophe while the parsed component lineage stays split. An all-initial Chinese given span remains one compound first name, with every true initial rendered with a period. In a mixed span, fully written syllables form the given name and standalone initials occupy the middle-name field.
     *   **Input (Standard):** `"Wang Li Ming"` → **Output:** `"Li-Ming Wang"`
-    *   **Input (Initials):** `"Y. Z. Wei"` → **Output:** `"Y-Z Wei"`
+    *   **Input (Apostrophe):** `"Zheng Cui’e"` → **Output:** `"Cui'e Zheng"`
+    *   **Input (Initials):** `"Y. Z. Wei"` → **Output:** `"Y.-Z. Wei"`
+    *   **Input (Mixed):** `"Wei M. Wang"` → **Output:** `"Wei M. Wang"` (`given_name="Wei"`, `middle_name="M."`)
     *   **Input (Reduplicated):** `"Chen Linlin"` → **Output:** `"Lin-Lin Chen"`
 
 ### 2. Name Component Handling
@@ -92,8 +97,8 @@ Formatted Output
 
 ### 4. Cultural & Regional Specificity
 
-*   **Rejects Non-Chinese Names**
-    *   The library uses advanced heuristics and machine learning to reject names from other cultures to avoid false positives.
+*   **Keeps Chinese Recognition Conservative**
+    *   The legacy `success`, `result`, and `parsed` fields reject names that lack Chinese evidence, avoiding false positives. Recoverable people can still have a normalized `canonical_name`.
     *   **Western:** Rejects `"John Smith"` and even `"Christian Wong"`.
     *   **Korean:** Rejects `"Kim Min-jun"`.
     *   **Vietnamese:** Rejects `"Nguyen Van Anh"`.
@@ -103,10 +108,6 @@ Formatted Output
     *   The library recognizes and preserves different English romanization systems.
     *   **Cantonese:** Input `"Chan Tai Man"` becomes `"Tai-Man Chan"` (not `"Chen"`).
     *   **Wade-Giles:** Input `"Ts'ao Ming"` becomes `"Ming Ts'ao"` (preserves apostrophe).
-
-*   **Corrects for Pinyin Library Inconsistencies**
-    *   It contains an internal mapping to fix cases where the underlying `pypinyin` library's output doesn't match the most common romanization for a surname.
-    *   *Example:* The character `曾` is converted by `pypinyin` to `Zeng`, but this library corrects it to the expected `Zeng`.
 
 ### 5. Performance
 
@@ -119,7 +120,7 @@ Sinonym processes names through a multi-stage pipeline designed for high accurac
 
 1.  **Input Preprocessing**: The input string is cleaned and normalized. This includes handling mixed scripts (e.g., "张 Wei") and standardizing different romanization variants.
 2.  **All-Chinese Detection**: The system detects inputs written entirely in Chinese characters and applies Han-to-Pinyin conversion with surname-first ordering preferences.
-3.  **Ethnicity Classification**: The name is analyzed to filter out non-Chinese names. This stage uses linguistic patterns and machine learning to identify and reject Western, Korean, Vietnamese, and Japanese names. For all-Chinese character inputs, a trained ML classifier (99.5% accuracy) determines if names like "山田太郎" are Japanese vs Chinese.
+3.  **Chinese Recognition**: Linguistic patterns and machine learning keep Western, Korean, Vietnamese, and Japanese names out of the legacy Chinese result fields. For all-Chinese character inputs, a trained ML classifier (99.5% accuracy) distinguishes names such as "山田太郎" from Chinese names. The all-person canonical path can still normalize recoverable non-Chinese people.
 4.  **Probabilistic Parsing**: The system identifies potential surname and given name boundaries by leveraging frequency data, which helps in accurately distinguishing between a surname and a given name. For all-Chinese inputs, it applies a surname-first bonus while still considering frequency data.
 5.  **Compound Name Splitting**: For names with fused given names (e.g., "Weiming"), a tiered confidence system is used to correctly split them into their constituent parts (e.g., "Wei-Ming").
 6.  **Output Formatting**: The final output is standardized to a "Given-Name Surname" format (e.g., "Wei Zhang").
@@ -165,76 +166,34 @@ Sinonym includes a ML-based Japanese vs Chinese name classifier for enhanced acc
 
 ## Quick Start
 
-Here's a simple example of how to use Sinonym to detect and normalize a Chinese name:
+The same detector supports legacy Chinese recognition, all-person canonical
+normalization, and batch context:
 
 ```python
 from sinonym.detector import ChineseNameDetector
 
-# Initialize the detector
 detector = ChineseNameDetector()
 
-# --- Example 1: A simple Chinese name ---
-result = detector.normalize_name("Li Wei")
-if result.success:
-    print(f"Normalized Name: {result.result}")
-    # Expected Output: Normalized Name: Wei Li
+# Legacy Chinese recognition and formatting.
+chinese = detector.normalize_name("Li Wei")
+assert chinese.success
+print(chinese.result)  # Wei Li
 
-# --- Example 2: A compound given name ---
-result = detector.normalize_name("Wang Weiming")
-if result.success:
-    print(f"Normalized Name: {result.result}")
-    # Expected Output: Normalized Name: Wei-Ming Wang
+compound = detector.normalize_name("Wang Weiming")
+print(compound.result)  # Wei-Ming Wang
 
-# --- Example 3: An all-Chinese character name ---
-result = detector.normalize_name("巩俐")
-if result.success:
-    print(f"Normalized Name: {result.result}")
-    # Expected Output: Normalized Name: Li Gong
+# A non-Chinese person fails the legacy Chinese check but still gets a
+# canonical all-person representation.
+western = detector.normalize_name("John Smith")
+assert not western.success
+print(western.canonical_name.text)  # John Smith
 
-# --- Example 4: A non-Chinese name ---
-result = detector.normalize_name("John Smith")
-if not result.success:
-    print(f"Error: {result.error_message}")
-    # Expected Output: Error: name not recognised as Chinese
-
-# --- Example 5: Japanese name in Chinese characters (ML-enhanced detection) ---
-result = detector.normalize_name("山田太郎")
-if not result.success:
-    print(f"Error: {result.error_message}")
-    # Expected Output: Error: Japanese name detected by ML classifier
-
-# --- Example 6: Batch processing of academic author list ---
-author_list = ["Zhang Wei", "Li Ming", "Wang Xiaoli", "Liu Jiaming", "Feng Cha"]
-batch_result = detector.analyze_name_batch(author_list)
-print(f"Format detected: {batch_result.format_pattern.dominant_format}")
-print(f"Confidence: {batch_result.format_pattern.confidence:.1%}")
-print(f"Decision confidence: {batch_result.format_pattern.decision_confidence:.1%}")
-# Expected Output:
-# Format detected: NameFormat.SURNAME_FIRST
-# Confidence: 80.0%
-# Decision confidence: 80.0%
-
-for i, result in enumerate(batch_result.results):
-    if result.success:
-        print(f"{author_list[i]} → {result.result}")
-# Expected Output: Zhang Wei → Wei Zhang, Li Ming → Ming Li, etc.
-
-# --- Example 7: Quick format detection for data validation ---
-unknown_format_list = ["Wei Zhang", "Ming Li", "Xiaoli Wang"]
-pattern = detector.detect_batch_format(unknown_format_list)
-if pattern.threshold_met:
-    print(f"Consistent {pattern.dominant_format} formatting detected")
-    print(f"Safe to process as batch with {pattern.decision_confidence:.1%} decision confidence")
-else:
-    print("Mixed formatting detected - process individually")
-
-  # --- Example 8: Simple batch processing for data cleanup ---
-  messy_names = ["Li, Wei", "Zhang.Ming", "Wang Xiaoli"]
-  clean_results = detector.process_name_batch(messy_names)
-  for original, clean in zip(messy_names, clean_results):
-      if clean.success:
-          print(f"Cleaned: '{original}' → '{clean.result}'")
-      # Expected Output: Li, Wei → Wei Li, Zhang.Ming → Ming Zhang, etc.
+# Related names can vote on one shared input convention.
+authors = ["Zhang Wei", "Li Ming", "Wang Xiaoli"]
+batch = detector.analyze_name_batch(authors)
+print(batch.format_pattern.dominant_format.value)  # surname_first
+print([result.result for result in batch.results])
+# ['Wei Zhang', 'Ming Li', 'Xiao-Li Wang']
 ```
 
 ## Parse Results
@@ -246,11 +205,151 @@ When you call `normalize_name`, you get a `ParseResult` with helpful structured 
 - `parsed`: A `ParsedName` with normalized components in output order
   - `surname`, `given_name`: component strings as in `result`
   - `surname_tokens`, `given_tokens`: normalized, capitalized tokens used to form components
-  - `middle_tokens`: trailing single-letter initials extracted from given name, if present
+  - `middle_tokens`: normalized middle components, including standalone initials collected from any source position
   - `order`: component order descriptor, typically `["given", "middle", "surname"]`
 - `parsed_original_order`: A `ParsedName` with the same semantic `surname` and
   `given_name` labels as `parsed`, plus an `order` list that records how those
   components appeared in the input.
+- `canonical_name`: an all-person canonical representation. This is populated
+  for Chinese and non-Chinese people, while the legacy `success`, `result`, and
+  `parsed` fields remain Chinese-recognition fields.
+
+### Canonical names for all people
+
+`canonical_name.text` is the fully normalized display form. Its `normalized`
+components expose `given_name`, `middle_name`, `surname`, and `suffix`, plus
+immutable token tuples and their display order. Name dashes and apostrophes are
+standardized to ASCII `-` and `'`; obvious titles and credentials are removed;
+and true generational suffixes are kept in the suffix field.
+
+Periods are treated by role and shape rather than removed globally. Known
+leading titles and trailing credentials are consumed; generational suffixes are
+canonicalized; every true initial is rendered as an uppercase letter followed
+by one period; transliteration abbreviations such as ``M.Yu.`` retain their
+mixed casing; and a terminal full stop on an ordinary word is removed as
+sentence punctuation. Dotted, fused-dotted, and spaced initial sequences are
+semantically equivalent. An undelimited token such as ``AD`` is not split
+without separate compact-initial evidence.
+
+The culture-specific field policy is:
+
+- On the non-Chinese path, the first unbound initial is the given name and all
+  later initials are middle names. A fully written given name remains given, and
+  following initials are middle names when a full surname remains. If comma-free
+  input contains only `Full I I`, capitalization or periods alone do not justify
+  reordering: the source order is retained, with the final initial serving as the
+  required surname floor. An explicit comma, or a structured record whose only
+  populated name component is `last_name`, supplies stronger surname-first evidence.
+- On the Chinese path, an all-initial given span is one hyphenated compound
+  given name. In a mixed span, fully written Chinese syllables form the
+  hyphenated given name and every standalone initial is placed in the middle
+  field, regardless of its source position.
+- Explicit hyphens bind their parts and remain hyphens; explicit apostrophes
+  remain ASCII apostrophes while preserving split-token lineage. Native-script
+  alignment and reviewed identity evidence override shape-based initial inference,
+  so a proven one-letter syllable remains undotted.
+
+```python
+western = detector.normalize_name("Dr. Ana–Maria O’Neill PhD")
+assert not western.success  # unchanged: not recognized as Chinese
+assert western.parsed is None
+assert western.canonical_name.text == "Ana-Maria O'Neill"
+assert western.canonical_name.normalized.given_name == "Ana-Maria"
+assert western.canonical_name.normalized.surname == "O'Neill"
+
+suffixed = detector.normalize_person_name("Steve Blando IV")
+assert suffixed.text == "Steve Blando IV"
+assert suffixed.normalized.suffix == "IV"
+
+repaired = detector.normalize_person_name_components(
+    first_name="dr steve",
+    middle_name="marsh",
+    last_name="phd",
+)
+assert repaired.text == "Steve Marsh"
+assert repaired.normalized.given_name == "Steve"
+assert repaired.normalized.middle_name == ""
+assert repaired.normalized.surname == "Marsh"
+```
+
+### Canonical output contract
+
+`normalize_name` keeps its legacy Chinese-recognition fields (`success`,
+`result`, `parsed`, and `error_message`) and attaches `canonical_name` for any
+recoverable person. Consumers that write normalized author fields should use
+`canonical_name.normalized`; `canonical_name.source` records source spelling
+and supplied component order for lineage, not an alternative normalized
+answer.
+
+`normalize_person_name_components` accepts structured first/middle/last input,
+preserves that input in `canonical_name.source`, and may update
+`canonical_name.normalized` through the same culture-specific initial and
+East Asian routing policies used for raw names. Unsupported inputs keep the
+generic canonical assignment; invalid and non-person inputs have no canonical
+name. Reviewed source-only metadata, credential rows, and last-field-only Han
+institutions are rejected at this structured boundary. Raw Hangul surfaces
+whose every token has a reviewed organization suffix are likewise non-person
+inputs; ordinary Hangul person names are unaffected.
+
+Optional detector parsing weights must contain eight or nine finite real
+numbers (booleans are not coefficients). Eight-element vectors receive the
+documented ninth default. Invalid vectors raise during construction, before
+service initialization. A custom `ChineseNameConfig.min_tokens_required` is a
+lower bound and must be an integer of at least two.
+
+Initials do not themselves establish that a name is Chinese. In particular, an
+initials-only name with a cross-cultural surname spelling such as `Lee`, `Lim`,
+`Tan`, or `Yi` stays on the non-Chinese fallback unless native script, identity
+data, or other affirmative evidence establishes the Chinese path.
+
+### Routed writer integration
+
+New writer integrations should use the `sinonym` TIMO model. It accepts aligned
+structured paper authors and returns one directly writable field object for
+each author. Writers copy those fields as-is unless `resolution_action` is
+`suppress`; no downstream fallback or suffix merge is needed.
+
+Source fields ordinarily preserve lineage while scalar and batch inference use
+their combined text. A small set of reviewed structured shapes can also supply
+direct evidence. See the [TIMO writer contract](docs/timo.md) for a
+runnable example, wire shapes, missing-value rules, decisions, and failure
+semantics.
+
+That reviewed tier includes guarded two- and three-component CJK
+transliterations packed into a last field with an authored middle dot. The
+delimiter boundary is preserved without treating every middle dot, or every
+source-field label, as semantic role evidence.
+
+TIMO clients select `sinonym` for terminal writer-ready fields.
+
+### Conservative East Asian routing
+
+Raw parsing preserves visible order by default. A separate conservative router
+assigns semantic family-first components only for evidence combinations that
+held the existing non-Chinese benchmark constant: three-syllable compact
+Hangul; Japanese native text supported by the Chinese/Japanese classifier and
+component dictionaries; strict Korean romanized shapes; diacritic-bearing
+Vietnamese names and guarded, reviewed bare-ASCII Vietnamese family-first
+forms; and two-token Japanese romanizations whose surname/given dictionaries
+support only the family-first direction. Ambiguous or unsupported names retain
+the generic input-order normalization.
+
+For spaced native Japanese names, mutually exclusive dictionary evidence is a
+hard writer decision: strict family-first evidence assigns the exchanged
+endpoints, while strict given-first evidence preserves them. TIMO applies those
+decisions before PP/VYS candidates, and the public canonical APIs apply every
+terminal mapped decision before a competing Chinese interpretation. One-sided
+or conflicting dictionary shapes remain soft and retain the existing
+conservative arbitration. Soft Japanese dictionary assignments preserve the
+authored display order while recording the inferred semantic roles, so feeding
+their canonical text through the API again is stable.
+
+The East Asian assets are primarily component lexicons. The Roman asset also
+contains a small, provenance-backed exact full-name tier for reviewed routing
+decisions. Sources, hashes, and licenses are documented in
+[`sinonym/data/EAST_ASIAN_NAME_LEXICONS.md`](sinonym/data/EAST_ASIAN_NAME_LEXICONS.md);
+the rebuild tool is
+[`scripts/build_east_asian_name_lexicons.py`](scripts/build_east_asian_name_lexicons.py).
 
 Notes:
 - The tokens in `parsed` and `parsed_original_order` are the same normalized tokens; only the conceptual ordering differs via the `order` list.
@@ -267,9 +366,9 @@ res = detector.normalize_name("Li Wei")
 # res.parsed_original_order.surname == "Li"
 
 res = detector.normalize_name("Chi-Ying F. Huang")
-# res.result == "Chi-Ying F Huang"
+# res.result == "Chi-Ying F. Huang"
 # res.parsed.given_tokens == ["Chi", "Ying"]
-# res.parsed.middle_tokens == ["F"]
+# res.parsed.middle_tokens == ["F."]
 # res.parsed.order == ["given", "middle", "surname"]
 # res.parsed_original_order.order == ["given", "middle", "surname"]
 # res.parsed_original_order.given_name == "Chi-Ying"
@@ -278,207 +377,30 @@ res = detector.normalize_name("Chi-Ying F. Huang")
 
 ## Batch Processing for Consistent Formatting
 
-Sinonym includes advanced batch processing capabilities that significantly improve accuracy when processing lists of names that share consistent formatting patterns. This is particularly valuable for real-world datasets like academic author lists, company directories, or database migrations.
-
-### How Batch Processing Works
-
-When processing multiple names together, Sinonym:
-
-1.  **Detects Format Patterns**: Analyzes the entire batch to identify whether names follow a surname-first (e.g., "Zhang Wei") or given-first (e.g., "Wei Zhang") pattern
-2.  **Aggregates Evidence**: Uses frequency statistics across all names to build confidence in the detected pattern
-3.  **Applies Consistent Formatting**: When `decision_confidence` exceeds the configured threshold, applies the detected pattern to improve parsing of ambiguous individual names
-4.  **Tracks Improvements**: Identifies which names benefit from batch context vs. individual processing
-
-### Key Benefits
-
-*   **Fixes Ambiguous Cases**: Names like "Feng Cha" that are difficult to parse individually become clear in batch context
-*   **Maintains Consistency**: Ensures all names in a list follow the same formatting pattern
-*   **High Accuracy**: Achieves 90%+ success rate on previously problematic cases when proper format context is available
-*   **Intelligent Fallback**: Automatically falls back to individual processing when batch patterns are unclear
-
-### Batch Processing Methods
+Use batch processing when related names, such as one paper's author list, are
+likely to share an ordering convention. Sinonym uses eligible names to infer a
+surname-first or given-first pattern, then applies a clear pattern to ambiguous
+members without forcing non-voting or unambiguous names into it.
 
 ```python
 from sinonym.detector import ChineseNameDetector
 
 detector = ChineseNameDetector()
-
-# Full batch analysis with detailed results
-result = detector.analyze_name_batch([
-    "Zhang Wei", "Li Ming", "Wang Xiaoli", "Liu Jiaming"
-])
-print(f"Format detected: {result.format_pattern.dominant_format}")
-print(f"Confidence: {result.format_pattern.confidence:.1%}")
-print(f"Decision confidence: {result.format_pattern.decision_confidence:.1%}")
-print(f"Vote margin: {result.format_pattern.vote_margin:.1%}")
-print(f"Improved names: {len(result.improvements)}")
-print(result.name_order_evidence[0].selected_surname_position)
-
-# Quick format detection without full processing
-pattern = detector.detect_batch_format([
-    "Zhang Wei", "Li Ming", "Wang Xiaoli"
-])
-if pattern.threshold_met:
-    print(f"Strong {pattern.dominant_format} pattern detected")
-
-# Simple batch processing (returns list of results)
-results = detector.process_name_batch([
-    "Zhang Wei", "Li Ming", "Wang Xiaoli"
-])
-for result in results:
-    print(f"Processed: {result.result}")
+batch = detector.analyze_name_batch(
+    ["Zhang Wei", "Li Ming", "Wang Xiaoli", "Liu Jiaming"],
+)
+print(batch.format_pattern.dominant_format.value)
+for raw_name, result in zip(batch.names, batch.results, strict=True):
+    print(raw_name, "->", result.result or result.error_message)
 ```
 
-Use `analyze_name_batch()` when you need to choose between two batch contexts
-such as paper-level and source/venue/year-level runs. `process_name_batch()`
-returns only the final `ParseResult` list and intentionally drops the routing
-evidence.
+`analyze_name_batch()` keeps the decision evidence; use
+`process_name_batch()` when you only need the aligned `ParseResult` list. The
+defaults are `format_threshold=0.55` and `minimum_batch_size=2`; correction
+still requires at least two eligible votes.
 
-`BatchFormatPattern` exposes batch-level convention evidence:
-
-- `dominant_format`, `confidence`, and `threshold_met`
-- `decision_confidence`, the score used by the batch-application gate
-- `surname_first_count`, `given_first_count`, and `total_count`
-- `voting_count`, `vote_margin_count`, and `vote_margin`
-
-`BatchParseResult.name_order_evidence` is aligned with `names` and `results`.
-Each `NameOrderEvidence` contains stable evidence for external context-routing
-rules:
-
-- token shape: `raw_tokens`, `raw_token_count`, `has_all_caps_token`,
-  `all_caps_tokens`
-- batch behavior: `script_representation`, `batch_participant`,
-  `batch_applied`, `batch_changed_format`
-- order choices: `individual_format`, `selected_format`,
-  `selected_surname_position`
-- endpoint frequency evidence: `first_token_surname_frequency`,
-  `last_token_surname_frequency`, `selected_surname_frequency`,
-  `alternate_endpoint_surname_frequency`,
-  `selected_over_alternate_surname_frequency_ratio`
-
-Caller-owned metadata such as source, venue, and year is not inferred by
-sinonym. Keep that metadata beside the PP/VYS batch calls and combine it with
-the emitted evidence in the external router.
-
-### Persistent Multi-Process Processing
-
-For high-throughput workloads, you can keep a persistent process pool alive and
-reuse worker processes across multiple calls. This avoids repeated process
-start-up overhead and works on Windows/macOS/Linux via `spawn`.
-
-```python
-from sinonym.detector import ChineseNameDetector
-
-def main():
-    detector = ChineseNameDetector()
-    names_a = ["Li Wei", "Wang Weiming", "Zhang Ming"]
-    names_b = ["Xin Liu", "Yang Li", "Chen Huang"]
-    author_batches = [
-        ["Wang An", "Yan Li", "Wu Gang", "Li Bao"],
-        ["Li Wei", "Wang Weiming", "Zhang Ming"],
-    ]
-
-    # High-level auto wrappers choose local vs process-pool execution.
-    # Each inner author list remains an independent batch-context boundary.
-    normalized = detector.normalize_names(names_a, parallel="auto")
-    batch_results = detector.process_name_batches(author_batches, parallel="auto")
-
-    # Reuse workers across many calls
-    with detector.create_persistent_multiprocess_pool(max_workers=6, chunk_size=64) as pool:
-        results_a = pool.normalize_names(names_a)
-        results_b = pool.normalize_names(names_b)
-        persistent_batch_results = pool.process_name_batches(author_batches)
-
-    # One-off temporary pool with process_name_batch batch-context semantics
-    single_batch = detector.process_name_batch_multiprocess(names_a, max_workers=6, chunk_size=64)
-    return normalized, batch_results, results_a, results_b, persistent_batch_results, single_batch
-
-if __name__ == "__main__":
-    main()
-```
-
-Use the `if __name__ == "__main__":` guard in scripts to ensure safe process
-spawning on Windows and macOS.
-
-`normalize_names()` has per-name `normalize_name()` semantics. `process_name_batches()`
-is the high-level wrapper for many independent author lists: each inner list
-gets normal batch-format correction, and `parallel="auto"` uses conservative
-platform-aware thresholds to avoid one-off process-startup regressions.
-
-For repeated high-throughput calls, keep a persistent pool open. The persistent
-pool exposes `normalize_names()` for independent names and `process_name_batches()`
-for independent author-list batches. The one-off
-`process_name_batch_multiprocess()` method is kept for compatibility and has
-`process_name_batch()` batch-context semantics. For per-name multiprocessing,
-use `normalize_names(..., parallel="always")` or a persistent pool's
-`normalize_names()` method.
-
-### When to Use Batch Processing
-
-*   **Academic Papers**: Author lists typically follow consistent formatting
-*   **Company Directories**: Employee lists often use uniform formatting conventions  
-*   **Large Datasets**: Processing 100+ names where format consistency is expected
-
-Batch processing requires a minimum of 2 names and works best with 5+ names for reliable pattern detection.
-
-### Batch Processing Behavior
-
-**Unambiguous Names**: Some names have only one possible parsing format (e.g., compound given names like "Wei‑Qi Wang"). Batch processing never forces such names into the detected pattern and never raises. These names keep their best individual parse while other Chinese names benefit from the jointly detected order.
-
-**Batch Application Threshold**: Batch detection keeps count-based evidence (`confidence`, counts, and vote margin) separate from the application decision (`decision_confidence`). Batch formatting is applied only when the direction is confident, at least two vote-eligible Latin-only Chinese names participate, and `decision_confidence` clears the configured threshold. Latin rows with all-caps source-token cues are exposed in `name_order_evidence` but do not vote in, or receive, Latin batch formatting.
-
-**Script Cohorts**: Vote-eligible Latin-only names vote in and receive Latin batch formatting. Han-only, explicitly aligned Han/Roman, and other mixed-script names are parsed from their own script evidence so a Latin batch convention does not flip their order.
-
-### Batch Processing with Mixed Name Types
-
-Batch processing works seamlessly with mixed datasets containing both Chinese and non-Chinese names. Non-Chinese names are rejected during individual analysis but still appear in the batch output as failed results.
-
-```python
-# Mixed dataset: 2 Western names + 8 Chinese names
-mixed_names = [
-    "John Smith",     # Western - will be rejected
-    "Mary Johnson",   # Western - will be rejected  
-    "Xin Liu",        # Chinese - GIVEN_FIRST preference
-    "Yang Li",        # Chinese - GIVEN_FIRST preference
-    "Wei Zhang",      # Chinese - GIVEN_FIRST preference
-    "Ming Wang",      # Chinese - GIVEN_FIRST preference
-    "Li Chen",        # Chinese - GIVEN_FIRST preference
-    "Hui Zhou",       # Chinese - GIVEN_FIRST preference
-    "Feng Zhao",      # Chinese - GIVEN_FIRST preference
-    "Tong Zhang",     # Chinese - might prefer SURNAME_FIRST (ambiguous)
-]
-
-result = detector.analyze_name_batch(mixed_names)
-
-# Format detection uses only the 8 Latin-only Chinese names
-# If 7 prefer GIVEN_FIRST vs 1 SURNAME_FIRST = 87.5% confidence
-# GIVEN_FIRST pattern is applied to Chinese names; non‑Chinese names return clear failures
-
-print(f"Total results: {len(result.results)}")  # 10 (same as input)
-print(f"Format detected: {result.format_pattern.dominant_format}")  # GIVEN_FIRST
-print(f"Confidence: {result.format_pattern.confidence:.1%}")  # 87.5%
-
-# Check results by type
-for i, (name, result_obj) in enumerate(zip(mixed_names, result.results)):
-    if result_obj.success:
-        print(f"✅ {name} → {result_obj.result}")
-    else:
-        print(f"❌ {name} → {result_obj.error_message}")
-
-# Output:
-# ❌ John Smith → name not recognised as Chinese
-# ❌ Mary Johnson → name not recognised as Chinese  
-# ✅ Xin Liu → Xin Liu
-# ✅ Yang Li → Yang Li
-# ✅ Wei Zhang → Wei Zhang
-# ... (all Chinese names processed successfully with consistent formatting)
-```
-
-**Key Benefits:**
-- **Maintains input-output correspondence**: Results array matches input array length and order
-- **Robust format detection**: Only valid Latin-only Chinese names contribute to Latin batch pattern detection
-- **Consistent formatting**: Latin-only Chinese names get the detected format applied when the batch signal is strong enough
-- **Clear failure reporting**: Non-Chinese names are clearly marked as failed with error messages
+See [Batch processing](docs/batch_processing.md) for API selection, evidence
+fields, validation and failure behavior, mixed inputs, and multiprocessing.
 
 ## Development
 

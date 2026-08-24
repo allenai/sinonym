@@ -1,21 +1,19 @@
-# ruff: noqa: SIM117, SLF001
+# ruff: noqa: SLF001
 """Regression tests that implement the proposals tracked in TEST_PROPOSAL.md."""
 
 from __future__ import annotations
 
 import inspect
-import logging
 import math
 import re
 import unicodedata
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import ClassVar
 
 import pytest
 
-from sinonym.chinese_names_data import COMPOUND_VARIANTS
+from sinonym.chinese_names_data import COMPOUND_VARIANTS, REVIEWED_ATOMIC_GIVEN_FORMS
 from sinonym.coretypes import NameFormat, ParseCandidate
 from sinonym.resources import open_csv_reader, resource_path
 from sinonym.services import ethnicity
@@ -154,7 +152,7 @@ def test_compound_surname_formatter_uses_token_linked_metadata(detector):
         "Ka": CompoundMetadata(is_compound=True, format_type="spaced", compound_target="ka ming"),
         "Ming": CompoundMetadata(is_compound=True, format_type="spaced", compound_target="ka ming"),
     }
-    formatted = detector._formatting_service.format_name_output(
+    formatted, *_ = detector._formatting_service.format_name_output_with_tokens(
         ["Au", "Yeung"],
         ["Ka", "Ming"],
         {},
@@ -168,7 +166,7 @@ def test_compound_surname_formatter_uses_token_linked_metadata(detector):
         "Ka": CompoundMetadata(is_compound=True, format_type="spaced", compound_target="ka ming"),
         "Ming": CompoundMetadata(is_compound=True, format_type="spaced", compound_target="ka ming"),
     }
-    fallback = detector._formatting_service.format_name_output(
+    fallback, *_ = detector._formatting_service.format_name_output_with_tokens(
         ["Au", "Yeung"],
         ["Ka", "Ming"],
         {},
@@ -275,7 +273,7 @@ def test_batch_preserves_homogeneous_given_context_gold_splits(detector):
 def test_given_context_gold_split_is_used_by_string_formatter(detector):
     normalized = detector._normalizer.apply("Junjie Fang")
 
-    formatted = detector._formatting_service.format_name_output(
+    formatted, *_ = detector._formatting_service.format_name_output_with_tokens(
         ["Fang"],
         ["Junjie"],
         normalized.norm_map,
@@ -313,6 +311,171 @@ def test_given_context_gold_split_keeps_ambiguous_non_gold_tokens_unsplit(detect
             )
             is None
         )
+
+
+@pytest.mark.parametrize("token", ["cuong", "huong", "luong", "tuong"])
+def test_vietnamese_given_tokens_do_not_split_through_internal_ng_alias(detector, token):
+    """An inferred fragment cannot borrow the whole-token ``Ng`` surname alias."""
+    normalized = detector._normalizer.apply(token)
+
+    assert (
+        StringManipulationUtils.split_concatenated_name(
+            token,
+            normalized.norm_map,
+            detector._data,
+            detector._normalizer,
+            detector._config,
+        )
+        is None
+    )
+
+
+def test_explicit_ng_boundary_remains_splittable(detector):
+    """The inferred-boundary guard must not erase author-supplied structure."""
+    normalized = detector._normalizer.apply("Huo-Ng")
+
+    assert StringManipulationUtils.split_concatenated_name(
+        "Huo-Ng",
+        normalized.norm_map,
+        detector._data,
+        detector._normalizer,
+        detector._config,
+    ) == ["Huo", "Ng"]
+
+
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [
+        ("Kafai", ["Ka", "fai"]),
+        ("Siuming", ["Siu", "ming"]),
+        ("Chiuming", ["Chiu", "ming"]),
+        ("Ngaiming", ["Ngai", "ming"]),
+    ],
+)
+def test_internal_ng_guard_preserves_compact_regional_given_splits(detector, token, expected):
+    """The narrow ``Ng`` guard must not disable other regional aliases."""
+    assert (
+        StringManipulationUtils.split_concatenated_name(
+            token,
+            None,
+            detector._data,
+            detector._normalizer,
+            detector._config,
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize("token", sorted(REVIEWED_ATOMIC_GIVEN_FORMS))
+def test_reviewed_atomic_given_forms_refuse_inferred_boundaries(detector, token):
+    """A reviewed complete regional token must not be split by pinyin coincidence."""
+    cache = StringManipulationUtils._get_thread_cache()
+    cache.discard(token)
+    normalized = detector._normalizer.apply(token)
+
+    try:
+        assert (
+            StringManipulationUtils.split_concatenated_name(
+                token,
+                normalized.norm_map,
+                detector._data,
+                detector._normalizer,
+                detector._config,
+            )
+            is None
+        )
+        assert token not in cache
+    finally:
+        cache.discard(token)
+
+
+@pytest.mark.parametrize("token", ["ho\u00e0i", "to\u00e0n"])
+def test_reviewed_vietnamese_atomic_forms_fold_tone_marks(detector, token):
+    """Vietnamese tone marks must not bypass the reviewed atomic lookup."""
+    cache = StringManipulationUtils._get_thread_cache()
+    cache.discard(token)
+
+    try:
+        assert (
+            StringManipulationUtils.split_concatenated_name(
+                token,
+                None,
+                detector._data,
+                detector._normalizer,
+                detector._config,
+            )
+            is None
+        )
+        assert token not in cache
+    finally:
+        cache.discard(token)
+
+
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [
+        ("Ho-Ai", ["Ho", "Ai"]),
+        ("Ho'Ai", ["Ho", "Ai"]),
+        ("HoAi", ["Ho", "Ai"]),
+        ("To-An", ["To", "An"]),
+        ("To'An", ["To", "An"]),
+        ("ToAn", ["To", "An"]),
+    ],
+)
+def test_authored_boundaries_override_reviewed_atomic_forms(detector, token, expected):
+    """Explicit punctuation and CamelCase remain stronger than the atomic veto."""
+    normalized = detector._normalizer.apply(token)
+
+    assert (
+        StringManipulationUtils.split_concatenated_name(
+            token,
+            normalized.norm_map,
+            detector._data,
+            detector._normalizer,
+            detector._config,
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("atomic", "camel", "expected"),
+    [
+        ("hana", "HaNa", ["Ha", "Na"]),
+        ("hoai", "HoAi", ["Ho", "Ai"]),
+        ("hoon", "HoOn", ["Ho", "On"]),
+        ("seon", "SeOn", ["Se", "On"]),
+        ("seungbo", "SeungBo", ["Seung", "Bo"]),
+        ("toan", "ToAn", ["To", "An"]),
+        ("woong", "WooNg", ["Woo", "Ng"]),
+        ("young", "YouNg", ["You", "Ng"]),
+    ],
+)
+def test_reviewed_atomic_refusal_does_not_mask_later_camel_case(detector, atomic, camel, expected):
+    """A lowercase refusal must not enter the case-insensitive unsplittable cache."""
+    cache = StringManipulationUtils._get_thread_cache()
+    cache.discard(atomic)
+
+    try:
+        assert (
+            StringManipulationUtils.split_concatenated_name(
+                atomic,
+                None,
+                detector._data,
+                detector._normalizer,
+                detector._config,
+            )
+            is None
+        )
+        assert StringManipulationUtils.split_concatenated_name(
+            camel,
+            None,
+            detector._data,
+            detector._normalizer,
+            detector._config,
+        ) == expected
+    finally:
+        cache.discard(atomic)
 
 
 def test_two_token_format_alignment_tie_break_is_directional(detector):
@@ -512,6 +675,7 @@ def test_batch_format_votes_downweight_weak_candidate_gaps_and_count_duplicate_r
             weak_surname_first,
             None,
             LATIN_ONLY_REPRESENTATION,
+            raw_tokens=("Li", "Wei"),
         ),
         BatchCandidateEntry(
             "Ming Zhang",
@@ -519,6 +683,7 @@ def test_batch_format_votes_downweight_weak_candidate_gaps_and_count_duplicate_r
             strong_given_first,
             None,
             LATIN_ONLY_REPRESENTATION,
+            raw_tokens=("Ming", "Zhang"),
         ),
         BatchCandidateEntry(
             "ming zhang",
@@ -526,6 +691,7 @@ def test_batch_format_votes_downweight_weak_candidate_gaps_and_count_duplicate_r
             strong_given_first,
             None,
             LATIN_ONLY_REPRESENTATION,
+            raw_tokens=("ming", "zhang"),
         ),
         BatchCandidateEntry(
             "Yan Wang",
@@ -533,6 +699,7 @@ def test_batch_format_votes_downweight_weak_candidate_gaps_and_count_duplicate_r
             strong_given_first,
             None,
             LATIN_ONLY_REPRESENTATION,
+            raw_tokens=("Yan", "Wang"),
         ),
     ]
 
@@ -575,7 +742,7 @@ def test_strong_given_first_batch_still_overrides_ambiguous_name(detector):
     [
         (["Li Yang Hsu", "Hanwei Cao"], ["Li-Yang Hsu", "Han-Wei Cao"]),
         (["Yunbo Hu", "Fei Yu"], ["Yun-Bo Hu", "Fei Yu"]),
-        (["J. Liu", "Jing Wan"], ["J Liu", "Jing Wan"]),
+        (["J. Liu", "Jing Wan"], ["J. Liu", "Jing Wan"]),
         (["Qinggong Ping", "Hao Fei"], ["Qing-Gong Ping", "Hao Fei"]),
     ],
 )
@@ -641,6 +808,39 @@ def test_batch_does_not_treat_compact_mixed_han_roman_as_latin_only(detector):
     assert batch.individual_analyses[0].best_candidate is None
 
 
+@pytest.mark.parametrize(
+    ("raw_name", "expected_tokens", "expected_order"),
+    [
+        ("张Wei", ("zhang", "Wei"), ["surname", "given"]),
+        ("Wei张", ("Wei", "zhang"), ["given", "surname"]),
+    ],
+)
+def test_compact_mixed_han_roman_preserves_source_run_order(
+    detector,
+    raw_name,
+    expected_tokens,
+    expected_order,
+):
+    normalized = detector._normalizer.apply(raw_name)
+    result = detector.normalize_name(raw_name)
+
+    assert normalized.roman_tokens == expected_tokens
+    assert result.success
+    assert result.result == "Wei Zhang"
+    assert result.parsed_original_order.order == expected_order
+
+
+@pytest.mark.parametrize("order", [[], ["Zhang"]])
+def test_name_parser_rejects_fewer_than_minimum_tokens(detector, order):
+    parsing = detector._parsing_service
+
+    result = parsing.parse_name_order(order, {}, {})
+
+    assert not result.success
+    assert result.error_message == "needs at least 2 tokens"
+    assert parsing.parse_name_order_tokens(order, {}, {}) is None
+
+
 def test_aligned_bilingual_pairs_use_han_identity(detector):
     given_first = detector.normalize_name("Mi \u5bc6 Jiang \u848b")
     surname_first = detector.normalize_name("\u9ad8 Gao \u9759 Jing")
@@ -662,6 +862,24 @@ def test_aligned_bilingual_pairs_use_han_identity(detector):
     assert roman_first_given_first.success
     assert roman_first_given_first.result == "Wang Tian"
     assert roman_first_given_first.parsed_original_order.order == ["given", "surname"]
+
+
+def test_aligned_bilingual_polyphonic_surname_precedes_roman_ethnicity_rejection(detector):
+    raw_name = "Zhexu \u54f2\u65ed Shan \u5355"
+    normalized = detector._normalizer.apply(raw_name)
+    pairs = detector._normalizer.aligned_bilingual_pairs(normalized)
+
+    assert pairs is not None
+    assert [pair.han_pinyin for pair in pairs] == [("zhe", "xu"), ("shan",)]
+    assert detector._normalizer.classify_script_representation(normalized) == "bilingual_aligned"
+
+    result = detector.normalize_name(raw_name)
+
+    assert result.success
+    assert result.result == "Zhe-Xu Shan"
+    assert result.parsed.surname == "Shan"
+    assert result.parsed.given_name == "Zhe-Xu"
+    assert result.parsed_original_order.order == ["given", "surname"]
 
 
 @pytest.mark.parametrize("lu_token", ["Lu", "L\u00fc"])
@@ -695,10 +913,11 @@ def test_aligned_bilingual_middle_initial_preserves_original_order(detector):
     result = detector.normalize_name("Zhang \u5f20 Wei \u4f1f A \u963f")
 
     assert result.success
-    assert result.result == "Wei A Zhang"
-    assert result.parsed.middle_tokens == ["A"]
-    assert result.parsed_original_order.middle_tokens == ["A"]
-    assert result.parsed_original_order.order == ["surname", "given", "middle"]
+    assert result.result == "Wei-A Zhang"
+    assert result.parsed.given_tokens == ["Wei", "A"]
+    assert result.parsed.middle_tokens == []
+    assert result.parsed_original_order.middle_tokens == []
+    assert result.parsed_original_order.order == ["surname", "given"]
 
 
 def test_ambiguous_aligned_single_char_pairs_do_not_force_frequency_flip(detector):
@@ -789,9 +1008,9 @@ def test_compact_han_roman_transliteration_uses_han_order(detector, raw_name, ex
 @pytest.mark.parametrize(
     ("raw_name", "expected"),
     [
-        ("Haoran wang \u6d69\u7136\u738b", "Haoran Wang"),
-        ("\u6d69\u7136\u738b Haoran Wang", "Haoran Wang"),
-        ("\u738b\u6d69\u7136 Wang Haoran", "Haoran Wang"),
+        ("Haoran wang \u6d69\u7136\u738b", "Hao-Ran Wang"),
+        ("\u6d69\u7136\u738b Haoran Wang", "Hao-Ran Wang"),
+        ("\u738b\u6d69\u7136 Wang Haoran", "Hao-Ran Wang"),
     ],
 )
 def test_compact_han_roman_transliteration_uses_stronger_endpoint_surname(detector, raw_name, expected):
@@ -800,7 +1019,7 @@ def test_compact_han_roman_transliteration_uses_stronger_endpoint_surname(detect
     assert result.success
     assert result.result == expected
     assert result.parsed.surname == "Wang"
-    assert result.parsed.given_name == "Haoran"
+    assert result.parsed.given_name == "Hao-Ran"
 
 
 @pytest.mark.parametrize(
@@ -859,30 +1078,21 @@ def test_han_compound_surname_suppresses_japanese_ml_rejection(detector, raw_nam
     assert result.parsed_original_order.order == ["surname", "given"]
 
 
-class BrokenJapaneseProbabilityModel:
-    """Model stub whose probability API fails after reporting availability."""
+class BrokenJapaneseProbabilityScorer:
+    """Scorer stub whose probability API fails after reporting availability."""
 
-    classes_: ClassVar[list[str]] = ["cn", "jp"]
-
-    def predict_proba(self, names):
+    def japanese_probability(self, name):
         message = "boom"
         raise RuntimeError(message)
 
-    def predict(self, names):
-        return ["jp"]
 
-
-def test_japanese_probability_raises_when_loaded_model_errors(caplog):
+def test_japanese_probability_propagates_loaded_scorer_errors():
     classifier = ethnicity._MLJapaneseClassifier(confidence_threshold=0.8)
     classifier._available = True
-    classifier._model = BrokenJapaneseProbabilityModel()
+    classifier._scorer = BrokenJapaneseProbabilityScorer()
 
-    with caplog.at_level(logging.WARNING, logger=ethnicity.__name__):
-        with pytest.raises(RuntimeError, match="probability failed"):
-            classifier.japanese_probability("\u5c71\u7530")
-
-    assert "ML Japanese classifier probability error" in caplog.text
-    assert any(record.exc_info for record in caplog.records)
+    with pytest.raises(RuntimeError, match="boom"):
+        classifier.japanese_probability("\u5c71\u7530")
 
 
 def test_non_person_inputs_are_rejected_before_parsing(detector):
@@ -906,14 +1116,23 @@ def test_non_person_inputs_are_rejected_before_parsing(detector):
     [
         "\u7269\u7406\u7cfb",
         "\u5b9e\u9a8c\u5ba4",
+        "實驗室",
         "\u7814\u7a76\u6240",
         "\u5b66\u9662",
+        "學院",
         "\u5927\u5b66",
+        "大學",
+        "編輯部",
+        "科學院",
+        "學部",
         "\u516c\u53f8",
         "\u5317\u4eac\u5927\u5b66",
         "\u6e05\u534e\u5927\u5b66",
         "\u5f20\u4f1f\u5927\u5b66",
         "\u5f20\u4f1f(\u7269\u7406\u7cfb)",
+        "香港大學",
+        "香港重點實驗室",
+        "香港國家實驗室",
     ],
 )
 def test_short_standalone_cjk_non_person_markers_are_rejected(detector, raw_name):
@@ -945,12 +1164,12 @@ def test_short_cjk_non_person_marker_gate_preserves_person_names(detector, raw_n
     [
         ("Kai \u51ef Xi \u4e60", "Kai Xi"),
         ("Hongqing \u7ea2\u5e86 Dai \u4ee3", "Hong-Qing Dai"),
-        ("Zhang \u5f20 Wei \u4f1f A \u963f", "Wei A Zhang"),
+        ("Zhang \u5f20 Wei \u4f1f A \u963f", "Wei-A Zhang"),
         # Genuine Chinese names carrying a trailing Latin middle initial: the initial
         # is space-separated from the Han tokens (no dot bridges the two scripts), so
         # the mixed-initial transliteration gate must not reject them.
-        ("\u674e \u5c0f\u660e G.", "Xiao-Ming G Li"),
-        ("\u674e \u5c0f\u660e H. K.", "Xiao-Ming H K Li"),
+        ("\u674e \u5c0f\u660e G.", "Xiao-Ming G. Li"),
+        ("\u674e \u5c0f\u660e H. K.", "Xiao-Ming H. K. Li"),
     ],
 )
 def test_mixed_initial_transliteration_gate_preserves_bilingual_names(detector, raw_name, expected):
@@ -1114,7 +1333,7 @@ def test_korean_specific_token_signal_is_capped(detector):
     assert three_token_score == 2.0
 
 
-def test_batch_tie_break_heuristics_use_normalized_tokenization(detector):
+def test_batch_tie_break_heuristics_use_prepared_normalized_tokens(detector):
     dummy_candidate = ParseCandidate(
         surname_tokens=["li"],
         given_tokens=["wei"],
@@ -1123,15 +1342,21 @@ def test_batch_tie_break_heuristics_use_normalized_tokenization(detector):
         original_compound_format=None,
     )
     names = ["XinLiu", "YangLi", "WeiLi"]
+    normalized_tokens = [("Xin", "Liu"), ("Yang", "Li"), ("Wei", "Li")]
     name_candidates = [
-        BatchCandidateEntry(name, [dummy_candidate], dummy_candidate, None, LATIN_ONLY_REPRESENTATION) for name in names
+        BatchCandidateEntry(
+            name,
+            [dummy_candidate],
+            dummy_candidate,
+            None,
+            LATIN_ONLY_REPRESENTATION,
+            raw_tokens=tokens,
+        )
+        for name, tokens in zip(names, normalized_tokens, strict=True)
     ]
 
     assert all(len(name.split()) == 1 for name in names)
-    dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(
-        name_candidates,
-        detector._normalizer,
-    )
+    dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(name_candidates)
     assert dominant == NameFormat.GIVEN_FIRST
 
 

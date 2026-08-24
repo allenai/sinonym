@@ -6,8 +6,8 @@ from sinonym.pipeline.name_order_routing import route_pp_abstain_rows, route_pp_
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "sinonym" / "data" / "name_order_routing"
 PP_VYS_FIXTURE_ROWS = 1000
-PP_VYS_DECISIVE_ROWS = 791
-PP_VYS_EITHER_ROWS = 164
+PP_VYS_DECISIVE_ROWS = 805
+PP_VYS_EITHER_ROWS = 150
 PP_ABSTAIN_FIXTURE_ROWS = 750
 PP_ABSTAIN_DECISIVE_ROWS = 608
 
@@ -50,13 +50,9 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
     would emit under the router's route equals the labeled route's string
     (`pp_result` for label `pp`, `vys_result` for label `vys`).
 
-    Rows labeled `either` are the ones whose PP and VYS parses emit the
-    identical string under the current parser: the route choice is cosmetic, so
-    the row scores correct for any person route (pp, vys, or abstain resolving
-    to either side). The invariant `pp_result == vys_result` is asserted per
-    row — if a parser change makes an `either` row's strings diverge again, the
-    fixture is stale and the row must go back for relabeling (see the fixture
-    README), so this test fails loudly rather than trusting the label.
+    `either` labels have identical current PP/VYS output, so the route is
+    cosmetic. The inverse is asserted too: decisive labels must still represent
+    an observable output difference.
     """
     rows = _load_jsonl(DATA_DIR / "pp_vys_abstain_labels.jsonl")
     routed = route_pp_vys_abstain_rows(rows)
@@ -67,12 +63,15 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
         for row in either
         if not (row["pp_success"] and row["vys_success"] and row["pp_result"] == row["vys_result"])
     ]
-    assert stale_either == [], f"either-labeled rows whose PP/VYS strings diverged (relabel them): {stale_either}"
-    either_scored = Counter(
-        "match" if _emitted_string(row) == str(row["pp_result"]) else "mismatch" for row in either
-    )
+    assert stale_either == []
+    either_scored = Counter("match" if _emitted_string(row) == str(row["pp_result"]) else "mismatch" for row in either)
 
     decisive = [row for row in routed if row["decision"] in {"pp", "vys"}]
+    equivalent_decisive = [
+        str(row["item_id"])
+        for row in decisive
+        if row["pp_success"] and row["vys_success"] and row["pp_result"] == row["vys_result"]
+    ]
     confusion = Counter(
         (str(row["decision"]), "match" if _emitted_string(row) == _labeled_string(row) else "mismatch") for row in decisive
     )
@@ -81,12 +80,13 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
     assert len(rows) == PP_VYS_FIXTURE_ROWS
     assert len(decisive) == PP_VYS_DECISIVE_ROWS
     assert len(either) == PP_VYS_EITHER_ROWS
+    assert equivalent_decisive == []
     assert either_scored == {"match": PP_VYS_EITHER_ROWS}
     assert confusion == {
-        ("pp", "match"): 388,
-        ("pp", "mismatch"): 57,
-        ("vys", "match"): 331,
-        ("vys", "mismatch"): 15,
+        ("pp", "match"): 379,
+        ("pp", "mismatch"): 64,
+        ("vys", "match"): 346,
+        ("vys", "mismatch"): 16,
     }
     assert {reason: count for reason, count in reason_counts.items() if reason.startswith("name_prior_")} == {
         "name_prior_cantonese_given_first": 6,
@@ -98,12 +98,10 @@ def test_pp_vys_abstain_label_fixture_reproduces_validation_metrics():
 def test_pp_abstain_label_fixture_reproduces_current_validation_metrics():
     """Score the pp-abstain router at the route level against production behavior.
 
-    Failed PP parses route to the terminal `not_person` decision (the builder emits
-    `pp_success=False` for them; the fixture backfills it from the failed-parse
-    encoding `pp_result_token_count == 1`). The 312 failed-parse rows here (311
-    labeled `abstain`, 1 labeled `pp`) therefore appear as `not_person` cells in
-    the confusion matrix, exercising the real production path rather than the
-    abstain path the fixture used to validate.
+    Failed PP parses route to raw-router `not_person` (the builder emits
+    `pp_success=False`). The terminal writer treats that as negative batch
+    evidence, not a conclusive claim about the source record: reviewed and scalar
+    resolution may still recover a person before source passthrough.
     """
     rows = _load_jsonl(DATA_DIR / "pp_abstain_labels.jsonl")
     routed = route_pp_abstain_rows(rows)
@@ -115,19 +113,19 @@ def test_pp_abstain_label_fixture_reproduces_current_validation_metrics():
     assert len(rows) == PP_ABSTAIN_FIXTURE_ROWS
     assert len(decisive) == PP_ABSTAIN_DECISIVE_ROWS
     assert confusion == {
-        ("abstain", "abstain"): 127,
-        ("abstain", "not_person"): 311,
-        ("abstain", "pp"): 6,
-        ("pp", "abstain"): 14,
+        ("abstain", "abstain"): 27,
+        ("abstain", "not_person"): 409,
+        ("abstain", "pp"): 8,
+        ("pp", "abstain"): 16,
         ("pp", "not_person"): 1,
-        ("pp", "pp"): 149,
+        ("pp", "pp"): 147,
     }
     assert reason_counts == {
         "clean_bilingual_given_first": 34,
-        "default_abstain": 17,
-        "not_person": 312,
-        "spaced_cjk_zero_batch_surname_first": 7,
+        "default_abstain": 22,
+        "not_person": 410,
+        "spaced_cjk_zero_batch_surname_first": 6,
         "surname_first_two_token": 121,
-        "weak_zero_batch": 41,
-        "zero_batch_mixed_long": 76,
+        "weak_zero_batch": 2,
+        "zero_batch_mixed_long": 13,
     }

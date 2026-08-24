@@ -573,6 +573,10 @@ CANTONESE_SURNAMES = {
     "teo": ("zhang", "张"),  # 张 - Teochew/Hokkien Teo = Mandarin Zhang
     "goh": ("wu", "吴"),  # 吴 - Teochew/Hokkien Goh = Mandarin Wu
     "khoo": ("qiu", "邱"),  # 邱 - Teochew/Hokkien Khoo = Mandarin Qiu
+    # Reviewed Taiwanese/Wade-Giles surname spellings. Conservative
+    # as-written frequency shares already live in surname_romanizations.csv.
+    "horng": ("hong", "洪"),
+    "hsien": ("xian", "冼/先"),
     "soo": ("su", "苏"),  # 苏 - Korean Soo = Mandarin Su
     # Korean surnames with Chinese equivalents
     "jang": ("zhang", "张"),  # 张 - Korean Jang = Mandarin Zhang
@@ -582,6 +586,16 @@ CANTONESE_SURNAMES = {
     "son": ("sun", "孙"),  # 孙 - Korean Son = Mandarin Sun
     "kyeong": ("jing", "京"),  # 京 - Korean Kyeong = Mandarin Jing
 }
+
+ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES = frozenset({"horng", "hsien"})
+
+# Complete regional given-name tokens that the Chinese concatenated-name
+# splitter would otherwise fragment at an inferred pinyin boundary. Keep the
+# reviewed source groups separate so consumers can apply a narrower policy
+# when ethnicity-specific source preservation matters.
+REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS = frozenset({"hana", "hoon", "seon", "seungbo", "woong", "young"})
+REVIEWED_ATOMIC_VIETNAMESE_GIVEN_FORMS = frozenset({"hoai", "toan"})
+REVIEWED_ATOMIC_GIVEN_FORMS = REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS | REVIEWED_ATOMIC_VIETNAMESE_GIVEN_FORMS
 
 
 # Sanity check: Ensure no inconsistencies between SYLLABLE_RULES and CANTONESE_SURNAMES
@@ -697,6 +711,13 @@ PYPINYIN_FREQUENCY_ALIASES = [
     ("yin", "wen"),  # 尹: pypinyin produces 'yin' but romanization system expects 'wen'
 ]
 
+# Contextual readings that are valid only after a Han component is assigned as
+# the surname. Keys are ``(source_character, pypinyin_reading)``.
+HAN_SURNAME_POSITION_READINGS = {
+    ("\u4ec7", "chou"): "qiu",
+    ("\u66fe", "ceng"): "zeng",
+}
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CHINESE PHONETIC VALIDATION (for rejecting Western names)
@@ -792,6 +813,12 @@ VALID_CHINESE_RIMES = frozenset(
 # ═══════════════════════════════════════════════════════════════════════════════
 # TIERED CONFIDENCE SETS FOR GIVEN NAME SPLITTING
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# Compatibility ideographs with NO Unicode decomposition (NFKC leaves them unchanged), mapped
+# to the unified forms every lexicon and the CN-vs-JP classifier were built on. Applied to
+# LOOKUP and classification inputs only, never to emitted components: 田﨑/野﨑/山﨑 must be
+# recognised as the 崎 names, but the output keeps the glyph the author wrote.
+COMPATIBILITY_IDEOGRAPH_FOLDS = {"﨑": "崎"}
 
 # Tier 1: High-Confidence Anchors. A small set of the ~60 most common and
 # statistically significant given name syllables. Their presence is a strong
@@ -1058,6 +1085,8 @@ KOREAN_AMBIGUOUS_PATTERNS = frozenset(
 # Korean name pairs: Common Korean given name combinations
 KOREAN_GIVEN_PAIRS = frozenset(
     {
+        ("in", "sun"),
+        ("jin", "uk"),
         ("soo", "jin"),  # 수진 - very common Korean name
         ("min", "soo"),  # 민수 - very common Korean name
         ("min", "jung"),  # 민정 - very common Korean name
@@ -1085,6 +1114,11 @@ KOREAN_GIVEN_PAIRS = frozenset(
         ("eun", "ji"),  # 은지 - Korean name pattern
     },
 )
+
+# Directional evidence only. ``Ok`` also occurs in Korean given names, so it
+# must never be added to the anywhere-in-name Korean surname sets.
+KOREAN_DIRECTIONAL_FAMILY_FIRST_SURNAMES = frozenset({"ok"})
+KOREAN_DIRECTIONAL_SINGLE_GIVEN_NAMES = frozenset({"jeung"})
 
 
 # Overlapping Korean surnames (exist in both Korean and Chinese)
@@ -1255,7 +1289,6 @@ VIETNAMESE_GIVEN_PATTERNS = frozenset(
         "vuong",  # 王 - king, Vietnamese given name
     },
 )
-
 
 NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES = frozenset(
     {

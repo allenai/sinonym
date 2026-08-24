@@ -1,277 +1,49 @@
-from enum import Enum
+"""Single TIMO boundary for terminal, source-shaped author resolution."""
 
-from pydantic import BaseModel, BaseSettings, Field, root_validator
+from pydantic import BaseSettings as _BaseSettings
+from pydantic import Field as _Field
 
-from sinonym.coretypes import BatchParseResult
-from sinonym.detector import ChineseNameDetector, ParallelMode
+from sinonym.coretypes import BatchParseResult as _BatchParseResult
+from sinonym.detector import ChineseNameDetector as _ChineseNameDetector
+from sinonym.detector import ParallelMode as _ParallelMode
 from sinonym.pipeline.name_order_routing import (
-    build_pp_abstain_rows,
-    pp_abstain_parsed,
-    route_pp_abstain_rows,
-    route_pp_vys_abstain_batches,
+    build_pp_abstain_rows as _build_pp_abstain_rows,
+)
+from sinonym.pipeline.name_order_routing import (
+    route_pp_abstain_rows as _route_pp_abstain_rows,
+)
+from sinonym.pipeline.name_order_routing import (
+    route_pp_vys_abstain_batches as _route_pp_vys_abstain_batches,
+)
+from sinonym.services.batch_analysis import RelatedBatchParseResult as _RelatedBatchParseResult
+from sinonym.timo._resolution import (
+    Instance,
+    ResolvedAuthorFields,
+    SourceAuthorFields,
+    _Model,
+    _Resolver,
 )
 
+__all__ = [
+    "Instance",
+    "Prediction",
+    "Predictor",
+    "PredictorConfig",
+    "ResolvedAuthorFields",
+    "SourceAuthorFields",
+]
 
-class _PoolPreconditionError(ValueError):
-    """A `RoutingInstance`'s `vys_pool_names` violates the `route_pp_vys` pool precondition.
 
-    Raised only at the `route_pp_vys` pool-shape validation sites (paper authors must be the leading
-    slice of the pool). Subclasses `ValueError` so any existing caller that catches `ValueError`
-    keeps working (contract preserved). It is deliberately module-private: an internal signalling
-    type, never part of a serving DTO/schema.
-    """
+class Prediction(_Model):
+    """One paper's positionally aligned, directly writable author fields."""
 
+    authors: list[ResolvedAuthorFields] = _Field(default_factory=list)
 
-class TimoModel(BaseModel):
-    """Base Pydantic model for TIMO request and response contracts."""
 
-    def dict(self, *args, **kwargs):
-        """Return plain Python serialization values for enum fields."""
-        return _serialize_enum_values(super().dict(*args, **kwargs))
+class PredictorConfig(_BaseSettings):
+    """Batch execution settings for :class:`Predictor`."""
 
-
-class NameFormatValue(str, Enum):
-    """Serialized batch name-order values."""
-
-    SURNAME_FIRST = "surname_first"
-    GIVEN_FIRST = "given_first"
-    MIXED = "mixed"
-
-
-class ScriptRepresentationValue(str, Enum):
-    """Serialized script provenance values exposed in batch evidence."""
-
-    LATIN_ONLY = "latin_only"
-    HAN_ONLY = "han_only"
-    BILINGUAL_ALIGNED = "bilingual_aligned"
-    MIXED_SCRIPT = "mixed_script"
-    REJECTED_INPUT = "rejected_input"
-    UNKNOWN = "unknown"
-
-
-class SurnamePositionValue(str, Enum):
-    """Serialized selected surname positions in source tokens."""
-
-    FIRST = "first"
-    LAST = "last"
-    INTERNAL = "internal"
-    UNKNOWN = "unknown"
-
-
-class Instance(TimoModel):
-    name: str = Field(description="Name string to detect/normalize as Chinese")
-
-
-class FormatPattern(TimoModel):
-    """Batch-level order detection (surname-first vs given-first)."""
-
-    dominant_format: NameFormatValue
-    confidence: float = Field(description="dominant_count / total_count")
-    decision_confidence: float = Field(description="score used to decide threshold_met")
-    surname_first_count: int
-    given_first_count: int
-    total_count: int
-    voting_count: int = Field(description="count of names contributing a confident direction vote")
-    vote_margin_count: int = Field(description="absolute difference between surname-first and given-first votes")
-    vote_margin: float = Field(description="vote_margin_count / total_count")
-    threshold_met: bool = Field(description="decision_confidence >= format_threshold plus gating checks")
-
-    @root_validator(pre=True)
-    def _fill_derived_fields(cls, values):  # noqa: N805
-        """Accept legacy six-field payloads and derive the new vote metrics."""
-        if not isinstance(values, dict):
-            return values
-
-        output = dict(values)
-        confidence = float(output.get("confidence", 0.0) or 0.0)
-        surname_first_count = int(output.get("surname_first_count", 0) or 0)
-        given_first_count = int(output.get("given_first_count", 0) or 0)
-        total_count = int(output.get("total_count", 0) or 0)
-        vote_margin_count = abs(surname_first_count - given_first_count)
-
-        output.setdefault("decision_confidence", confidence)
-        output.setdefault("voting_count", surname_first_count + given_first_count)
-        output.setdefault("vote_margin_count", vote_margin_count)
-        output.setdefault("vote_margin", vote_margin_count / total_count if total_count > 0 else 0.0)
-        return output
-
-
-def _serialize_enum_values(value):
-    """Recursively convert Enum objects to their values for `.dict()` output."""
-    if isinstance(value, Enum):
-        return value.value
-    if isinstance(value, list):
-        return [_serialize_enum_values(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_serialize_enum_values(item) for item in value)
-    if isinstance(value, dict):
-        return {key: _serialize_enum_values(item) for key, item in value.items()}
-    return value
-
-
-class Prediction(TimoModel):
-    success: bool = Field(description="Whether the name was recognized as Chinese")
-    error_message: str | None = Field(default=None, description="Reason for failure")
-    given_name: str | None = Field(default=None)
-    surname: str | None = Field(default=None)
-    middle_name: str | None = Field(default=None)
-    confidence: float | None = Field(
-        default=None,
-        description="per-name confidence; candidate softmax when candidates exist, 1.0 for successful structural parses",
-    )
-    format_pattern: FormatPattern | None = Field(default=None, description="shared batch order pattern (same on every row)")
-
-
-class Candidate(TimoModel):
-    surname_tokens: list[str]
-    given_tokens: list[str]
-    score: float
-    format: NameFormatValue
-    original_compound_format: str | None = None
-
-
-class IndividualAnalysis(TimoModel):
-    """Per-name analysis, pre batch-override."""
-
-    raw_name: str
-    candidates: list[Candidate]
-    best_candidate: Candidate | None = None
-    confidence: float = Field(description="candidate softmax for best candidate, or structural parse confidence")
-
-
-class NameOrderEvidence(TimoModel):
-    """Per-name evidence aligned with batch names and results."""
-
-    raw_name: str
-    raw_tokens: list[str]
-    raw_token_count: int
-    script_representation: ScriptRepresentationValue
-    batch_participant: bool
-    batch_applied: bool
-    batch_changed_format: bool
-    individual_format: NameFormatValue
-    selected_format: NameFormatValue
-    selected_surname_position: SurnamePositionValue
-    selected_surname_token_count: int
-    has_all_caps_token: bool
-    all_caps_tokens: list[str]
-    first_token_surname_frequency: float | None = None
-    last_token_surname_frequency: float | None = None
-    selected_surname_frequency: float | None = None
-    alternate_endpoint_surname_frequency: float | None = None
-    selected_over_alternate_surname_frequency_ratio: float | None = None
-
-
-class BatchPrediction(TimoModel):
-    """Full result of analyze_name_batch."""
-
-    names: list[str]
-    results: list[Prediction]
-    format_pattern: FormatPattern
-    individual_analyses: list[IndividualAnalysis]
-    improvements: list[int] = Field(description="indices of names changed by batch context")
-    name_order_evidence: list[NameOrderEvidence]
-
-
-class BatchSummary(TimoModel):
-    """Trimmed analyze_name_batch result: drops candidates, keeps per-name confidence only."""
-
-    names: list[str]
-    results: list[Prediction]
-    format_pattern: FormatPattern
-    confidences: list[float] = Field(description="per-name confidence from individual_analyses, aligned with results")
-
-
-class RoutingDecisionValue(str, Enum):
-    """Serialized pp-vys-abstain router decision."""
-
-    PP = "pp"
-    VYS = "vys"
-    ABSTAIN = "abstain"
-    NOT_PERSON = "not_person"
-
-
-class InputOrderCandidateValue(str, Enum):
-    """Which batch (pp/vys) preserves the input/given-first order; unknown if neither uniquely does."""
-
-    PP = "pp"
-    VYS = "vys"
-    UNKNOWN = "unknown"
-
-
-class RoutedPrediction(TimoModel):
-    """PP-vs-VYS routed result for one author, plus everything needed to inspect/re-run the router.
-
-    `given_name`/`surname`/`middle_name`/`success` are the FINAL routed answer: the PP parse
-    when `router_prediction=='pp'`, the VYS parse when `'vys'`, the input-order side
-    (`input_order_candidate`) when `'abstain'`, and empty when `'not_person'`.
-    """
-
-    success: bool = Field(description="Whether the routed answer is a recognized Chinese person")
-    given_name: str | None = Field(default=None)
-    surname: str | None = Field(default=None)
-    middle_name: str | None = Field(default=None)
-    router_prediction: RoutingDecisionValue = Field(description="pp / vys / abstain / not_person")
-    router_reason: str = Field(description="rule that produced router_prediction")
-    input_order_candidate: InputOrderCandidateValue | None = Field(
-        default=None,
-        description="pp/vys/unknown; abstain resolves to this side. None in PP-only mode.",
-    )
-    pp: Prediction = Field(description="the paper-batch (PP) parse for this author")
-    vys: Prediction | None = Field(default=None, description="the VYS parse; None in PP-only mode (no venue pool)")
-
-
-class PPRoutedPrediction(TimoModel):
-    """PP-only (pp-abstain) routed result for one author.
-
-    `given_name`/`surname`/`middle_name`/`success` are the FINAL routed answer: the PP parse when
-    `router_prediction=='pp'`, the script-aware input-order parse when `'abstain'`, empty when `'not_person'`.
-    """
-
-    success: bool = Field(description="Whether the routed answer is a recognized Chinese person")
-    given_name: str | None = Field(default=None)
-    surname: str | None = Field(default=None)
-    middle_name: str | None = Field(default=None)
-    router_prediction: RoutingDecisionValue = Field(description="pp / abstain / not_person (pp-abstain never emits vys)")
-    router_reason: str = Field(description="rule that produced router_prediction")
-    pp: Prediction = Field(description="the paper-batch (PP) parse for this author")
-
-
-class RoutingInstance(TimoModel):
-    """One paper's authors for the routing-served variant (`RoutingPredictor.predict_batch`).
-
-    Self-contained per instance (the timo runner feeds one Instance at a time), so each carries
-    its own venue pool. One `RoutingInstance` maps to exactly one `RoutedPaperPrediction`, whose
-    `authors` list holds `len(pp_names)` routed authors in `pp_names` order.
-    """
-
-    pp_names: list[str] = Field(description="the paper's author names (PP batch); output aligns to this order")
-    vys_pool_names: list[str] | None = Field(
-        default=None,
-        description=(
-            "venue-source-year author pool with the paper's authors as the FIRST len(pp_names) "
-            "entries (same strings/order as pp_names), then the other venue authors. None/empty => "
-            "PP-only routing fallback."
-        ),
-    )
-
-
-class RoutedPaperPrediction(TimoModel):
-    """One paper's routed result — the timo `Prediction` for the `sinonym_routing_v1` variant.
-
-    Keeps the timo contract 1:1 (one Prediction per `RoutingInstance`) while carrying the paper's
-    per-author routed results in `authors` (aligned to `pp_names`). A paper with no authors yields
-    `authors=[]`, so instances never silently vanish from the output stream.
-    """
-
-    authors: list[RoutedPrediction] = Field(
-        default_factory=list,
-        description="per-author routed results, aligned to the instance's pp_names",
-    )
-
-
-class PredictorConfig(BaseSettings):
-    parallel: ParallelMode = "auto"
+    parallel: _ParallelMode = "auto"
     mp_max_workers: int | None = None
     mp_chunk_size: int = 64
     mp_min_parallel_batches: int | None = None
@@ -282,475 +54,160 @@ class PredictorConfig(BaseSettings):
 
 
 class Predictor:
-    _config: PredictorConfig
-    _artifacts_dir: str
+    """Resolve each paper to one authoritative set of author fields."""
 
     def __init__(self, config: PredictorConfig, artifacts_dir: str):
         self._config = config
         self._artifacts_dir = artifacts_dir
-        self._detector = ChineseNameDetector()
+        self._detector = _ChineseNameDetector()
+        self._resolver = _Resolver(self._detector)
 
-    # ---- converters -------------------------------------------------------
-
-    def _to_prediction(
+    def _resolve_pp_vys_batch(
         self,
-        parse_result,
         *,
-        confidence: float | None = None,
-        format_pattern: FormatPattern | None = None,
-    ) -> Prediction:
-        return Prediction(
-            success=parse_result.success,
-            error_message=parse_result.error_message,
-            given_name=parse_result.parsed.given_name if parse_result.parsed else None,
-            surname=parse_result.parsed.surname if parse_result.parsed else None,
-            middle_name=(parse_result.parsed.middle_name if parse_result.parsed and parse_result.parsed.middle_name else None),
-            confidence=confidence,
-            format_pattern=format_pattern,
-        )
+        sources: list[SourceAuthorFields],
+        pp_batch: _BatchParseResult,
+        pool: _BatchParseResult,
+    ) -> list[ResolvedAuthorFields]:
+        rows = _route_pp_vys_abstain_batches(pp_batch, pool)
+        if len(rows) != len(sources):
+            message = "PP/VYS router output no longer aligns with source authors"
+            raise RuntimeError(message)
+
+        return [
+            self._resolver.resolve_pp_vys_author(
+                source=source,
+                paper_authors=sources,
+                raw_name=pp_batch.names[index],
+                paper_names=pp_batch.names,
+                focal_index=index,
+                row=row,
+                pp_result=pp_batch.results[index],
+                vys_result=pool.results[index],
+            ).copy(update={"chinese_detected": pp_batch.results[index].success})
+            for index, (source, row) in enumerate(zip(sources, rows, strict=True))
+        ]
+
+    def _resolve_pp_batch(
+        self,
+        *,
+        sources: list[SourceAuthorFields],
+        pp_batch: _BatchParseResult,
+    ) -> list[ResolvedAuthorFields]:
+        rows = _route_pp_abstain_rows(_build_pp_abstain_rows(pp_batch, self._detector))
+        if len(rows) != len(sources):
+            message = "PP router output no longer aligns with source authors"
+            raise RuntimeError(message)
+
+        return [
+            self._resolver.resolve_pp_author(
+                source=source,
+                paper_authors=sources,
+                raw_name=pp_batch.names[index],
+                paper_names=pp_batch.names,
+                focal_index=index,
+                row=row,
+                result=pp_batch.results[index],
+            ).copy(update={"chinese_detected": pp_batch.results[index].success})
+            for index, (source, row) in enumerate(zip(sources, rows, strict=True))
+        ]
 
     @staticmethod
-    def _routed_name_fields(parsed) -> dict:
-        """given/surname/middle for a routed answer (all None when `parsed` is None)."""
-        return {
-            "given_name": parsed.given_name if parsed else None,
-            "surname": parsed.surname if parsed else None,
-            "middle_name": parsed.middle_name if parsed and parsed.middle_name else None,
+    def _validate_batch_alignment(
+        submitted_names: list[str],
+        batch_result: _BatchParseResult,
+        *,
+        batch_index: int,
+    ) -> None:
+        """Reject a batch result that no longer matches its submitted slots."""
+        if list(batch_result.names) != submitted_names:
+            message = f"batch result {batch_index} names/order do not match the submitted batch"
+            raise RuntimeError(message)
+
+        expected = len(submitted_names)
+        aligned_lengths = {
+            "results": len(batch_result.results),
+            "individual_analyses": len(batch_result.individual_analyses),
+            "name_order_evidence": len(batch_result.name_order_evidence),
         }
+        mismatched = {name: length for name, length in aligned_lengths.items() if length != expected}
+        if mismatched:
+            message = f"batch result {batch_index} has misaligned fields: expected {expected}, got {mismatched}"
+            raise RuntimeError(message)
+        if any(index < 0 or index >= expected for index in batch_result.improvements):
+            message = f"batch result {batch_index} has an out-of-range improvement index"
+            raise RuntimeError(message)
 
-    def _to_format_pattern(self, pattern) -> FormatPattern:
-        return FormatPattern(
-            dominant_format=pattern.dominant_format.value,
-            confidence=pattern.confidence,
-            decision_confidence=pattern.decision_confidence,
-            surname_first_count=pattern.surname_first_count,
-            given_first_count=pattern.given_first_count,
-            total_count=pattern.total_count,
-            voting_count=pattern.voting_count,
-            vote_margin_count=pattern.vote_margin_count,
-            vote_margin=pattern.vote_margin,
-            threshold_met=pattern.threshold_met,
-        )
+    def _validate_related_batch_results(
+        self,
+        requests: list[tuple[list[str], list[str] | None]],
+        batch_results: list[_RelatedBatchParseResult],
+    ) -> None:
+        """Validate complete PP rows and focal VYS rows before resolution."""
+        if len(batch_results) != len(requests):
+            message = f"batch analysis returned the wrong number of batches: expected {len(requests)}, got {len(batch_results)}"
+            raise RuntimeError(message)
 
-    def _to_candidate(self, candidate) -> Candidate:
-        return Candidate(
-            surname_tokens=list(candidate.surname_tokens),
-            given_tokens=list(candidate.given_tokens),
-            score=candidate.score,
-            format=candidate.format.value,
-            original_compound_format=candidate.original_compound_format,
-        )
-
-    def _to_individual_analysis(self, analysis) -> IndividualAnalysis:
-        return IndividualAnalysis(
-            raw_name=analysis.raw_name,
-            candidates=[self._to_candidate(c) for c in analysis.candidates],
-            best_candidate=(self._to_candidate(analysis.best_candidate) if analysis.best_candidate is not None else None),
-            confidence=analysis.confidence,
-        )
-
-    def _to_name_order_evidence(self, evidence) -> NameOrderEvidence:
-        return NameOrderEvidence(
-            raw_name=evidence.raw_name,
-            raw_tokens=list(evidence.raw_tokens),
-            raw_token_count=evidence.raw_token_count,
-            script_representation=evidence.script_representation or ScriptRepresentationValue.UNKNOWN.value,
-            batch_participant=evidence.batch_participant,
-            batch_applied=evidence.batch_applied,
-            batch_changed_format=evidence.batch_changed_format,
-            individual_format=evidence.individual_format.value,
-            selected_format=evidence.selected_format.value,
-            selected_surname_position=evidence.selected_surname_position,
-            selected_surname_token_count=evidence.selected_surname_token_count,
-            first_token_surname_frequency=evidence.first_token_surname_frequency,
-            last_token_surname_frequency=evidence.last_token_surname_frequency,
-            selected_surname_frequency=evidence.selected_surname_frequency,
-            alternate_endpoint_surname_frequency=evidence.alternate_endpoint_surname_frequency,
-            selected_over_alternate_surname_frequency_ratio=(evidence.selected_over_alternate_surname_frequency_ratio),
-            has_all_caps_token=evidence.has_all_caps_token,
-            all_caps_tokens=list(evidence.all_caps_tokens),
-        )
-
-    def _to_batch_prediction(self, batch_result) -> BatchPrediction:
-        return BatchPrediction(
-            names=list(batch_result.names),
-            results=[self._to_prediction(r) for r in batch_result.results],
-            format_pattern=self._to_format_pattern(batch_result.format_pattern),
-            individual_analyses=[self._to_individual_analysis(a) for a in batch_result.individual_analyses],
-            improvements=list(batch_result.improvements),
-            name_order_evidence=[self._to_name_order_evidence(e) for e in batch_result.name_order_evidence],
-        )
-
-    def _to_batch_summary(self, batch_result) -> BatchSummary:
-        return BatchSummary(
-            names=list(batch_result.names),
-            results=[self._to_prediction(r) for r in batch_result.results],
-            format_pattern=self._to_format_pattern(batch_result.format_pattern),
-            confidences=[a.confidence for a in batch_result.individual_analyses],
-        )
-
-    # ---- predict_batch: timo-served entrypoint for sinonym_v1 (flat name->Prediction) ----
+        for request_index, ((pp_names, vys_pool_names), batch_result) in enumerate(
+            zip(requests, batch_results, strict=True),
+        ):
+            self._validate_batch_alignment(pp_names, batch_result.pp_batch, batch_index=request_index * 2)
+            if vys_pool_names is None:
+                if batch_result.vys_batch is not None or batch_result.vys_context_names is not None:
+                    message = "PP-only analysis unexpectedly returned a VYS result"
+                    raise RuntimeError(message)
+                continue
+            if batch_result.vys_batch is None or batch_result.vys_context_names != tuple(vys_pool_names):
+                message = f"batch result {request_index * 2 + 1} names/order do not match the submitted batch"
+                raise RuntimeError(message)
+            self._validate_batch_alignment(pp_names, batch_result.vys_batch, batch_index=request_index * 2 + 1)
 
     def predict_batch(self, instances: list[Instance]) -> list[Prediction]:
-        """timo HTTP entrypoint. Analyze the whole batch jointly."""
-        if not instances:
-            return []
+        """Resolve one prediction per paper, preserving paper and author order."""
+        predictions: list[Prediction | None] = [None] * len(instances)
+        requests: list[tuple[list[str], list[str] | None]] = []
+        plans: list[tuple[int, int]] = []
 
-        names = [i.name for i in instances]
-        batch_result = self._detector.analyze_name_batches(
-            [names],
-            parallel=self._config.parallel,
-            min_parallel_batches=self._config.mp_min_parallel_batches,
-            max_workers=self._config.mp_max_workers,
-            chunk_size=self._config.mp_chunk_size,
-            mp_start_method=self._config.mp_start_method,
-        )[0]
-        pattern = self._to_format_pattern(batch_result.format_pattern)
-
-        predictions = []
-        for parse_result, analysis in zip(batch_result.results, batch_result.individual_analyses, strict=True):
-            predictions.append(
-                self._to_prediction(
-                    parse_result,
-                    confidence=analysis.confidence,
-                    format_pattern=pattern.copy(deep=True),
-                ),
-            )
-        return predictions
-
-    # ---- exposed detector functions --------------------------------------
-
-    @staticmethod
-    def _batch_kwargs(format_threshold, minimum_batch_size=...) -> dict:
-        """Forward only caller-set tuning params; let sinonym own the defaults."""
-        kw = {}
-        if format_threshold is not None:
-            kw["format_threshold"] = format_threshold
-        if minimum_batch_size is not ... and minimum_batch_size is not None:
-            kw["minimum_batch_size"] = minimum_batch_size
-        return kw
-
-    def analyze_name_batch(
-        self,
-        names: list[str],
-        format_threshold: float | None = None,
-        minimum_batch_size: int | None = None,
-    ) -> BatchPrediction:
-        batch_result = self._detector.analyze_name_batch(names, **self._batch_kwargs(format_threshold, minimum_batch_size))
-        return self._to_batch_prediction(batch_result)
-
-    def process_name_batch(
-        self,
-        names: list[str],
-        format_threshold: float | None = None,
-        minimum_batch_size: int | None = None,
-    ) -> list[Prediction]:
-        results = self._detector.process_name_batch(names, **self._batch_kwargs(format_threshold, minimum_batch_size))
-        return [self._to_prediction(r) for r in results]
-
-    def detect_batch_format(
-        self,
-        names: list[str],
-        format_threshold: float | None = None,
-    ) -> FormatPattern:
-        pattern = self._detector.detect_batch_format(names, **self._batch_kwargs(format_threshold))
-        return self._to_format_pattern(pattern)
-
-    def process_name_batch_multiprocess(
-        self,
-        names: list[str],
-        max_workers: int | None = None,
-        chunk_size: int | None = None,
-    ) -> list[Prediction]:
-        results = self._detector.process_name_batches(
-            [names],
-            parallel="always",
-            min_parallel_batches=1,
-            max_workers=self._config.mp_max_workers if max_workers is None else max_workers,
-            chunk_size=self._config.mp_chunk_size if chunk_size is None else chunk_size,
-            mp_start_method=self._config.mp_start_method,
-        )[0]
-        return [self._to_prediction(r) for r in results]
-
-    def process_name_batches(  # noqa: PLR0913
-        self,
-        batches: list[list[str]],
-        *,
-        parallel: ParallelMode | None = None,
-        max_workers: int | None = None,
-        chunk_size: int | None = None,
-        min_parallel_batches: int | None = None,
-        format_threshold: float | None = None,
-        minimum_batch_size: int | None = None,
-    ) -> list[list[Prediction]]:
-        results = self._detector.process_name_batches(
-            batches,
-            parallel=parallel or self._config.parallel,
-            min_parallel_batches=(
-                self._config.mp_min_parallel_batches if min_parallel_batches is None else min_parallel_batches
-            ),
-            max_workers=self._config.mp_max_workers if max_workers is None else max_workers,
-            chunk_size=self._config.mp_chunk_size if chunk_size is None else chunk_size,
-            mp_start_method=self._config.mp_start_method,
-            **self._batch_kwargs(format_threshold, minimum_batch_size),
-        )
-        return [[self._to_prediction(r) for r in batch_results] for batch_results in results]
-
-    def score_name_batch(
-        self,
-        names: list[str],
-        format_threshold: float | None = None,
-        minimum_batch_size: int | None = None,
-    ) -> BatchSummary:
-        """analyze_name_batch trimmed to names, results, format_pattern, per-name confidence."""
-        batch_result = self._detector.analyze_name_batch(names, **self._batch_kwargs(format_threshold, minimum_batch_size))
-        return self._to_batch_summary(batch_result)
-
-    # ---- name-order routing (call `route`) --------------------------------
-    # The routing core: `RoutingPredictor.predict_batch` (the sinonym_routing_v1 timo variant)
-    # calls `route` per RoutingInstance; also callable directly by importing Predictor.
-    # Needs per-paper grouping (pp_names + vys_pool_names), which the flat sinonym_v1
-    # predict_batch(List[Instance]) contract can't express — hence the separate variant.
-
-    def route_pp_vys(
-        self,
-        pp_names: list[str],
-        vys_pool_names: list[str],
-    ) -> list[RoutedPrediction]:
-        """Run the pp-vys-abstain router for one paper's authors.
-
-        - `pp_names`: the paper's author names (the PP batch); output is aligned to this order.
-        - `vys_pool_names`: the venue-source-year author pool (the VYS batch), with **the paper's
-          own authors as the FIRST `len(pp_names)` entries** (same strings, same order as
-          `pp_names`), followed by the other venue authors. Validated:
-          `vys_pool_names[:len(pp_names)] == pp_names`, else ValueError.
-
-        The full pool sets the VYS batch order-vote (parsing is order-independent, so only the
-        set of names matters); the paper's authors are the leading slice, so their VYS parses are
-        `vys_pool_names[:len(pp_names)]`. Returns one RoutedPrediction per pp author: the FINAL
-        routed parse plus the PP and VYS candidate parses and the router
-        decision/reason/input_order_candidate. Routing emits the PP parse for `pp`, the VYS parse
-        for `vys`, the `input_order_candidate` side for `abstain`, nothing for `not_person`.
-
-        Example — build `vys_pool_names` as the paper's authors FIRST, then the *other* venue
-        authors (do NOT re-include the paper's authors again; that would double-count them in the
-        vote):
-
-            pp_names = ["Yue Lin", "Wei Wang"]                 # this paper's 2 authors
-            other_venue_authors = ["Jun Zhao", "Hui Li", ...]  # rest of the venue-source-year pool
-            vys_pool_names = pp_names + other_venue_authors     # paper authors first
-            predictor.route_pp_vys(pp_names, vys_pool_names)
-
-        Returns 2 RoutedPredictions (one per pp author), aligned to `pp_names`.
-        """
-        if not pp_names:
-            return []
-        n = len(pp_names)
-        if len(vys_pool_names) < n:
-            message = (
-                f"vys_pool_names (len {len(vys_pool_names)}) must contain at least the paper's "
-                f"{n} authors — the paper is a subset of the venue pool"
-            )
-            raise _PoolPreconditionError(message)
-        if list(vys_pool_names[:n]) != list(pp_names):
-            message = "vys_pool_names must start with the paper's authors: vys_pool_names[:len(pp_names)] == pp_names"
-            raise _PoolPreconditionError(message)
-
-        pp_batch = self._detector.analyze_name_batch(pp_names)
-        pool = self._detector.analyze_name_batch(vys_pool_names)
-        return self._route_pp_vys_batches(pp_batch, pool, n)
-
-    @staticmethod
-    def _validate_vys_pool_names(pp_names: list[str], vys_pool_names: list[str]) -> None:
-        """Validate that the VYS pool starts with the PP author slice."""
-        n = len(pp_names)
-        if len(vys_pool_names) < n:
-            message = (
-                f"vys_pool_names (len {len(vys_pool_names)}) must contain at least the paper's "
-                f"{n} authors - the paper is a subset of the venue pool"
-            )
-            raise _PoolPreconditionError(message)
-        if list(vys_pool_names[:n]) != list(pp_names):
-            message = "vys_pool_names must start with the paper's authors: vys_pool_names[:len(pp_names)] == pp_names"
-            raise _PoolPreconditionError(message)
-
-    def _route_pp_vys_batches(
-        self,
-        pp_batch: BatchParseResult,
-        pool: BatchParseResult,
-        n: int,
-    ) -> list[RoutedPrediction]:
-        """Route one PP batch against one analyzed VYS pool batch."""
-        vys_batch = BatchParseResult(
-            names=list(pool.names[:n]),
-            results=list(pool.results[:n]),
-            format_pattern=pool.format_pattern,
-            individual_analyses=list(pool.individual_analyses[:n]),
-            improvements=[i for i in pool.improvements if i < n],
-            name_order_evidence=list(pool.name_order_evidence[:n]),
-        )
-        rows = route_pp_vys_abstain_batches(pp_batch, vys_batch)
-
-        pp_fp = self._to_format_pattern(pp_batch.format_pattern)
-        vys_fp = self._to_format_pattern(vys_batch.format_pattern)
-        out: list[RoutedPrediction] = []
-        for i, row in enumerate(rows):
-            pred = row["router_prediction"]
-            ioc = row.get("input_order_candidate", "unknown")
-            pp_res = pp_batch.results[i]
-            vys_res = vys_batch.results[i]
-            if pred == "pp":
-                chosen = pp_res
-            elif pred == "vys":
-                chosen = vys_res
-            elif pred == "abstain":
-                chosen = {"pp": pp_res, "vys": vys_res}.get(ioc)
-                if chosen is None:
-                    message = f"abstain with unexpected input_order_candidate={ioc!r} (expected 'pp'/'vys')"
-                    raise ValueError(message)
-            elif pred == "not_person":
-                chosen = None
-            else:
-                message = f"pp-vys router returned unexpected router_prediction={pred!r}"
-                raise ValueError(message)
-            parsed = chosen.parsed if (chosen is not None and chosen.success) else None
-            out.append(
-                RoutedPrediction(
-                    success=bool(chosen is not None and chosen.success),
-                    **self._routed_name_fields(parsed),
-                    router_prediction=pred,
-                    router_reason=row.get("router_reason", ""),
-                    input_order_candidate=ioc,
-                    pp=self._to_prediction(pp_res, format_pattern=pp_fp.copy(deep=True)),
-                    vys=self._to_prediction(vys_res, format_pattern=vys_fp.copy(deep=True)),
-                ),
-            )
-        return out
-
-    def _route_pp_batch(self, pp_batch: BatchParseResult) -> list[PPRoutedPrediction]:
-        """Route one analyzed PP-only batch."""
-        rows = route_pp_abstain_rows(build_pp_abstain_rows(pp_batch, self._detector))
-        pp_fp = self._to_format_pattern(pp_batch.format_pattern)
-
-        out: list[PPRoutedPrediction] = []
-        for i, row in enumerate(rows):
-            pred = row["router_prediction"]
-            res = pp_batch.results[i]
-            if pred == "pp":
-                parsed = res.parsed if res.success else None
-            elif pred == "abstain":
-                parsed = pp_abstain_parsed(res, row)
-            elif pred == "not_person":
-                parsed = None
-            else:
-                message = f"pp-abstain router returned unexpected router_prediction={pred!r}"
-                raise ValueError(message)
-            out.append(
-                PPRoutedPrediction(
-                    success=bool(parsed is not None),
-                    **self._routed_name_fields(parsed),
-                    router_prediction=pred,
-                    router_reason=row.get("router_reason", ""),
-                    pp=self._to_prediction(res, format_pattern=pp_fp.copy(deep=True)),
-                ),
-            )
-        return out
-
-    def route_pp(self, names: list[str]) -> list[PPRoutedPrediction]:
-        """PP-only (pp-abstain) router — for when there is no VYS venue pool.
-
-        Runs a single PP batch and applies the self-contained pp-abstain router, which decides
-        per author between `pp` (trust the PP-batch reorder), `abstain` (keep the input-order
-        parse), and `not_person`. Returns one PPRoutedPrediction per name (aligned to `names`):
-        the final routed parse + decision/reason + the PP candidate parse.
-        """
-        if not names:
-            return []
-
-        pp_batch = self._detector.analyze_name_batch(names)
-        return self._route_pp_batch(pp_batch)
-
-    def route(
-        self,
-        pp_names: list[str],
-        vys_pool_names: list[str] | None = None,
-    ) -> list[RoutedPrediction]:
-        """Unified router: use PP+VYS routing when a venue pool is given, else PP-only fallback.
-
-        - If `vys_pool_names` is falsy (None or empty), routes PP-only via the pp-abstain router
-          (`route_pp`); returned `RoutedPrediction`s have `vys=None` and `input_order_candidate=None`.
-        - Otherwise routes PP-vs-VYS via `route_pp_vys` (paper authors must be the leading slice of
-          `vys_pool_names`; see that method).
-
-        Always returns `list[RoutedPrediction]` (one per pp author, aligned to `pp_names`), so callers
-        get a single response shape whether or not venue context is available.
-        """
-        if vys_pool_names:
-            return self.route_pp_vys(pp_names, vys_pool_names)
-        # PPRoutedPrediction is a field-subset of RoutedPrediction; widen each to the unified
-        # shape by adding the PP-only sentinels (no venue pool → no vys / input_order_candidate).
-        return [RoutedPrediction(**r.dict(), input_order_candidate=None, vys=None) for r in self.route_pp(pp_names)]
-
-
-class RoutingPredictor(Predictor):
-    """timo-served routing variant: one RoutingInstance (paper) -> one RoutedPaperPrediction.
-
-    Wraps `Predictor.route`. Stays 1:1 with the timo instance/prediction contract — the paper's
-    per-author routed results are nested in `RoutedPaperPrediction.authors` (aligned to pp_names),
-    so paper boundaries are explicit and empty papers still emit one prediction.
-
-    Malformed non-empty `vys_pool_names` still fail validation with `_PoolPreconditionError`
-    (`ValueError`) instead of being coerced into the same `authors=[]` shape used for valid empty
-    papers. Genuine routing errors also propagate.
-    """
-
-    def predict_batch(self, instances: list[RoutingInstance]) -> list[RoutedPaperPrediction]:  # type: ignore[override]
-        predictions: list[RoutedPaperPrediction | None] = [None] * len(instances)
-        batch_inputs: list[list[str]] = []
-        plans: list[tuple[int, str, int, int | None, int]] = []
-
-        for instance_index, inst in enumerate(instances):
-            if not inst.pp_names:
-                predictions[instance_index] = RoutedPaperPrediction(authors=[])
+        for instance_index, instance in enumerate(instances):
+            pp_names = [author.full_name() for author in instance.pp_authors]
+            if not pp_names:
+                predictions[instance_index] = Prediction(authors=[])
                 continue
 
-            if inst.vys_pool_names:
-                self._validate_vys_pool_names(inst.pp_names, inst.vys_pool_names)
-                pp_batch_index = len(batch_inputs)
-                batch_inputs.append(inst.pp_names)
-                vys_batch_index = len(batch_inputs)
-                batch_inputs.append(inst.vys_pool_names)
-                plans.append((instance_index, "pp_vys", pp_batch_index, vys_batch_index, len(inst.pp_names)))
-            else:
-                pp_batch_index = len(batch_inputs)
-                batch_inputs.append(inst.pp_names)
-                plans.append((instance_index, "pp_only", pp_batch_index, None, 0))
+            vys_pool_names = [*pp_names, *instance.vys_other_names] if instance.vys_other_names else None
+            plans.append((instance_index, len(requests)))
+            requests.append((pp_names, vys_pool_names))
 
-        batch_results = self._detector.analyze_name_batches(
-            batch_inputs,
+        batch_results = self._detector._analyze_related_batch_requests(  # noqa: SLF001
+            requests,
             parallel=self._config.parallel,
             min_parallel_batches=self._config.mp_min_parallel_batches,
             max_workers=self._config.mp_max_workers,
             chunk_size=self._config.mp_chunk_size,
             mp_start_method=self._config.mp_start_method,
         )
+        self._validate_related_batch_results(requests, batch_results)
 
-        for instance_index, mode, pp_batch_index, vys_batch_index, pp_count in plans:
-            if mode == "pp_vys":
-                if vys_batch_index is None:
-                    message = "pp_vys routing plan missing VYS batch index"
-                    raise RuntimeError(message)
-                authors = self._route_pp_vys_batches(
-                    batch_results[pp_batch_index],
-                    batch_results[vys_batch_index],
-                    pp_count,
+        for instance_index, request_index in plans:
+            instance = instances[instance_index]
+            batch_result = batch_results[request_index]
+            if requests[request_index][1] is None:
+                authors = self._resolve_pp_batch(
+                    sources=instance.pp_authors,
+                    pp_batch=batch_result.pp_batch,
                 )
             else:
-                pp_only = self._route_pp_batch(batch_results[pp_batch_index])
-                authors = [RoutedPrediction(**r.dict(), input_order_candidate=None, vys=None) for r in pp_only]
-            predictions[instance_index] = RoutedPaperPrediction(authors=authors)
+                if batch_result.vys_batch is None:
+                    message = "PP/VYS routing plan is missing its VYS batch result"
+                    raise RuntimeError(message)
+                authors = self._resolve_pp_vys_batch(
+                    sources=instance.pp_authors,
+                    pp_batch=batch_result.pp_batch,
+                    pool=batch_result.vys_batch,
+                )
+            predictions[instance_index] = Prediction(authors=authors)
 
         if any(prediction is None for prediction in predictions):
-            message = "routing prediction plan did not fill every instance slot"
+            message = "prediction plan did not fill every instance slot"
             raise RuntimeError(message)
         return [prediction for prediction in predictions if prediction is not None]

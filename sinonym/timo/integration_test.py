@@ -1,124 +1,56 @@
 import unittest
 
+from sinonym.coretypes.routing_resolution import ResolutionAction, ResolutionReason
 from sinonym.timo.interface import (
     Instance,
     Prediction,
     Predictor,
     PredictorConfig,
-    RoutedPaperPrediction,
-    RoutedPrediction,
-    RoutingInstance,
-    RoutingPredictor,
+    ResolvedAuthorFields,
+    SourceAuthorFields,
 )
 
 
 class TestIntegration(unittest.TestCase):
+    """Integration contract for terminal, source-shaped author resolution."""
+
     @classmethod
     def setUpClass(cls):
         cls.predictor = Predictor(config=PredictorConfig(), artifacts_dir=".")
 
-    def test_chinese_name(self):
-        results = self.predictor.predict_batch([Instance(name="Li Wei")])
-        self.assertEqual(len(results), 1)
-        self.assertIsInstance(results[0], Prediction)
-        self.assertTrue(results[0].success)
-        self.assertEqual(results[0].given_name, "Wei")
-        self.assertEqual(results[0].surname, "Li")
-
-    def test_non_chinese_name(self):
-        results = self.predictor.predict_batch([Instance(name="John Smith")])
-        self.assertEqual(len(results), 1)
-        self.assertFalse(results[0].success)
-        self.assertIsNotNone(results[0].error_message)
-
-    def test_batch_superset_output(self):
-        instances = [Instance(name="Li Wei"), Instance(name="Wang Weiming")]
-        results = self.predictor.predict_batch(instances)
-        self.assertEqual(len(results), 2)
-        for r in results:
-            self.assertIsInstance(r, Prediction)
-            self.assertTrue(r.success)
-            # superset: every Prediction carries confidence + format_pattern
-            self.assertIsNotNone(r.confidence)
-            self.assertIsNotNone(r.format_pattern)
-        # shared batch pattern replicated onto each row
-        self.assertEqual(
-            results[0].format_pattern.dominant_format,
-            results[1].format_pattern.dominant_format,
+    def test_structured_input_produces_directly_writable_fields(self):
+        instance = Instance(
+            pp_authors=[
+                SourceAuthorFields(first_name="Steve", last_name="Blando", suffix="IV"),
+                SourceAuthorFields(first_name="Li", last_name="Wei"),
+            ],
+            vys_other_names=["Jun Zhao", "Hui Li"],
         )
 
-    def test_predict_batch_empty(self):
-        self.assertEqual(self.predictor.predict_batch([]), [])
+        (paper,) = self.predictor.predict_batch([instance])
 
-    def test_score_name_batch(self):
-        names = ["Li Wei", "Wang Weiming"]
-        summary = self.predictor.score_name_batch(names)
-        self.assertEqual(summary.names, names)
-        self.assertEqual(len(summary.results), 2)
-        self.assertEqual(len(summary.confidences), 2)
-        self.assertIsNotNone(summary.format_pattern.dominant_format)
-
-    def test_score_name_batch_tuned_threshold(self):
-        names = ["Li Wei", "Wang Weiming"]
-        summary = self.predictor.score_name_batch(names, format_threshold=0.9)
-        self.assertEqual(len(summary.results), 2)
-        if summary.format_pattern.threshold_met:
-            self.assertGreaterEqual(summary.format_pattern.decision_confidence, 0.9)
-
-    def test_detect_batch_format(self):
-        pattern = self.predictor.detect_batch_format(["Zhang Wei", "Li Ming", "Wang Xiaoli"])
-        self.assertIn(pattern.dominant_format, {"surname_first", "given_first", "mixed"})
-
-    def test_analyze_name_batch_full(self):
-        result = self.predictor.analyze_name_batch(["Li Wei", "Wang Weiming"])
-        self.assertEqual(len(result.results), 2)
-        self.assertEqual(len(result.individual_analyses), 2)
-        self.assertEqual(len(result.name_order_evidence), 2)
-        self.assertEqual(result.name_order_evidence[0].raw_name, "Li Wei")
-        self.assertEqual(result.name_order_evidence[0].selected_format, "surname_first")
-
-
-class TestRoutingIntegration(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.predictor = RoutingPredictor(config=PredictorConfig(), artifacts_dir=".")
-
-    def test_route_with_vys_pool(self):
-        # paper authors must be the leading slice of the pool
-        pp = ["Yue Lin", "Wei Wang"]
-        pool = pp + ["Jun Zhao", "Hui Li"]
-        results = self.predictor.predict_batch([RoutingInstance(pp_names=pp, vys_pool_names=pool)])
-        self.assertEqual(len(results), 1)  # one prediction per instance (timo 1:1 contract)
-        paper = results[0]
-        self.assertIsInstance(paper, RoutedPaperPrediction)
-        self.assertEqual(len(paper.authors), 2)  # one RoutedPrediction per pp author
-        for r in paper.authors:
-            self.assertIsInstance(r, RoutedPrediction)
-            self.assertIn(r.router_prediction, {"pp", "vys", "abstain", "not_person"})
-            self.assertIsNotNone(r.vys)  # vys candidate present when a pool is given
-
-    def test_route_pp_only_fallback(self):
-        results = self.predictor.predict_batch([RoutingInstance(pp_names=["Li Wei"])])
-        self.assertEqual(len(results), 1)
-        authors = results[0].authors
-        self.assertEqual(len(authors), 1)
-        self.assertIsNone(authors[0].vys)  # PP-only fallback: no venue pool
-        self.assertIsNone(authors[0].input_order_candidate)
-
-    def test_predict_batch_is_one_to_one(self):
-        instances = [
-            RoutingInstance(pp_names=["Li Wei", "Wang Weiming"]),
-            RoutingInstance(pp_names=["Zhang San"]),
-        ]
-        results = self.predictor.predict_batch(instances)
-        self.assertEqual(len(results), len(instances))  # 1:1, paper boundaries preserved
-        self.assertEqual([len(p.authors) for p in results], [2, 1])
+        self.assertIsInstance(paper, Prediction)
+        self.assertEqual(len(paper.authors), 2)
+        self.assertTrue(all(isinstance(author, ResolvedAuthorFields) for author in paper.authors))
+        self.assertEqual(paper.authors[0].suffix, "IV")
+        self.assertEqual(paper.authors[1].last_name, "Li")
+        self.assertIn("resolution_action", paper.authors[0].dict())
+        self.assertNotIn("resolved_fields", paper.authors[0].dict())
 
     def test_empty_paper_still_emits_one_prediction(self):
-        # an instance with no authors must not vanish from the output stream
-        results = self.predictor.predict_batch([RoutingInstance(pp_names=[])])
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].authors, [])
+        (paper,) = self.predictor.predict_batch([Instance(pp_authors=[])])
+        self.assertEqual(paper.authors, [])
+
+    def test_reviewed_non_person_is_machine_actionable(self):
+        instance = Instance(
+            pp_authors=[SourceAuthorFields(first_name="STADT", last_name="N\u00dcRNBERG")],
+        )
+
+        (paper,) = self.predictor.predict_batch([instance])
+
+        resolved = paper.authors[0]
+        self.assertIs(resolved.resolution_action, ResolutionAction.SUPPRESS)
+        self.assertIs(resolved.resolution_reason, ResolutionReason.REVIEWED_NON_PERSON_PATTERN)
 
     def test_predict_batch_empty(self):
         self.assertEqual(self.predictor.predict_batch([]), [])

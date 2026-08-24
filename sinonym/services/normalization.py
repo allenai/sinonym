@@ -9,10 +9,18 @@ from __future__ import annotations
 
 import string
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import TYPE_CHECKING, Literal
 
 from sinonym.chinese_names_data import VALID_CHINESE_RIMES
+from sinonym.coretypes import NameFormat
+from sinonym.name_punctuation import (
+    ROMAN_HYPHEN_LIKE,
+    fold_internal_name_joiners,
+    fold_spaced_transliteration_apostrophes,
+)
 from sinonym.text_processing import CompoundDetector, TextNormalizer, TextPreprocessor
+from sinonym.text_processing.text_normalizer import strip_name_variation_selectors
 from sinonym.utils.string_manipulation import StringManipulationUtils
 from sinonym.utils.thread_cache import ThreadLocalCache
 
@@ -46,16 +54,18 @@ class LazyNormalizationMap:
         object.__setattr__(self, "_normalizer", normalizer)
         object.__setattr__(self, "_cache", ThreadLocalCache())
 
-    def get(self, token: str, default: str | None = None):
-        """Get normalized value for token, computing lazily with thread-local cache."""
+    def get(self, token: str, default: str | None = None) -> str | None:
+        """Return a normalized member value, or ``default`` for a missing key."""
+        if token not in self:
+            return default
+        return self[token]
+
+    def __getitem__(self, token: str) -> str:
+        """Normalize any key lazily, preserving the legacy indexing contract."""
         return self._cache.get_or_compute(
             token,
             lambda: self._normalizer._text_normalizer.normalize_token(token),
         )
-
-    def __getitem__(self, token: str) -> str:
-        """Dict-like access."""
-        return self.get(token)
 
     def __contains__(self, token: str) -> bool:
         """Check if token is in the original tokens."""
@@ -65,6 +75,28 @@ class LazyNormalizationMap:
         """Iterate over all items, computing values lazily."""
         for token in self._tokens:
             yield token, self.get(token)
+
+
+@dataclass(frozen=True)
+class SpacedCompoundSpan:
+    """One occurrence of a space-delimited compound surname.
+
+    ``start`` is inclusive and ``end`` is exclusive in the normalized Roman
+    token sequence.  Keeping source positions here prevents repeated token
+    values from making unrelated occurrences look like compound parts.
+    """
+
+    start: int
+    end: int
+    compound_target: str
+
+    def reversed(self, token_count: int) -> SpacedCompoundSpan:
+        """Return this span re-indexed for the reversed token sequence."""
+        return SpacedCompoundSpan(
+            start=token_count - self.end,
+            end=token_count - self.start,
+            compound_target=self.compound_target,
+        )
 
 
 @dataclass(frozen=True)
@@ -88,6 +120,9 @@ class NormalizedInput:
     compound_metadata: dict[str, CompoundMetadata]  # token → compound info
     from_camel_case_pair: bool = False
     surname_first_parenthetical_hint: bool = False
+    spaced_compound_spans: tuple[SpacedCompoundSpan, ...] = ()
+    authored_roman_tokens: tuple[str, ...] = ()
+    authoritative_source_format: NameFormat | None = None
 
     @classmethod
     def empty(cls, raw: str = "") -> NormalizedInput:
@@ -105,6 +140,11 @@ class NormalizationService:
         self._text_normalizer = TextNormalizer(config)
         self._text_preprocessor = TextPreprocessor(config, self)
         self._compound_detector = CompoundDetector(config)
+        self._structural_hyphen_tr = {
+            source: target
+            for source, target in config.roman_punctuation_fold_tr.items()
+            if source > 0x7F and chr(source) in ROMAN_HYPHEN_LIKE and target == "-"
+        }
 
     def set_data_context(self, data) -> None:
         """Inject data context after initialization - breaks circular dependency."""
@@ -132,6 +172,22 @@ class NormalizationService:
         """
         return self._text_normalizer.normalize_token_light(token)
 
+    def is_attested_remapped_given_syllable(self, token: str) -> bool:
+        """Return whether romanization remaps ``token`` to an attested given syllable."""
+        light = self.norm_light(token)
+        mapped = self.norm(token)
+        return bool(self._data and mapped != light and self._data.is_given_name(mapped))
+
+    def is_vowelless_compact_initial(self, token: str) -> bool:
+        """Return whether ``token`` has the reviewed 2-3 letter initial shape."""
+        folded = self.norm_light(token)
+        return bool(
+            token.isalpha()
+            and 2 <= len(folded) <= 3
+            and not any(character in "aeiou" for character in folded)
+            and not self.is_attested_remapped_given_syllable(token),
+        )
+
     def contains_cjk(self, text: str) -> bool:
         """Return whether text contains any configured CJK character."""
         return bool(self._config.cjk_pattern.search(text))
@@ -142,7 +198,9 @@ class NormalizationService:
 
         Consolidates the common pattern: normalized_cache.get(token, self.norm(token))
         """
-        return norm_cache.get(token, self.norm(token))
+        if token in norm_cache:
+            return norm_cache[token]
+        return self.norm(token)
 
     def apply(self, raw_name: str) -> NormalizedInput:
         """
@@ -152,22 +210,53 @@ class NormalizationService:
         if not raw_name or not raw_name.strip():
             return NormalizedInput.empty(raw_name)
 
-        # Phase 1: Clean input (single regex pass)
+        semantic_name = strip_name_variation_selectors(raw_name)
+        simple_tokens = self.simple_latin_tokens(semantic_name)
+        if simple_tokens is not None:
+            norm_map = {token: self._text_normalizer.normalize_token(token) for token in simple_tokens}
+            compound_metadata, spaced_compound_spans = self._compound_detector.generate_compound_analysis(
+                simple_tokens,
+                self._data,
+            )
+            return NormalizedInput(
+                raw=raw_name,
+                cleaned=semantic_name,
+                tokens=simple_tokens,
+                roman_tokens=simple_tokens,
+                norm_map=norm_map,
+                compound_metadata=compound_metadata,
+                spaced_compound_spans=spaced_compound_spans,
+            )
+
+        # Phase 1: Give Unicode hyphens the same structural treatment as ASCII
+        # before camel-case and concatenated-surname decisions run. Apostrophes
+        # retain their existing later fold point.
+        structural_name = (
+            semantic_name if semantic_name.isascii() else fold_internal_name_joiners(semantic_name, self._structural_hyphen_tr)
+        )
         cleaned, from_camel_case_pair, surname_first_parenthetical_hint = self._text_preprocessor.preprocess_input(
-            raw_name,
+            structural_name,
             self._data,
         )
 
-        # Phase 2: Handle "LAST, First" format (common in academic/professional contexts)
+        # Phase 2: Handle "LAST, First" format (common in academic/professional contexts).
+        # Parsing keeps the established given-first rewrite, while the authored
+        # representation remains available for source metadata and batch voting.
+        authored_cleaned = cleaned
+        authoritative_source_format = None
         if "," in cleaned:
             parts = [part.strip() for part in cleaned.split(",")]
             if len(parts) == 2 and all(parts):  # Exactly 2 non-empty parts
+                authored_cleaned = StringManipulationUtils.join_with_spaces(parts)
                 cleaned = StringManipulationUtils.join_with_spaces(parts[::-1])  # Reverse order: "Last, First" -> "First Last"
+                authoritative_source_format = NameFormat.SURNAME_FIRST
 
         # Phase 3: Detect all-Chinese input for special processing
         is_all_chinese = self._text_preprocessor.is_all_chinese_input(cleaned)
 
-        # Phase 4: Tokenize on separators/whitespace and filter out invalid tokens
+        # Phase 4: Preserve authored name joiners before the generic separator pass.
+        cleaned = fold_internal_name_joiners(cleaned, self._config.roman_punctuation_fold_tr)
+        cleaned = fold_spaced_transliteration_apostrophes(cleaned)
         raw_tokens = self._config.sep_pattern.sub(" ", cleaned).split()
         tokens = tuple(t for t in raw_tokens if t and not all(c in string.punctuation for c in t))
 
@@ -177,6 +266,22 @@ class NormalizationService:
         # Phase 5: Process mixed Han/Roman tokens (enhanced for all-Chinese inputs)
         roman_tokens = tuple(self._process_mixed_tokens(list(tokens), is_all_chinese))
 
+        if authoritative_source_format is None:
+            authored_roman_tokens = roman_tokens
+        else:
+            authored_cleaned = fold_internal_name_joiners(
+                authored_cleaned,
+                self._config.roman_punctuation_fold_tr,
+            )
+            authored_cleaned = fold_spaced_transliteration_apostrophes(authored_cleaned)
+            authored_raw_tokens = self._config.sep_pattern.sub(" ", authored_cleaned).split()
+            authored_tokens = tuple(
+                token
+                for token in authored_raw_tokens
+                if token and not all(character in string.punctuation for character in token)
+            )
+            authored_roman_tokens = tuple(self._process_mixed_tokens(list(authored_tokens), is_all_chinese))
+
         if not roman_tokens:
             return NormalizedInput.empty(raw_name)
 
@@ -184,7 +289,10 @@ class NormalizationService:
         norm_map = {token: self._text_normalizer.normalize_token(token) for token in roman_tokens}
 
         # Phase 7: Generate compound metadata for each token (centralized detection)
-        compound_metadata = self._compound_detector.generate_compound_metadata(roman_tokens, self._data)
+        compound_metadata, spaced_compound_spans = self._compound_detector.generate_compound_analysis(
+            roman_tokens,
+            self._data,
+        )
 
         return NormalizedInput(
             raw=raw_name,
@@ -195,34 +303,59 @@ class NormalizationService:
             compound_metadata=compound_metadata,
             from_camel_case_pair=from_camel_case_pair,
             surname_first_parenthetical_hint=surname_first_parenthetical_hint,
+            spaced_compound_spans=spaced_compound_spans,
+            authored_roman_tokens=authored_roman_tokens,
+            authoritative_source_format=authoritative_source_format,
         )
+
+    @staticmethod
+    @lru_cache(maxsize=4096)
+    def simple_latin_tokens(raw_name: str) -> tuple[str, ...] | None:
+        """Return clean space-delimited ASCII name tokens, or abstain."""
+        if not raw_name.isascii() or raw_name != raw_name.strip():
+            return None
+        tokens = tuple(raw_name.split(" "))
+        if len(tokens) < 2 or any(not token for token in tokens):
+            return None
+        for token in tokens:
+            parts = token.replace("'", "-").split("-")
+            if any(not part.isalpha() for part in parts):
+                return None
+        return tokens
+
+    def _is_supported_roman_letter(self, character: str) -> bool:
+        """Return whether one character belongs to the configured Roman ranges."""
+        return character.isalpha() and not self._config.clean_roman_pattern.search(character)
 
     def _process_mixed_tokens(self, tokens: list[str], is_all_chinese: bool = False) -> list[str]:
         """Extract existing mixed token processing logic with enhanced all-Chinese support."""
         mix = []
+        has_compact_mixed_token = False
         # Cache for character-level CJK pattern checks to avoid repeated regex calls
         cjk_cache = {}
 
         for token in tokens:
-            if self._config.cjk_pattern.search(token) and self._config.ascii_alpha_pattern.search(token):
-                # Split mixed Han/Roman token - use character caching for performance
-                han_chars = []
-                rom_chars = []
+            if self._config.cjk_pattern.search(token) and any(self._is_supported_roman_letter(c) for c in token):
+                has_compact_mixed_token = True
+                # Split into contiguous script runs so source order survives
+                # romanization (for example, both ``张Wei`` and ``Wei张``).
+                current_run = []
+                current_run_is_han = None
                 for c in token:
                     if c not in cjk_cache:
                         cjk_cache[c] = bool(self._config.cjk_pattern.search(c))
 
-                    if cjk_cache[c]:
-                        han_chars.append(c)
-                    elif c.isascii() and c.isalpha():
-                        rom_chars.append(c)
+                    is_han = cjk_cache[c]
+                    if not is_han and not self._is_supported_roman_letter(c):
+                        continue
+                    if current_run and is_han != current_run_is_han:
+                        mix.append("".join(current_run))
+                        current_run = []
+                    current_run.append(c)
+                    current_run_is_han = is_han
 
-                han = "".join(han_chars)
-                rom = "".join(rom_chars)
-                if han:
-                    mix.append(han)
-                if rom:
-                    mix.append(rom)
+                if current_run:
+                    mix.append("".join(current_run))
             else:
                 mix.append(token)
 
@@ -230,19 +363,21 @@ class NormalizationService:
         han_tokens = []
         roman_tokens_split = []
         roman_tokens_original = []
+        source_order_tokens = []
 
         for token in mix:
             if self._config.cjk_pattern.search(token):
                 # Convert Han to pinyin. all-Chinese and mixed-script paths share the same behavior.
-                han_token = token
-                if is_all_chinese:
-                    han_token = self._config.sep_pattern.sub("", han_token)
-                    han_token = han_token.translate(self._config.hyphens_apostrophes_tr)
+                han_token = self._han_conversion_token(token, is_all_chinese)
                 pinyin_tokens = self._cache_service.han_to_pinyin_fast(han_token)
                 han_tokens.extend(pinyin_tokens)
+                source_order_tokens.extend(pinyin_tokens)
             else:
                 # Clean Roman token
-                clean_token = self._config.clean_roman_pattern.sub("", token)
+                clean_token = self._config.clean_roman_pattern.sub(
+                    "",
+                    token.translate(self._config.roman_punctuation_fold_tr),
+                )
                 # Filter out empty tokens and tokens that are only punctuation
                 if clean_token and not all(c in string.punctuation for c in clean_token):
                     roman_tokens_original.append(clean_token)
@@ -251,6 +386,7 @@ class NormalizationService:
                     if "-" in clean_token:
                         parts = StringManipulationUtils.split_and_clean_hyphens(clean_token)
                         roman_tokens_split.extend(parts)
+                        source_order_tokens.extend(parts)
                     # Use centralized split_concat method if available
                     elif self._data:
                         # Seed cache with the full token; split helper fills additional entries on demand.
@@ -265,10 +401,13 @@ class NormalizationService:
                         )
                         if split_result:
                             roman_tokens_split.extend(split_result)
+                            source_order_tokens.extend(split_result)
                         else:
                             roman_tokens_split.append(clean_token)
+                            source_order_tokens.append(clean_token)
                     else:
                         roman_tokens_split.append(clean_token)
+                        source_order_tokens.append(clean_token)
 
         # Handle Han/Roman duplication
         if han_tokens and roman_tokens_split:
@@ -282,11 +421,28 @@ class NormalizationService:
             if len(overlap) >= max_size * 0.5:
                 # Use original Roman format (preserves hyphens and avoids duplication)
                 return roman_tokens_original
-            # Combine them
+            if has_compact_mixed_token:
+                return source_order_tokens
             return han_tokens + roman_tokens_split
         if han_tokens:
             return han_tokens
         return roman_tokens_original
+
+    def han_roman_source_characters(self, normalized_input: NormalizedInput) -> tuple[str, ...]:
+        """Return source characters aligned with a Han-only input's Roman tokens."""
+        is_all_chinese = self._text_preprocessor.is_all_chinese_input(normalized_input.cleaned)
+        characters = []
+        for token in normalized_input.tokens:
+            if self._config.cjk_pattern.search(token):
+                characters.extend(self._han_conversion_token(token, is_all_chinese))
+        return tuple(characters)
+
+    def _han_conversion_token(self, token: str, is_all_chinese: bool) -> str:
+        """Return the source characters passed to the Han-to-pinyin cache."""
+        if not is_all_chinese:
+            return token
+        token = self._config.sep_pattern.sub("", token)
+        return token.translate(self._config.hyphens_apostrophes_tr)
 
     def classify_script_representation(self, normalized_input: NormalizedInput) -> ScriptRepresentation:
         """Classify script provenance for batch convention voting."""
@@ -323,14 +479,30 @@ class NormalizationService:
             else:
                 return None
 
-            han_pinyin = tuple(self._cache_service.han_to_pinyin_fast(han_token))
-            if not roman_token or not han_pinyin or not self._roman_matches_han_token(roman_token, han_pinyin):
+            han_pinyin = self._matching_aligned_han_pinyin(roman_token, han_token)
+            if not roman_token or han_pinyin is None:
                 return None
 
             pairs.append(BilingualTokenPair(roman_token=roman_token, han_token=han_token, han_pinyin=han_pinyin))
             index += 2
 
         return tuple(pairs) if len(pairs) >= MIN_BILINGUAL_ALIGNMENT_PAIRS else None
+
+    def _matching_aligned_han_pinyin(self, roman_token: str, han_token: str) -> tuple[str, ...] | None:
+        """Match one explicit pair, allowing heteronyms only for recognized Han surnames."""
+        primary = tuple(self._cache_service.han_to_pinyin_fast(han_token))
+        if primary and self._roman_matches_han_token(roman_token, primary):
+            return primary
+        if self._data is None or self._data.surname_frequencies.get(han_token, 0.0) <= 0:
+            return None
+        return next(
+            (
+                alternative
+                for alternative in self._cache_service.han_to_pinyin_alternatives_fast(han_token)
+                if self._roman_matches_han_token(roman_token, alternative)
+            ),
+            None,
+        )
 
     def _is_han_token(self, token: str) -> bool:
         """Return whether the whole token is CJK characters."""
@@ -344,7 +516,8 @@ class NormalizationService:
 
     def _clean_roman_token(self, token: str) -> str:
         """Clean a Roman token without changing its source capitalization."""
-        return self._config.clean_roman_pattern.sub("", token)
+        folded = token.translate(self._config.roman_punctuation_fold_tr)
+        return self._config.clean_roman_pattern.sub("", folded)
 
     def _roman_matches_han_token(self, roman_token: str, han_pinyin: tuple[str, ...]) -> bool:
         """Return whether a Roman token is the pinyin equivalent of a Han token group."""

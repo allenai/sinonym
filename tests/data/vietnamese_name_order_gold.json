@@ -1,0 +1,6233 @@
+{
+ "provenance": {
+  "what": "blind labels for bare-ASCII Vietnamese-headed author names: which token is the family name. Judges saw the raw string only, never any sinonym output.",
+  "judged": "2026-07-28. vn26: 306 items / 918 votes / 6 judges, stratified by token shape. vn26c: 397 names drawn with probability proportional to corpus mentions, 2 votes, 6 judges. vn26d: the same 397 names re-judged open-ended (no candidate answers offered), 2 votes, 6 judges.",
+  "items": 690,
+  "instruments": {
+   "open_ended": 388,
+   "two_candidate": 302
+  },
+  "shapes": {
+   "multi_tok": 525,
+   "two_tok": 165
+  },
+  "agreement": "the two instruments agreed on 383/384 shared names; attention checks 12/12 and 6/6; calibration against the stratified round 57/57 and 58/58",
+  "why_pps": "accuracy on this population is mention-weighted by construction: under PPS the unweighted rate of the sample estimates the corpus rate, so no per-name rate is projected onto mentions",
+  "population": "23,462 names / 101,119 mentions route family-first under the 26-head relaxation; a further 9,144 names / 53,067 mentions are held back by the trailing-surname guard and are represented here too",
+  "rule_measured": "sinonym/services/east_asian_name_order.py::_infer_vietnamese, the ASCII_ROUTABLE_VIETNAMESE_SURNAMES_WITHOUT_SURNAME_PARTNER branch",
+  "known_residue": "non-Vietnamese surnames in trailing position (Doan Perdana, Dam Sunwoo, Doan Nainggolan, Vo Ebuara), rare Vietnamese surnames trailing (Truong Nghiem, Truong Son Hy) and front-rotated records (Thuong Le Thi, Trinh Nguyen Duy). No shipped asset can identify these; see the discussion in the experiment log.",
+  "scripts": "author-names/sinonym_split_experiment/korean_experiment/vn26*.py"
+ },
+ "items": [
+  {
+   "name": "Bui An Ton",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 80
+  },
+  {
+   "name": "Bui Anh Thy",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Bui Dinh Khan",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Bui Dinh Tri",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 6
+  },
+  {
+   "name": "Bui Duy Khuong",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Bui Hai Hoang",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 16
+  },
+  {
+   "name": "Bui Hoang Phuc",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 12
+  },
+  {
+   "name": "Bui Huu Duc",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Bui Huu Tai",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 357
+  },
+  {
+   "name": "Bui Huy",
+   "family": "Bui",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 24
+  },
+  {
+   "name": "Bui Khoa",
+   "family": "Bui",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Bui Lan Huong",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Bui Le Trong Thanh",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 15
+  },
+  {
+   "name": "Bui Le Vinh",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 8
+  },
+  {
+   "name": "Bui Manh Tuan",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Bui Nghia",
+   "family": "Bui",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Bui Ngoc Linh Chi",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Bui Pham Minh Man",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Bui Phuoc Tam",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 9
+  },
+  {
+   "name": "Bui Phuong Thao",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 68
+  },
+  {
+   "name": "Bui Qq",
+   "family": "Bui",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Bui Quang Minh",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 118
+  },
+  {
+   "name": "Bui Quang Thuat",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Bui Tac",
+   "family": "Bui",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Bui Thanh Tung",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 143
+  },
+  {
+   "name": "Bui Thi",
+   "family": "Bui",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 110
+  },
+  {
+   "name": "Bui Thi Bich Hang",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 25
+  },
+  {
+   "name": "Bui Thi Hang",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 58
+  },
+  {
+   "name": "Bui Thi Kim Uyen",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 7
+  },
+  {
+   "name": "Bui Thi Mai Huong",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 13
+  },
+  {
+   "name": "Bui Thi Thu Trang",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 30
+  },
+  {
+   "name": "Bui Thi Thuy",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 28
+  },
+  {
+   "name": "Bui Thi Thuy Lan",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Bui Trong Cau",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Bui Truong Giang",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Bui Van Duc",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 16
+  },
+  {
+   "name": "Bui Van Lac",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Bui Van Pho",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Bui Van Thang",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 22
+  },
+  {
+   "name": "Bui Van Thanh",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 29
+  },
+  {
+   "name": "Bui Van Trung",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 8
+  },
+  {
+   "name": "Bui Viet Dung",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 21
+  },
+  {
+   "name": "Bui Vu",
+   "family": "Bui",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Bui Xuan Thanh",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 86
+  },
+  {
+   "name": "Dam Ha Luong Thanh",
+   "family": "Dam",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Dam Khan",
+   "family": "Dam",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26c_pps_xy",
+   "instrument": "two_candidate",
+   "mentions": 6
+  },
+  {
+   "name": "Dam Nguyen Binh",
+   "family": "Dam",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 57
+  },
+  {
+   "name": "Dam Smith",
+   "family": "Smith",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dam Sunwoo",
+   "family": "Sunwoo",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 27
+  },
+  {
+   "name": "Dam Thanh Son",
+   "family": "Dam",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 168
+  },
+  {
+   "name": "Dang Dd",
+   "family": "Dang",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dang Dinh",
+   "family": "Dang",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 21
+  },
+  {
+   "name": "Dang Dinh Ang",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 55
+  },
+  {
+   "name": "Dang Dinh Thoang",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 14
+  },
+  {
+   "name": "Dang Dinh Tri",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Dang Duc Trach",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 26
+  },
+  {
+   "name": "Dang Hoang Viet",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Dang Huu Man",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Dang Huu Trung",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 10
+  },
+  {
+   "name": "Dang Kim Tuyen",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dang Lam Ngoc Dieu",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Dang Ngoc Can",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 9
+  },
+  {
+   "name": "Dang Ngoc KHUE",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Dang Nguyen Nhat Huy",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dang Nhu Thanh",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Dang Phuc",
+   "family": "Dang",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dang Quan Nguyen",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 18
+  },
+  {
+   "name": "Dang Quang Vinh",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 12
+  },
+  {
+   "name": "Dang Quoc Khanh",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 19
+  },
+  {
+   "name": "Dang Quoc Minh Duong",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dang Quyet Thang",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 7
+  },
+  {
+   "name": "Dang Quynh Lien",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dang Rui-zh",
+   "family": "Dang",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dang Thanh Chung",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 15
+  },
+  {
+   "name": "Dang Thanh Chuong",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 11
+  },
+  {
+   "name": "Dang Thanh Cong Minh",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 31
+  },
+  {
+   "name": "Dang Thanh Liem",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Dang Thi Kim Ngan",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Dang Thi Kim Phuong",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Dang Thi Lan Anh",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 18
+  },
+  {
+   "name": "Dang Thi Thanh Thuy",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 24
+  },
+  {
+   "name": "Dang Thi Thu Huyen",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Dang Thi Thuy Linh",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Dang Thi To Nga",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Dang Thu Hoai",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Dang Thuy Mai Thy",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 6
+  },
+  {
+   "name": "Dang Van Tuc",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Dang Viet Quang",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 88
+  },
+  {
+   "name": "Dang Vu Bao Tran",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dang Vu Tung",
+   "family": "Dang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Dinh An-Nguyen",
+   "family": "Dinh",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dinh Bui",
+   "family": "Bui",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 50
+  },
+  {
+   "name": "Dinh Chau Phan",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 16
+  },
+  {
+   "name": "Dinh Diem",
+   "family": "Dinh",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dinh Doan Long",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 20
+  },
+  {
+   "name": "Dinh Hong Linh",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 14
+  },
+  {
+   "name": "Dinh Khac Toan",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Dinh Le",
+   "family": "Le",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 11
+  },
+  {
+   "name": "Dinh Mai Linh",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Dinh Minh",
+   "family": "Dinh",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Dinh Ngoc",
+   "family": "Dinh",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 8
+  },
+  {
+   "name": "Dinh Pablo",
+   "family": "Dinh",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dinh Phan",
+   "family": "Phan",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Dinh Quang Khieu",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 134
+  },
+  {
+   "name": "Dinh Thach Ngoc",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dinh Thanh Do",
+   "family": "Do",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dinh Thanh Tuyen",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Dinh Thi Hien Le",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Dinh Thi My Huong",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 7
+  },
+  {
+   "name": "Dinh Thi Nga",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 17
+  },
+  {
+   "name": "Dinh Thi Yen Phuong",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Dinh ThiNga",
+   "family": "Dinh",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Dinh Thuy",
+   "family": "Dinh",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Dinh Tran Ngoc Huy",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 401
+  },
+  {
+   "name": "Dinh Trang Dang Le",
+   "family": "Le",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Dinh Van Dung",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 21
+  },
+  {
+   "name": "Dinh Van Toan",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 23
+  },
+  {
+   "name": "Dinh Van Tuan",
+   "family": "Dinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 84
+  },
+  {
+   "name": "Dinh Vo-Ngoc",
+   "family": "Vo-Ngoc",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26c_pps_xy",
+   "instrument": "two_candidate",
+   "mentions": 6
+  },
+  {
+   "name": "Doan Chau Long",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Doan Ha",
+   "family": "Doan",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 11
+  },
+  {
+   "name": "Doan Hai Yen",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Doan Hoang Bang",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Doan Huy Hien",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 13
+  },
+  {
+   "name": "Doan Minh Thuy",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 9
+  },
+  {
+   "name": "Doan Monang",
+   "family": "Doan",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Doan My Duyen Nguyen",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Doan Nainggolan",
+   "family": "Nainggolan",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 37
+  },
+  {
+   "name": "Doan Nguyen Vo",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Doan Nhat Quang",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 50
+  },
+  {
+   "name": "Doan Nugyen",
+   "family": "Nugyen",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Doan Perdana",
+   "family": "Perdana",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 154
+  },
+  {
+   "name": "Doan Sepdianto",
+   "family": "Doan",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Doan Suan Kuang",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Doan Thanh",
+   "family": "Doan",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 6
+  },
+  {
+   "name": "Doan Thanh Binh",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 10
+  },
+  {
+   "name": "Doan Thi Hue",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 11
+  },
+  {
+   "name": "Doan Thi Lam Oanh",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Doan Thi Nhinh",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 16
+  },
+  {
+   "name": "Doan Thi Nhu Quynh",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Doan Thi Yen Oanh",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 63
+  },
+  {
+   "name": "Doan Thuoc",
+   "family": "Doan",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Doan Thuy",
+   "family": "Doan",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 6
+  },
+  {
+   "name": "Doan Thuy Phuong",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Doan Trung Nghia",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Doan Van Binh",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 70
+  },
+  {
+   "name": "Doan Van Hong Thien",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 41
+  },
+  {
+   "name": "Doan Van Thuan",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 51
+  },
+  {
+   "name": "Doan Van-Truong",
+   "family": "Doan",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Bach Nhat",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Duong Cham",
+   "family": "Duong",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Duong D Doan",
+   "family": "Doan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Danh Nguyen Hien",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Duc La",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 149
+  },
+  {
+   "name": "Duong Ho Vu",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Huu Ai",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 25
+  },
+  {
+   "name": "Duong Le Ngoc Dang",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Luonga",
+   "family": "Duong",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Minh",
+   "family": "Duong",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 15
+  },
+  {
+   "name": "Duong Minh Duc",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 65
+  },
+  {
+   "name": "Duong Ngoc Thanh",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 8
+  },
+  {
+   "name": "Duong Nguyen Thi Bach",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Nguyen-Dang",
+   "family": "Nguyen-Dang",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Duong Phan Nguyen Duc",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Duong Phuoc Tan",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Quoc Hung",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 53
+  },
+  {
+   "name": "Duong Quoc Viet",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 33
+  },
+  {
+   "name": "Duong Quy Le",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Tan Nhut",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 165
+  },
+  {
+   "name": "Duong Thang",
+   "family": "Duong",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Duong Thanh Hao",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 7
+  },
+  {
+   "name": "Duong Thanh Tai",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 45
+  },
+  {
+   "name": "Duong Thi Thanh Huyen",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Thi Thuy",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 43
+  },
+  {
+   "name": "Duong Thi Thuy Huong",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Duong Thu Huong Hoang",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Thuy Thi Le",
+   "family": "Le",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Tran Anh",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 94
+  },
+  {
+   "name": "Duong Tran-Luu",
+   "family": "Tran-Luu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Duong Trong Hien",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Duong Tuan Quang",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 122
+  },
+  {
+   "name": "Duong Van Hop",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 21
+  },
+  {
+   "name": "Duong Van Tan",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Duong Veasna",
+   "family": "Duong",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 12
+  },
+  {
+   "name": "Hoang Anh Nguyen Kim",
+   "family": "Kim",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Anh Thang",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Hoang Anh Tuan",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 105
+  },
+  {
+   "name": "Hoang Bao Khanh Chu",
+   "family": "Chu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 9
+  },
+  {
+   "name": "Hoang Chi Thanh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 17
+  },
+  {
+   "name": "Hoang Chinh Nguyen",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 73
+  },
+  {
+   "name": "Hoang Dinh Phuc",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Dinh Van",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 6
+  },
+  {
+   "name": "Hoang Duc Hanh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 18
+  },
+  {
+   "name": "Hoang Duc Nam",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Hoang Duc Thao",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Hoang Ha",
+   "family": "Hoang",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 49
+  },
+  {
+   "name": "Hoang Hong Hai",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Hoang Huong Huyen",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Khai Nguyen",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Khieu",
+   "family": "Hoang",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 10
+  },
+  {
+   "name": "Hoang Kim Pham Tran",
+   "family": "Tran",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Kim Thanh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Hoang Le Tuan Anh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 126
+  },
+  {
+   "name": "Hoang Le-Huu",
+   "family": "Le-Huu",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26c_pps_xy",
+   "instrument": "two_candidate",
+   "mentions": 13
+  },
+  {
+   "name": "Hoang Linh",
+   "family": "Hoang",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 4
+  },
+  {
+   "name": "Hoang M Tran",
+   "family": "Tran",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Hoang Minh Loi",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Hoang Minh Ly",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Hoang Minh Nam",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 61
+  },
+  {
+   "name": "Hoang Mol Bui",
+   "family": "Bui",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang My Linh Nguyen",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Nghia Son",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 47
+  },
+  {
+   "name": "Hoang Ngoc Long",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 131
+  },
+  {
+   "name": "Hoang Ngoc Minh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 37
+  },
+  {
+   "name": "Hoang Ngoc Thao",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 11
+  },
+  {
+   "name": "Hoang Nguyen Phuong Linh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Nguyen Quang Huy",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Hoang Nguyen-Duc",
+   "family": "Nguyen-Duc",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 7
+  },
+  {
+   "name": "Hoang Nhu Van",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 38
+  },
+  {
+   "name": "Hoang Ninh Nguyen",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Phung",
+   "family": "Hoang",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Phuong Nga",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Quang Vuong",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Quoc Viet",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 66
+  },
+  {
+   "name": "Hoang Thang",
+   "family": "Hoang",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 8
+  },
+  {
+   "name": "Hoang Thanh",
+   "family": "Hoang",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 30
+  },
+  {
+   "name": "Hoang Thanh Hanh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 20
+  },
+  {
+   "name": "Hoang The Tuan",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 32
+  },
+  {
+   "name": "Hoang Thi Anh Phuong",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Hoang Thi Mong Huyen",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Hoang Thi Ngoc Yen",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Thi Nhung",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 7
+  },
+  {
+   "name": "Hoang Thi Van Anh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 14
+  },
+  {
+   "name": "Hoang Tl",
+   "family": "Hoang",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Hoang Tran Phuong",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Hoang Tran Vinh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 6
+  },
+  {
+   "name": "Hoang Trong Khuyen",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Hoang Trung Hieu Duong",
+   "family": "Duong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 6
+  },
+  {
+   "name": "Hoang V Chuyen",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Hoang Van Binh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 4
+  },
+  {
+   "name": "Hoang Van Duc",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 19
+  },
+  {
+   "name": "Hoang Van Hien",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 26
+  },
+  {
+   "name": "Hoang Van Luong",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 47
+  },
+  {
+   "name": "Hoang Van Minh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 265
+  },
+  {
+   "name": "Hoang Van Ngoc",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 75
+  },
+  {
+   "name": "Hoang Van Thang",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 31
+  },
+  {
+   "name": "Hoang Van Thuyet",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Vi",
+   "family": "Hoang",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Hoang Viet",
+   "family": "Hoang",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 57
+  },
+  {
+   "name": "Hoang Viet Trinh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 5
+  },
+  {
+   "name": "Hoang Vu",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 87
+  },
+  {
+   "name": "Hoang Vu Van",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26c_pps_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Hoang Vu-Thien",
+   "family": "Hoang",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 32
+  },
+  {
+   "name": "Hoang Vuthien",
+   "family": "Hoang",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Hoang Vy Ha",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Hoang Xuan Binh",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Hoang Xuan Quang",
+   "family": "Hoang",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 15
+  },
+  {
+   "name": "Hoang Xuan Tran",
+   "family": "Tran",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 4
+  },
+  {
+   "name": "Huynh Ai Van",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Huynh Bui Linh Chi",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 16
+  },
+  {
+   "name": "Huynh De-Thu",
+   "family": "Huynh",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Huynh Duc Thuan",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Huynh Duong Hung",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Huynh Ho",
+   "family": "Huynh",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Huynh Kim",
+   "family": "Huynh",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 6
+  },
+  {
+   "name": "Huynh Le",
+   "family": "Huynh",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 10
+  },
+  {
+   "name": "Huynh Lien Buia",
+   "family": "Buia",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26c_pps_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Huynh Luong Tam",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Huynh Minh Tuan",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 12
+  },
+  {
+   "name": "Huynh My-Hang",
+   "family": "Huynh",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Huynh Nguyen Khanh Tranb",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Huynh Nhut Nghia",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Huynh Oanh",
+   "family": "Huynh",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Huynh Pham Tu Vi",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 5
+  },
+  {
+   "name": "Huynh Phuoc Hau",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Huynh Phuoc Toan",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 9
+  },
+  {
+   "name": "Huynh Phuong",
+   "family": "Huynh",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 7
+  },
+  {
+   "name": "Huynh Tan Hiep",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Huynh Thi",
+   "family": "Huynh",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 60
+  },
+  {
+   "name": "Huynh Thi Huong",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Huynh Thi Long",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Huynh Thi Minh Thanh",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 4
+  },
+  {
+   "name": "Huynh Thi Mong Tuyen",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Huynh Thi Ngoc Mi",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 10
+  },
+  {
+   "name": "Huynh Thi Thanh Binh",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 211
+  },
+  {
+   "name": "Huynh To",
+   "family": "Huynh",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Huynh Truc Phuong",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 24
+  },
+  {
+   "name": "Huynh Trung Hai",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 21
+  },
+  {
+   "name": "Huynh Tuan Anh",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Huynh Van",
+   "family": "Huynh",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 7
+  },
+  {
+   "name": "Huynh Van Hien",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 8
+  },
+  {
+   "name": "Huynh Van Loc",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 6
+  },
+  {
+   "name": "Huynh Van Minh",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 55
+  },
+  {
+   "name": "Huynh Van Ngai",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 36
+  },
+  {
+   "name": "Huynh Viet Khanh",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 22
+  },
+  {
+   "name": "Huynh Vu",
+   "family": "Huynh",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 6
+  },
+  {
+   "name": "Huynh Xuan Phong",
+   "family": "Huynh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 34
+  },
+  {
+   "name": "Khuc Dung",
+   "family": "Khuc",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Khuc The Anh",
+   "family": "Khuc",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 11
+  },
+  {
+   "name": "Khuc Thi",
+   "family": "Khuc",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Khuc Thi Ngoc Anh",
+   "family": "Khuc",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luong Bao Binh",
+   "family": "Luong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Luong Bui",
+   "family": "Bui",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luong Chan Quang",
+   "family": "Luong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 17
+  },
+  {
+   "name": "Luong Dinh-Van",
+   "family": "Luong",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luong Hieu Trinh",
+   "family": "Luong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luong Quang Tuong",
+   "family": "Luong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Luong Quoc Tuyen",
+   "family": "Luong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 29
+  },
+  {
+   "name": "Luong Thanh Long",
+   "family": "Luong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Luong Thi Diem Nga",
+   "family": "Luong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Luong Thi Thu Thao",
+   "family": "Luong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luong Thi Thu Trang",
+   "family": "Luong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Luong Tt",
+   "family": "Luong",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luong Van Doan",
+   "family": "Luong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luong Xuan Dien",
+   "family": "Luong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 18
+  },
+  {
+   "name": "Luu Bich Ngoc",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 14
+  },
+  {
+   "name": "Luu Cao",
+   "family": "Luu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luu Chinh",
+   "family": "Luu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luu Danh Minh",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Luu Duc Anh",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Luu Duc Trung",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Luu Gen Hwa",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 5
+  },
+  {
+   "name": "Luu Ha",
+   "family": "Luu",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Luu Hoai",
+   "family": "Luu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Luu James",
+   "family": "Luu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luu Kim Le Hang",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Luu Lam",
+   "family": "Luu",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luu Luong",
+   "family": "Luu",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luu N'Guyen",
+   "family": "N'Guyen",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luu Ngoc Quang",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Luu Quoc Chien",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Luu Quoc Thai",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Luu Quy Tung",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Luu Thanh Huyen",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Luu Thi Nguyen Ngoc",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Luu Van Dieu",
+   "family": "Luu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 5
+  },
+  {
+   "name": "Luu Vicky",
+   "family": "Luu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Ngo Anh Tuan",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 15
+  },
+  {
+   "name": "Ngo Chi Bach",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 12
+  },
+  {
+   "name": "Ngo Dac Dai",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Dang Phong",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 13
+  },
+  {
+   "name": "Ngo Dien Tap",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Ngo Dinh Anh Khoa",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Duc Anh",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 6
+  },
+  {
+   "name": "Ngo Duc Phuoc",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Ngo Duc Thang",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 27
+  },
+  {
+   "name": "Ngo Duc Thuan",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 7
+  },
+  {
+   "name": "Ngo Gh",
+   "family": "Ngo",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Ngo Giao Thong",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 5
+  },
+  {
+   "name": "Ngo Hai Ha",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Hoc",
+   "family": "Ngo",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Hondt OE",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo K Nguyen",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Kim Chi",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 20
+  },
+  {
+   "name": "Ngo Le",
+   "family": "Ngo",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Ngo Manh Tien",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 19
+  },
+  {
+   "name": "Ngo Manh Tuong",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 4
+  },
+  {
+   "name": "Ngo Minh Thien",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Phu Khang",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Quang Tien",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Quoc Dung",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 9
+  },
+  {
+   "name": "Ngo Si Huy",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Ngo Si-Huy",
+   "family": "Ngo",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Ngo Sitthy",
+   "family": "Ngo",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Ngo Thai",
+   "family": "Ngo",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Thanh Nha",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Ngo Thanh Phong",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 25
+  },
+  {
+   "name": "Ngo Thi",
+   "family": "Ngo",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 98
+  },
+  {
+   "name": "Ngo Thi Bich Lan",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Thi Dien",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Thi Hanh",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 8
+  },
+  {
+   "name": "Ngo Thi Hong Ha",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Thi Lan Anh",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Ngo Thi Phuong Thao",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 10
+  },
+  {
+   "name": "Ngo Thi Phyong",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Ngo Thi Trang",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 12
+  },
+  {
+   "name": "Ngo Thi Tuyet",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 6
+  },
+  {
+   "name": "Ngo Thi Xuan",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Ngo Tuan Anh",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 11
+  },
+  {
+   "name": "Ngo Tung Son",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 42
+  },
+  {
+   "name": "Ngo Uy",
+   "family": "Ngo",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Van Khue",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Van Long",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 408
+  },
+  {
+   "name": "Ngo Van Mao",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Vinh Hanh",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Ngo Vo Thanh",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Xuan Dac",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 4
+  },
+  {
+   "name": "Ngo Xuan Nghie",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Ngo Xuan Thanh",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 23
+  },
+  {
+   "name": "Phan Bao Vy",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 14
+  },
+  {
+   "name": "Phan Buu Tuan",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Cao",
+   "family": "Phan",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Cong Vinh",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 115
+  },
+  {
+   "name": "Phan Dai Thich",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Phan Dang Thang",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 5
+  },
+  {
+   "name": "Phan Datthuyawat",
+   "family": "Datthuyawat",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Dong Pha",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 16
+  },
+  {
+   "name": "Phan Duc Chinh",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Duc Lenh",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 6
+  },
+  {
+   "name": "Phan Hai Nam",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Phan Hoai Anh",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Huu Tai",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Phan Minh Tri",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 9
+  },
+  {
+   "name": "Phan Minh-thu",
+   "family": "Phan",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Ngoc",
+   "family": "Phan",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 17
+  },
+  {
+   "name": "Phan Ngoc Son",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 7
+  },
+  {
+   "name": "Phan Ngoc Yen Nhi",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Nguyen Ky Phuc",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 37
+  },
+  {
+   "name": "Phan Nhuan",
+   "family": "Phan",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Q Duy",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 40
+  },
+  {
+   "name": "Phan Quang Diep",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Quoc Bao",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 6
+  },
+  {
+   "name": "Phan Quoc Dzung",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 44
+  },
+  {
+   "name": "Phan Quoc Khang Nguyen",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 10
+  },
+  {
+   "name": "Phan Quoc Khanh",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 148
+  },
+  {
+   "name": "Phan Quoc Thinh",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Phan Thanh Cong",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Phan Thanh Hung",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 7
+  },
+  {
+   "name": "Phan Thanh Huy",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 9
+  },
+  {
+   "name": "Phan Thanh Nam",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 108
+  },
+  {
+   "name": "Phan Thanh Ngan",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Thanh Tam",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 70
+  },
+  {
+   "name": "Phan Thanh Thao",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 15
+  },
+  {
+   "name": "Phan The Cong",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 43
+  },
+  {
+   "name": "Phan The Duy",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 110
+  },
+  {
+   "name": "Phan Thi Hang",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 26
+  },
+  {
+   "name": "Phan Thi Hoang Anh",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 8
+  },
+  {
+   "name": "Phan Thi Minh Uyen",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Phan Thi Nga",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 35
+  },
+  {
+   "name": "Phan Thi Ngoc Huyen",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Thuy An",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Tri",
+   "family": "Phan",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Tri Kien",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 13
+  },
+  {
+   "name": "Phan Trieu",
+   "family": "Phan",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 21
+  },
+  {
+   "name": "Phan Trung Kien",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 21
+  },
+  {
+   "name": "Phan Tuan Anh",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 20
+  },
+  {
+   "name": "Phan Tuan Nghia",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 30
+  },
+  {
+   "name": "Phan Van An",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Phan Van Ho Nam",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phan Van Kiem",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 504
+  },
+  {
+   "name": "Phan Van Quynh",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 6
+  },
+  {
+   "name": "Phan Van Tan",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 18
+  },
+  {
+   "name": "Phan Van Thinh",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Phan Xuan Quang",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phan van Hien",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Phi Duong",
+   "family": "Duong",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 9
+  },
+  {
+   "name": "Phi Goy",
+   "family": "Goy",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Phi Nguyen",
+   "family": "Nguyen",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 63
+  },
+  {
+   "name": "Phi Thai",
+   "family": "Phi",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phi Van Ho",
+   "family": "Ho",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phung Dang Huy",
+   "family": "Phung",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 7
+  },
+  {
+   "name": "Phung Duc Kien",
+   "family": "Phung",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phung Duong",
+   "family": "Phung",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 6
+  },
+  {
+   "name": "Phung Hieu",
+   "family": "Phung",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phung Ho Thi Kim",
+   "family": "Phung",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phung Kim Thoa",
+   "family": "Phung",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Phung Minh Duc",
+   "family": "Phung",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Phung Phan",
+   "family": "Phan",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Phung Thai",
+   "family": "Phung",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 21
+  },
+  {
+   "name": "Phung Xuan Bihn",
+   "family": "Phung",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Phung Yen",
+   "family": "Phung",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Quach Binh",
+   "family": "Quach",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Quach Hong Nhi",
+   "family": "Quach",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Quach Thi Thu Huong",
+   "family": "Quach",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Quach Thi Yen",
+   "family": "Quach",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Thach Ngoc Phuc",
+   "family": "Thach",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Thach TungNguyen",
+   "family": "TungNguyen",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Thuong Khanh Tran",
+   "family": "Tran",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Thuong Le Thi",
+   "family": "Le",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 12
+  },
+  {
+   "name": "Thuong Le-Tien",
+   "family": "Le-Tien",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 101
+  },
+  {
+   "name": "Thuong San Ngo",
+   "family": "Ngo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Thuong Thi Huyen Phan",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 5
+  },
+  {
+   "name": "Trac Canh Phan",
+   "family": "Phan",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 7
+  },
+  {
+   "name": "Trac Duong",
+   "family": "Duong",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Trieu Anh",
+   "family": "Trieu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Trieu Bernard Du",
+   "family": "Trieu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Trieu Huynh-Nhat",
+   "family": "Trieu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Trieu Thi Nguyet",
+   "family": "Trieu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 10
+  },
+  {
+   "name": "Trieu Thu Hang",
+   "family": "Trieu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Trieu Tuan Anh",
+   "family": "Trieu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 9
+  },
+  {
+   "name": "Trinh Chi Mai",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Trinh Chinh Minh",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Trinh Huynh",
+   "family": "Huynh",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 24
+  },
+  {
+   "name": "Trinh Khac Manh",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Trinh Le",
+   "family": "Le",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 94
+  },
+  {
+   "name": "Trinh Le Hung",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 46
+  },
+  {
+   "name": "Trinh Le-Khanh",
+   "family": "Le-Khanh",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26c_pps_xy",
+   "instrument": "two_candidate",
+   "mentions": 6
+  },
+  {
+   "name": "Trinh Mai",
+   "family": "Trinh",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 19
+  },
+  {
+   "name": "Trinh Minh",
+   "family": "Trinh",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Trinh Minh Anh",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Trinh Minh Chien",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Trinh Na",
+   "family": "Trinh",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Trinh Nguyen",
+   "family": "Nguyen",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 136
+  },
+  {
+   "name": "Trinh Nguyen Duy",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 14
+  },
+  {
+   "name": "Trinh Phan",
+   "family": "Phan",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 9
+  },
+  {
+   "name": "Trinh Thi Ben",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 8
+  },
+  {
+   "name": "Trinh Thi Dieu Hang",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Trinh Thien An",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Trinh Thuy Chi",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Trinh Tran Quang",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26c_pps_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Trinh Tri Minh",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Trinh Trung Dung",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Trinh Van Thanh",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 7
+  },
+  {
+   "name": "Trinh Xuan Anh",
+   "family": "Trinh",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 11
+  },
+  {
+   "name": "Truong Ba Nhat",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Truong Chi",
+   "family": "Truong",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Truong Chi Tin",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Truong Dinh Dung",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Truong Do",
+   "family": "Do",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 50
+  },
+  {
+   "name": "Truong Do Minh Phuong",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Truong Duc Hoang Nguyen",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Truong Duong",
+   "family": "Truong",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 6
+  },
+  {
+   "name": "Truong Hoang Diep Huong",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Truong Khang Nguyen",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 205
+  },
+  {
+   "name": "Truong Ma",
+   "family": "Truong",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 13
+  },
+  {
+   "name": "Truong Manh Hung",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Truong Nghiem",
+   "family": "Nghiem",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 48
+  },
+  {
+   "name": "Truong Nguyen",
+   "family": "Nguyen",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 260
+  },
+  {
+   "name": "Truong Nguyen-Ba",
+   "family": "Nguyen-Ba",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 37
+  },
+  {
+   "name": "Truong Nguyen-Xuan",
+   "family": "Nguyen-Xuan",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Truong Phuc Hung",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 4
+  },
+  {
+   "name": "Truong Phung",
+   "family": "Truong",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 13
+  },
+  {
+   "name": "Truong Quang",
+   "family": "Truong",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 31
+  },
+  {
+   "name": "Truong Quoc Phong",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 24
+  },
+  {
+   "name": "Truong Quoc Tat",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 6
+  },
+  {
+   "name": "Truong Quoc Thanh",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 24
+  },
+  {
+   "name": "Truong Quoc Tien",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Truong Son Hy",
+   "family": "Hy",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 43
+  },
+  {
+   "name": "Truong Tan Quan",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 10
+  },
+  {
+   "name": "Truong Tan Trung",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 16
+  },
+  {
+   "name": "Truong Thanh Trung",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 18
+  },
+  {
+   "name": "Truong Thi My Hanh",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Truong Thu Huong",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 74
+  },
+  {
+   "name": "Truong Tien Dung",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Truong Van Khiem",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Truong Van Nghia",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Truong Vi Man",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Truong Vq",
+   "family": "Truong",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Truong Vu Bang Giang",
+   "family": "Truong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 27
+  },
+  {
+   "name": "Vo An Quan",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 8
+  },
+  {
+   "name": "Vo Anh",
+   "family": "Vo",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 245
+  },
+  {
+   "name": "Vo Cong Dung",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 15
+  },
+  {
+   "name": "Vo Cong Thanh",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 19
+  },
+  {
+   "name": "Vo Cuong",
+   "family": "Vo",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vo Cuong Viet",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Vo Dinh",
+   "family": "Vo",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Vo Duong",
+   "family": "Vo",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vo Duy Long",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 22
+  },
+  {
+   "name": "Vo Duy Thong",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 16
+  },
+  {
+   "name": "Vo Ebuara",
+   "family": "Ebuara",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Vo Ekudina",
+   "family": "Vo",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vo Hong Thanh",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 28
+  },
+  {
+   "name": "Vo Huynh Ngoc Diep",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Vo Minh Tam",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 33
+  },
+  {
+   "name": "Vo Minh Triet",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Vo Nguyen",
+   "family": "Nguyen",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 24
+  },
+  {
+   "name": "Vo Nguyen Quoc Bao",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 216
+  },
+  {
+   "name": "Vo Nguyen Xuan Phuong",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vo Nm",
+   "family": "Vo",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 9
+  },
+  {
+   "name": "Vo Quang Sang",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 7
+  },
+  {
+   "name": "Vo Quoc Phong",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 30
+  },
+  {
+   "name": "Vo Quoc Tuan",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 17
+  },
+  {
+   "name": "Vo Son",
+   "family": "Vo",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Vo Thanh Liem",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 32
+  },
+  {
+   "name": "Vo Thanh Phuong Nguyen",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 5
+  },
+  {
+   "name": "Vo That",
+   "family": "Vo",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vo Thi",
+   "family": "Vo",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 80
+  },
+  {
+   "name": "Vo Thi Hong Tuyet",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 25
+  },
+  {
+   "name": "Vo Thi Khanh Hoa",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vo Thi Kim Yen",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 4
+  },
+  {
+   "name": "Vo Thi Mong Tham",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Vo Thi My",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 6
+  },
+  {
+   "name": "Vo Thi My Hanh",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Vo Thi Ngoc Thuy",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 20
+  },
+  {
+   "name": "Vo Thi Thanh",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 4
+  },
+  {
+   "name": "Vo Trong Ngheia",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vo Trong Thu",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Vo Tyen",
+   "family": "Vo",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vo Van Chi",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Vo Van Dut",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 11
+  },
+  {
+   "name": "Vo Van Nha",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Vo Van Thang",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 24
+  },
+  {
+   "name": "Vo Van Tuyen",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 39
+  },
+  {
+   "name": "Vo Viet Thang",
+   "family": "Vo",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 12
+  },
+  {
+   "name": "Vu Anh Tuan",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 139
+  },
+  {
+   "name": "Vu Ba Thanh",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Vu Ba Thao",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Brussel",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Chien Thang",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 8
+  },
+  {
+   "name": "Vu Dang La",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 26
+  },
+  {
+   "name": "Vu Dao",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 26
+  },
+  {
+   "name": "Vu Dinh",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 57
+  },
+  {
+   "name": "Vu Dinh Hoan",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Dinh Tho",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 13
+  },
+  {
+   "name": "Vu Dinh Thong",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 73
+  },
+  {
+   "name": "Vu DinhHoang",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Dl",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Duc Toan",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 34
+  },
+  {
+   "name": "Vu Hoa Nguyen",
+   "family": "Nguyen",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 11
+  },
+  {
+   "name": "Vu Hoai Nam",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 82
+  },
+  {
+   "name": "Vu Hoang Thang Chau",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Vu Hong Diep",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Huong Chi",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Huu Tiep",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Vu Khac Trai",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 7
+  },
+  {
+   "name": "Vu Khang Ninh",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Kim Cong",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 10
+  },
+  {
+   "name": "Vu Kim Duy",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Vu Kim Tuan",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 138
+  },
+  {
+   "name": "Vu Lam",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 34
+  },
+  {
+   "name": "Vu Le Quyen",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 4
+  },
+  {
+   "name": "Vu Manh Hung",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 14
+  },
+  {
+   "name": "Vu Manh Tan",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Vu Manh Thuan",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Vu Minh",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 23
+  },
+  {
+   "name": "Vu Ngoc Nhung",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Vu Ngoc Phat",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 120
+  },
+  {
+   "name": "Vu Ngoc Phuong Linh",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Vu Ngoc Pi",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 96
+  },
+  {
+   "name": "Vu Ngoc Toan",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 55
+  },
+  {
+   "name": "Vu Ngoc Tuan",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 35
+  },
+  {
+   "name": "Vu Ngoc Xuan",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 78
+  },
+  {
+   "name": "Vu Nguyen Thanh",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 38
+  },
+  {
+   "name": "Vu Nhat Huy",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 42
+  },
+  {
+   "name": "Vu Pham",
+   "family": "Pham",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 50
+  },
+  {
+   "name": "Vu Phuc",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Qd",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Quang Hop",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Vu Quang Huy",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 19
+  },
+  {
+   "name": "Vu Quang Nam",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 9
+  },
+  {
+   "name": "Vu Quang Phong",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Quang Tung",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Quoc Huy",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 21
+  },
+  {
+   "name": "Vu Quoc Luan",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 79
+  },
+  {
+   "name": "Vu Quoc Trung",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 58
+  },
+  {
+   "name": "Vu Sudakov",
+   "family": "Sudakov",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Ta",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Vu Thanh Dat",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 7
+  },
+  {
+   "name": "Vu Thi",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 140
+  },
+  {
+   "name": "Vu Thi Anh Tuyet",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 5
+  },
+  {
+   "name": "Vu Thi Bich Quyen",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 24
+  },
+  {
+   "name": "Vu Thi Cam",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Thi Hanh Thu",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 40
+  },
+  {
+   "name": "Vu Thi Hien",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 65
+  },
+  {
+   "name": "Vu Thi Hong Ngoc",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Vu Thi Hong Van",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 6
+  },
+  {
+   "name": "Vu Thi Kim Oanh",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 41
+  },
+  {
+   "name": "Vu Thi Lan Anh",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 15
+  },
+  {
+   "name": "Vu Thi Nga",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 50
+  },
+  {
+   "name": "Vu Thi Ngoc Linh",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 3
+  },
+  {
+   "name": "Vu Thi Ngoc Minh",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 12
+  },
+  {
+   "name": "Vu Thi Nhung",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 7
+  },
+  {
+   "name": "Vu Thi Son",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Thi Tam",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 11
+  },
+  {
+   "name": "Vu Thi Thom",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 36
+  },
+  {
+   "name": "Vu Thi Thu",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 92
+  },
+  {
+   "name": "Vu Thi Thuy",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 33
+  },
+  {
+   "name": "Vu Thi Tinh",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 5
+  },
+  {
+   "name": "Vu Thi Yen",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 18
+  },
+  {
+   "name": "Vu ThiUyen",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Thich",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Thien Binh",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 129
+  },
+  {
+   "name": "Vu Thu Trang",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 51
+  },
+  {
+   "name": "Vu Thuy Khanh Le-Trilling",
+   "family": "Le-Trilling",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 64
+  },
+  {
+   "name": "Vu Tien",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 5
+  },
+  {
+   "name": "Vu Tien Trung",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Ton",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vu Tri Thien",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Vu Trieu Minh",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 63
+  },
+  {
+   "name": "Vu Van Huy",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 14
+  },
+  {
+   "name": "Vu Van In",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 11
+  },
+  {
+   "name": "Vu Van Ma",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 8
+  },
+  {
+   "name": "Vu Van Tan",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 49
+  },
+  {
+   "name": "Vu Van Tung",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 4
+  },
+  {
+   "name": "Vu Van Yem",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 83
+  },
+  {
+   "name": "Vu Xuan Nghia",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 20
+  },
+  {
+   "name": "Vu Xuan Quang",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 53
+  },
+  {
+   "name": "Vu Xuan Thuy",
+   "family": "Vu",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 2
+  },
+  {
+   "name": "Vu Zoan",
+   "family": "Vu",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vuong Dang Huy",
+   "family": "Vuong",
+   "shape": "multi_tok",
+   "stratum": "pps_routed",
+   "round": "vn26d_open_ended",
+   "instrument": "open_ended",
+   "mentions": 1
+  },
+  {
+   "name": "Vuong Dinh",
+   "family": "Vuong",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 3
+  },
+  {
+   "name": "Vuong Le",
+   "family": "Le",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 60
+  },
+  {
+   "name": "Vuong Luong",
+   "family": "Vuong",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  },
+  {
+   "name": "Vuong Nguyen Hoang",
+   "family": "Vuong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vuong Roger",
+   "family": "Vuong",
+   "shape": "two_tok",
+   "stratum": "plain_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vuong Thi Ngoc Huyen",
+   "family": "Vuong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vuong Thuong",
+   "family": "Vuong",
+   "shape": "two_tok",
+   "stratum": "risky_2tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vuong Tien Hoa",
+   "family": "Vuong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vuong Tin Thach",
+   "family": "Vuong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 1
+  },
+  {
+   "name": "Vuong Trung Kien",
+   "family": "Vuong",
+   "shape": "multi_tok",
+   "stratum": "multi_tok",
+   "round": "vn26_stratified_xy",
+   "instrument": "two_candidate",
+   "mentions": 2
+  }
+ ]
+}

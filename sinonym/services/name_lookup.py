@@ -2,11 +2,28 @@
 
 from __future__ import annotations
 
+import re
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 DOMINANT_CHINESE_SURNAME_FREQ_MIN = 10_000.0
+_PARSER_KEY_CACHE_SIZE = 4_096
+_WADE_GILES_APOSTROPHE_SURNAME_RE = re.compile(r"(?:ch|ts|tz|k|p|t)'[a-z]+", re.IGNORECASE)
+_APOSTROPHE_TRANSLATION = str.maketrans(
+    {
+        "\u02b9": "'",
+        "\u02bb": "'",
+        "\u02bc": "'",
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u2032": "'",
+        "\uff07": "'",
+        "`": "'",
+        "\u00b4": "'",
+    },
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -26,9 +43,7 @@ class SurnameResolver:
     def __init__(self, data: NameDataStructures, normalizer: NormalizationService) -> None:
         self._data = data
         self._normalizer = normalizer
-        self._parser_key_cache: dict[tuple[str, ...], str] = {}
-        self._evidence_key_cache: dict[str, str] = {}
-        self._wade_initial_remap_cache: dict[str, bool] = {}
+        self._cached_parser_key = lru_cache(maxsize=_PARSER_KEY_CACHE_SIZE)(self._derive_parser_key)
 
     def parser_frequency(self, surname_tokens: Sequence[str]) -> float:
         """Return surname frequency under the parser-strict lookup policy."""
@@ -63,6 +78,13 @@ class SurnameResolver:
         """Return whether ``token`` carries dominant as-written Chinese surname evidence."""
         return self.evidence_frequency(token) >= DOMINANT_CHINESE_SURNAME_FREQ_MIN
 
+    def evidence_is_wade_giles_apostrophe_surname(self, token: str) -> bool:
+        """Return exact-token Wade-Giles spelling backed by existing surname data."""
+        normalized_apostrophe = token.translate(_APOSTROPHE_TRANSLATION)
+        return bool(
+            _WADE_GILES_APOSTROPHE_SURNAME_RE.fullmatch(normalized_apostrophe) and self.evidence_is_surname(token),
+        )
+
     def evidence_span_key(self, token: str) -> str:
         """Return the evidence key for batch span assembly only."""
         return self._evidence_key(token)
@@ -89,18 +111,14 @@ class SurnameResolver:
     def _parser_key(self, surname_tokens: Sequence[str]) -> str:
         """Derive the parser-strict surname key used by parse scoring."""
         self._require_tokens(surname_tokens)
-        cache_key = tuple(surname_tokens)
-        if cache_key in self._parser_key_cache:
-            return self._parser_key_cache[cache_key]
+        return self._cached_parser_key(tuple(surname_tokens))
 
+    def _derive_parser_key(self, cache_key: tuple[str, ...]) -> str:
+        """Derive an uncached parser key from an immutable token sequence."""
         if len(cache_key) == 1:
-            parser_key = self._single_parser_key(cache_key[0])
-        else:
-            normalized_tokens = [self._normalizer.norm(token) for token in cache_key]
-            parser_key = StringManipulationUtils.join_with_spaces(normalized_tokens)
-
-        self._parser_key_cache[cache_key] = parser_key
-        return parser_key
+            return self._single_parser_key(cache_key[0])
+        normalized_tokens = [self._normalizer.norm(token) for token in cache_key]
+        return StringManipulationUtils.join_with_spaces(normalized_tokens)
 
     def _single_parser_key(self, token: str) -> str:
         if self._contains_cjk(token) and token in self._data.surname_frequencies:
@@ -124,21 +142,16 @@ class SurnameResolver:
 
     def _evidence_key(self, token: str) -> str:
         """Derive the as-written surname evidence key."""
-        if token not in self._evidence_key_cache:
-            self._evidence_key_cache[token] = self._data.surname_lookup_key(
-                self._normalizer.norm_light(token),
-                self._normalizer.norm(token),
-            )
-        return self._evidence_key_cache[token]
+        return self._data.surname_lookup_key(
+            self._normalizer.norm_light(token),
+            self._normalizer.norm(token),
+        )
 
     def _is_wade_giles_initial_remapped_surname_token(self, token: str) -> bool:
         """Return whether a direct surname was remapped by a Wade-Giles initial rule."""
-        if token in self._wade_initial_remap_cache:
-            return self._wade_initial_remap_cache[token]
-
         light_key = self._normalizer.norm_light(token)
         remapped_key = self._normalizer.norm(token)
-        result = (
+        return (
             light_key != remapped_key
             and bool(light_key)
             and bool(remapped_key)
@@ -147,5 +160,3 @@ class SurnameResolver:
             and self._data.get_surname_freq(light_key) > 0
             and self._data.get_surname_freq(remapped_key) == 0
         )
-        self._wade_initial_remap_cache[token] = result
-        return result

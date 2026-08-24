@@ -94,29 +94,20 @@ def generate_parse_candidates(
     Generate all possible parse candidates for a tokenized name.
     Returns list of parse dictionaries with surname/given tokens.
     """
-    try:
-        # Use the existing _generate_all_parses_with_format method
-        parses_with_format = parsing_service._generate_all_parses_with_format(
-            tokens,
-            normalized_cache,
-            compound_metadata,
-        )
-
-        parse_candidates = []
-        for surname_tokens, given_tokens, original_compound_format in parses_with_format:
-
-            parse_candidates.append(
-                {
-                    "surname_tokens": surname_tokens,
-                    "given_tokens": given_tokens,
-                    "original_compound_format": original_compound_format,
-                },
-            )
-
-        return parse_candidates
-    except Exception as e:
-        print(f"Error generating parses for {tokens}: {e}")
-        return []
+    parses_with_format = parsing_service._generate_all_parses_with_format(
+        tokens,
+        normalized_cache,
+        compound_metadata,
+        None,
+    )
+    return [
+        {
+            "surname_tokens": surname_tokens,
+            "given_tokens": given_tokens,
+            "original_compound_format": original_compound_format,
+        }
+        for surname_tokens, given_tokens, original_compound_format in parses_with_format
+    ]
 
 
 def extract_basic_features(

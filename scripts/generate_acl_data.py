@@ -113,6 +113,7 @@ def convert_to_training_format(chinese_names, detector):
             list(normalized_input.roman_tokens),
             normalized_input.norm_map,
             normalized_input.compound_metadata,
+            None,
         )
 
         if not parses_with_format:

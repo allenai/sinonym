@@ -1,0 +1,2570 @@
+{
+  "_note": "Real corpus names whose Chinese parse was produced only by peeling a leading single letter out as a middle initial. Refusing that peel drops them off the Chinese path; these record what the all-person path returns instead, with `was` the discarded parse.",
+  "given_first_preserved": [
+    {
+      "raw": "AJuan Cui",
+      "given": "AJuan",
+      "middle": "",
+      "surname": "Cui",
+      "was": [
+        "Juan",
+        "A",
+        "Cui"
+      ]
+    },
+    {
+      "raw": "AJuan Gong",
+      "given": "AJuan",
+      "middle": "",
+      "surname": "Gong",
+      "was": [
+        "Juan",
+        "A",
+        "Gong"
+      ]
+    },
+    {
+      "raw": "AU Amin",
+      "given": "AU",
+      "middle": "",
+      "surname": "Amin",
+      "was": [
+        "Au",
+        "A",
+        "Min"
+      ]
+    },
+    {
+      "raw": "AWang Suo Lang",
+      "given": "AWang",
+      "middle": "Suo",
+      "surname": "Lang",
+      "was": [
+        "Wang-Suo",
+        "A",
+        "Lang"
+      ]
+    },
+    {
+      "raw": "AYan Cai",
+      "given": "AYan",
+      "middle": "",
+      "surname": "Cai",
+      "was": [
+        "Yan",
+        "A",
+        "Cai"
+      ]
+    },
+    {
+      "raw": "Abao Guo",
+      "given": "Abao",
+      "middle": "",
+      "surname": "Guo",
+      "was": [
+        "Bao",
+        "A",
+        "Guo"
+      ]
+    },
+    {
+      "raw": "Abie Li",
+      "given": "Abie",
+      "middle": "",
+      "surname": "Li",
+      "was": [
+        "Bie",
+        "A",
+        "Li"
+      ]
+    },
+    {
+      "raw": "Abing Ji",
+      "given": "Abing",
+      "middle": "",
+      "surname": "Ji",
+      "was": [
+        "Bing",
+        "A",
+        "Ji"
+      ]
+    },
+    {
+      "raw": "Acan Liu",
+      "given": "Acan",
+      "middle": "",
+      "surname": "Liu",
+      "was": [
+        "Can",
+        "A",
+        "Liu"
+      ]
+    },
+    {
+      "raw": "Adong Han",
+      "given": "Adong",
+      "middle": "",
+      "surname": "Han",
+      "was": [
+        "Dong",
+        "A",
+        "Han"
+      ]
+    },
+    {
+      "raw": "Afang Sun",
+      "given": "Afang",
+      "middle": "",
+      "surname": "Sun",
+      "was": [
+        "Fang",
+        "A",
+        "Sun"
+      ]
+    },
+    {
+      "raw": "Afang Wu",
+      "given": "Afang",
+      "middle": "",
+      "surname": "Wu",
+      "was": [
+        "Fang",
+        "A",
+        "Wu"
+      ]
+    },
+    {
+      "raw": "Afei Tang",
+      "given": "Afei",
+      "middle": "",
+      "surname": "Tang",
+      "was": [
+        "Fei",
+        "A",
+        "Tang"
+      ]
+    },
+    {
+      "raw": "Agen Cai",
+      "given": "Agen",
+      "middle": "",
+      "surname": "Cai",
+      "was": [
+        "Gen",
+        "A",
+        "Cai"
+      ]
+    },
+    {
+      "raw": "Ahui Huang",
+      "given": "Ahui",
+      "middle": "",
+      "surname": "Huang",
+      "was": [
+        "Hui",
+        "A",
+        "Huang"
+      ]
+    },
+    {
+      "raw": "Ahui Mao",
+      "given": "Ahui",
+      "middle": "",
+      "surname": "Mao",
+      "was": [
+        "Hui",
+        "A",
+        "Mao"
+      ]
+    },
+    {
+      "raw": "Ajin Choi",
+      "given": "Ajin",
+      "middle": "",
+      "surname": "Choi",
+      "was": [
+        "Jin",
+        "A",
+        "Choi"
+      ]
+    },
+    {
+      "raw": "Ajuan Yuan",
+      "given": "Ajuan",
+      "middle": "",
+      "surname": "Yuan",
+      "was": [
+        "Juan",
+        "A",
+        "Yuan"
+      ]
+    },
+    {
+      "raw": "Akang Gao",
+      "given": "Akang",
+      "middle": "",
+      "surname": "Gao",
+      "was": [
+        "Kang",
+        "A",
+        "Gao"
+      ]
+    },
+    {
+      "raw": "Akang Han",
+      "given": "Akang",
+      "middle": "",
+      "surname": "Han",
+      "was": [
+        "Kang",
+        "A",
+        "Han"
+      ]
+    },
+    {
+      "raw": "Ali Wang",
+      "given": "Ali",
+      "middle": "",
+      "surname": "Wang",
+      "was": [
+        "Li",
+        "A",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Alian Yu",
+      "given": "Alian",
+      "middle": "",
+      "surname": "Yu",
+      "was": [
+        "Lian",
+        "A",
+        "Yu"
+      ]
+    },
+    {
+      "raw": "Alin Guo",
+      "given": "Alin",
+      "middle": "",
+      "surname": "Guo",
+      "was": [
+        "Lin",
+        "A",
+        "Guo"
+      ]
+    },
+    {
+      "raw": "Alin Yang",
+      "given": "Alin",
+      "middle": "",
+      "surname": "Yang",
+      "was": [
+        "Lin",
+        "A",
+        "Yang"
+      ]
+    },
+    {
+      "raw": "Alin Yao",
+      "given": "Alin",
+      "middle": "",
+      "surname": "Yao",
+      "was": [
+        "Lin",
+        "A",
+        "Yao"
+      ]
+    },
+    {
+      "raw": "Aling Chen",
+      "given": "Aling",
+      "middle": "",
+      "surname": "Chen",
+      "was": [
+        "Ling",
+        "A",
+        "Chen"
+      ]
+    },
+    {
+      "raw": "Aliu Shi",
+      "given": "Aliu",
+      "middle": "",
+      "surname": "Shi",
+      "was": [
+        "Liu",
+        "A",
+        "Shi"
+      ]
+    },
+    {
+      "raw": "Along Jin",
+      "given": "Along",
+      "middle": "",
+      "surname": "Jin",
+      "was": [
+        "Long",
+        "A",
+        "Jin"
+      ]
+    },
+    {
+      "raw": "Amei Cheng",
+      "given": "Amei",
+      "middle": "",
+      "surname": "Cheng",
+      "was": [
+        "Mei",
+        "A",
+        "Cheng"
+      ]
+    },
+    {
+      "raw": "Amei Liu",
+      "given": "Amei",
+      "middle": "",
+      "surname": "Liu",
+      "was": [
+        "Mei",
+        "A",
+        "Liu"
+      ]
+    },
+    {
+      "raw": "Amin Chen",
+      "given": "Amin",
+      "middle": "",
+      "surname": "Chen",
+      "was": [
+        "Min",
+        "A",
+        "Chen"
+      ]
+    },
+    {
+      "raw": "Amin Kam",
+      "given": "Amin",
+      "middle": "",
+      "surname": "Kam",
+      "was": [
+        "Min",
+        "A",
+        "Kam"
+      ]
+    },
+    {
+      "raw": "Amin L Tong",
+      "given": "Amin",
+      "middle": "L",
+      "surname": "Tong",
+      "was": [
+        "Min",
+        "A L",
+        "Tong"
+      ]
+    },
+    {
+      "raw": "Amin Lim",
+      "given": "Amin",
+      "middle": "",
+      "surname": "Lim",
+      "was": [
+        "Min",
+        "A",
+        "Lim"
+      ]
+    },
+    {
+      "raw": "Amin Mao",
+      "given": "Amin",
+      "middle": "",
+      "surname": "Mao",
+      "was": [
+        "Min",
+        "A",
+        "Mao"
+      ]
+    },
+    {
+      "raw": "Amin Zhu",
+      "given": "Amin",
+      "middle": "",
+      "surname": "Zhu",
+      "was": [
+        "Min",
+        "A",
+        "Zhu"
+      ]
+    },
+    {
+      "raw": "Aming Hao",
+      "given": "Aming",
+      "middle": "",
+      "surname": "Hao",
+      "was": [
+        "Ming",
+        "A",
+        "Hao"
+      ]
+    },
+    {
+      "raw": "Aming Song",
+      "given": "Aming",
+      "middle": "",
+      "surname": "Song",
+      "was": [
+        "Ming",
+        "A",
+        "Song"
+      ]
+    },
+    {
+      "raw": "Apan Qian",
+      "given": "Apan",
+      "middle": "",
+      "surname": "Qian",
+      "was": [
+        "Pan",
+        "A",
+        "Qian"
+      ]
+    },
+    {
+      "raw": "Aping Wang",
+      "given": "Aping",
+      "middle": "",
+      "surname": "Wang",
+      "was": [
+        "Ping",
+        "A",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Aqian Lu",
+      "given": "Aqian",
+      "middle": "",
+      "surname": "Lu",
+      "was": [
+        "Qian",
+        "A",
+        "Lu"
+      ]
+    },
+    {
+      "raw": "Aqin Wang",
+      "given": "Aqin",
+      "middle": "",
+      "surname": "Wang",
+      "was": [
+        "Qin",
+        "A",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Aqing Wang",
+      "given": "Aqing",
+      "middle": "",
+      "surname": "Wang",
+      "was": [
+        "Qing",
+        "A",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Aqing Yang",
+      "given": "Aqing",
+      "middle": "",
+      "surname": "Yang",
+      "was": [
+        "Qing",
+        "A",
+        "Yang"
+      ]
+    },
+    {
+      "raw": "Arong Luo",
+      "given": "Arong",
+      "middle": "",
+      "surname": "Luo",
+      "was": [
+        "Rong",
+        "A",
+        "Luo"
+      ]
+    },
+    {
+      "raw": "Arui Tan",
+      "given": "Arui",
+      "middle": "",
+      "surname": "Tan",
+      "was": [
+        "Rui",
+        "A",
+        "Tan"
+      ]
+    },
+    {
+      "raw": "Arui Wang",
+      "given": "Arui",
+      "middle": "",
+      "surname": "Wang",
+      "was": [
+        "Rui",
+        "A",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Arun MA",
+      "given": "Arun",
+      "middle": "",
+      "surname": "Ma",
+      "was": [
+        "Run",
+        "A",
+        "Ma"
+      ]
+    },
+    {
+      "raw": "Arun NA",
+      "given": "Arun",
+      "middle": "",
+      "surname": "Na",
+      "was": [
+        "Run",
+        "A",
+        "Na"
+      ]
+    },
+    {
+      "raw": "Aruo Nan",
+      "given": "Aruo",
+      "middle": "",
+      "surname": "Nan",
+      "was": [
+        "Ruo",
+        "A",
+        "Nan"
+      ]
+    },
+    {
+      "raw": "Asha Wang",
+      "given": "Asha",
+      "middle": "",
+      "surname": "Wang",
+      "was": [
+        "Sha",
+        "A",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Ashe Bi",
+      "given": "Ashe",
+      "middle": "",
+      "surname": "Bi",
+      "was": [
+        "She",
+        "A",
+        "Bi"
+      ]
+    },
+    {
+      "raw": "Ashen Deng",
+      "given": "Ashen",
+      "middle": "",
+      "surname": "Deng",
+      "was": [
+        "Shen",
+        "A",
+        "Deng"
+      ]
+    },
+    {
+      "raw": "Ashok Si",
+      "given": "Ashok",
+      "middle": "",
+      "surname": "Si",
+      "was": [
+        "Shok",
+        "A",
+        "Si"
+      ]
+    },
+    {
+      "raw": "Axin Xiang",
+      "given": "Axin",
+      "middle": "",
+      "surname": "Xiang",
+      "was": [
+        "Xin",
+        "A",
+        "Xiang"
+      ]
+    },
+    {
+      "raw": "Ayan Mao",
+      "given": "Ayan",
+      "middle": "",
+      "surname": "Mao",
+      "was": [
+        "Yan",
+        "A",
+        "Mao"
+      ]
+    },
+    {
+      "raw": "Aying Wen",
+      "given": "Aying",
+      "middle": "",
+      "surname": "Wen",
+      "was": [
+        "Ying",
+        "A",
+        "Wen"
+      ]
+    },
+    {
+      "raw": "Ayong Li",
+      "given": "Ayong",
+      "middle": "",
+      "surname": "Li",
+      "was": [
+        "Yong",
+        "A",
+        "Li"
+      ]
+    },
+    {
+      "raw": "Ayong Zheng",
+      "given": "Ayong",
+      "middle": "",
+      "surname": "Zheng",
+      "was": [
+        "Yong",
+        "A",
+        "Zheng"
+      ]
+    },
+    {
+      "raw": "Ayuan Shi",
+      "given": "Ayuan",
+      "middle": "",
+      "surname": "Shi",
+      "was": [
+        "Yuan",
+        "A",
+        "Shi"
+      ]
+    },
+    {
+      "raw": "Ayuk Ma",
+      "given": "Ayuk",
+      "middle": "",
+      "surname": "Ma",
+      "was": [
+        "Yuk",
+        "A",
+        "Ma"
+      ]
+    },
+    {
+      "raw": "Azhen Du",
+      "given": "Azhen",
+      "middle": "",
+      "surname": "Du",
+      "was": [
+        "Zhen",
+        "A",
+        "Du"
+      ]
+    },
+    {
+      "raw": "Ban Edan",
+      "given": "Ban",
+      "middle": "",
+      "surname": "Edan",
+      "was": [
+        "Ban",
+        "E",
+        "Dan"
+      ]
+    },
+    {
+      "raw": "Bao'e Yang",
+      "given": "Bao'e",
+      "middle": "",
+      "surname": "Yang",
+      "was": [
+        "Bao",
+        "E",
+        "Yang"
+      ]
+    },
+    {
+      "raw": "BoA Lim",
+      "given": "Boa",
+      "middle": "",
+      "surname": "Lim",
+      "was": [
+        "Bo",
+        "A",
+        "Lim"
+      ]
+    },
+    {
+      "raw": "CHAE HONG LIM",
+      "given": "Chae",
+      "middle": "Hong",
+      "surname": "Lim",
+      "was": [
+        "Cha E Hong",
+        null,
+        "Lim"
+      ]
+    },
+    {
+      "raw": "Cai'E Cui",
+      "given": "Cai'E",
+      "middle": "",
+      "surname": "Cui",
+      "was": [
+        "Cai",
+        "E",
+        "Cui"
+      ]
+    },
+    {
+      "raw": "Caie Li",
+      "given": "Caie",
+      "middle": "",
+      "surname": "Li",
+      "was": [
+        "Cai",
+        "E",
+        "Li"
+      ]
+    },
+    {
+      "raw": "Caie Zhou",
+      "given": "Caie",
+      "middle": "",
+      "surname": "Zhou",
+      "was": [
+        "Cai",
+        "E",
+        "Zhou"
+      ]
+    },
+    {
+      "raw": "Chae An",
+      "given": "Chae",
+      "middle": "",
+      "surname": "An",
+      "was": [
+        "Cha",
+        "E",
+        "An"
+      ]
+    },
+    {
+      "raw": "Chae Chu",
+      "given": "Chae",
+      "middle": "",
+      "surname": "Chu",
+      "was": [
+        "Cha",
+        "E",
+        "Chu"
+      ]
+    },
+    {
+      "raw": "Chae H. An",
+      "given": "Chae",
+      "middle": "H.",
+      "surname": "An",
+      "was": [
+        "Cha",
+        "E H",
+        "An"
+      ]
+    },
+    {
+      "raw": "Chae Hee Dong",
+      "given": "Chae",
+      "middle": "Hee",
+      "surname": "Dong",
+      "was": [
+        "Cha E Hee",
+        null,
+        "Dong"
+      ]
+    },
+    {
+      "raw": "Chae Heon Lim",
+      "given": "Chae",
+      "middle": "Heon",
+      "surname": "Lim",
+      "was": [
+        "Cha E He On",
+        null,
+        "Lim"
+      ]
+    },
+    {
+      "raw": "Chae Hui Lim",
+      "given": "Chae",
+      "middle": "Hui",
+      "surname": "Lim",
+      "was": [
+        "Cha E Hui",
+        null,
+        "Lim"
+      ]
+    },
+    {
+      "raw": "Chae Hun Lee",
+      "given": "Chae",
+      "middle": "Hun",
+      "surname": "Lee",
+      "was": [
+        "Cha E Hun",
+        null,
+        "Lee"
+      ]
+    },
+    {
+      "raw": "Chae Jin Lee",
+      "given": "Chae",
+      "middle": "Jin",
+      "surname": "Lee",
+      "was": [
+        "Cha E Jin",
+        null,
+        "Lee"
+      ]
+    },
+    {
+      "raw": "Chae K. Lee",
+      "given": "Chae",
+      "middle": "K.",
+      "surname": "Lee",
+      "was": [
+        "Cha",
+        "E K",
+        "Lee"
+      ]
+    },
+    {
+      "raw": "Chae Kang",
+      "given": "Chae",
+      "middle": "",
+      "surname": "Kang",
+      "was": [
+        "Cha",
+        "E",
+        "Kang"
+      ]
+    },
+    {
+      "raw": "Chae Min Shin",
+      "given": "Chae",
+      "middle": "Min",
+      "surname": "Shin",
+      "was": [
+        "Cha E Min",
+        null,
+        "Shin"
+      ]
+    },
+    {
+      "raw": "Chae Rin Song",
+      "given": "Chae",
+      "middle": "Rin",
+      "surname": "Song",
+      "was": [
+        "Cha E Rin",
+        null,
+        "Song"
+      ]
+    },
+    {
+      "raw": "Chea Siang Ng",
+      "given": "Chea",
+      "middle": "Siang",
+      "surname": "Ng",
+      "was": [
+        "Che A Siang",
+        null,
+        "Ng"
+      ]
+    },
+    {
+      "raw": "Chun Huie Lin",
+      "given": "Chun",
+      "middle": "Huie",
+      "surname": "Lin",
+      "was": [
+        "Chun-Hui",
+        "E",
+        "Lin"
+      ]
+    },
+    {
+      "raw": "Cui'e Wang",
+      "given": "Cui'e",
+      "middle": "",
+      "surname": "Wang",
+      "was": [
+        "Cui",
+        "E",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Cui'e Wei",
+      "given": "Cui'e",
+      "middle": "",
+      "surname": "Wei",
+      "was": [
+        "Cui",
+        "E",
+        "Wei"
+      ]
+    },
+    {
+      "raw": "Cui'e Wu",
+      "given": "Cui'e",
+      "middle": "",
+      "surname": "Wu",
+      "was": [
+        "Cui",
+        "E",
+        "Wu"
+      ]
+    },
+    {
+      "raw": "Cuie Fu",
+      "given": "Cuie",
+      "middle": "",
+      "surname": "Fu",
+      "was": [
+        "Cui",
+        "E",
+        "Fu"
+      ]
+    },
+    {
+      "raw": "Cuie Liu",
+      "given": "Cuie",
+      "middle": "",
+      "surname": "Liu",
+      "was": [
+        "Cui",
+        "E",
+        "Liu"
+      ]
+    },
+    {
+      "raw": "Cuie Wu",
+      "given": "Cuie",
+      "middle": "",
+      "surname": "Wu",
+      "was": [
+        "Cui",
+        "E",
+        "Wu"
+      ]
+    },
+    {
+      "raw": "Cuie Xiao",
+      "given": "Cuie",
+      "middle": "",
+      "surname": "Xiao",
+      "was": [
+        "Cui",
+        "E",
+        "Xiao"
+      ]
+    },
+    {
+      "raw": "Diwan Ali Bin",
+      "given": "Diwan",
+      "middle": "Ali",
+      "surname": "Bin",
+      "was": [
+        "Di Wan A Li",
+        null,
+        "Bin"
+      ]
+    },
+    {
+      "raw": "DongA Shin",
+      "given": "DongA",
+      "middle": "",
+      "surname": "Shin",
+      "was": [
+        "Dong",
+        "A",
+        "Shin"
+      ]
+    },
+    {
+      "raw": "Donge Tang",
+      "given": "Donge",
+      "middle": "",
+      "surname": "Tang",
+      "was": [
+        "Dong",
+        "E",
+        "Tang"
+      ]
+    },
+    {
+      "raw": "Duane A Chang",
+      "given": "Duane",
+      "middle": "A",
+      "surname": "Chang",
+      "was": [
+        "Duan",
+        "E A",
+        "Chang"
+      ]
+    },
+    {
+      "raw": "Duane E. Lee",
+      "given": "Duane",
+      "middle": "E.",
+      "surname": "Lee",
+      "was": [
+        "Duan",
+        "E E",
+        "Lee"
+      ]
+    },
+    {
+      "raw": "Eang Lao",
+      "given": "Eang",
+      "middle": "",
+      "surname": "Lao",
+      "was": [
+        "Ang",
+        "E",
+        "Lao"
+      ]
+    },
+    {
+      "raw": "Eben Chong Yi Xie",
+      "given": "Eben",
+      "middle": "Chong Yi",
+      "surname": "Xie",
+      "was": [
+        "Ben-Chong-Yi",
+        "E",
+        "Xie"
+      ]
+    },
+    {
+      "raw": "Eben Jung",
+      "given": "Eben",
+      "middle": "",
+      "surname": "Jung",
+      "was": [
+        "Ben",
+        "E",
+        "Jung"
+      ]
+    },
+    {
+      "raw": "Eben Yong",
+      "given": "Eben",
+      "middle": "",
+      "surname": "Yong",
+      "was": [
+        "Ben",
+        "E",
+        "Yong"
+      ]
+    },
+    {
+      "raw": "Ebo Liu",
+      "given": "Ebo",
+      "middle": "",
+      "surname": "Liu",
+      "was": [
+        "Bo",
+        "E",
+        "Liu"
+      ]
+    },
+    {
+      "raw": "Edie Mao",
+      "given": "Edie",
+      "middle": "",
+      "surname": "Mao",
+      "was": [
+        "Die",
+        "E",
+        "Mao"
+      ]
+    },
+    {
+      "raw": "Ee Yuee CHAN",
+      "given": "Ee",
+      "middle": "Yuee",
+      "surname": "Chan",
+      "was": [
+        "Ee-Yue",
+        "E",
+        "Chan"
+      ]
+    },
+    {
+      "raw": "Ejun (Elijah) Huang",
+      "given": "Ejun",
+      "middle": "(Elijah)",
+      "surname": "Huang",
+      "was": [
+        "Jun",
+        "E",
+        "Huang"
+      ]
+    },
+    {
+      "raw": "Elan Wang",
+      "given": "Elan",
+      "middle": "",
+      "surname": "Wang",
+      "was": [
+        "Lan",
+        "E",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Elin H. Chen",
+      "given": "Elin",
+      "middle": "H.",
+      "surname": "Chen",
+      "was": [
+        "Lin",
+        "E H",
+        "Chen"
+      ]
+    },
+    {
+      "raw": "Elin Wei",
+      "given": "Elin",
+      "middle": "",
+      "surname": "Wei",
+      "was": [
+        "Lin",
+        "E",
+        "Wei"
+      ]
+    },
+    {
+      "raw": "Elong Lin",
+      "given": "Elong",
+      "middle": "",
+      "surname": "Lin",
+      "was": [
+        "Long",
+        "E",
+        "Lin"
+      ]
+    },
+    {
+      "raw": "Emiao Lu",
+      "given": "Emiao",
+      "middle": "",
+      "surname": "Lu",
+      "was": [
+        "Miao",
+        "E",
+        "Lu"
+      ]
+    },
+    {
+      "raw": "Eting Chen",
+      "given": "Eting",
+      "middle": "",
+      "surname": "Chen",
+      "was": [
+        "Ting",
+        "E",
+        "Chen"
+      ]
+    },
+    {
+      "raw": "Ewen Shengyao Huang",
+      "given": "Ewen",
+      "middle": "Shengyao",
+      "surname": "Huang",
+      "was": [
+        "Wen-Sheng-Yao",
+        "E",
+        "Huang"
+      ]
+    },
+    {
+      "raw": "Ewen Xu",
+      "given": "Ewen",
+      "middle": "",
+      "surname": "Xu",
+      "was": [
+        "Wen",
+        "E",
+        "Xu"
+      ]
+    },
+    {
+      "raw": "Ewen Y Tseng",
+      "given": "Ewen",
+      "middle": "Y",
+      "surname": "Tseng",
+      "was": [
+        "Wen",
+        "E Y",
+        "Tseng"
+      ]
+    },
+    {
+      "raw": "Eyu Wang",
+      "given": "Eyu",
+      "middle": "",
+      "surname": "Wang",
+      "was": [
+        "Yu",
+        "E",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Ezhen Zhang",
+      "given": "Ezhen",
+      "middle": "",
+      "surname": "Zhang",
+      "was": [
+        "Zhen",
+        "E",
+        "Zhang"
+      ]
+    },
+    {
+      "raw": "Fai Ali",
+      "given": "Fai",
+      "middle": "",
+      "surname": "Ali",
+      "was": [
+        "Fai",
+        "A",
+        "Li"
+      ]
+    },
+    {
+      "raw": "Guie Xiao",
+      "given": "Guie",
+      "middle": "",
+      "surname": "Xiao",
+      "was": [
+        "Gui",
+        "E",
+        "Xiao"
+      ]
+    },
+    {
+      "raw": "Haie Han",
+      "given": "Haie",
+      "middle": "",
+      "surname": "Han",
+      "was": [
+        "Hai",
+        "E",
+        "Han"
+      ]
+    },
+    {
+      "raw": "Han Chae Cho",
+      "given": "Han",
+      "middle": "Chae",
+      "surname": "Cho",
+      "was": [
+        "Han-Cha-E",
+        null,
+        "Cho"
+      ]
+    },
+    {
+      "raw": "Heng Shue Teah",
+      "given": "Heng",
+      "middle": "Shue",
+      "surname": "Teah",
+      "was": [
+        "Heng-Shu-E-Te",
+        null,
+        "Ah"
+      ]
+    },
+    {
+      "raw": "Hina Lee",
+      "given": "Hina",
+      "middle": "",
+      "surname": "Lee",
+      "was": [
+        "Hin",
+        "A",
+        "Lee"
+      ]
+    },
+    {
+      "raw": "Hong Chae Woo",
+      "given": "Hong",
+      "middle": "Chae",
+      "surname": "Woo",
+      "was": [
+        "Hong-Cha",
+        "E",
+        "Woo"
+      ]
+    },
+    {
+      "raw": "Hua'e Xu",
+      "given": "Hua'e",
+      "middle": "",
+      "surname": "Xu",
+      "was": [
+        "Hua",
+        "E",
+        "Xu"
+      ]
+    },
+    {
+      "raw": "Huaie Liu",
+      "given": "Huaie",
+      "middle": "",
+      "surname": "Liu",
+      "was": [
+        "Huai",
+        "E",
+        "Liu"
+      ]
+    },
+    {
+      "raw": "Huang Ehui",
+      "given": "Huang",
+      "middle": "",
+      "surname": "Ehui",
+      "was": [
+        "Huang",
+        "E",
+        "Hui"
+      ]
+    },
+    {
+      "raw": "Huie Chun Lin",
+      "given": "Huie",
+      "middle": "Chun",
+      "surname": "Lin",
+      "was": [
+        "Hui E Chun",
+        null,
+        "Lin"
+      ]
+    },
+    {
+      "raw": "Huie Zhuang",
+      "given": "Huie",
+      "middle": "",
+      "surname": "Zhuang",
+      "was": [
+        "Hui",
+        "E",
+        "Zhuang"
+      ]
+    },
+    {
+      "raw": "Ji Y Chae",
+      "given": "Ji",
+      "middle": "Y",
+      "surname": "Chae",
+      "was": [
+        "Ji",
+        "Y E",
+        "Cha"
+      ]
+    },
+    {
+      "raw": "Jiae An",
+      "given": "Jiae",
+      "middle": "",
+      "surname": "An",
+      "was": [
+        "Jia",
+        "E",
+        "An"
+      ]
+    },
+    {
+      "raw": "Jiaoe Sheng",
+      "given": "Jiaoe",
+      "middle": "",
+      "surname": "Sheng",
+      "was": [
+        "Jiao",
+        "E",
+        "Sheng"
+      ]
+    },
+    {
+      "raw": "Juana M. Lang",
+      "given": "Juana",
+      "middle": "M.",
+      "surname": "Lang",
+      "was": [
+        "Juan",
+        "A M",
+        "Lang"
+      ]
+    },
+    {
+      "raw": "Jung Chae Kang",
+      "given": "Jung",
+      "middle": "Chae",
+      "surname": "Kang",
+      "was": [
+        "Jung-Cha-E",
+        null,
+        "Kang"
+      ]
+    },
+    {
+      "raw": "Ko Asai",
+      "given": "Ko",
+      "middle": "",
+      "surname": "Asai",
+      "was": [
+        "Ko",
+        "A",
+        "Sai"
+      ]
+    },
+    {
+      "raw": "LE Ali",
+      "given": "LE",
+      "middle": "",
+      "surname": "Ali",
+      "was": [
+        "Le",
+        "A",
+        "Li"
+      ]
+    },
+    {
+      "raw": "Lee Elam",
+      "given": "Lee",
+      "middle": "",
+      "surname": "Elam",
+      "was": [
+        "Lee",
+        "E",
+        "Lam"
+      ]
+    },
+    {
+      "raw": "Lee Jene Teng",
+      "given": "Lee",
+      "middle": "Jene",
+      "surname": "Teng",
+      "was": [
+        "Lee-Jen-E",
+        null,
+        "Teng"
+      ]
+    },
+    {
+      "raw": "Leia C Shum",
+      "given": "Leia",
+      "middle": "C",
+      "surname": "Shum",
+      "was": [
+        "Lei",
+        "A C",
+        "Shum"
+      ]
+    },
+    {
+      "raw": "Liana Guo",
+      "given": "Liana",
+      "middle": "",
+      "surname": "Guo",
+      "was": [
+        "Lian",
+        "A",
+        "Guo"
+      ]
+    },
+    {
+      "raw": "Liang Alei",
+      "given": "Liang",
+      "middle": "",
+      "surname": "Alei",
+      "was": [
+        "Liang",
+        "A",
+        "Lei"
+      ]
+    },
+    {
+      "raw": "Liao Eyuan",
+      "given": "Liao",
+      "middle": "",
+      "surname": "Eyuan",
+      "was": [
+        "Liao",
+        "E",
+        "Yuan"
+      ]
+    },
+    {
+      "raw": "Long'e Dai",
+      "given": "Long'e",
+      "middle": "",
+      "surname": "Dai",
+      "was": [
+        "Long",
+        "E",
+        "Dai"
+      ]
+    },
+    {
+      "raw": "Longe Sun",
+      "given": "Longe",
+      "middle": "",
+      "surname": "Sun",
+      "was": [
+        "Long",
+        "E",
+        "Sun"
+      ]
+    },
+    {
+      "raw": "MO Alao",
+      "given": "MO",
+      "middle": "",
+      "surname": "Alao",
+      "was": [
+        "Mo",
+        "A",
+        "Lao"
+      ]
+    },
+    {
+      "raw": "Mai Ali Nada",
+      "given": "Mai",
+      "middle": "Ali",
+      "surname": "Nada",
+      "was": [
+        "Mai-Li-Na",
+        "A",
+        "Da"
+      ]
+    },
+    {
+      "raw": "Maia Zhang",
+      "given": "Maia",
+      "middle": "",
+      "surname": "Zhang",
+      "was": [
+        "Mai",
+        "A",
+        "Zhang"
+      ]
+    },
+    {
+      "raw": "Mao Tang Eang",
+      "given": "Mao",
+      "middle": "Tang",
+      "surname": "Eang",
+      "was": [
+        "Mao-Tang-E",
+        null,
+        "Ang"
+      ]
+    },
+    {
+      "raw": "Nae Ho Lee",
+      "given": "Nae",
+      "middle": "Ho",
+      "surname": "Lee",
+      "was": [
+        "Na E Ho",
+        null,
+        "Lee"
+      ]
+    },
+    {
+      "raw": "Nae Young Choi",
+      "given": "Nae",
+      "middle": "Young",
+      "surname": "Choi",
+      "was": [
+        "Na E You Ng",
+        null,
+        "Choi"
+      ]
+    },
+    {
+      "raw": "Nuoa Lei",
+      "given": "Nuoa",
+      "middle": "",
+      "surname": "Lei",
+      "was": [
+        "Nuo",
+        "A",
+        "Lei"
+      ]
+    },
+    {
+      "raw": "Qiaoe Lu",
+      "given": "Qiaoe",
+      "middle": "",
+      "surname": "Lu",
+      "was": [
+        "Qiao",
+        "E",
+        "Lu"
+      ]
+    },
+    {
+      "raw": "Qiu'e Yao",
+      "given": "Qiu'e",
+      "middle": "",
+      "surname": "Yao",
+      "was": [
+        "Qiu",
+        "E",
+        "Yao"
+      ]
+    },
+    {
+      "raw": "Qiue Liu",
+      "given": "Qiue",
+      "middle": "",
+      "surname": "Liu",
+      "was": [
+        "Qiu",
+        "E",
+        "Liu"
+      ]
+    },
+    {
+      "raw": "Qiue Yin",
+      "given": "Qiue",
+      "middle": "",
+      "surname": "Yin",
+      "was": [
+        "Qiu",
+        "E",
+        "Yin"
+      ]
+    },
+    {
+      "raw": "Rana Chan",
+      "given": "Rana",
+      "middle": "",
+      "surname": "Chan",
+      "was": [
+        "Ran",
+        "A",
+        "Chan"
+      ]
+    },
+    {
+      "raw": "Rane Tu",
+      "given": "Rane",
+      "middle": "",
+      "surname": "Tu",
+      "was": [
+        "Ran",
+        "E",
+        "Tu"
+      ]
+    },
+    {
+      "raw": "Rao K. Ali",
+      "given": "Rao",
+      "middle": "K.",
+      "surname": "Ali",
+      "was": [
+        "Rao",
+        "K A",
+        "Li"
+      ]
+    },
+    {
+      "raw": "Ruie Nie",
+      "given": "Ruie",
+      "middle": "",
+      "surname": "Nie",
+      "was": [
+        "Rui",
+        "E",
+        "Nie"
+      ]
+    },
+    {
+      "raw": "Saie Huang",
+      "given": "Saie",
+      "middle": "",
+      "surname": "Huang",
+      "was": [
+        "Sai",
+        "E",
+        "Huang"
+      ]
+    },
+    {
+      "raw": "Shaoe Lin",
+      "given": "Shaoe",
+      "middle": "",
+      "surname": "Lin",
+      "was": [
+        "Shao",
+        "E",
+        "Lin"
+      ]
+    },
+    {
+      "raw": "Shu'e Dang",
+      "given": "Shu'e",
+      "middle": "",
+      "surname": "Dang",
+      "was": [
+        "Shu",
+        "E",
+        "Dang"
+      ]
+    },
+    {
+      "raw": "ShuE Ji",
+      "given": "ShuE",
+      "middle": "",
+      "surname": "Ji",
+      "was": [
+        "Shu",
+        "E",
+        "Ji"
+      ]
+    },
+    {
+      "raw": "Shuie Sun",
+      "given": "Shuie",
+      "middle": "",
+      "surname": "Sun",
+      "was": [
+        "Shui",
+        "E",
+        "Sun"
+      ]
+    },
+    {
+      "raw": "Si Nae Lee",
+      "given": "Si",
+      "middle": "Nae",
+      "surname": "Lee",
+      "was": [
+        "Si-Na",
+        "E",
+        "Lee"
+      ]
+    },
+    {
+      "raw": "Tan Chue Tin",
+      "given": "Tan",
+      "middle": "Chue",
+      "surname": "Tin",
+      "was": [
+        "Tan-Chu",
+        "E",
+        "Tin"
+      ]
+    },
+    {
+      "raw": "Tian'e Zhou",
+      "given": "Tian'e",
+      "middle": "",
+      "surname": "Zhou",
+      "was": [
+        "Tian",
+        "E",
+        "Zhou"
+      ]
+    },
+    {
+      "raw": "Tiana Liu",
+      "given": "Tiana",
+      "middle": "",
+      "surname": "Liu",
+      "was": [
+        "Tian",
+        "A",
+        "Liu"
+      ]
+    },
+    {
+      "raw": "Tiana Ti",
+      "given": "Tiana",
+      "middle": "",
+      "surname": "Ti",
+      "was": [
+        "Tian",
+        "A",
+        "Ti"
+      ]
+    },
+    {
+      "raw": "Tiane L. Lee",
+      "given": "Tiane",
+      "middle": "L.",
+      "surname": "Lee",
+      "was": [
+        "Tian",
+        "E L",
+        "Lee"
+      ]
+    },
+    {
+      "raw": "Tiane Ma",
+      "given": "Tiane",
+      "middle": "",
+      "surname": "Ma",
+      "was": [
+        "Tian",
+        "E",
+        "Ma"
+      ]
+    },
+    {
+      "raw": "Tinga Zhang",
+      "given": "Tinga",
+      "middle": "",
+      "surname": "Zhang",
+      "was": [
+        "Ting",
+        "A",
+        "Zhang"
+      ]
+    },
+    {
+      "raw": "Tinge Wang",
+      "given": "Tinge",
+      "middle": "",
+      "surname": "Wang",
+      "was": [
+        "Ting",
+        "E",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Tsze Yin Tan",
+      "given": "Tsze",
+      "middle": "Yin",
+      "surname": "Tan",
+      "was": [
+        "Tsz E Yin",
+        null,
+        "Tan"
+      ]
+    },
+    {
+      "raw": "Tzee C. Chao",
+      "given": "Tzee",
+      "middle": "C.",
+      "surname": "Chao",
+      "was": [
+        "Tze",
+        "E C",
+        "Chao"
+      ]
+    },
+    {
+      "raw": "Wai Amin",
+      "given": "Wai",
+      "middle": "",
+      "surname": "Amin",
+      "was": [
+        "Wai",
+        "A",
+        "Min"
+      ]
+    },
+    {
+      "raw": "Wan Ali",
+      "given": "Wan",
+      "middle": "",
+      "surname": "Ali",
+      "was": [
+        "Wan",
+        "A",
+        "Li"
+      ]
+    },
+    {
+      "raw": "Wang Efeng",
+      "given": "Wang",
+      "middle": "",
+      "surname": "Efeng",
+      "was": [
+        "Wang",
+        "E",
+        "Feng"
+      ]
+    },
+    {
+      "raw": "WeiE Wang",
+      "given": "WeiE",
+      "middle": "",
+      "surname": "Wang",
+      "was": [
+        "Wei",
+        "E",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Weie (Alex) Wang",
+      "given": "Weie",
+      "middle": "(Alex)",
+      "surname": "Wang",
+      "was": [
+        "Wei",
+        "E",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Weie Han",
+      "given": "Weie",
+      "middle": "",
+      "surname": "Han",
+      "was": [
+        "Wei",
+        "E",
+        "Han"
+      ]
+    },
+    {
+      "raw": "Wene Chang",
+      "given": "Wene",
+      "middle": "",
+      "surname": "Chang",
+      "was": [
+        "Wen",
+        "E",
+        "Chang"
+      ]
+    },
+    {
+      "raw": "Xiaoe Qu",
+      "given": "Xiaoe",
+      "middle": "",
+      "surname": "Qu",
+      "was": [
+        "Xiao",
+        "E",
+        "Qu"
+      ]
+    },
+    {
+      "raw": "Xie Ameng",
+      "given": "Xie",
+      "middle": "",
+      "surname": "Ameng",
+      "was": [
+        "Xie",
+        "A",
+        "Meng"
+      ]
+    },
+    {
+      "raw": "XiuE Yan",
+      "given": "XiuE",
+      "middle": "",
+      "surname": "Yan",
+      "was": [
+        "Xiu",
+        "E",
+        "Yan"
+      ]
+    },
+    {
+      "raw": "Xiue Cao",
+      "given": "Xiue",
+      "middle": "",
+      "surname": "Cao",
+      "was": [
+        "Xiu",
+        "E",
+        "Cao"
+      ]
+    },
+    {
+      "raw": "Xiue Guo",
+      "given": "Xiue",
+      "middle": "",
+      "surname": "Guo",
+      "was": [
+        "Xiu",
+        "E",
+        "Guo"
+      ]
+    },
+    {
+      "raw": "Xiue Yuan",
+      "given": "Xiue",
+      "middle": "",
+      "surname": "Yuan",
+      "was": [
+        "Xiu",
+        "E",
+        "Yuan"
+      ]
+    },
+    {
+      "raw": "Xuee Zou",
+      "given": "Xuee",
+      "middle": "",
+      "surname": "Zou",
+      "was": [
+        "Xue",
+        "E",
+        "Zou"
+      ]
+    },
+    {
+      "raw": "Yonge Guo",
+      "given": "Yonge",
+      "middle": "",
+      "surname": "Guo",
+      "was": [
+        "Yong",
+        "E",
+        "Guo"
+      ]
+    },
+    {
+      "raw": "Yonge Li",
+      "given": "Yonge",
+      "middle": "",
+      "surname": "Li",
+      "was": [
+        "Yong",
+        "E",
+        "Li"
+      ]
+    },
+    {
+      "raw": "You'e He",
+      "given": "You'e",
+      "middle": "",
+      "surname": "He",
+      "was": [
+        "You",
+        "E",
+        "He"
+      ]
+    },
+    {
+      "raw": "Yue'e Fang",
+      "given": "Yue'e",
+      "middle": "",
+      "surname": "Fang",
+      "was": [
+        "Yue",
+        "E",
+        "Fang"
+      ]
+    },
+    {
+      "raw": "Yue'e Liu",
+      "given": "Yue'e",
+      "middle": "",
+      "surname": "Liu",
+      "was": [
+        "Yue",
+        "E",
+        "Liu"
+      ]
+    },
+    {
+      "raw": "Yuee Chen",
+      "given": "Yuee",
+      "middle": "",
+      "surname": "Chen",
+      "was": [
+        "Yue",
+        "E",
+        "Chen"
+      ]
+    },
+    {
+      "raw": "Yuee Li",
+      "given": "Yuee",
+      "middle": "",
+      "surname": "Li",
+      "was": [
+        "Yue",
+        "E",
+        "Li"
+      ]
+    },
+    {
+      "raw": "Yuee ZHANG",
+      "given": "Yuee",
+      "middle": "",
+      "surname": "Zhang",
+      "was": [
+        "Yue",
+        "E",
+        "Zhang"
+      ]
+    },
+    {
+      "raw": "Yue‐E Jiao",
+      "given": "Yue-E",
+      "middle": "",
+      "surname": "Jiao",
+      "was": [
+        "Yue",
+        "E",
+        "Jiao"
+      ]
+    },
+    {
+      "raw": "Yue‐e Ma",
+      "given": "Yue-e",
+      "middle": "",
+      "surname": "Ma",
+      "was": [
+        "Yue",
+        "E",
+        "Ma"
+      ]
+    },
+    {
+      "raw": "Zane Z. Yu",
+      "given": "Zane",
+      "middle": "Z.",
+      "surname": "Yu",
+      "was": [
+        "Zan",
+        "E Z",
+        "Yu"
+      ]
+    },
+    {
+      "raw": "Zeng Ashan",
+      "given": "Zeng",
+      "middle": "",
+      "surname": "Ashan",
+      "was": [
+        "Zeng",
+        "A",
+        "Shan"
+      ]
+    },
+    {
+      "raw": "Zhang Ayuan",
+      "given": "Zhang",
+      "middle": "",
+      "surname": "Ayuan",
+      "was": [
+        "Zhang",
+        "A",
+        "Yuan"
+      ]
+    },
+    {
+      "raw": "alai tan",
+      "given": "Alai",
+      "middle": "",
+      "surname": "Tan",
+      "was": [
+        "Lai",
+        "A",
+        "Tan"
+      ]
+    }
+  ],
+  "components_not_recovered": [
+    {
+      "raw": "Alam Hannan MA",
+      "given": "Alam",
+      "middle": "",
+      "surname": "Hannan",
+      "was": [
+        "Lam-Han-Nan",
+        "A",
+        "Ma"
+      ]
+    },
+    {
+      "raw": "Alei 阿蕾 Li 李",
+      "given": "Alei",
+      "middle": "阿蕾 Li",
+      "surname": "李",
+      "was": [
+        "Lei",
+        "A",
+        "Li"
+      ]
+    },
+    {
+      "raw": "Ali 阿理 Luo 罗",
+      "given": "Ali",
+      "middle": "阿理 Luo",
+      "surname": "罗",
+      "was": [
+        "Li",
+        "A",
+        "Luo"
+      ]
+    },
+    {
+      "raw": "Aming 啊鸣 Lin 林",
+      "given": "Aming",
+      "middle": "啊鸣 Lin",
+      "surname": "林",
+      "was": [
+        "Ming",
+        "A",
+        "Lin"
+      ]
+    },
+    {
+      "raw": "Asai Ren",
+      "given": "Ren",
+      "middle": "",
+      "surname": "Asai",
+      "was": [
+        "Sai",
+        "A",
+        "Ren"
+      ]
+    },
+    {
+      "raw": "Atsuo 並木",
+      "given": "Atsuo",
+      "middle": "",
+      "surname": "並木",
+      "was": [
+        "Bing-Mu",
+        "A",
+        "Tsuo"
+      ]
+    },
+    {
+      "raw": "Axin 阿新 Xie 谢",
+      "given": "Axin",
+      "middle": "阿新 Xie",
+      "surname": "谢",
+      "was": [
+        "Xin",
+        "A",
+        "Xie"
+      ]
+    },
+    {
+      "raw": "Axin 阿鑫 Guo 郭",
+      "given": "Axin",
+      "middle": "阿鑫 Guo",
+      "surname": "郭",
+      "was": [
+        "Xin",
+        "A",
+        "Guo"
+      ]
+    },
+    {
+      "raw": "Bao, Arun Bao",
+      "given": "Arun",
+      "middle": "Bao",
+      "surname": "Bao",
+      "was": [
+        "Run-Bao",
+        "A",
+        "Bao"
+      ]
+    },
+    {
+      "raw": "C Y Adou Yao",
+      "given": "C",
+      "middle": "Y",
+      "surname": "Adou Yao",
+      "was": [
+        "Dou",
+        "C Y A",
+        "Yao"
+      ]
+    },
+    {
+      "raw": "CHAE WOO MA",
+      "given": "Chae",
+      "middle": "",
+      "surname": "Woo",
+      "was": [
+        "Cha E Woo",
+        null,
+        "Ma"
+      ]
+    },
+    {
+      "raw": "Chae Bin Lee",
+      "given": "Chae",
+      "middle": "",
+      "surname": "Bin Lee",
+      "was": [
+        "Cha E Bin",
+        null,
+        "Lee"
+      ]
+    },
+    {
+      "raw": "Chae Hong1",
+      "given": "Chae",
+      "middle": "",
+      "surname": "Hong",
+      "was": [
+        "Cha",
+        "E",
+        "Hong"
+      ]
+    },
+    {
+      "raw": "D. N. Awang Chee",
+      "given": "D.",
+      "middle": "N.",
+      "surname": "Awang Chee",
+      "was": [
+        "Wang",
+        "D N A",
+        "Chee"
+      ]
+    },
+    {
+      "raw": "Ejun Peng 彭鄂军",
+      "given": "Ejun",
+      "middle": "Peng",
+      "surname": "彭鄂军",
+      "was": [
+        "Jun",
+        "E",
+        "Peng"
+      ]
+    },
+    {
+      "raw": "Eyou Wang 王鄂友",
+      "given": "Eyou",
+      "middle": "Wang",
+      "surname": "王鄂友",
+      "was": [
+        "You",
+        "E",
+        "Wang"
+      ]
+    },
+    {
+      "raw": "Kai Etsuo",
+      "given": "Etsuo",
+      "middle": "",
+      "surname": "Kai",
+      "was": [
+        "Kai",
+        "E",
+        "Tsuo"
+      ]
+    },
+    {
+      "raw": "MA E Ali",
+      "given": "E",
+      "middle": "",
+      "surname": "Ali",
+      "was": [
+        "Ma",
+        "E A",
+        "Li"
+      ]
+    },
+    {
+      "raw": "Mun,im R. Ali",
+      "given": "Im",
+      "middle": "R. Ali",
+      "surname": "Mun",
+      "was": [
+        "Im-Li",
+        "R A",
+        "Mun"
+      ]
+    },
+    {
+      "raw": "P V Asha Bai",
+      "given": "P",
+      "middle": "V",
+      "surname": "Asha Bai",
+      "was": [
+        "Sha",
+        "P V A",
+        "Bai"
+      ]
+    },
+    {
+      "raw": "Tzee Luai MENG",
+      "given": "Tzee",
+      "middle": "",
+      "surname": "Luai",
+      "was": [
+        "Tze E Lu Ai",
+        null,
+        "Meng"
+      ]
+    },
+    {
+      "raw": "Xiaoe 小娥 LI 李",
+      "given": "Xiaoe",
+      "middle": "小娥 LI",
+      "surname": "李",
+      "was": [
+        "Xiao",
+        "E",
+        "Li"
+      ]
+    },
+    {
+      "raw": "Yuee 月娥 Xie 谢",
+      "given": "Yuee",
+      "middle": "月娥 Xie",
+      "surname": "谢",
+      "was": [
+        "Yue",
+        "E",
+        "Xie"
+      ]
+    },
+    {
+      "raw": "Zhoue Fei1",
+      "given": "Zhoue",
+      "middle": "",
+      "surname": "Fei",
+      "was": [
+        "Zhou",
+        "E",
+        "Fei"
+      ]
+    },
+    {
+      "raw": "侯阿慧 Hou Ahui",
+      "given": "侯阿慧",
+      "middle": "Hou",
+      "surname": "Ahui",
+      "was": [
+        "Hou",
+        "A",
+        "Hui"
+      ]
+    },
+    {
+      "raw": "孙阿辉 Sun Ahui",
+      "given": "孙阿辉",
+      "middle": "Sun",
+      "surname": "Ahui",
+      "was": [
+        "Sun",
+        "A",
+        "Hui"
+      ]
+    },
+    {
+      "raw": "屈阿雪 Qu Axue",
+      "given": "屈阿雪",
+      "middle": "Qu",
+      "surname": "Axue",
+      "was": [
+        "Qu",
+        "A",
+        "Xue"
+      ]
+    },
+    {
+      "raw": "张阿娟 ZHANG Ajuan",
+      "given": "张阿娟",
+      "middle": "Zhang",
+      "surname": "Ajuan",
+      "was": [
+        "Zhang",
+        "A",
+        "Juan"
+      ]
+    },
+    {
+      "raw": "张阿龙 ZHANG Along",
+      "given": "张阿龙",
+      "middle": "Zhang",
+      "surname": "Along",
+      "was": [
+        "Zhang",
+        "A",
+        "Long"
+      ]
+    },
+    {
+      "raw": "杜阿朋 Du A'peng",
+      "given": "杜阿朋",
+      "middle": "",
+      "surname": "Du A'Peng",
+      "was": [
+        "Du",
+        "A",
+        "Peng"
+      ]
+    },
+    {
+      "raw": "杨阿坤 Yang Akun",
+      "given": "杨阿坤",
+      "middle": "Yang",
+      "surname": "Akun",
+      "was": [
+        "Yang",
+        "A",
+        "Kun"
+      ]
+    },
+    {
+      "raw": "樊阿馨 Fan Axin",
+      "given": "樊阿馨",
+      "middle": "Fan",
+      "surname": "Axin",
+      "was": [
+        "Fan",
+        "A",
+        "Xin"
+      ]
+    },
+    {
+      "raw": "陈阿君 Chen Ajun",
+      "given": "陈阿君",
+      "middle": "Chen",
+      "surname": "Ajun",
+      "was": [
+        "Chen",
+        "A",
+        "Jun"
+      ]
+    }
+  ]
+}

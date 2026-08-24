@@ -7,6 +7,7 @@ for performance optimization.
 from __future__ import annotations
 
 from functools import cache
+from itertools import product
 from typing import TYPE_CHECKING
 
 import pypinyin
@@ -18,6 +19,13 @@ if TYPE_CHECKING:
 @cache  # one entry per unique Han character
 def _char_to_pinyin(ch: str) -> str:
     return pypinyin.lazy_pinyin(ch, style=pypinyin.Style.NORMAL)[0]
+
+
+@cache  # one entry per unique Han character
+def _char_to_pinyin_alternatives(ch: str) -> tuple[str, ...]:
+    """Return every dictionary pronunciation for one Han character."""
+    readings = pypinyin.pinyin(ch, style=pypinyin.Style.NORMAL, heteronym=True)[0]
+    return tuple(dict.fromkeys(readings))
 
 
 class PinyinCacheService:
@@ -33,6 +41,10 @@ class PinyinCacheService:
     def han_to_pinyin_fast(self, han_str: str) -> list[str]:
         """Return pinyin for every character, memoising on first sight."""
         return [_char_to_pinyin(c) for c in han_str]
+
+    def han_to_pinyin_alternatives_fast(self, han_str: str) -> tuple[tuple[str, ...], ...]:
+        """Return pronunciation combinations for an explicitly aligned Han token."""
+        return tuple(product(*(_char_to_pinyin_alternatives(character) for character in han_str)))
 
     # (optional) diagnostics you were using elsewhere
     @property

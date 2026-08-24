@@ -8,15 +8,48 @@ data structures and patterns used by the Chinese name detection system.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, replace
+from types import MappingProxyType
 
 from sinonym.chinese_names_data import VALID_CHINESE_ONSETS
+from sinonym.name_punctuation import (
+    INVISIBLE_MARKUP_DELETE_TRANSLATION,
+    APOSTROPHE_FOLD_TRANSLATION,
+    HYPHEN_FOLD_TRANSLATION,
+    NAME_JOINER_DELETE_TRANSLATION,
+)
 from sinonym.patterns import (
     CLEAN_PATTERN,
     COMPREHENSIVE_CJK_PATTERN,
     FORBIDDEN_PATTERNS_REGEX,
     HAN_ROMAN_SPLITTER,
 )
+
+MIN_PARSING_TOKENS = 2
+
+
+@dataclass(frozen=True, slots=True)
+class _FrozenTranslationTable(Mapping[int, str | None]):
+    """Pickle-safe immutable mapping accepted by ``str.translate``."""
+
+    _values: Mapping[int, str | None]
+
+    def __init__(self, values: Mapping[int, str | None]) -> None:
+        object.__setattr__(self, "_values", MappingProxyType(dict(values)))
+
+    def __getitem__(self, key: int) -> str | None:
+        return self._values[key]
+
+    def __iter__(self) -> Iterator[int]:
+        return iter(self._values)
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __reduce__(self) -> tuple[type[_FrozenTranslationTable], tuple[dict[int, str | None]]]:
+        """Rebuild through the constructor because mapping proxies are not picklable."""
+        return _FrozenTranslationTable, (dict(self._values),)
 
 
 @dataclass(frozen=True)
@@ -41,7 +74,12 @@ class ChineseNameConfig:
     forbidden_patterns_regex: re.Pattern[str]
 
     # Character translation table
-    hyphens_apostrophes_tr: dict[int, None]
+    hyphens_apostrophes_tr: Mapping[int, str | None]
+
+    # Unicode hyphen/apostrophe variants folded to their ASCII form. Without this they fall
+    # outside clean_roman_pattern and are DELETED, which destroys the author-supplied syllable
+    # boundary that `Cui'e` and `Ji-Ae` carry: `Cui’e` reached the splitter as `Cuie`.
+    roman_punctuation_fold_tr: Mapping[int, str | None]
 
     # Pre-sorted Chinese onsets for phonetic validation (performance optimization)
     sorted_chinese_onsets: tuple[str, ...]
@@ -57,6 +95,28 @@ class ChineseNameConfig:
 
     # Parsing scoring constants
     poor_score_threshold: float  # Score below which parsing is considered poor
+
+    def __post_init__(self) -> None:
+        """Validate scalar invariants and freeze translation mappings."""
+        if (
+            isinstance(self.min_tokens_required, bool)
+            or not isinstance(self.min_tokens_required, int)
+            or self.min_tokens_required < MIN_PARSING_TOKENS
+        ):
+            message = "min_tokens_required must be an integer >= 2"
+            raise ValueError(message)
+        if not isinstance(self.hyphens_apostrophes_tr, _FrozenTranslationTable):
+            object.__setattr__(
+                self,
+                "hyphens_apostrophes_tr",
+                _FrozenTranslationTable(self.hyphens_apostrophes_tr),
+            )
+        if not isinstance(self.roman_punctuation_fold_tr, _FrozenTranslationTable):
+            object.__setattr__(
+                self,
+                "roman_punctuation_fold_tr",
+                _FrozenTranslationTable(self.roman_punctuation_fold_tr),
+            )
 
     @classmethod
     def create_default(cls) -> ChineseNameConfig:
@@ -77,7 +137,10 @@ class ChineseNameConfig:
             camel_case_finder=re.compile(r"[A-Z][a-z]+"),
             clean_pattern=CLEAN_PATTERN,
             forbidden_patterns_regex=FORBIDDEN_PATTERNS_REGEX,
-            hyphens_apostrophes_tr=str.maketrans("", "", "-‐‒–—―﹘﹣－⁃₋''''''''"),
+            hyphens_apostrophes_tr=NAME_JOINER_DELETE_TRANSLATION,
+            roman_punctuation_fold_tr=APOSTROPHE_FOLD_TRANSLATION
+            | HYPHEN_FOLD_TRANSLATION
+            | INVISIBLE_MARKUP_DELETE_TRANSLATION,
             sorted_chinese_onsets=tuple(sorted(VALID_CHINESE_ONSETS, key=len, reverse=True)),
             default_surname_logp=-15.0,
             default_given_logp=-15.0,

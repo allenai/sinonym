@@ -7,6 +7,8 @@ of the Chinese name detection system.
 All tests refactored to use session-scoped detector fixture for optimal performance.
 """
 
+import pickle
+
 import pytest
 
 from sinonym.coretypes import (
@@ -25,10 +27,37 @@ from sinonym.services.batch_analysis import (
     BatchCandidateEntry,
     SurnameEndpointSpan,
 )
+from tests._korean_atomic_cases import ATOMIC_KOREAN_GIVEN_CASES, AtomicKoreanGivenCase
 
 # ===================================================================
 # BATCH FORMAT DETECTION TESTS
 # ===================================================================
+
+
+def test_batch_dependencies_default_classification_input_to_identity() -> None:
+    """The legacy three-argument constructor keeps the submitted surface."""
+    dependencies = BatchAnalysisDependencies(
+        2,
+        lambda _name: ParseResult.failure("unused"),
+        lambda _name: None,
+    )
+
+    assert dependencies.classification_input("Li Ming") == "Li Ming"
+    assert dependencies.surname_resolver is None
+
+
+def test_batch_dependencies_keep_surname_resolver_as_fourth_positional_field() -> None:
+    """The legacy fourth positional argument remains the surname resolver."""
+    surname_resolver = object()
+    dependencies = BatchAnalysisDependencies(
+        2,
+        lambda _name: ParseResult.failure("unused"),
+        lambda _name: None,
+        surname_resolver,
+    )
+
+    assert dependencies.surname_resolver is surname_resolver
+    assert dependencies.classification_input("Li Ming") == "Li Ming"
 
 
 def test_homogeneous_given_first_batch(detector):
@@ -110,6 +139,21 @@ def test_low_gap_majority_votes_are_not_dropped(detector):
     assert [result.result for result in batch.results] == ["Wen Bo", "Min Hao", "Wen Jun", "Han Yu"]
 
 
+def test_duplicate_compound_token_uses_full_source_slice_for_batch_order(detector):
+    """A repeated endpoint token must not turn a given-first compound vote around."""
+    names = ["Au Au Yeung", "Ming Au Yeung", "Li Jin"]
+
+    batch = detector.analyze_name_batch(names)
+
+    assert batch.format_pattern.dominant_format == NameFormat.GIVEN_FIRST
+    assert batch.format_pattern.surname_first_count == 1
+    assert batch.format_pattern.given_first_count == 2
+    assert batch.format_pattern.total_count == 3
+    assert batch.format_pattern.threshold_met
+    assert [result.result for result in batch.results] == ["Au Au Yeung", "Ming Au Yeung", "Li Jin"]
+    assert batch.results[0].parsed_original_order.order == ["given", "surname"]
+
+
 def test_small_batch_fallback(detector):
     """Test that small batches fall back correctly."""
     names = ["Mai Li", "Li Wang"]
@@ -128,6 +172,75 @@ def test_small_batch_fallback(detector):
     assert batch_result.name_order_evidence[0].batch_participant is True
     assert len(batch_result.results) == len(names)
     assert len(batch_result.improvements) == 0
+
+
+@pytest.mark.parametrize(
+    ("name", "no_bonus_hex", "guarded_hex"),
+    [
+        (
+            "Bian Li",
+            ["-0x1.87d2f56c0441ep+2", "-0x1.c4b65c1c29d8ap+2"],
+            ["-0x1.55336027f1635p+1", "-0x1.87d2f56c0441ep+2"],
+        ),
+        (
+            "Cen Zhang",
+            ["-0x1.9368e896d3962p+2", "-0x1.b8a3a45e98030p+2"],
+            ["-0x1.3d0df0accdb80p+1", "-0x1.9368e896d3962p+2"],
+        ),
+    ],
+)
+def test_prepared_score_views_preserve_exact_float_order(detector, name, no_bonus_hex, guarded_hex):
+    service = detector._batch_analysis_service  # noqa: SLF001
+    assert service is not None
+    normalized = detector._normalizer.apply(name)  # noqa: SLF001
+
+    format_view, individual_view, _failure = service._prepare_candidate_views(  # noqa: SLF001
+        name,
+        normalized,
+        need_individual=True,
+    )
+    no_bonus = [candidate.materialize() for candidate in format_view]
+    guarded = [candidate.materialize() for candidate in individual_view]
+
+    assert [candidate.score.hex() for candidate in no_bonus] == no_bonus_hex
+    assert [candidate.score.hex() for candidate in guarded] == guarded_hex
+
+
+def test_threshold_fallback_reuses_exact_ethnicity_failures(detector):
+    names = ["Kim Min-jun", "John Smith"]
+    expected = [detector._normalize_chinese_name(name).error_message for name in names]  # noqa: SLF001
+
+    batch = detector._analyze_related_name_batches(  # noqa: SLF001
+        names,
+        None,
+        format_threshold=1.0,
+    ).pp_batch
+
+    assert not batch.format_pattern.threshold_met
+    assert [result.error_message for result in batch.results] == expected
+
+
+def test_related_batch_preparation_keeps_tail_votes_without_aliasing(detector):
+    pp_names = ["Bian Li", "Bian Li"]
+    pool_names = [*pp_names, "Cen Zhang"]
+
+    related = detector._analyze_related_name_batches(pp_names, pool_names)  # noqa: SLF001
+
+    assert related.vys_batch is not None
+    assert related.vys_context_names == tuple(pool_names)
+    assert related.vys_batch.names == pp_names
+    assert related.vys_batch.format_pattern.total_count == len(pool_names)
+    assert pickle.loads(pickle.dumps(related)) == related  # noqa: S301 - round-trip trusted test data.
+
+    first = related.pp_batch.individual_analyses[0].candidates[0]
+    duplicate = related.pp_batch.individual_analyses[1].candidates[0]
+    vys = related.vys_batch.individual_analyses[0].candidates[0]
+    assert first is not duplicate
+    assert first is not vys
+    assert first.surname_tokens is not duplicate.surname_tokens
+    first.surname_tokens.append("mutation")
+    assert "mutation" not in duplicate.surname_tokens
+    assert "mutation" not in vys.surname_tokens
 
 
 def test_batch_format_pattern_preserves_explicit_zero_decision_confidence():
@@ -213,6 +326,21 @@ def test_name_order_evidence_supports_external_context_routing(detector):
     )
 
 
+def test_batch_applied_requires_selected_dominant_format(detector):
+    """A row without the dominant candidate reports that batch was not applied."""
+    batch = detector.analyze_name_batch(["Li Ming", "Wei Zhang", "Ming Li", "Hao Wang"])
+    evidence = batch.name_order_evidence[0]
+
+    assert batch.format_pattern.dominant_format is NameFormat.GIVEN_FIRST
+    assert batch.format_pattern.threshold_met
+    assert evidence.individual_format is NameFormat.SURNAME_FIRST
+    assert evidence.selected_format is NameFormat.SURNAME_FIRST
+    assert evidence.batch_participant is True
+    assert evidence.batch_applied is False
+    assert evidence.batch_changed_format is False
+    assert [candidate.format for candidate in batch.individual_analyses[0].candidates] == [NameFormat.SURNAME_FIRST]
+
+
 def test_batch_evidence_uses_actual_individual_format_for_guarded_given_first(detector):
     """Batch metadata reports standalone order when batch context flips guarded names."""
     names = ["Diao Wang", "Bian Li", "Cen Zhang", "Luan Wang", "Rao Li"]
@@ -228,6 +356,21 @@ def test_batch_evidence_uses_actual_individual_format_for_guarded_given_first(de
     assert result.name_order_evidence[0].batch_changed_format is True
     assert 0 in result.improvements
     assert result.individual_analyses[0].best_candidate.format == NameFormat.GIVEN_FIRST
+
+
+def test_nonparticipant_uses_guarded_individual_view_in_thresholded_batch(detector):
+    """A row excluded from batch formatting must keep its standalone winner."""
+    names = ["Lu Chen", "Yuanyuan Ma", "Zhipeng SHAO", "Mu CHEN"]
+
+    result = detector.analyze_name_batch(names)
+    focal = result.name_order_evidence[3]
+
+    assert result.format_pattern.threshold_met
+    assert result.results[3].result == "Mu Chen"
+    assert focal.batch_participant is False
+    assert focal.batch_applied is False
+    assert focal.individual_format is NameFormat.GIVEN_FIRST
+    assert focal.selected_format is NameFormat.GIVEN_FIRST
 
 
 def test_name_order_evidence_uses_selected_compound_surname_span_frequency(detector):
@@ -319,13 +462,11 @@ def test_batch_tie_break_uses_parser_policy_surname_frequency(detector):
             dummy_candidate,
             {},
             LATIN_ONLY_REPRESENTATION,
+            raw_tokens=("Chong", "Chien"),
         ),
     ]
 
-    dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(  # noqa: SLF001
-        name_candidates,
-        detector._normalizer,  # noqa: SLF001
-    )
+    dominant = detector._batch_analysis_service._apply_tie_breaking_heuristics(name_candidates)  # noqa: SLF001
 
     assert dominant == NameFormat.SURNAME_FIRST
     assert detector._surname_resolver.evidence_frequency("Chong") < detector._surname_resolver.evidence_frequency(  # noqa: SLF001
@@ -347,14 +488,66 @@ def test_name_order_evidence_exposes_all_caps_cue(detector):
     assert evidence.batch_applied is False
 
 
+def test_parenthetical_surname_hint_votes_without_receiving_batch_format(detector):
+    """Explicit parenthetical order evidence must not be reversed by peers."""
+    names = ["Li(Peter)Chen", "Wei Zhang(Michael)", "Ming Li"]
+
+    batch = detector.analyze_name_batch(names)
+
+    assert batch.format_pattern.dominant_format is NameFormat.GIVEN_FIRST
+    assert batch.format_pattern.threshold_met
+    assert batch.format_pattern.surname_first_count == 1
+    assert batch.results[0].result == "Chen Li"
+    assert batch.name_order_evidence[0].batch_participant is True
+    assert batch.name_order_evidence[0].batch_applied is False
+    assert batch.name_order_evidence[0].batch_changed_format is False
+
+
+@pytest.mark.parametrize(
+    "case",
+    ATOMIC_KOREAN_GIVEN_CASES,
+    ids=lambda case: case.raw_name,
+)
+def test_reviewed_korean_given_tokens_remain_atomic_in_scalar_and_batch(
+    detector,
+    case: AtomicKoreanGivenCase,
+) -> None:
+    """The shared formatter must not reinterpret complete Korean tokens as pinyin pieces."""
+    scalar = detector.normalize_name(case.raw_name)
+    batch = detector.analyze_name_batch([case.raw_name])
+
+    assert scalar.result == case.formatted_name
+    assert batch.results[0].result == case.formatted_name
+    assert scalar.canonical_name is not None
+    assert batch.results[0].canonical_name is not None
+    assert scalar.canonical_name.normalized == batch.results[0].canonical_name.normalized
+
+
+def test_batch_context_does_not_replace_an_existing_failure_reason(detector):
+    """Whether peers meet the format threshold must not rewrite a focal failure."""
+    individual = detector.analyze_name_batch(["Zhang"])
+    contextual = detector.analyze_name_batch(["Zhang", "Wei Zhang", "Ming Li"])
+
+    assert individual.results[0].error_message == "no valid parse found"
+    assert contextual.format_pattern.threshold_met
+    assert contextual.results[0].error_message == individual.results[0].error_message
+
+
 def test_name_order_evidence_does_not_normalize_rejected_input():
     """Rejected inputs keep evidence aligned without re-running normalization."""
+    failure = ParseResult(
+        success=False,
+        result="sentinel",
+        error_message=None,
+        original_compound_surname="kept",
+    )
     service = BatchAnalysisService(
         parsing_service=None,
         dependencies=BatchAnalysisDependencies(
             min_tokens_required=2,
             individual_parser=lambda _name: ParseResult.failure("unexpected individual parse"),
-            input_failure=lambda _name: ParseResult.failure("invalid input length"),
+            input_failure=lambda _name: failure,
+            classification_input=lambda name: name,
         ),
     )
 
@@ -364,14 +557,14 @@ def test_name_order_evidence_does_not_normalize_rejected_input():
 
     rejected_name = "A" * 101
     result = service.analyze_name_batch(
-        [rejected_name],
+        [rejected_name, rejected_name],
         NormalizerThatMustNotRun(),
         formatting_service=None,
         options=BatchAnalysisOptions(minimum_batch_size=1),
     )
 
-    assert result.results[0].success is False
-    assert result.results[0].error_message == "invalid input length"
+    # ParseResult is frozen, so sharing the callback's instance across slots is safe.
+    assert result.results == [failure, failure]
     evidence = result.name_order_evidence[0]
     assert evidence.raw_name == rejected_name
     assert evidence.raw_tokens == []

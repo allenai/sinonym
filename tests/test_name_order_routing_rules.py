@@ -367,12 +367,23 @@ def test_pp_abstain_builder_converts_batch_evidence_to_router_rows(detector):
     assert all("router_prediction" in row for row in routed)
 
 
-def test_pp_abstain_builder_counts_result_text_tokens_for_hyphenated_given_names(detector):
-    batch = detector.analyze_name_batch(["Zhang Chang-Qing"])
+@pytest.mark.parametrize(
+    ("raw_name", "rendered"),
+    [
+        ("Zhang Chang-Qing", "Chang-Qing Zhang"),
+        ("Wang Kc", "K.-C. Wang"),
+    ],
+)
+def test_pp_abstain_builder_counts_rendered_components_for_hyphenated_given_names(
+    detector,
+    raw_name,
+    rendered,
+):
+    batch = detector.analyze_name_batch([raw_name])
 
     rows = build_pp_abstain_rows(batch, detector)
 
-    assert batch.results[0].result == "Chang-Qing Zhang"
+    assert batch.results[0].result == rendered
     assert rows[0]["pp_result_token_count"] == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
 
 
@@ -972,6 +983,16 @@ def test_input_order_parsed_hyphenates_multi_token_given():
     as_typed = input_order_parsed(result)
     assert (as_typed.given_name, as_typed.surname) == ("Huang-Yu", "Qiang")
     assert as_typed.given_tokens == ["Huang", "Yu"]
+
+
+@pytest.mark.parametrize("raw_name", ["Ren Bai-li", "XU Dong-fang"])
+def test_input_order_parsed_does_not_generalize_compound_surname_lineage(
+    detector,
+    raw_name: str,
+) -> None:
+    result = detector.analyze_name_batch([raw_name]).results[0]
+
+    assert input_order_parsed(result) is not result.parsed
 
 
 def test_pp_abstain_parsed_keeps_spaced_han_pp_parse():
