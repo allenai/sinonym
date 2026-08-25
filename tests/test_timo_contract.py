@@ -120,7 +120,7 @@ def test_json_schemas_match_the_runtime_contract() -> None:
     request_schema = Instance.schema()
     source_properties = request_schema["definitions"]["SourceAuthorFields"]["properties"]
 
-    assert {name: source_properties[name]["type"] for name in source_properties} == {
+    assert {name: [branch["type"] for branch in source_properties[name]["anyOf"]] for name in source_properties} == {
         "first_name": ["string", "null"],
         "middle_names": ["string", "null"],
         "last_name": ["string", "null"],
@@ -132,7 +132,7 @@ def test_json_schemas_match_the_runtime_contract() -> None:
     response_schema = Prediction.schema()
     assert response_schema["properties"]["authors"]["items"] == {"$ref": "#/definitions/ResolvedAuthorFields"}
     resolved_properties = response_schema["definitions"]["ResolvedAuthorFields"]["properties"]
-    assert resolved_properties["suffix"]["type"] == ["string", "null"]
+    assert [branch["type"] for branch in resolved_properties["suffix"]["anyOf"]] == ["string", "null"]
     assert {resolved_properties[name]["type"] for name in ("first_name", "middle_names", "last_name")} == {
         "string",
     }
