@@ -1177,12 +1177,9 @@ class _Model(BaseModel):
                 if field.allow_none:
                     property_name = field.alias if field.alias in properties else field_name
                     property_schema = properties[property_name]
-                    if "type" in property_schema:
-                        property_schema["type"] = [property_schema["type"], "null"]
-                    else:
-                        properties[property_name] = {
-                            "anyOf": [property_schema, {"type": "null"}],
-                        }
+                    properties[property_name] = {
+                        "anyOf": [property_schema, {"type": "null"}],
+                    }
 
     def dict(self, *args, **kwargs):
         """Return plain Python serialization values for enum fields."""
