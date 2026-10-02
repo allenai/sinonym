@@ -43,6 +43,7 @@ if TYPE_CHECKING:
 # time. `hoang` fails that bar at 66.7% ("Hoang Nguyen", "Hoang Pham" are given-name-first), and the
 # short entries fail it outright.
 ASCII_ROUTABLE_VIETNAMESE_SURNAMES = frozenset({"nguyen", "pham", "tran"})
+_ROMANIZED_INITIAL_RE = re.compile(r"[A-Z](?:\.[A-Z])*\.?")
 # The pinned Vietnamese-surname/Japanese-given overlap is {do, mai, to} after
 # excluding Korean surnames. ``do`` is also a Portuguese particle and an
 # ambiguous credential, and its audited activations were malformed or
@@ -1120,13 +1121,23 @@ class EastAsianNameOrderService:
                 source_order=exact_roles,
                 reason=EastAsianEvidenceReason.IDENTITY_BACKED_EXACT_FULL_SURFACE,
             )
-        if not all(all(character.isalpha() or character in "-'" for character in token) for token in tokens):
-            return None
-        lexicons = _roman_lexicons()
+        def is_word(token: str) -> bool:
+            return all(character.isalpha() or character in "-'" for character in token)
 
-        vietnamese = self._infer_vietnamese(tokens, surface, lexicons)
-        if vietnamese is not None:
-            return vietnamese
+        lexicons = _roman_lexicons()
+        # The Vietnamese pass also takes a middle initial: a family name is no less certain in
+        # ``Pham Q. Hung`` than in ``Pham Quang Hung``, and leaving the initialled mentions alone
+        # split one person between ``p hung`` and ``h pham``.
+        if (
+            is_word(tokens[0])
+            and is_word(tokens[-1])
+            and all(is_word(token) or _ROMANIZED_INITIAL_RE.fullmatch(token) for token in tokens[1:-1])
+        ):
+            vietnamese = self._infer_vietnamese(tokens, surface, lexicons)
+            if vietnamese is not None:
+                return vietnamese
+        if not all(is_word(token) for token in tokens):
+            return None
         korean = self._infer_korean(tokens, lexicons)
         if korean is not None:
             return korean

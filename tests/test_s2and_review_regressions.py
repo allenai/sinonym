@@ -141,3 +141,19 @@ GLUED_SINGLE_INITIAL_CASES = [
 @pytest.mark.parametrize(("source", "expected"), GLUED_SINGLE_INITIAL_CASES)
 def test_one_glued_initial_is_split_off_the_surname(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+VIETNAMESE_INITIALLED_CASES = [
+    # paper 122189999's author: the spelled-out mentions already flip; the initialled ones did not,
+    # splitting one person between ``p hung`` and ``h pham``
+    (("Pham", "Q.", "Hung"), ("Hung", "Q.", "Pham")),
+    (("Pham", "Quang", "Hung"), ("Hung", "Quang", "Pham")),
+    (("Nguyen", "V.", "Hieu"), ("Hieu", "V.", "Nguyen")),
+    # no surname to work from
+    (("P.", None, "Hung"), ("P.", "", "Hung")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), VIETNAMESE_INITIALLED_CASES)
+def test_vietnamese_family_name_is_recognized_past_a_middle_initial(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
