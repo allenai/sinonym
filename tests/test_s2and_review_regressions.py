@@ -98,3 +98,14 @@ def test_korean_surname_as_last_token_is_not_moved_to_the_front(predictor):
     # inspire:953808 / :909467 — Myung and Hyun
     assert resolve(predictor, "Yun", "Soo", "Myung") == ("Yun", "Soo", "Myung")
     assert resolve(predictor, "Chang", "Ho", "Hyun") == ("Chang", "Ho", "Hyun")
+
+
+@pytest.mark.parametrize("source", [("Gong-Bo", None, "Zhao"), ("Da", None, "Xing")])
+def test_lone_two_token_name_with_a_far_rarer_surname_keeps_source_order(predictor, source):
+    # aminer: accepted surname-first alone although the other token is the 20x likelier
+    # surname; with no batch to lean on the source order stands
+    assert resolve(predictor, *source) == (source[0], "", source[2])
+
+
+def test_lone_two_token_name_with_the_likelier_surname_still_flips(predictor):
+    assert resolve(predictor, "Zhang", None, "Wei") == ("Wei", "", "Zhang")

@@ -132,6 +132,7 @@ PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT = 2
 PP_ABSTAIN_MIXED_LONG_RAW_TOKEN_MIN = 3
 PP_ABSTAIN_CLEAN_BILINGUAL_RAW_TOKEN_COUNT = 2
 PP_ABSTAIN_RELIABLE_BATCH_COUNT_MIN = 2
+PP_ABSTAIN_TWO_TOKEN_WEAK_RATIO_MAX = 0.05
 PP_VYS_REAL_PAPER_VOTES_MIN = 3
 PP_VYS_LOW_BATCH_MAX = 2
 PP_VYS_VERY_LOW_BATCH_MAX = 1
@@ -202,6 +203,7 @@ def build_pp_abstain_rows(batch_result: BatchParseResult, detector_context: Any)
                 "has_latin": _has_latin(script_representation),
                 "cjk_has_space": script_representation == "han_only" and len(normalized_input.tokens) > 1,
                 "raw_tokens": evidence.raw_token_count,
+                "selected_surname_frequency_ratio": evidence.selected_over_alternate_surname_frequency_ratio,
             },
         )
     return rows
@@ -593,6 +595,7 @@ def route_pp_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
                 predicates,
                 (
                     "spaced_cjk_zero_batch_surname_first",
+                    "weak_two_token_guess",
                     "weak_zero_batch",
                     "zero_batch_mixed_long",
                 ),
@@ -1003,10 +1006,23 @@ def _pp_abstain_predicates(row: Row) -> dict[str, bool]:
     spaced_cjk_zero_batch_surname_first = (
         surname_first_at_input_start and below_reliable_batch_min and has_cjk and not has_latin and cjk_has_space
     )
+    # A lone two-token Latin name whose chosen surname is 20x rarer than the alternative is a
+    # guess, not evidence. On the 2026-09 S2AND review the wrong lone flips had a median ratio of
+    # 0.08 and the right ones 23.7; below 0.05 the flip was wrong 145 times and right 13.
+    ratio = row.get("selected_surname_frequency_ratio")
+    weak_two_token_guess = (
+        surname_first_two_token
+        and below_reliable_batch_min
+        and has_latin
+        and not has_cjk
+        and ratio is not None
+        and ratio < PP_ABSTAIN_TWO_TOKEN_WEAK_RATIO_MAX
+    )
     accept_surname_first = (
         (surname_first_two_token or compound_surname_first_input_start)
         and not zero_batch_mixed_long
         and not spaced_cjk_zero_batch_surname_first
+        and not weak_two_token_guess
     )
     clean_bilingual_given_first = (
         pp_result_token_count == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
@@ -1024,6 +1040,7 @@ def _pp_abstain_predicates(row: Row) -> dict[str, bool]:
         "zero_batch_mixed_long": zero_batch_mixed_long,
         "spaced_cjk_zero_batch_surname_first": spaced_cjk_zero_batch_surname_first,
         "accept_surname_first": accept_surname_first,
+        "weak_two_token_guess": weak_two_token_guess,
         "clean_bilingual_given_first": clean_bilingual_given_first,
     }
 
