@@ -63,6 +63,7 @@ class ResolutionReason(str, Enum):
     SCALAR_SOURCE_BOUNDARY_PRESERVE_INPUT = "scalar_source_boundary_preserve_input"
     SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT = "scalar_clean_source_surname_repartition_assignment"
     STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT = "structured_surname_initial_tail_assignment"
+    CAPS_SURNAME_CUE_ASSIGNMENT = "caps_surname_cue_assignment"
 
     JAPANESE_ITERATION_MARK_ASSIGNMENT = "japanese_iteration_mark_assignment"
     JAPANESE_NATIVE_SPACED_STRICT_ASSIGNMENT = "japanese_native_spaced_strict_assignment"
@@ -119,6 +120,7 @@ _RESOLUTION_REASON_GROUPS = {
     (ResolutionProvenance.SOURCE, ResolutionAction.ASSIGN): (
         ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT,
         ResolutionReason.STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT,
+        ResolutionReason.CAPS_SURNAME_CUE_ASSIGNMENT,
         ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT,
         ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
     ),

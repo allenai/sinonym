@@ -241,6 +241,7 @@ def test_every_resolution_reason_has_one_complete_decision_spec() -> None:
         (ResolutionProvenance.SOURCE, ResolutionAction.ASSIGN): {
             ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT,
             ResolutionReason.STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT,
+            ResolutionReason.CAPS_SURNAME_CUE_ASSIGNMENT,
             ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT,
             ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
         },

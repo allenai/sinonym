@@ -48,5 +48,42 @@ def test_source_boundary_guard_is_shrink_only(predictor, source, expected):
     assert resolve(predictor, *source) == expected
 
 
+CAPS_SURNAME_CUE_CASES = [
+    # MAG marks the surname in caps; the delivered names kept input order and title-cased it
+    (("LI", None, "Hui"), ("Hui", "", "Li")),
+    (("LIU", None, "Lian"), ("Lian", "", "Liu")),
+    (("Lian", None, "LIU"), ("Lian", "", "Liu")),
+    (("LI", None, "Huihui"), ("Hui-Hui", "", "Li")),
+    # a particle before the caps surname stays with it
+    (("A. S.", None, "de CASTRO"), ("A.", "S.", "de Castro")),
+    (("J. W.", None, "van HOLTEN"), ("J.", "W.", "van Holten")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), CAPS_SURNAME_CUE_CASES)
+def test_all_caps_token_marks_the_surname(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+def test_glued_caps_surname_accepts_a_capital_after_the_hyphen(predictor):
+    # aminer BOTH_WRONG rows: a MAG byline of glued ``SURNAMEGiven-Name`` tokens
+    instance = Instance(pp_authors=[
+        SourceAuthorFields(last_name="ZHANGWei-Jun"),
+        SourceAuthorFields(last_name="JIANGZong-Hui"),
+        SourceAuthorFields(last_name="LIUXiao-Wei"),
+    ])
+    rows = predictor.predict_batch([instance])[0].authors
+    assert [(a.first_name, a.middle_names, a.last_name) for a in rows] == [
+        ("Wei-Jun", "", "Zhang"),
+        ("Zong-Hui", "", "Jiang"),
+        ("Xiao-Wei", "", "Liu"),
+    ]
+
+
+@pytest.mark.parametrize("source", [("JH", None, "Smith"), ("JOHN", None, "SMITH"), ("John", None, "Smith III")])
+def test_caps_cue_ignores_bare_initials_and_all_caps_names(predictor, source):
+    assert resolve(predictor, *source)[2].casefold().startswith("smith")
+
+
 def test_scalar_baseline_still_canonicalizes_initials_without_moving_boundary(predictor):
     assert resolve(predictor, "J", None, "Smith") == ("J.", "", "Smith")
