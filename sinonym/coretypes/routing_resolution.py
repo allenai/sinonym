@@ -60,6 +60,7 @@ class ResolutionReason(str, Enum):
     HANDLED_EVIDENCE_FAILURE = "handled_evidence_failure"
     HARD_SCALAR_MATERIALIZATION_FAILED = "hard_scalar_materialization_failed"
     SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT = "scalar_known_compound_surname_preserve_input"
+    SCALAR_SOURCE_BOUNDARY_PRESERVE_INPUT = "scalar_source_boundary_preserve_input"
     SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT = "scalar_clean_source_surname_repartition_assignment"
     STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT = "structured_surname_initial_tail_assignment"
 
@@ -107,6 +108,7 @@ _RESOLUTION_REASON_GROUPS = {
         ResolutionReason.HANDLED_EVIDENCE_FAILURE,
         ResolutionReason.HARD_SCALAR_MATERIALIZATION_FAILED,
         ResolutionReason.SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT,
+        ResolutionReason.SCALAR_SOURCE_BOUNDARY_PRESERVE_INPUT,
         ResolutionReason.INITIALS_COMMA_REORDER_VETO_PRESERVE_INPUT,
         ResolutionReason.REVIEWED_EXACT_SOURCE_REORDER_VETO_PRESERVE_INPUT,
         ResolutionReason.PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME,

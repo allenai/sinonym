@@ -138,6 +138,7 @@ _ASCII_WORD_RE = re.compile(r"[A-Za-z]+")
 _ASCII_HYPHENATED_WORD_RE = re.compile(r"[A-Za-z]+(?:-[A-Za-z]+)*")
 _ASCII_INITIAL_RE = re.compile(r"[A-Za-z]\.?")
 _DOTTED_INITIAL_RE = re.compile(r"[^\W\d_]\.", re.UNICODE)
+_INITIAL_TOKEN_RE = re.compile(r"[^\W\d_](?:\.[^\W\d_])*\.?", re.UNICODE)
 _JOINED_UPPERCASE_SURNAME_RE = re.compile(r"([A-Z]{2,})([A-Z][a-z]+(?:-[a-z]+)*)")
 _TITLED_GIVEN_RE = re.compile(r"(?:Dr\.|Prof\.) ([^\s]+)")
 _TRAILING_AFFILIATION_SURNAME_RE = re.compile(r"[A-Z][a-z]+a")
@@ -1826,6 +1827,41 @@ class _Resolver:
             selected.surname.split(),
         ) == surface_key(surname[-1:])
 
+    @staticmethod
+    def _scalar_only_moves_source_boundary(
+        source: SourceAuthorFields,
+        selected: NameComponents,
+    ) -> bool:
+        """Return whether scalar parsing kept every source token in order and only cut the
+        leading tokens off a multi-token source surname.
+
+        A structured source that fills both ``first_name`` and a multi-token ``last_name``
+        (``C`` / ``Garcia Recio``) has already said where its surname starts. Without a reorder
+        the scalar baseline has no new evidence about that boundary, and shrinking it (Garcia →
+        middle) was wrong on 170 of 225 reviewed cases. Growing the surname is left alone:
+        ``H. Llewellyn / Smith`` → ``Llewellyn Smith`` is right as often as ``C.H.Quentin /
+        Ingram`` → ``Quentin Ingram`` is wrong, and only a lexicon can tell them apart. A
+        last-name-only source and a cut that only strips initials are also left alone — there
+        the source made no partition claim worth keeping.
+        """
+        if not (source.first_name or "").strip():
+            return False
+        source_surname = (source.last_name or "").split()
+        selected_surname = selected.surname.split()
+        if len(source_surname) < 2 or not selected_surname or len(selected_surname) >= len(source_surname):
+            return False
+        # a terminal initial as the surname is the reviewed South Indian shape (``Vijay Chander S``)
+        if all(_INITIAL_TOKEN_RE.fullmatch(token) for token in selected_surname):
+            return False
+        source_run = _alnum_key(" ".join(part for part in (source.first_name, source.middle_names, source.last_name) if part))
+        selected_run = _alnum_key(" ".join(part for part in (selected.given_name, selected.middle_name, selected.surname) if part))
+        if not source_run or source_run != selected_run:
+            return False
+        cut = len(source_surname) - len(selected_surname)
+        if _alnum_key(" ".join(selected_surname)) != _alnum_key(" ".join(source_surname[cut:])):
+            return False
+        return not all(_INITIAL_TOKEN_RE.fullmatch(token) for token in source_surname[:cut])
+
     def _structured_surname_initial_tail_candidate(
         self,
         source: SourceAuthorFields,
@@ -2157,6 +2193,11 @@ class _Resolver:
                     source=source,
                     selected=source_surname_candidate,
                     reason=ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT,
+                )
+            if self._scalar_only_moves_source_boundary(source, scalar_canonical.normalized):
+                return self._source_resolution(
+                    source,
+                    ResolutionReason.SCALAR_SOURCE_BOUNDARY_PRESERVE_INPUT,
                 )
             return self._materialize_selected_candidate(
                 source=source,
