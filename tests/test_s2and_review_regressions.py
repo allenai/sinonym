@@ -78,3 +78,23 @@ DETACHED_DIACRITIC_CASES = [
 @pytest.mark.parametrize(("source", "expected"), DETACHED_DIACRITIC_CASES)
 def test_detached_diacritic_rejoins_its_letter(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+def _byline(predictor, *authors):
+    instance = Instance(pp_authors=[SourceAuthorFields(first_name=f, middle_names=m, last_name=l) for f, m, l in authors])
+    return [(a.first_name, a.middle_names, a.last_name) for a in predictor.predict_batch([instance])[0].authors]
+
+
+def test_reviewed_japanese_surname_vetoes_the_flip_in_a_given_first_byline(predictor):
+    # inspire:718787 — Asaka was absent from every surname list, so
+    # the one-sided Japanese vote flipped him; with the reviewed surname the given-first byline wins
+    rows = _byline(predictor, ("Takao", None, "Asaka"), ("Jonathan", None, "Mayer"), ("Michael", None, "Smith"))
+    assert rows[0] == ("Takao", "", "Asaka")
+    rows = _byline(predictor, ("Masaki", None, "Shigemori"), ("Edward", None, "Witten"), ("Juan", None, "Maldacena"))
+    assert rows[0] == ("Masaki", "", "Shigemori")
+
+
+def test_korean_surname_as_last_token_is_not_moved_to_the_front(predictor):
+    # inspire:953808 / :909467 — Myung and Hyun
+    assert resolve(predictor, "Yun", "Soo", "Myung") == ("Yun", "Soo", "Myung")
+    assert resolve(predictor, "Chang", "Ho", "Hyun") == ("Chang", "Ho", "Hyun")

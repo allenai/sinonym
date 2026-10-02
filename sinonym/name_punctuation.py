@@ -221,6 +221,7 @@ _SPACING_TO_COMBINING = {
     "\u02dc": "\u0303", "\u00b8": "\u0327", "\u02c7": "\u030c", "\u00af": "\u0304", "\u02d8": "\u0306",
     "\u02dd": "\u030b", "\u02d9": "\u0307",
 }
+_APOSTROPHE_LIKE_MARKS = frozenset({"\u00b4", "\u0060"})
 _DETACHED_MARK_RE = re.compile(
     "(?P<prev>[^\\W\\d_])?(?P<ws1>\\s?)(?P<mark>[" + "".join(_SPACING_TO_COMBINING) + "\\u0300-\\u036f])(?P<ws2>\\s?)(?P<next>[^\\W\\d_])?",
     re.UNICODE,
@@ -233,7 +234,8 @@ def attach_detached_diacritics(text: str) -> str:
     ``Arenh¨ovel`` carries U+00A8, whose NFKC form is a space plus a combining diaeresis, so
     every later step sees two tokens. A mark followed by a space binds to the letter before it
     (``Jose´ Emilio`` → ``José``), one preceded by a space binds to the letter after it, and
-    between two letters the vowel wins (``Vela´zquez`` → ``Velázquez``, ``¨ovel`` → ``övel``).
+    between two letters the vowel wins (``¨ovel`` → ``övel``); mid-word ``´``/`` ` `` are apostrophe
+    variants in Chinese given names and are left alone.
     A mark that composes with neither candidate is left as it was.
     """
     if not any(c in text for c in _SPACING_TO_COMBINING) and not re.search("[\u0300-\u036f]", text):
@@ -250,6 +252,8 @@ def attach_detached_diacritics(text: str) -> str:
         ws1, ws2 = match.group("ws1"), match.group("ws2")
         mark = match.group("mark")
         combining = _SPACING_TO_COMBINING.get(mark, mark)
+        if mark in _APOSTROPHE_LIKE_MARKS and not (ws1 or ws2):
+            return match.group(0)  # mid-word ´ and ` are apostrophe variants (``Cui´e``), not accents
         if mark == combining and ws1 and not ws2:
             ws1 = ""  # a bare combining mark after a space is NFKC's rendering of a spacing mark
         if ws1 and ws2:

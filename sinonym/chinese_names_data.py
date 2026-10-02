@@ -1378,6 +1378,8 @@ NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES = frozenset(
 
 NAME_ORDER_ROUTING_KOREAN_SURNAMES = frozenset(
     {
+        "hyun",  # 현 — Chang Ho Hyun
+        "myung",  # 명 — Yun Soo Myung
         "ahn",
         "an",
         "bae",

@@ -79,14 +79,16 @@ def test_reviewed_possible_surname_evidence_must_end_in_that_surname(
 def test_shipped_reviewed_surnames_keep_general_evidence_separate_from_exact_repairs() -> None:
     surnames, exact_surfaces, _metadata = builder.reviewed_possible_surnames()
 
-    assert len(surnames) == 29
+    assert len(surnames) == 31
     assert {"azuma", "haba", "kadono", "shiota", "yoshinaka"} <= set(surnames)
     assert exact_surfaces == [
         "haruki kadono",
         "kou hiroya",
+        "masaki shigemori",
         "masaki takamoto",
         "masaki tomonaga",
         "shoji kagami",
+        "takao asaka",
         "takaya miwa",
     ]
 
