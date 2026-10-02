@@ -1475,6 +1475,30 @@ def _is_dotted_initial(token: str) -> bool:
 _PLAIN_SURNAME_TOKEN_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", re.UNICODE)
 
 
+_GLUED_SINGLE_INITIAL_SURNAME_RE = re.compile(r"([A-Z])\.([A-Z][a-z]+(?:-[A-Z][a-z]+)*)")
+_SINGLE_INITIAL_RE = re.compile(r"[A-Z]\.?")
+
+
+def _glued_single_initial_assignment(source: SourceAuthorFields) -> NameComponents | None:
+    """Unglue one initial written against the surname: ``- / M.Nguyen`` → ``M. / Nguyen``.
+
+    The Chinese path already does this for its names (``Z.Li`` → ``Z. / Li``); the person-name
+    path returned the glued token verbatim, with no first name. ``J / A.Minahan`` → ``J. / A. /
+    Minahan``. Two or more glued initials are left to the Chinese formatter (``Z.Y.Li`` →
+    ``Z.-Y. Li``).
+    """
+    if (source.suffix or "").strip() or (source.middle_names or "").strip():
+        return None
+    first = (source.first_name or "").strip()
+    match = _GLUED_SINGLE_INITIAL_SURNAME_RE.fullmatch((source.last_name or "").strip())
+    if match is None or (first and not _SINGLE_INITIAL_RE.fullmatch(first)):
+        return None
+    initial, surname = match.groups()
+    if first:
+        return NameComponents(given_name=first.rstrip(".") + ".", middle_name=initial + ".", surname=surname)
+    return NameComponents(given_name=initial + ".", surname=surname)
+
+
 def _structured_initials_surname_assignment(source: SourceAuthorFields) -> NameComponents | None:
     """Keep a source made of dotted initials and one surname token: ``Ya. G. / Sinai``.
 
@@ -1984,6 +2008,7 @@ class _Resolver:
                 lambda: _structured_initials_surname_assignment(source),
                 ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT,
             ),
+            (lambda: _glued_single_initial_assignment(source), ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT),
             (
                 lambda: _reviewed_detached_diacritic_assignment(source, paper_authors, self._source_normalizer),
                 pattern_reason,

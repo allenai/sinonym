@@ -125,3 +125,19 @@ def test_soft_hyphen_artifact_is_deleted_but_a_syllable_boundary_is_kept(predict
     assert resolve(predictor, "O.", None, "Zaval\u00adniuk") == ("O.", "", "Zavalniuk")
     assert resolve(predictor, "Jan", None, "Haščí\u00adk") == ("Jan", "", "Haščík")
     assert resolve(predictor, "Guo\u00ade", None, "Li")[0] == "Guo-E"
+
+
+GLUED_SINGLE_INITIAL_CASES = [
+    # inspire:57264 / 67927 — one initial written against the surname with no first name
+    (("", None, "M.Nguyen"), ("M.", "", "Nguyen")),
+    (("", None, "K.Krueger"), ("K.", "", "Krueger")),
+    (("J", None, "A.Minahan"), ("J.", "A.", "Minahan")),
+    # the Chinese path's own handling is unchanged
+    (("", None, "Z.Li"), ("Z.", "", "Li")),
+    (("", None, "Z.Y.Li"), ("Z.-Y.", "", "Li")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), GLUED_SINGLE_INITIAL_CASES)
+def test_one_glued_initial_is_split_off_the_surname(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
