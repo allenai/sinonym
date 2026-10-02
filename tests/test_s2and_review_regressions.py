@@ -117,3 +117,11 @@ def test_token_with_an_uncomposable_mark_is_left_whole():
 
     assert attach_detached_diacritics("Evgenij V. S˘c˘epin") == "Evgenij V. S˘c˘epin"
     assert attach_detached_diacritics("Mu¨ller-Preussker") == "Müller-Preussker"
+
+
+def test_soft_hyphen_artifact_is_deleted_but_a_syllable_boundary_is_kept(predictor):
+    # ORCID corpus: a soft hyphen inside a non-Chinese name is a line-break artifact or mojibake;
+    # on the Chinese path it stays the reviewed syllable-boundary cue
+    assert resolve(predictor, "O.", None, "Zaval\u00adniuk") == ("O.", "", "Zavalniuk")
+    assert resolve(predictor, "Jan", None, "Haščí\u00adk") == ("Jan", "", "Haščík")
+    assert resolve(predictor, "Guo\u00ade", None, "Li")[0] == "Guo-E"

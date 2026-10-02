@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 
 from sinonym.coretypes import CanonicalName, NameComponents
-from sinonym.name_punctuation import attach_detached_diacritics
+from sinonym.name_punctuation import attach_detached_diacritics, strip_soft_hyphens
 from sinonym.name_punctuation import (
     INVISIBLE_MARKUP_DELETE_TRANSLATION,
     PERSON_JOINER_FOLD_TRANSLATION,
@@ -669,7 +669,7 @@ class PersonNameNormalizationService:
         """Normalize one raw name string into semantic canonical components."""
         if not isinstance(raw_name, str):
             return self._invalid("name must be a string")
-        raw_name = attach_detached_diacritics(raw_name)
+        raw_name = attach_detached_diacritics(strip_soft_hyphens(raw_name))
         if reviewed_non_person_text_pattern(raw_name) is not None:
             return self._non_person("reviewed non-person input")
 
@@ -812,7 +812,7 @@ class PersonNameNormalizationService:
         }
         if any(value is not None and not isinstance(value, str) for value in values.values()):
             return self._invalid("name components must be strings or null")
-        values = {role: attach_detached_diacritics(value) if value else value for role, value in values.items()}
+        values = {role: attach_detached_diacritics(strip_soft_hyphens(value)) if value else value for role, value in values.items()}
         first_name, middle_name, last_name, suffix = values["given"], values["middle"], values["surname"], values["suffix"]
         source_surface = " ".join(value for value in (first_name, middle_name, last_name) if value)
         if not (suffix or "").strip() and reviewed_non_person_text_pattern(source_surface) is not None:

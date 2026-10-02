@@ -259,6 +259,17 @@ def _reattach_in_token(token: str) -> str:
     return token if failed else repaired
 
 
+def strip_soft_hyphens(text: str) -> str:
+    """Delete U+00AD on the person-name path.
+
+    The Chinese path keeps it as a reviewed syllable-boundary cue (``Guo\u00ade Li`` →
+    ``Guo-E Li``). For every other name it is a line-break artifact or half of a mojibake ``í``
+    — in the ORCID corpus 0 of 100 classifiable cases were a boundary — and reading it as a
+    hyphen wrote ``Zaval-niuk`` for Завальнюк.
+    """
+    return text.replace("\u00ad", "") if "\u00ad" in text else text
+
+
 def attach_detached_diacritics(text: str) -> str:
     """Reattach a diacritic that PDF extraction left as its own character.
 
