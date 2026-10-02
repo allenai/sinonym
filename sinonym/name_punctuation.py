@@ -222,53 +222,56 @@ _SPACING_TO_COMBINING = {
     "\u02dd": "\u030b", "\u02d9": "\u0307",
 }
 _APOSTROPHE_LIKE_MARKS = frozenset({"\u00b4", "\u0060"})
-_DETACHED_MARK_RE = re.compile(
-    "(?P<prev>[^\\W\\d_])?(?P<ws1>\\s?)(?P<mark>[" + "".join(_SPACING_TO_COMBINING) + "\\u0300-\\u036f])(?P<ws2>\\s?)(?P<next>[^\\W\\d_])?",
+_ANY_DETACHED_MARK_RE = re.compile("[" + "".join(_SPACING_TO_COMBINING) + "\\u0300-\\u036f]")
+_TOKEN_MARK_RE = re.compile(
+    "(?P<prev>[^\\W\\d_])?(?P<mark>[" + "".join(_SPACING_TO_COMBINING) + "\\u0300-\\u036f])(?P<next>[^\\W\\d_])?",
     re.UNICODE,
 )
+
+
+def _compose(base: str, combining: str) -> str | None:
+    if not base:
+        return None
+    out = unicodedata.normalize("NFC", base + combining)
+    return out if len(out) == 1 else None
+
+
+def _reattach_in_token(token: str) -> str:
+    """One token, all or nothing: a mark that composes with neither neighbour leaves the token as it was."""
+    failed = False
+
+    def fix(match):
+        nonlocal failed
+        prev, nxt, mark = match.group("prev") or "", match.group("next") or "", match.group("mark")
+        combining = _SPACING_TO_COMBINING.get(mark, mark)
+        if mark in _APOSTROPHE_LIKE_MARKS and prev and nxt:
+            return match.group(0)  # mid-word ´ and ` are apostrophe variants (``Cui´e``), not accents
+        vowel_next = nxt.lower() in "aeiouy" and prev.lower() not in "aeiouy"
+        order = ((nxt, True), (prev, False)) if vowel_next or not prev else ((prev, False), (nxt, True))
+        for base, is_next in order:
+            out = _compose(base, combining)
+            if out is not None:
+                return prev + out if is_next else out + nxt
+        failed = True
+        return match.group(0)
+
+    repaired = _TOKEN_MARK_RE.sub(fix, token)
+    return token if failed else repaired
 
 
 def attach_detached_diacritics(text: str) -> str:
     """Reattach a diacritic that PDF extraction left as its own character.
 
     ``Arenh¨ovel`` carries U+00A8, whose NFKC form is a space plus a combining diaeresis, so
-    every later step sees two tokens. A mark followed by a space binds to the letter before it
-    (``Jose´ Emilio`` → ``José``), one preceded by a space binds to the letter after it, and
-    between two letters the vowel wins (``¨ovel`` → ``övel``); mid-word ``´``/`` ` `` are apostrophe
-    variants in Chinese given names and are left alone.
-    A mark that composes with neither candidate is left as it was.
+    every later step sees two tokens. Within a token the mark joins the neighbouring letter it
+    composes with, the vowel first (``¨ovel`` → ``övel``, ``Jose´`` → ``José``); a bare
+    combining mark after a space is the NFKC rendering of such a mark and joins the next
+    token. A token with a mark that composes with nothing is left exactly as it was
+    (``S˘c˘epin``), and mid-word ``´``/`` ` `` stay apostrophe variants.
     """
-    if not any(c in text for c in _SPACING_TO_COMBINING) and not re.search("[\u0300-\u036f]", text):
+    if not _ANY_DETACHED_MARK_RE.search(text):
         return text
-
-    def composed(base, combining):
-        if not base:
-            return None
-        out = unicodedata.normalize("NFC", base + combining)
-        return out if len(out) == 1 else None
-
-    def fix(match):
-        prev, nxt = match.group("prev") or "", match.group("next") or ""
-        ws1, ws2 = match.group("ws1"), match.group("ws2")
-        mark = match.group("mark")
-        combining = _SPACING_TO_COMBINING.get(mark, mark)
-        if mark in _APOSTROPHE_LIKE_MARKS and not (ws1 or ws2):
-            return match.group(0)  # mid-word ´ and ` are apostrophe variants (``Cui´e``), not accents
-        if mark == combining and ws1 and not ws2:
-            ws1 = ""  # a bare combining mark after a space is NFKC's rendering of a spacing mark
-        if ws1 and ws2:
-            return match.group(0)
-        if ws2:
-            candidates = ((prev, ws2 + nxt, True),)
-        elif ws1:
-            candidates = ((nxt, prev + ws1, False),)
-        else:
-            vowel_first = nxt.lower() in "aeiouy" and prev.lower() not in "aeiouy"
-            candidates = ((nxt, prev, False), (prev, nxt, True)) if vowel_first or not prev else ((prev, nxt, True), (nxt, prev, False))
-        for base, rest, base_is_prev in candidates:
-            out = composed(base, combining)
-            if out is not None:
-                return out + rest if base_is_prev else rest + out
-        return match.group(0)
-
-    return _DETACHED_MARK_RE.sub(fix, text)
+    text = re.sub("(?<=\\s)([\\u0300-\\u036f])(?=[^\\W\\d_])", lambda m: m.group(1), text)
+    text = re.sub("(?<=[^\\W\\d_]) ([\\u0300-\\u036f])", lambda m: m.group(1), text)
+    parts = re.split(r"(\s+)", text)
+    return "".join(part if part.isspace() or not part else _reattach_in_token(part) for part in parts)

@@ -109,3 +109,11 @@ def test_lone_two_token_name_with_a_far_rarer_surname_keeps_source_order(predict
 
 def test_lone_two_token_name_with_the_likelier_surname_still_flips(predictor):
     assert resolve(predictor, "Zhang", None, "Wei") == ("Wei", "", "Zhang")
+
+
+def test_token_with_an_uncomposable_mark_is_left_whole():
+    # inspire: carons rendered as breves; composing only the second one would split the surname
+    from sinonym.name_punctuation import attach_detached_diacritics
+
+    assert attach_detached_diacritics("Evgenij V. S˘c˘epin") == "Evgenij V. S˘c˘epin"
+    assert attach_detached_diacritics("Mu¨ller-Preussker") == "Müller-Preussker"
