@@ -138,7 +138,6 @@ _ASCII_WORD_RE = re.compile(r"[A-Za-z]+")
 _ASCII_HYPHENATED_WORD_RE = re.compile(r"[A-Za-z]+(?:-[A-Za-z]+)*")
 _ASCII_INITIAL_RE = re.compile(r"[A-Za-z]\.?")
 _DOTTED_INITIAL_RE = re.compile(r"[^\W\d_]\.", re.UNICODE)
-_INITIAL_TOKEN_RE = re.compile(r"[^\W\d_](?:\.[^\W\d_])*\.?", re.UNICODE)
 _JOINED_UPPERCASE_SURNAME_RE = re.compile(r"([A-Z]{2,})([A-Z][a-z]+(?:-[A-Za-z][a-z]+)*)")
 _TITLED_GIVEN_RE = re.compile(r"(?:Dr\.|Prof\.) ([^\s]+)")
 _TRAILING_AFFILIATION_SURNAME_RE = re.compile(r"[A-Z][a-z]+a")
@@ -1464,59 +1463,43 @@ def _reviewed_joined_uppercase_surname_assignment(
     return NameComponents(given_name=given, surname=surname.title())
 
 
-_SUFFIX_LIKE_CAPS = frozenset({"II", "III", "IV", "JR", "SR"})
+_DIGRAPH_INITIALS = frozenset({"Ya", "Yu", "Ye", "Yo", "Zh", "Ch", "Sh", "Kh", "Ts", "Ia", "Iu", "Dz", "Dj", "Lj", "Nj"})
+_DOTTED_SHORT_INITIAL_RE = re.compile(r"[A-Z][a-z]?\.")
 
 
-def _caps_surname_cue_assignment(
-    source: SourceAuthorFields,
-    detector,
-    surname_is_recognized: Callable[[str], bool],
-) -> NameComponents | None:
-    """Read the all-caps surname cue a source carries: ``LI Hui`` / ``Lian LIU``.
+def _is_dotted_initial(token: str) -> bool:
+    """``A.`` or a dotted Slavic digraph initial (``Ya.``, ``Zh.``); never a title (``Dr.``, ``St.``)."""
+    if not _DOTTED_SHORT_INITIAL_RE.fullmatch(token):
+        return False
+    return len(token) == 2 or token[:-1] in _DIGRAPH_INITIALS  # noqa: PLR2004
+_PLAIN_SURNAME_TOKEN_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", re.UNICODE)
 
-    Exactly one all-caps word among mixed-case words is the source marking its surname (the
-    MAG convention behind ~190 reviewed wrong names). A two-letter caps word must be a
-    recognized surname (``LI``, ``WU``) so that bare initials (``JH Smith``) never qualify;
-    roman-numeral and Jr/Sr suffix words never do. The glued form (``ZHANGWei-Jun``) stays
-    with the peer-gated ``_reviewed_joined_uppercase_surname_assignment``.
+
+def _structured_initials_surname_assignment(source: SourceAuthorFields) -> NameComponents | None:
+    """Keep a source made of dotted initials and one surname token: ``Ya. G. / Sinai``.
+
+    Every given/middle token is a dotted initial (one letter, or a Slavic digraph such as
+    ``Ya.``/``Zh.``) and the surname is a single word, so the source has exactly one reading. Letting it reach the Chinese parser is how
+    ``Ya.`` (a Russian digraph initial) became the surname and ``Sinai`` was cut into pinyin
+    syllables.
     """
     if (source.suffix or "").strip():
         return None
-    tokens = source.full_name().split()
-    if not tokens or not all(_ASCII_HYPHENATED_WORD_RE.fullmatch(token.rstrip(".")) or _ASCII_INITIAL_RE.fullmatch(token) for token in tokens):
+    personal = f"{source.first_name or ''} {source.middle_names or ''}".split()
+    surname = (source.last_name or "").strip()
+    if not personal or not surname or " " in surname:
         return None
-
-    if not 2 <= len(tokens) <= 4:  # noqa: PLR2004
+    if not all(_is_dotted_initial(token) for token in personal):
         return None
-    caps = [i for i, token in enumerate(tokens) if len(token) > 1 and token.isupper() and token.isalpha()]
-    if len(caps) != 1 or caps[0] not in (0, len(tokens) - 1) or tokens[caps[0]] in _SUFFIX_LIKE_CAPS:
+    # single-letter initials alone stay with the Chinese pipeline (``J. J. Zhu`` -> ``J.-J. Zhu``)
+    if not any(token[:-1] in _DIGRAPH_INITIALS for token in personal):
         return None
-    others = [token for i, token in enumerate(tokens) if i != caps[0]]
-    if not any(any(c.islower() for c in token) for token in others):
+    if not _PLAIN_SURNAME_TOKEN_RE.fullmatch(surname) or len(surname) < 3:  # noqa: PLR2004
         return None
-    if any(token.isupper() and token.isalpha() for token in others):
-        return None
-    surname = tokens[caps[0]]
-    if len(surname) == 2 and not surname_is_recognized(surname):  # noqa: PLR2004
-        return None
-    surname = surname.title()
-    given_tokens = others
-    # a lowercase particle written before a trailing caps surname belongs to it: ``de CASTRO``
-    if caps[0] == len(tokens) - 1 and len(others) > 1 and others[-1].isalpha() and others[-1].islower():
-        surname = f"{others[-1]} {surname}"
-        given_tokens = others[:-1]
-
-    given = " ".join(given_tokens)
-    # the Chinese pipeline supplies the given-name syllable split; its answer is only taken
-    # when it agrees on the surname, so the cue can never be overridden by a reorder
-    parsed = detector.normalize_name(f"{given} {surname}")
-    if parsed.success and parsed.parsed is not None and parsed.parsed.surname.casefold() == surname.casefold():
-        return NameComponents(
-            given_name=parsed.parsed.given_name,
-            middle_name=parsed.parsed.middle_name,
-            surname=parsed.parsed.surname,
-        )
-    return NameComponents(given_name=given, surname=surname)
+    first, *middle = personal
+    if surname.isupper():
+        surname = surname.title()
+    return NameComponents(given_name=first, middle_name=" ".join(middle), surname=surname)
 
 
 def _joined_uppercase_candidate_adds_normalization(
@@ -1882,41 +1865,6 @@ class _Resolver:
             selected.surname.split(),
         ) == surface_key(surname[-1:])
 
-    @staticmethod
-    def _scalar_only_moves_source_boundary(
-        source: SourceAuthorFields,
-        selected: NameComponents,
-    ) -> bool:
-        """Return whether scalar parsing kept every source token in order and only cut the
-        leading tokens off a multi-token source surname.
-
-        A structured source that fills both ``first_name`` and a multi-token ``last_name``
-        (``C`` / ``Garcia Recio``) has already said where its surname starts. Without a reorder
-        the scalar baseline has no new evidence about that boundary, and shrinking it (Garcia →
-        middle) was wrong on 170 of 225 reviewed cases. Growing the surname is left alone:
-        ``H. Llewellyn / Smith`` → ``Llewellyn Smith`` is right as often as ``C.H.Quentin /
-        Ingram`` → ``Quentin Ingram`` is wrong, and only a lexicon can tell them apart. A
-        last-name-only source and a cut that only strips initials are also left alone — there
-        the source made no partition claim worth keeping.
-        """
-        if not (source.first_name or "").strip():
-            return False
-        source_surname = (source.last_name or "").split()
-        selected_surname = selected.surname.split()
-        if len(source_surname) < 2 or not selected_surname or len(selected_surname) >= len(source_surname):
-            return False
-        # a terminal initial as the surname is the reviewed South Indian shape (``Vijay Chander S``)
-        if all(_INITIAL_TOKEN_RE.fullmatch(token) for token in selected_surname):
-            return False
-        source_run = _alnum_key(" ".join(part for part in (source.first_name, source.middle_names, source.last_name) if part))
-        selected_run = _alnum_key(" ".join(part for part in (selected.given_name, selected.middle_name, selected.surname) if part))
-        if not source_run or source_run != selected_run:
-            return False
-        cut = len(source_surname) - len(selected_surname)
-        if _alnum_key(" ".join(selected_surname)) != _alnum_key(" ".join(source_surname[cut:])):
-            return False
-        return not all(_INITIAL_TOKEN_RE.fullmatch(token) for token in source_surname[:cut])
-
     def _structured_surname_initial_tail_candidate(
         self,
         source: SourceAuthorFields,
@@ -2033,12 +1981,8 @@ class _Resolver:
         assignment_rules: tuple[tuple[Callable[[], NameComponents | None], ResolutionReason], ...] = (
             (lambda: reviewed_exact_source_assignment(source), ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT),
             (
-                lambda: _caps_surname_cue_assignment(
-                    source,
-                    self._detector,
-                    lambda surname: self._detector._require_surname_resolver().parser_is_surname((surname,)),  # noqa: SLF001
-                ),
-                ResolutionReason.CAPS_SURNAME_CUE_ASSIGNMENT,
+                lambda: _structured_initials_surname_assignment(source),
+                ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT,
             ),
             (
                 lambda: _reviewed_detached_diacritic_assignment(source, paper_authors, self._source_normalizer),
@@ -2256,11 +2200,6 @@ class _Resolver:
                     source=source,
                     selected=source_surname_candidate,
                     reason=ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT,
-                )
-            if self._scalar_only_moves_source_boundary(source, scalar_canonical.normalized):
-                return self._source_resolution(
-                    source,
-                    ResolutionReason.SCALAR_SOURCE_BOUNDARY_PRESERVE_INPUT,
                 )
             return self._materialize_selected_candidate(
                 source=source,

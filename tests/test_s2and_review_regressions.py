@@ -20,48 +20,29 @@ def resolve(predictor: Predictor, first, middle, last):
     return author.first_name, author.middle_names, author.last_name
 
 
-SOURCE_BOUNDARY_CASES = [
-    # inspire:28657 — multi-token surname sliced into middle + surname
-    (("C", None, "Garcia Recio"), ("C", "", "Garcia Recio")),
-    (("A.", None, "Sabio Vera"), ("A.", "", "Sabio Vera")),
-    (("W.", None, "Haj Ahmad"), ("W.", "", "Haj Ahmad")),
+DOTTED_INITIALS_CASES = [
+    # zbmath: Yakov Sinai; ``Ya.`` was taken as a Chinese surname and Sinai cut into Si-Nai
+    (("Ya.", "G.", "Sinai"), ("Ya.", "G.", "Sinai")),
+    (("Ya. G.", None, "Sinai"), ("Ya.", "G.", "Sinai")),
+    (("Yu.", "G.", "Sinai"), ("Yu.", "G.", "Sinai")),
+    (("Ya.", None, "Sinai"), ("Ya.", "", "Sinai")),
+    # unchanged behaviour for ordinary initials
+    (("J.", "A.", "Minahan"), ("J.", "A.", "Minahan")),
+    (("Y.", None, "Zhang"), ("Y.", "", "Zhang")),
+    (("J.", "J.", "Zhu"), ("J.-J.", "", "Zhu")),
+    (("Yu.", "V.", "Shubin"), ("Yu.", "V.", "Shubin")),
+    (("Kh.", None, "GANIYEV"), ("Kh.", "", "Ganiyev")),
 ]
 
 
-@pytest.mark.parametrize(("source", "expected"), SOURCE_BOUNDARY_CASES)
-def test_scalar_baseline_keeps_source_surname_boundary(predictor, source, expected):
-    assert resolve(predictor, *source) == expected
+@pytest.mark.parametrize("source", [("Dr.", None, "Reshmi"), ("Ms.", None, "Bithi"), ("L.", "St.", "Marie")])
+def test_titles_are_not_dotted_initials(predictor, source):
+    first, middle, last = resolve(predictor, *source)
+    assert first not in ("Dr.", "Ms.") and (middle, last) != ("St.", "Marie")
 
 
-SURNAME_MAY_STILL_GROW_OR_BE_SPLIT = [
-    # growing the surname from a structured middle is a reviewed correct fix
-    (("C.", "H. Llewellyn", "Smith"), ("C.", "H.", "Llewellyn Smith")),
-    (("A.", "De", "Rújula"), ("A.", "", "De Rújula")),
-    # a last-name-only source made no partition claim
-    (("", None, "A.A.Andrianov"), ("A.", "A.", "Andrianov")),
-    (("", None, "Hwa-Yaw Tam"), ("Hwa-Yaw", "", "Tam")),
-]
-
-
-@pytest.mark.parametrize(("source", "expected"), SURNAME_MAY_STILL_GROW_OR_BE_SPLIT)
-def test_source_boundary_guard_is_shrink_only(predictor, source, expected):
-    assert resolve(predictor, *source) == expected
-
-
-CAPS_SURNAME_CUE_CASES = [
-    # MAG marks the surname in caps; the delivered names kept input order and title-cased it
-    (("LI", None, "Hui"), ("Hui", "", "Li")),
-    (("LIU", None, "Lian"), ("Lian", "", "Liu")),
-    (("Lian", None, "LIU"), ("Lian", "", "Liu")),
-    (("LI", None, "Huihui"), ("Hui-Hui", "", "Li")),
-    # a particle before the caps surname stays with it
-    (("A. S.", None, "de CASTRO"), ("A.", "S.", "de Castro")),
-    (("J. W.", None, "van HOLTEN"), ("J.", "W.", "van Holten")),
-]
-
-
-@pytest.mark.parametrize(("source", "expected"), CAPS_SURNAME_CUE_CASES)
-def test_all_caps_token_marks_the_surname(predictor, source, expected):
+@pytest.mark.parametrize(("source", "expected"), DOTTED_INITIALS_CASES)
+def test_dotted_initials_plus_one_surname_token_keep_their_roles(predictor, source, expected):
     assert resolve(predictor, *source) == expected
 
 
@@ -80,10 +61,20 @@ def test_glued_caps_surname_accepts_a_capital_after_the_hyphen(predictor):
     ]
 
 
-@pytest.mark.parametrize("source", [("JH", None, "Smith"), ("JOHN", None, "SMITH"), ("John", None, "Smith III")])
-def test_caps_cue_ignores_bare_initials_and_all_caps_names(predictor, source):
-    assert resolve(predictor, *source)[2].casefold().startswith("smith")
-
-
 def test_scalar_baseline_still_canonicalizes_initials_without_moving_boundary(predictor):
     assert resolve(predictor, "J", None, "Smith") == ("J.", "", "Smith")
+
+
+DETACHED_DIACRITIC_CASES = [
+    # inspire: a spacing diaeresis/ring left by PDF extraction split the surname
+    (("H", None, "Arenh¨ovel"), ("H.", "", "Arenhövel")),
+    (("M.", None, "B¨oge"), ("M.", "", "Böge")),
+    (("H.", None, "Pru˚chová"), ("H.", "", "Průchová")),
+    # a mark that composes with nothing is left alone
+    (("Nicolas", None, "D´ Amelio"), ("Nicolas", "", "D' Amelio")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), DETACHED_DIACRITIC_CASES)
+def test_detached_diacritic_rejoins_its_letter(predictor, source, expected):
+    assert resolve(predictor, *source) == expected

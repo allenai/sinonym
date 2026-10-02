@@ -230,7 +230,6 @@ def test_every_resolution_reason_has_one_complete_decision_spec() -> None:
             ResolutionReason.HANDLED_EVIDENCE_FAILURE,
             ResolutionReason.HARD_SCALAR_MATERIALIZATION_FAILED,
             ResolutionReason.SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT,
-            ResolutionReason.SCALAR_SOURCE_BOUNDARY_PRESERVE_INPUT,
             ResolutionReason.INITIALS_COMMA_REORDER_VETO_PRESERVE_INPUT,
             ResolutionReason.REVIEWED_EXACT_SOURCE_REORDER_VETO_PRESERVE_INPUT,
             ResolutionReason.PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME,
@@ -241,7 +240,7 @@ def test_every_resolution_reason_has_one_complete_decision_spec() -> None:
         (ResolutionProvenance.SOURCE, ResolutionAction.ASSIGN): {
             ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT,
             ResolutionReason.STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT,
-            ResolutionReason.CAPS_SURNAME_CUE_ASSIGNMENT,
+            ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT,
             ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT,
             ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
         },

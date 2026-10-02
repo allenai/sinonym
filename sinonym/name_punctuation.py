@@ -16,6 +16,7 @@ sharing this module does not change that path's deployed behavior.
 """
 
 import re
+import unicodedata
 from collections.abc import Mapping
 
 APOSTROPHE_LIKE = frozenset(
@@ -213,3 +214,57 @@ def fold_spaced_transliteration_apostrophes(value: str) -> str:
 
     value = _TRANSLITERATION_APOSTROPHE_RE.sub(join, value)
     return _DUTCH_T_SPACING_RE.sub(" 't", value)
+
+
+_SPACING_TO_COMBINING = {
+    "\u00a8": "\u0308", "\u02da": "\u030a", "\u00b4": "\u0301", "\u0060": "\u0300", "\u005e": "\u0302",
+    "\u02dc": "\u0303", "\u00b8": "\u0327", "\u02c7": "\u030c", "\u00af": "\u0304", "\u02d8": "\u0306",
+    "\u02dd": "\u030b", "\u02d9": "\u0307",
+}
+_DETACHED_MARK_RE = re.compile(
+    "(?P<prev>[^\\W\\d_])?(?P<ws1>\\s?)(?P<mark>[" + "".join(_SPACING_TO_COMBINING) + "\\u0300-\\u036f])(?P<ws2>\\s?)(?P<next>[^\\W\\d_])?",
+    re.UNICODE,
+)
+
+
+def attach_detached_diacritics(text: str) -> str:
+    """Reattach a diacritic that PDF extraction left as its own character.
+
+    ``Arenh¨ovel`` carries U+00A8, whose NFKC form is a space plus a combining diaeresis, so
+    every later step sees two tokens. A mark followed by a space binds to the letter before it
+    (``Jose´ Emilio`` → ``José``), one preceded by a space binds to the letter after it, and
+    between two letters the vowel wins (``Vela´zquez`` → ``Velázquez``, ``¨ovel`` → ``övel``).
+    A mark that composes with neither candidate is left as it was.
+    """
+    if not any(c in text for c in _SPACING_TO_COMBINING) and not re.search("[\u0300-\u036f]", text):
+        return text
+
+    def composed(base, combining):
+        if not base:
+            return None
+        out = unicodedata.normalize("NFC", base + combining)
+        return out if len(out) == 1 else None
+
+    def fix(match):
+        prev, nxt = match.group("prev") or "", match.group("next") or ""
+        ws1, ws2 = match.group("ws1"), match.group("ws2")
+        mark = match.group("mark")
+        combining = _SPACING_TO_COMBINING.get(mark, mark)
+        if mark == combining and ws1 and not ws2:
+            ws1 = ""  # a bare combining mark after a space is NFKC's rendering of a spacing mark
+        if ws1 and ws2:
+            return match.group(0)
+        if ws2:
+            candidates = ((prev, ws2 + nxt, True),)
+        elif ws1:
+            candidates = ((nxt, prev + ws1, False),)
+        else:
+            vowel_first = nxt.lower() in "aeiouy" and prev.lower() not in "aeiouy"
+            candidates = ((nxt, prev, False), (prev, nxt, True)) if vowel_first or not prev else ((prev, nxt, True), (nxt, prev, False))
+        for base, rest, base_is_prev in candidates:
+            out = composed(base, combining)
+            if out is not None:
+                return out + rest if base_is_prev else rest + out
+        return match.group(0)
+
+    return _DETACHED_MARK_RE.sub(fix, text)
