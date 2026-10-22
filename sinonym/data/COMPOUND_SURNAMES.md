@@ -11,7 +11,7 @@ parsed surname (`Silva dos Santos`) back to a listed suffix (`dos Santos`), neve
 never undoes a reordering the parser made (`Luong / Van / Viet` → `Viet Van Luong` stays). The first arm that
 allowed shrinking broke 101 ORCID people against 325 fixed on the 690k index; the no-shrink form is what ships.
 
-Two tiers, column `tier`:
+Three tiers, column `tier`:
 
 - `listed`: surfaces the corpus writes whole often enough *and* that distinct ORCID people carry in both shapes.
 - `vocabulary`: the Hispanic / Lusophone double-surname convention generalized from the listed tier. A 2-word
@@ -25,6 +25,18 @@ Two tiers, column `tier`:
   united but 105 split (2.6:1): when a pair is rare, the person's other sources usually abbreviate its head to an
   initial (`Lara / G. / Merino` vs `Lara / Garcia / Merino`), so joining splits them. A pair the corpus itself
   rarely writes whole is not worth joining; `Silvia / Rivera / Maza` stays a known limit of this approach.
+  The tier also requires `whole_share` ≥ 0.15: on every ORCID in the corpus (dataset v4, October 2026) the pairs
+  below it (`silva santos` 0.09, `pereira silva` 0.08, `santos silva` 0.14) united 477 people and split 224 — the
+  pair is two people's conventions, not one surname.
+- `corpus`: every 2–3-word tail the corpus itself writes whole in `last` at least 5 × 0.2 times (≥ 5 mentions,
+  `whole_share` ≥ 0.2, ≥ 2 given names), with the listed tier's head-word, East Asian, Vietnamese and suffix gates.
+  On the 690k index 60 % of the "surname word dropped" splits were boundary placements whose surface was in the
+  corpus but under the listed thresholds; this tier was the largest single gain (690k: +1,354 united / 120 split;
+  v4: 16,053 / 1,587). The breakage concentrates where the evidence is thinnest (`whole_share` 0.2–0.3: 5.7:1;
+  ≥ 0.4: 17:1 and better), which is the knob to turn if the ratio must rise.
+
+No tier admits a 2-word tail that repeats one word (`silva silva`, `velasco velasco`, `garcia garcia`): on v4
+such joins united 177 people and split 108; the usual source of the shape is a middle name repeating the surname.
 
 Columns: `surface` (folded: lower-case, accents stripped, single spaces), `tier`, `mentions`, `whole_share`
 (share of mentions that wrote the surface whole in `last`), `given_names` (distinct given names seen with it),
@@ -63,11 +75,15 @@ All steps are read-only and local except the first dump. Scripts live in
    partition_prior_tokens.parquet --orcid-gate compound_orcid_gate.parquet --output sinonym/data/compound_surnames.csv.gz`
    keeps the `listed` surfaces where both signals agree (≥ 3 people, ≥ 2 of them whole), derives the
    `vocabulary` head and tail words from the listed 2-word pairs (≥ 5 pairs each) and adds every unlisted 2-word
-   pair of the partition statistics built from them (≥ 5 mentions, same head-word given-name gate), then prints
-   the sha256. 2026-10-22 build: 4,564 listed + 2,534 vocabulary surfaces (72 KB).
-7. **Acceptance.** Route the 690k index with the new build (`run_690k_*.sh`), score with `conc_s2andfix.py`
+   pair of the partition statistics built from them (≥ 5 mentions, `whole_share` ≥ 0.15, same head-word
+   given-name gate), adds the `corpus` tier, drops doubled tails, then prints the sha256. 2026-10-22 October
+   build: 6,863 listed + 996 vocabulary + 139,638 corpus surfaces.
+7. **Acceptance.** Route the 690k index with the new build (`run_690k_*.sh`), score with `conc_arms.py`
    (FIXED/BROKE ≥ 5:1 on half B, no shared-block growth), run the detector (`weird_bugs.py`) and a blind judge
-   sample (`judge_changes.py`), and the test suite at its baseline.
+   sample (`judge_changes.py`), and the test suite at its baseline. Then the corpus-scale run (every ORCID,
+   `author-names/ORCID_V4.md`): `scripts/v4/broke_v4.py` attributes every united / split person to the rule and
+   row shape that moved it, and a per-surface join of its output to this asset's columns is the kill test for any
+   threshold change (2026-10-22: `data/orcid_v4/compound_surface_ledger_6f6fd53.parquet`).
 
 Known limits: sources that drop a compound's head entirely (`Maza` alone) cannot be joined by any rule; the
 mention counts inherit MAG-style conventions that split particles into `middle`, which is why the whole-share

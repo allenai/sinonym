@@ -19,7 +19,9 @@ Tier ``vocabulary`` generalizes the listed tier to the Hispanic / Lusophone doub
 tail whose head word opens >= VOCAB_MIN_SURFACES listed 2-word surfaces (``garcia``, ``rivera``, ...) and whose
 tail word closes as many (``lopez``, ``garcia``, ...) is a double surname even when the pair itself was split
 too often to be listed (``garcia garcia``). It needs >= VOCAB_MIN_MENTIONS mentions and the head-word given-name
-gate. Letting any plain surname word be the tail was tried and rejected (690k arm: +268 people united, +105
+gate, and a whole-in-last share >= VOCAB_MIN_WHOLE_SHARE: below that (``silva santos`` 0.09, ``pereira silva`` 0.08)
+the corpus-scale ORCID ledger shows the join splitting almost as many people as it unites (2.1:1), because the pair
+is really two people's conventions, not one surname. Letting any plain surname word be the tail was tried and rejected (690k arm: +268 people united, +105
 split, 2.6:1): a rare pair's other sources usually abbreviate the head (``Lara / G. / Merino``), so a pair that
 the corpus itself rarely writes whole is not worth joining. ``rivera maza`` therefore stays a known limit.
 
@@ -28,6 +30,10 @@ CORPUS_MIN_WHOLE_SHARE times (>= CORPUS_MIN_MENTIONS mentions, whole share >= CO
 CORPUS_MIN_GIVEN_NAMES given names), with the same head-word and East Asian gates. On the 690k index 60% of the
 "surname word dropped" splits were really boundary placements (the word in ``middle`` on one mention, in ``last`` on
 another) whose surface was in the corpus but below the listed tier's thresholds.
+
+No tier admits a 2-word tail that repeats one word (``silva silva``, ``velasco velasco``): a real doubled surname is
+rare, and the corpus-scale ledger shows such joins splitting 108 ORCID people for 177 united (1.6:1); the usual
+source of the shape is a middle name that repeats the surname.
 
 The asset carries only the surface, its tier and rounded counts. Rebuild with
   uv run python scripts/build_compound_surnames.py --partition ... --tokens ... --orcid-gate ... \\
@@ -51,6 +57,7 @@ MIN_PEOPLE = 3
 MIN_PEOPLE_WHOLE = 2
 VOCAB_MIN_SURFACES = 5
 VOCAB_MIN_MENTIONS = 5
+VOCAB_MIN_WHOLE_SHARE = 0.15
 CORPUS_MIN_MENTIONS = 5
 CORPUS_MIN_WHOLE_SHARE = 0.2
 CORPUS_MIN_GIVEN_NAMES = 2
@@ -95,6 +102,7 @@ def main() -> None:
     cn_heads = ",".join(f"'{t}'" for t in CHINESE_COMPOUND_HEADS)
     vn_middle = ",".join(f"'{t}'" for t in VIETNAMESE_MIDDLE)
     vn_tails = ",".join(f"'{t}'" for t in VIETNAMESE_TAILS)
+    doubled = "(len(string_split(tail, ' ')) = 2 AND string_split(tail, ' ')[1] = string_split(tail, ' ')[2])"
     vietnamese = (
         f"(len(string_split(tail, ' ')) = 2 AND string_split(tail, ' ')[1] IN ({vn_middle})"
         f" AND string_split(tail, ' ')[2] IN ({vn_tails}))"
@@ -106,6 +114,7 @@ def main() -> None:
             AND firsts >= {MIN_GIVEN_NAMES}
             AND regexp_extract(tail, '([^ ]+)$', 1) NOT IN ({sfx})
             AND string_split(tail, ' ')[1] NOT IN ({heads})
+            AND NOT {doubled}
         ),
         p2 AS (
           SELECT p.* FROM p
@@ -130,7 +139,8 @@ def main() -> None:
         JOIN heads ON heads.h = string_split(p.tail, ' ')[1]
         JOIN tails ON tails.t = string_split(p.tail, ' ')[2]
         JOIN '{a.tokens}' th ON th.t = heads.h
-        WHERE p.words = 2 AND p.n_total >= {VOCAB_MIN_MENTIONS} AND p.tail NOT IN (SELECT tail FROM listed)
+        WHERE p.words = 2 AND p.n_total >= {VOCAB_MIN_MENTIONS} AND p.share_whole >= {VOCAB_MIN_WHOLE_SHARE}
+          AND p.tail NOT IN (SELECT tail FROM listed) AND heads.h <> tails.t
           AND (heads.h IN ({particles}) OR th.given_share <= {MAX_GIVEN_SHARE})
           AND heads.h NOT IN ({heads}) AND tails.t NOT IN ({vn_tails})
           AND NOT EXISTS (SELECT 1 FROM unnest(string_split(p.tail, ' ')) AS u(w) WHERE length(u.w) < 2)
@@ -146,6 +156,7 @@ def main() -> None:
           AND string_split(p.tail, ' ')[1] NOT IN ({heads}) AND string_split(p.tail, ' ')[-1] NOT IN ({vn_tails})
           AND string_split(p.tail, ' ')[1] NOT IN ({cn_heads})
           AND NOT {vietnamese}
+          AND NOT {doubled.replace("tail", "p.tail")}
           AND regexp_extract(p.tail, '([^ ]+)$', 1) NOT IN ({sfx})
           AND NOT EXISTS (SELECT 1 FROM unnest(string_split(p.tail, ' ')) AS u(w) WHERE length(u.w) < 2)
         ORDER BY p.n_total DESC""").fetchall()  # noqa: S608
