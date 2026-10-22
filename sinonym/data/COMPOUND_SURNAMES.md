@@ -32,16 +32,17 @@ Columns: `surface` (folded: lower-case, accents stripped, single spaces), `tier`
 (people seen with both shapes, i.e. split across production block keys before this rule). No names of people and
 no identifiers.
 
-## How it was built (2026-10-21) and how to rebuild from a later dump
+## How it was built (2026-10-22, October snapshot) and how to rebuild from a later dump
 
 All steps are read-only and local except the first dump. Scripts live in
 `/Users/atalyaa/Documents/repos/author-names/pp_vys_orcid_conc/scripts/` unless noted; the final step is in this repo.
 
-1. **Pre-normalization names dump.** A full `paper_authors` export taken *before* any sinonym rewrite (used:
-   `author-names/data/paper_authors_full.parquet`, 691M rows, May 2026). From a post-backfill dump, use
-   `COALESCE(original_first, first)` etc. for rows with `name_modified`, so sinonym's own output is never counted.
-2. **Deduplicate.** `pre_name_counts.py <out_dir>` → one row per distinct (first, middle, last) with mention,
-   paper and author-cluster counts, in 12 hash partitions (107M triples).
+1. **Source-name counts.** One Athena pass over a post-backfill `paper_authors` snapshot
+   (`author-names/NAME_COUNTS.md`, `pp_vys_orcid_conc/scripts/v4/athena_name_counts.sh`): one row per distinct
+   source triple, where the source name is **all** `original_*` fields when `original_last IS NOT NULL`, else the
+   stored fields (never a per-field coalesce — it leaks sinonym's own middle into rewritten rows). Counts: mentions,
+   distinct papers, distinct ORCIDs; no production `author_id`. 113.6M triples, 702.9M mentions (Oct 2026).
+2. (The May 2026 build used a pre-sinonym dump, `pre_name_counts.py`; same schema.)
 3. **Partition statistics.** `partition_prior.py "<out_dir>/*.parquet" partition_prior.parquet` → for each 2–4-word
    surname tail (`middle` words + `last` words), how often the corpus puts k words in `middle`; `share_whole`
    = k = 0. Also writes `partition_prior_tokens.parquet`: per word, mentions as a given name vs as the surname word.
@@ -54,9 +55,10 @@ All steps are read-only and local except the first dump. Scripts live in
    shipped rule to an existing routed arm and scores people united / split under the production block key on
    the held-out ORCID half. Without `--no-shrink` the simulation also cuts longer surnames down to the surface
    and over-counts (2026-10-21: 446 / 17) — the shipped rule's own numbers are in step 7.
-5. **Person-level gate.** `compound_orcid_gate.py compound_orcid_gate.parquet` over the recurring-ORCID set
-   (`orcid_recurring_authors_v3.parquet`, 80M rows), excluding the ORCIDs of the evaluation index so the acceptance
-   test stays clean: per surface, distinct people with the whole form, the split form, and both.
+5. **Person-level gate.** `scripts/v4/compound_orcid_gate_v4.py` over dataset v4 (every ORCID mention with its source
+   name), excluding the ORCIDs of the 690k evaluation index: per surface, distinct people with the whole form, the
+   split form, and both. `HALF=A` builds it on one ORCID half (last ORCID character not in 1 3 5 7 9 X) so the other
+   half can score the asset; `HALF=all` for the shipped build.
 6. **Asset.** `uv run python scripts/build_compound_surnames.py --partition partition_prior.parquet --tokens
    partition_prior_tokens.parquet --orcid-gate compound_orcid_gate.parquet --output sinonym/data/compound_surnames.csv.gz`
    keeps the `listed` surfaces where both signals agree (≥ 3 people, ≥ 2 of them whole), derives the
