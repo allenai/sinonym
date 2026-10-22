@@ -199,3 +199,98 @@ def test_cyrillic_and_greek_names_never_parse_as_chinese(predictor, source, expe
     author = predictor.predict_batch([instance])[0].authors[0]
     assert (author.first_name, author.middle_names, author.last_name) == expected
     assert author.chinese_detected is False
+
+
+SMALL_CLASS_CASES = [
+    # a dotted-initials run before a multi-token surname is initials, not the M.A. degree
+    (("M.A.", None, "Medina Alcaide"), ("M.", "A.", "Medina Alcaide")),
+    (("M.A.", None, "Di Vito"), ("M.", "A.", "Di Vito")),
+    # bare Hon is a Cantonese given name; only the dotted title is dropped
+    (("Hon", "Lon", "Tam"), ("Hon", "Lon", "Tam")),
+    (("Hon.", "John", "Smith"), ("John", "", "Smith")),
+    # an all-caps credential lookalike alone in the surname field is the surname
+    (("Hue", "Thi", "DO"), ("Hue", "Thi", "Do")),
+    (("John", "Smith", "III"), ("John", "", "Smith")),
+    # pinyin ü written as v is a syllable, not two initials
+    (("Xv", None, "Wu"), ("Xv", "", "Wu")),
+    # a trailing comma on a full given word before a real surname is punctuation; before initials it is the
+    # surname-first marker it always was
+    (("Thomas,", "W.", "Crowther"), ("Thomas", "W.", "Crowther")),
+    (("Adamu,", None, "D. A."), ("D.", "A.", "Adamu")),
+    # a last-only "Surname I. I." reads surname-first (unchanged); the single-initial form is left to the
+    # scalar parse, since South-Indian "Given I." sources make it a coin flip (judged 12 for / 6 against)
+    ((None, None, "Petunin A.V."), ("A.", "V.", "Petunin")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), SMALL_CLASS_CASES)
+def test_small_deterministic_classes_from_the_corpus_scan(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+ORDER_PRIOR_CASES = [
+    # the corpus writes these pairs one way >= 80% of the time (pre-normalization names, 691M mentions): the
+    # reviewed S2AND labels agreed with the corpus on every one of them, the byline-only readings did not
+    (("Lu", None, "Xi"), ("Xi", "", "Lu")),
+    (("Gong", None, "Lei"), ("Lei", "", "Gong")),
+    (("Huang", None, "Xi"), ("Xi", "", "Huang")),
+    (("Gu", None, "Xin"), ("Xin", "", "Gu")),
+    (("Chen", None, "Hong"), ("Hong", "", "Chen")),
+    (("Lu", None, "Rong"), ("Rong", "", "Lu")),
+    # already in the corpus orientation: untouched
+    (("Xi", None, "Lu"), ("Xi", "", "Lu")),
+    (("Fang", None, "Du"), ("Fang", "", "Du")),
+    # outside the Chinese path or hyphenated: the prior does not apply
+    (("Thomas", None, "Martin"), ("Thomas", "", "Martin")),
+    (("Martin", None, "Thomas"), ("Martin", "", "Thomas")),
+    (("Jin-Young", None, "Lee"), ("Jin-Young", "", "Lee")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), ORDER_PRIOR_CASES)
+def test_corpus_order_prior_settles_ambiguous_two_token_names(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+def test_corpus_order_prior_reason_is_reported(predictor):
+    instance = Instance(pp_authors=[SourceAuthorFields(first_name="Lu", last_name="Xi")])
+    author = predictor.predict_batch([instance])[0].authors[0]
+    assert author.resolution_reason.value == "corpus_order_prior_assignment"
+
+
+@pytest.mark.parametrize("surname", ["Efendi̇oğlu", "Çi̇ner", "Yerlikaya Aydemi̇r"])
+def test_attached_combining_marks_are_not_moved(predictor, surname):
+    # Turkish İ lower-cases to i + U+0307, which has no precomposed form; the detached-diacritic repair
+    # moved that dot onto the next letter (Efendi̇oğlu -> Efendiȯğlu). An attached mark is never moved.
+    assert resolve(predictor, "Attila", None, surname) == ("Attila", "", surname)
+
+
+COMPOUND_CASES = [
+    # corpus-backed compound surnames (data/COMPOUND_SURNAMES.md) end up whole in `last` from either source shape
+    (("Jean", "du", "Plessis"), ("Jean", "", "du Plessis")),
+    (("Jean", None, "du Plessis"), ("Jean", "", "du Plessis")),
+    (("A.", "Gonzalez", "Lopez"), ("A.", "", "Gonzalez Lopez")),
+    # vocabulary tier: a frequent Hispanic pair the corpus splits too often to be listed
+    (("Maria", "Garcia", "Garcia"), ("Maria", "", "Garcia Garcia")),
+    (("Maria", "Jose Gonzalez", "Lopez"), ("Maria", "Jose", "Gonzalez Lopez")),
+    (("Ana", "Paula da", "Silva"), ("Ana", "Paula", "da Silva")),
+    # a given-name middle before a plain surname is untouched
+    (("John", "Michael", "de Vries"), ("John", "Michael", "de Vries")),
+    # the rule only extends a surname: a longer parsed surname is never cut back to a listed suffix
+    (("Rilbson", "Henrique Silva", "dos Santos"), ("Rilbson", "Henrique", "Silva dos Santos")),
+    (("Erica", None, "van de Waal"), ("Erica", "", "van de Waal")),
+    (("Maximillian", None, "Van Wyk de Vries"), ("Maximillian", "", "Van Wyk de Vries")),
+    # a parse that reordered the fields keeps its given name and surname
+    (("Luong", "Van", "Viet"), ("Viet", "Van", "Luong")),
+    # a surname the source wrote whole and longer than any listed surface is kept whole
+    (("Sergio", None, "Vazquez Montes de Oca"), ("Sergio", "", "Vazquez Montes de Oca")),
+    (("José", "Boris", "Bellido Santa María"), ("José", "Boris", "Bellido Santa María")),
+    (("Mayara", None, "Secco Torres Silva"), ("Mayara", "", "Secco Torres Silva")),
+    # a surname the source wrote whole is restored when the parse had shortened it
+    (("Ana", None, "Garcia Lopez"), ("Ana", "", "Garcia Lopez")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), COMPOUND_CASES)
+def test_corpus_compound_surnames_are_joined_or_kept_whole(predictor, source, expected):
+    assert resolve(predictor, *source) == expected

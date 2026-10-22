@@ -80,6 +80,8 @@ class ResolutionReason(str, Enum):
 
     PP_SELECTED = "pp_selected"
     VYS_SELECTED = "vys_selected"
+    CORPUS_ORDER_PRIOR_ASSIGNMENT = "corpus_order_prior_assignment"
+    CORPUS_COMPOUND_SURNAME_ASSIGNMENT = "corpus_compound_surname_assignment"
     PP_VYS_ABSTAIN_PP_INPUT = "pp_vys_abstain_pp_input"
     PP_VYS_ABSTAIN_VYS_INPUT = "pp_vys_abstain_vys_input"
     PP_ONLY_ABSTAIN_INPUT = "pp_only_abstain_input"
@@ -121,6 +123,7 @@ _RESOLUTION_REASON_GROUPS = {
         ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT,
         ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT,
         ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
+        ResolutionReason.CORPUS_COMPOUND_SURNAME_ASSIGNMENT,
     ),
     (ResolutionProvenance.SOURCE, ResolutionAction.SUPPRESS): (ResolutionReason.REVIEWED_NON_PERSON_PATTERN,),
     (ResolutionProvenance.SCALAR, ResolutionAction.PRESERVE_INPUT): (
@@ -140,7 +143,10 @@ _RESOLUTION_REASON_GROUPS = {
         ResolutionReason.PP_VYS_ABSTAIN_PP_INPUT,
         ResolutionReason.PP_ONLY_ABSTAIN_INPUT,
     ),
-    (ResolutionProvenance.PP, ResolutionAction.ASSIGN): (ResolutionReason.PP_SELECTED,),
+    (ResolutionProvenance.PP, ResolutionAction.ASSIGN): (
+        ResolutionReason.PP_SELECTED,
+        ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT,
+    ),
     (ResolutionProvenance.VYS, ResolutionAction.PRESERVE_INPUT): (ResolutionReason.PP_VYS_ABSTAIN_VYS_INPUT,),
     (ResolutionProvenance.VYS, ResolutionAction.ASSIGN): (ResolutionReason.VYS_SELECTED,),
 }

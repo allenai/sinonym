@@ -243,6 +243,7 @@ def test_every_resolution_reason_has_one_complete_decision_spec() -> None:
             ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT,
             ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT,
             ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
+            ResolutionReason.CORPUS_COMPOUND_SURNAME_ASSIGNMENT,
         },
         (ResolutionProvenance.SOURCE, ResolutionAction.SUPPRESS): {
             ResolutionReason.REVIEWED_NON_PERSON_PATTERN,
@@ -264,7 +265,10 @@ def test_every_resolution_reason_has_one_complete_decision_spec() -> None:
             ResolutionReason.PP_VYS_ABSTAIN_PP_INPUT,
             ResolutionReason.PP_ONLY_ABSTAIN_INPUT,
         },
-        (ResolutionProvenance.PP, ResolutionAction.ASSIGN): {ResolutionReason.PP_SELECTED},
+        (ResolutionProvenance.PP, ResolutionAction.ASSIGN): {
+            ResolutionReason.PP_SELECTED,
+            ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT,
+        },
         (ResolutionProvenance.VYS, ResolutionAction.PRESERVE_INPUT): {
             ResolutionReason.PP_VYS_ABSTAIN_VYS_INPUT,
         },
