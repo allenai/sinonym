@@ -44,6 +44,8 @@ from sinonym.services.non_person import (
 )
 from sinonym.services.order_prior import corpus_surname_for
 from sinonym.services.person_name_normalization import (
+    EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES,
+    EAST_ASIAN_GIVEN_SYLLABLES,
     PersonNameNormalizationService,
     PersonNameOutcome,
     reviewed_closed_comma_credential_tail_head,
@@ -2012,6 +2014,15 @@ class _Resolver:
             return None
         full = f"{selected.middle_name} {selected.surname}".strip()
         if self._detector.is_curated_compound_surname(full) or self._detector.is_curated_compound_surname(selected.surname):
+            return None
+        middle_words = selected.middle_name.split()
+        if (
+            middle_words
+            and middle_words[-1].casefold() in EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES
+            and selected.given_name.split()[-1].casefold() in EAST_ASIAN_GIVEN_SYLLABLES
+        ):
+            # ``Quan / Van / Dau``: after a Vietnamese / Korean / Cantonese given syllable the middle is a given syllable,
+            # even when the corpus happens to write ``Van Dau`` whole somewhere
             return None
         candidate = _corpus_compound_extension(selected)
         if candidate is None or len(candidate.surname.split()) < len((source.last_name or "").split()):

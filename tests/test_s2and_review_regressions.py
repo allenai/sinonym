@@ -325,6 +325,26 @@ CHAIN_CAP_CASES = [
 ]
 
 
+PARTICLE_GUARD_CASES = [
+    # A: a two-letter all-caps token between mixed-case names is initials, not a particle (AL/LA/EL/DA/ST/TE/LE)
+    (("Hakim", "AL", "Garalleh"), ("Hakim", "AL", "Garalleh")),
+    (("Michelle", "LA", "Nelson"), ("Michelle", "LA", "Nelson")),
+    (("Coen", "DA", "Stehouwer"), ("Coen", "DA", "Stehouwer")),
+    # DE / VAN / VON / DI stay particles: sources that capitalize the surname capitalize the particle too
+    (("Peter", "VAN", "OOSTEROM"), ("Peter", "", "van Oosterom")),
+    (("Eduardo", "De", "Loures"), ("Eduardo", "", "De Loures")),
+    # B: after a Korean / Cantonese / Vietnamese given syllable, bin / van / da is a given syllable
+    (("Young", "Bin", "Kim"), ("Young", "Bin", "Kim")),
+    (("Quan", "Van", "Dau"), ("Quan", "Van", "Dau")),
+    (("Maria", "da", "Silva"), ("Maria", "", "da Silva")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), PARTICLE_GUARD_CASES)
+def test_particle_guards(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
 @pytest.mark.parametrize(("source", "expected"), CHAIN_CAP_CASES)
 def test_given_chain_cap_keeps_authored_words(predictor, source, expected):
     assert resolve(predictor, *source) == expected

@@ -14,13 +14,19 @@ import unicodedata
 from dataclasses import dataclass, replace
 from enum import Enum
 
+from sinonym.chinese_names_data import (
+    NAME_ORDER_ROUTING_CANTONESE_GIVEN_SYLLABLES,
+    NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES,
+    VIETNAMESE_GIVEN_PATTERNS,
+)
 from sinonym.coretypes import CanonicalName, NameComponents
-from sinonym.name_punctuation import attach_detached_diacritics, strip_soft_hyphens
 from sinonym.name_punctuation import (
     INVISIBLE_MARKUP_DELETE_TRANSLATION,
     PERSON_JOINER_FOLD_TRANSLATION,
+    attach_detached_diacritics,
     fold_internal_name_joiners,
     fold_spaced_transliteration_apostrophes,
+    strip_soft_hyphens,
 )
 from sinonym.services.non_person import reviewed_non_person_text_pattern
 
@@ -277,6 +283,13 @@ _FAMILY_PARTICLES = frozenset(
         "zum",
         "zur",
     },
+)
+# all-caps two-letter tokens the corpus almost never uses as a capitalized particle (dotted-initial evidence
+# AL 321:7, LA 318:3, EL 208:19, DA 160:11, ST 57:0, TE 23:0, LE 87:5 in the October 2026 counts)
+_CAPITALIZED_INITIALS_NOT_PARTICLES = frozenset({"al", "la", "el", "da", "st", "te", "le"})
+EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES = frozenset({"bin", "van", "da", "do", "le", "ta"})
+EAST_ASIAN_GIVEN_SYLLABLES = frozenset(
+    NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES | NAME_ORDER_ROUTING_CANTONESE_GIVEN_SYLLABLES | VIETNAMESE_GIVEN_PATTERNS,
 )
 _LOWERCASE_RELATIONAL_TOKENS = frozenset({"'t", "b.", "d.", "e", "kizi", "kyzy", "oglu", "o'g'li", "oğlu", "qizi"})
 _STRONG_FAMILY_PARTICLE_SPANS = (
@@ -820,7 +833,9 @@ class PersonNameNormalizationService:
         }
         if any(value is not None and not isinstance(value, str) for value in values.values()):
             return self._invalid("name components must be strings or null")
-        values = {role: attach_detached_diacritics(strip_soft_hyphens(value)) if value else value for role, value in values.items()}
+        values = {
+            role: attach_detached_diacritics(strip_soft_hyphens(value)) if value else value for role, value in values.items()
+        }
         first_name, middle_name, last_name, suffix = values["given"], values["middle"], values["surname"], values["suffix"]
         source_surface = " ".join(value for value in (first_name, middle_name, last_name) if value)
         if not (suffix or "").strip() and reviewed_non_person_text_pattern(source_surface) is not None:
@@ -1958,7 +1973,9 @@ class PersonNameNormalizationService:
                 anchor = strong_particle[0]
             surname_start = anchor
         elif particle_positions := [
-            index for index, token in enumerate(tokens[1:-1], start=1) if self._particle_key(token.text) in _FAMILY_PARTICLES
+            index
+            for index, token in enumerate(tokens[1:-1], start=1)
+            if self._particle_key(token.text) in _FAMILY_PARTICLES and self._particle_reading_allowed(tokens, index)
         ]:
             surname_start = particle_positions[0]
         elif len(tokens) == _FOUR_COMPONENTS and self._is_initial(tokens[1].text) and not self._is_initial(tokens[2].text):
@@ -1969,6 +1986,31 @@ class PersonNameNormalizationService:
         middle = [replace(token, source_role="middle") for token in tokens[1:surname_start]]
         surname = [replace(token, source_role="surname") for token in tokens[surname_start:]]
         return given, middle, surname
+
+    def _particle_reading_allowed(self, tokens: list[_Token], index: int) -> bool:
+        """Two corpus-measured false particles: capitalized initials and East Asian given syllables.
+
+        ``Nicholas AL Garalleh``, ``Michelle LA Nelson``: a two-letter all-caps token between a mixed-case given name
+        and a mixed-case surname is initials (the October counts write such names with dotted initials 320:7 for AL
+        and LA); DE / VAN / VON / DI are excluded because sources that capitalize the surname also capitalize a real
+        particle (``Peter VAN OOSTEROM``). ``Young Bin Kim``, ``Quan Van Dau``: after a Korean, Cantonese or
+        Vietnamese given syllable, ``bin`` / ``van`` / ``da`` is the second given syllable, not a particle.
+        """
+        key = self._particle_key(tokens[index].text)
+        text = tokens[index].text
+        if (
+            key in _CAPITALIZED_INITIALS_NOT_PARTICLES
+            and text.isupper()
+            and len(text) == _TWO_COMPONENTS
+            and not tokens[0].text.isupper()
+            and not tokens[-1].text.isupper()
+        ):
+            return False
+        if key in EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES and index >= 1:
+            previous = tokens[index - 1].text.casefold()
+            if previous in EAST_ASIAN_GIVEN_SYLLABLES and not text.islower():
+                return False
+        return True
 
     def _structured_particle_surname_first_roles(
         self,
