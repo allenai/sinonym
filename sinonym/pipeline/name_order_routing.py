@@ -810,8 +810,13 @@ def _fold_word(text: str) -> str:
     return "".join(ch for ch in unicodedata.normalize("NFKD", text).casefold() if ch.isalnum())
 
 
+_FOOTNOTE_TAIL_RE = re.compile(r"[\d*†‡§¶]+$")
+
+
 def _authored_words(raw_name: str) -> list[str]:
-    return [word for word in raw_name.split() if _fold_word(word)]
+    """Authored words with footnote marks (``Chen1``, ``Li*``) removed, so an echo never carries them."""
+    words = (_FOOTNOTE_TAIL_RE.sub("", word) for word in raw_name.split())
+    return [word for word in words if _fold_word(word)]
 
 
 def _input_order_echo(raw_name: str) -> ParsedName | None:

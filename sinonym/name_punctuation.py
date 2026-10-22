@@ -289,7 +289,7 @@ def attach_detached_diacritics(text: str) -> str:
         return text
     # a combining mark after a space is the NFKC remnant of a spacing mark: restore the spacing form so the
     # token repair may move it to the letter it composes with (an attached combining mark is never moved)
-    text = re.sub("(?<=[^\\W\\d_]) ([\\u0300-\\u036f])", lambda m: _COMBINING_TO_SPACING.get(m.group(1), m.group(1)), text)
+    text = re.sub("(?<=[^\\W\\d_]) ([\\u0300-\\u036f])", lambda m: " " + _COMBINING_TO_SPACING.get(m.group(1), m.group(1)), text)
     text = re.sub("(?<=\\s)([\\u0300-\\u036f])(?=[^\\W\\d_])", lambda m: _COMBINING_TO_SPACING.get(m.group(1), m.group(1)), text)
     parts = re.split(r"(\s+)", text)
     return "".join(part if part.isspace() or not part else _reattach_in_token(part) for part in parts)
