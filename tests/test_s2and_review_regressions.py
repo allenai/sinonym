@@ -308,6 +308,7 @@ TOKEN_ORDER_CASES = [
     (("Maria", None, "Jose"), ("Maria", "", "Jose")),
     (("Smith", "A.", "John"), ("Smith", "A.", "John")),
     (("Prakash", None, "Sumit"), ("Prakash", "", "Sumit")),
+    (("VV", None, "Robin"), ("VV", "", "Robin")),
 ]
 
 

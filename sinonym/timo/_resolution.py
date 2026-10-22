@@ -2001,7 +2001,8 @@ class _Resolver:
         given, surname = selected.given_name.strip(), selected.surname.strip()
         if " " in given or " " in surname or "-" in given or "-" in surname or not given.isalpha() or not surname.isalpha():
             return None
-        if len(given) < 2 or len(surname) < 2 or not surname_first_pair(given, surname):  # noqa: PLR2004
+        if len(given) < 3 or len(surname) < 3 or not surname_first_pair(given, surname):  # noqa: PLR2004
+            # two-letter tokens are too often glued initials ("VV Robin") for the role prior to be trusted
             return None
         return NameComponents(given_name=surname, middle_name="", surname=given, suffix="")
 
