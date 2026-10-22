@@ -49,6 +49,7 @@ from sinonym.services.person_name_normalization import (
     reviewed_closed_comma_credential_tail_head,
     reviewed_source_cleanup_pattern,
 )
+from sinonym.services.token_order_prior import surname_first_pair
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -1989,6 +1990,21 @@ class _Resolver:
             selected.surname.split(),
         ) == surface_key(surname[-1:])
 
+    def _token_order_prior_candidate(self, source: SourceAuthorFields, selected: NameComponents) -> NameComponents | None:
+        """A two-token Latin name written surname-first: ``Ferrari / Giulia`` becomes ``Giulia / Ferrari``.
+
+        Fires only when the corpus role prior (services/token_order_prior.py) is strong on both tokens, the parse
+        has no middle name, and both tokens are plain alphabetic words.
+        """
+        if (source.suffix or "").strip() or selected.middle_name or selected.suffix:
+            return None
+        given, surname = selected.given_name.strip(), selected.surname.strip()
+        if " " in given or " " in surname or "-" in given or "-" in surname or not given.isalpha() or not surname.isalpha():
+            return None
+        if len(given) < 2 or len(surname) < 2 or not surname_first_pair(given, surname):  # noqa: PLR2004
+            return None
+        return NameComponents(given_name=surname, middle_name="", surname=given, suffix="")
+
     def _corpus_compound_candidate(self, source: SourceAuthorFields, selected: NameComponents) -> NameComponents | None:
         """A corpus-backed compound the scalar parse did not keep whole (data/COMPOUND_SURNAMES.md)."""
         if (source.suffix or "").strip() or not selected.given_name:
@@ -2323,6 +2339,13 @@ class _Resolver:
                     source=source,
                     selected=compound,
                     reason=ResolutionReason.CORPUS_COMPOUND_SURNAME_ASSIGNMENT,
+                )
+            surname_first = self._token_order_prior_candidate(source, scalar_canonical.normalized)
+            if surname_first is not None:
+                return self._source_assignment_resolution(
+                    source=source,
+                    selected=surname_first,
+                    reason=ResolutionReason.CORPUS_TOKEN_ORDER_PRIOR_ASSIGNMENT,
                 )
             structured_initial_tail = self._structured_surname_initial_tail_candidate(
                 source,

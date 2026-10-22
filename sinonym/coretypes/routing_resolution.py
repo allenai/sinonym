@@ -82,6 +82,7 @@ class ResolutionReason(str, Enum):
     VYS_SELECTED = "vys_selected"
     CORPUS_ORDER_PRIOR_ASSIGNMENT = "corpus_order_prior_assignment"
     CORPUS_COMPOUND_SURNAME_ASSIGNMENT = "corpus_compound_surname_assignment"
+    CORPUS_TOKEN_ORDER_PRIOR_ASSIGNMENT = "corpus_token_order_prior_assignment"  # noqa: S105
     PP_VYS_ABSTAIN_PP_INPUT = "pp_vys_abstain_pp_input"
     PP_VYS_ABSTAIN_VYS_INPUT = "pp_vys_abstain_vys_input"
     PP_ONLY_ABSTAIN_INPUT = "pp_only_abstain_input"
@@ -124,6 +125,7 @@ _RESOLUTION_REASON_GROUPS = {
         ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT,
         ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
         ResolutionReason.CORPUS_COMPOUND_SURNAME_ASSIGNMENT,
+        ResolutionReason.CORPUS_TOKEN_ORDER_PRIOR_ASSIGNMENT,
     ),
     (ResolutionProvenance.SOURCE, ResolutionAction.SUPPRESS): (ResolutionReason.REVIEWED_NON_PERSON_PATTERN,),
     (ResolutionProvenance.SCALAR, ResolutionAction.PRESERVE_INPUT): (

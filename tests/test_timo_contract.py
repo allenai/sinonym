@@ -244,6 +244,8 @@ def test_every_resolution_reason_has_one_complete_decision_spec() -> None:
             ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT,
             ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
             ResolutionReason.CORPUS_COMPOUND_SURNAME_ASSIGNMENT,
+        ResolutionReason.CORPUS_TOKEN_ORDER_PRIOR_ASSIGNMENT,
+            ResolutionReason.CORPUS_TOKEN_ORDER_PRIOR_ASSIGNMENT,
         },
         (ResolutionProvenance.SOURCE, ResolutionAction.SUPPRESS): {
             ResolutionReason.REVIEWED_NON_PERSON_PATTERN,

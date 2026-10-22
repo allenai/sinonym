@@ -160,6 +160,8 @@ def test_vietnamese_family_name_is_recognized_past_a_middle_initial(predictor, s
 
 
 ABSTAIN_ECHO_CASES = [
+    # footnote digits on an authored word never reach the echoed surname
+    (("Song", None, "Chen1"), ("Song", "", "Chen")),
     # the abstain path promised "trailing authored word is the surname" but rebuilt the name from the parser's
     # re-split syllables (issue #35): a fragment of an authored word became the surname
     ((None, None, "Ya. G. Sinai"), ("Ya.", "G.", "Sinai")),
@@ -258,6 +260,11 @@ def test_corpus_order_prior_reason_is_reported(predictor):
     assert author.resolution_reason.value == "corpus_order_prior_assignment"
 
 
+def test_leading_combining_mark_does_not_glue_words(predictor):
+    # ``Mithat ̈unsal`` (NFKC remnant of a spacing diaeresis before the surname) stays two words
+    assert resolve(predictor, "Mithat", None, "\u0308unsal") == ("Mithat", "", "Ünsal")
+
+
 @pytest.mark.parametrize("surname", ["Efendi̇oğlu", "Çi̇ner", "Yerlikaya Aydemi̇r"])
 def test_attached_combining_marks_are_not_moved(predictor, surname):
     # Turkish İ lower-cases to i + U+0307, which has no precomposed form; the detached-diacritic repair
@@ -289,6 +296,24 @@ COMPOUND_CASES = [
     # a surname the source wrote whole is restored when the parse had shortened it
     (("Ana", None, "Garcia Lopez"), ("Ana", "", "Garcia Lopez")),
 ]
+
+
+TOKEN_ORDER_CASES = [
+    # a two-token Latin name whose first token is a corpus surname word and whose last is a corpus given name
+    (("Ferrari", None, "Giulia"), ("Giulia", "", "Ferrari")),
+    (("Kushnir", None, "Yishai"), ("Yishai", "", "Kushnir")),
+    (("Smith", None, "John"), ("John", "", "Smith")),
+    # given-first names and names with a middle, hyphen or weak evidence stay as written
+    (("John", None, "Smith"), ("John", "", "Smith")),
+    (("Maria", None, "Jose"), ("Maria", "", "Jose")),
+    (("Smith", "A.", "John"), ("Smith", "A.", "John")),
+    (("Prakash", None, "Sumit"), ("Prakash", "", "Sumit")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), TOKEN_ORDER_CASES)
+def test_token_order_prior_swaps_surname_first_latin_pairs(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
 
 
 @pytest.mark.parametrize(("source", "expected"), COMPOUND_CASES)
