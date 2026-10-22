@@ -360,3 +360,23 @@ def test_token_order_prior_swaps_surname_first_latin_pairs(predictor, source, ex
 @pytest.mark.parametrize(("source", "expected"), COMPOUND_CASES)
 def test_corpus_compound_surnames_are_joined_or_kept_whole(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+CORPUS_SCALE_CASES = [
+    # a comma closing the first field before two full words is the surname-first marker (Crossref bylines from
+    # Nigeria) unless the corpus knows the closed word as a given name; before an initial it is punctuation
+    (("Anih,", "David", "Chinonso"), ("David", "Chinonso", "Anih")),
+    (("Alharbi,", "Ghadah", "Lafi"), ("Ghadah", "Lafi", "Alharbi")),
+    (("Jennifer,", "Alyson", "Carter"), ("Jennifer", "Alyson", "Carter")),
+    (("Jayne,", "L", "Astbury"), ("Jayne", "L.", "Astbury")),
+    (("Thomas,", "W.", "Crowther"), ("Thomas", "W.", "Crowther")),
+    # Hyun is a surname only as the last token; leading it is a given syllable
+    (("Hyun", "Ho", "Sung"), ("Hyun", "Ho", "Sung")),
+    (("Hyun", "Sik", "Jun"), ("Hyun", "Sik", "Jun")),
+    (("Chang", "Ho", "Hyun"), ("Chang", "Ho", "Hyun")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), CORPUS_SCALE_CASES)
+def test_corpus_scale_regressions(predictor, source, expected):
+    assert resolve(predictor, *source) == expected

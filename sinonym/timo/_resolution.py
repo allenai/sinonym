@@ -51,7 +51,7 @@ from sinonym.services.person_name_normalization import (
     reviewed_closed_comma_credential_tail_head,
     reviewed_source_cleanup_pattern,
 )
-from sinonym.services.token_order_prior import surname_first_pair
+from sinonym.services.token_order_prior import surname_first_pair, token_role
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -1204,13 +1204,21 @@ class SourceAuthorFields(_Model):
 
         A comma closing a full given word before a real surname ("Thomas," / "W." / "Crowther") is field
         punctuation; flattened verbatim it would read as the surname-first "Thomas, W. Crowther". Before
-        initials ("Adamu," / "D. A.") the comma is the surname-first marker and stays.
+        initials ("Adamu," / "D. A.") the comma is the surname-first marker and stays. When the middle field is a
+        full word too ("Anih," / "David" / "Chinonso", Crossref bylines from Nigeria) the comma is the marker unless
+        the corpus knows the closed word as a given name ("Jennifer," / "Alyson" / "Carter"): on every ORCID in the
+        corpus the unconditional reading split 62 people for 175 united, the conditional one 0 for 138.
         """
         first, middle, last = self.first_name or "", self.middle_names or "", self.last_name or ""
         given_word = first.rstrip(" ,")
         surname_words = [token for token in last.replace(".", " ").split() if len(token) > 1]
-        if surname_words and len(given_word) > 1 and given_word.isalpha():
-            # "Thomas," before a real surname is punctuation; "Adamu," before initials ("D. A.") marks surname-first
+        middle_words = [token for token in middle.replace(".", " ").split() if len(token) > 1]
+        if (
+            surname_words
+            and len(given_word) > 1
+            and given_word.isalpha()
+            and (not middle_words or token_role(given_word) == "given")
+        ):
             first = given_word
         return " ".join(part for part in (first, middle, last) if part).strip()
 

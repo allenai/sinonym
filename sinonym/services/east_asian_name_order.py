@@ -22,6 +22,7 @@ from sinonym.chinese_names_data import (
     NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES,
     NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES,
     NAME_ORDER_ROUTING_KOREAN_SURNAMES,
+    NAME_ORDER_ROUTING_KOREAN_TAIL_ONLY_SURNAMES,
     OVERLAPPING_KOREAN_SURNAMES,
     VIETNAMESE_ONLY_SURNAMES,
 )
@@ -1218,6 +1219,8 @@ class EastAsianNameOrderService:
         if any(_is_european_exclusive_diacritic(character) for token in tokens for character in token):
             return None
         if not _contains(lexicons.korean_surnames, _fold(tokens[0])):
+            return None
+        if _fold(tokens[0]) in NAME_ORDER_ROUTING_KOREAN_TAIL_ONLY_SURNAMES:
             return None
         if _contains(lexicons.korean_surnames, _fold(tokens[-1])):
             return None
