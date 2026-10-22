@@ -113,6 +113,14 @@ _PARENTHETICAL_DUPLICATE_RE = re.compile(r"^(\S+)\s+\(([^)]+)\)\s+(.+)$")
 _ASCII_JOINER_TRANSLATION = str.maketrans({"`": "'"})
 _PRE_NFKC_JOINER_TRANSLATION = str.maketrans({"\u00b4": "'"})
 
+# "Hon" is a Cantonese given name far more often than the Honourable; only the dotted form is a title
+_DOT_REQUIRED_TITLE_KEYS = frozenset({"hon"})
+
+
+def _bare_title_name(key: str, surface: str) -> bool:
+    return key in _DOT_REQUIRED_TITLE_KEYS and not surface.endswith(".")
+
+
 _TITLE_KEYS = frozenset(
     {
         "capt",
@@ -1304,7 +1312,12 @@ class PersonNameNormalizationService:
             # as the honorific "Ms": all-caps = initials, Title-case "Ms"/"Ms." = honorific.
             title_is_really_initials = ambiguous_name_token and token.text.isupper()
             if (
-                (key in _TITLE_KEYS and not multi_initial and not title_is_really_initials)
+                (
+                    key in _TITLE_KEYS
+                    and not multi_initial
+                    and not title_is_really_initials
+                    and not _bare_title_name(key, token.text)
+                )
                 or (stripped_title and key in _TITLE_QUALIFIER_KEYS)
                 or prefixed_academic_title
             ):

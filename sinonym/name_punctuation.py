@@ -222,6 +222,7 @@ _SPACING_TO_COMBINING = {
     "\u02dd": "\u030b", "\u02d9": "\u0307",
 }
 _APOSTROPHE_LIKE_MARKS = frozenset({"\u00b4", "\u0060"})
+_COMBINING_TO_SPACING = {combining: spacing for spacing, combining in _SPACING_TO_COMBINING.items()}
 _ANY_DETACHED_MARK_RE = re.compile("[" + "".join(_SPACING_TO_COMBINING) + "\\u0300-\\u036f]")
 _TOKEN_MARK_RE = re.compile(
     "(?P<prev>[^\\W\\d_])?(?P<mark>[" + "".join(_SPACING_TO_COMBINING) + "\\u0300-\\u036f])(?P<next>[^\\W\\d_])?",
@@ -246,6 +247,10 @@ def _reattach_in_token(token: str) -> str:
         combining = _SPACING_TO_COMBINING.get(mark, mark)
         if mark in _APOSTROPHE_LIKE_MARKS and prev and nxt:
             return match.group(0)  # mid-word ´ and ` are apostrophe variants (``Cui´e``), not accents
+        if mark == combining and prev:
+            # a combining mark right after a letter is already attached (Turkish ``i̇`` has no
+            # precomposed form); only spacing marks and marks left after a space are detached
+            return match.group(0)
         vowel_next = nxt.lower() in "aeiouy" and prev.lower() not in "aeiouy"
         order = ((nxt, True), (prev, False)) if vowel_next or not prev else ((prev, False), (nxt, True))
         for base, is_next in order:
@@ -282,7 +287,9 @@ def attach_detached_diacritics(text: str) -> str:
     """
     if not _ANY_DETACHED_MARK_RE.search(text):
         return text
-    text = re.sub("(?<=\\s)([\\u0300-\\u036f])(?=[^\\W\\d_])", lambda m: m.group(1), text)
-    text = re.sub("(?<=[^\\W\\d_]) ([\\u0300-\\u036f])", lambda m: m.group(1), text)
+    # a combining mark after a space is the NFKC remnant of a spacing mark: restore the spacing form so the
+    # token repair may move it to the letter it composes with (an attached combining mark is never moved)
+    text = re.sub("(?<=[^\\W\\d_]) ([\\u0300-\\u036f])", lambda m: _COMBINING_TO_SPACING.get(m.group(1), m.group(1)), text)
+    text = re.sub("(?<=\\s)([\\u0300-\\u036f])(?=[^\\W\\d_])", lambda m: _COMBINING_TO_SPACING.get(m.group(1), m.group(1)), text)
     parts = re.split(r"(\s+)", text)
     return "".join(part if part.isspace() or not part else _reattach_in_token(part) for part in parts)
