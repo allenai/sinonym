@@ -34,7 +34,7 @@ from sinonym.coretypes.routing_resolution import (
     resolution_decision_spec,
 )
 from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
-from sinonym.pipeline.name_order_routing import pp_abstain_parsed
+from sinonym.pipeline.name_order_routing import given_chain_cap_parsed, pp_abstain_parsed
 from sinonym.services.compound_surnames import listed_compound_suffix
 from sinonym.services.east_asian_name_order import JAPANESE_ML_THRESHOLD
 from sinonym.services.non_person import (
@@ -2174,7 +2174,12 @@ class _Resolver:
         for rule, reason in assignment_rules:
             selected = rule()
             if selected is not None:
-                return self._source_assignment_resolution(source=source, selected=selected, reason=reason)
+                try:
+                    return self._source_assignment_resolution(source=source, selected=selected, reason=reason)
+                except RuntimeError:
+                    # a pattern matched a shape the normalizer rejects ("E. / A. / and Solomon"): let the later
+                    # stages read the row instead of failing the whole paper
+                    continue
         return None
 
     def _reviewed_cleanup_resolution(
@@ -2334,20 +2339,6 @@ class _Resolver:
                 ResolutionReason.MIXED_SCRIPT_SAFETY_SUPPRESSION,
             )
         if scalar_canonical is not None and scalar_canonical.normalized.surname:
-            compound = self._corpus_compound_candidate(source, scalar_canonical.normalized)
-            if compound is not None:
-                return self._source_assignment_resolution(
-                    source=source,
-                    selected=compound,
-                    reason=ResolutionReason.CORPUS_COMPOUND_SURNAME_ASSIGNMENT,
-                )
-            surname_first = self._token_order_prior_candidate(source, scalar_canonical.normalized)
-            if surname_first is not None:
-                return self._source_assignment_resolution(
-                    source=source,
-                    selected=surname_first,
-                    reason=ResolutionReason.CORPUS_TOKEN_ORDER_PRIOR_ASSIGNMENT,
-                )
             structured_initial_tail = self._structured_surname_initial_tail_candidate(
                 source,
                 scalar_canonical.normalized,
@@ -2371,6 +2362,20 @@ class _Resolver:
                     source=source,
                     selected=source_surname_candidate,
                     reason=ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT,
+                )
+            compound = self._corpus_compound_candidate(source, scalar_canonical.normalized)
+            if compound is not None:
+                return self._source_assignment_resolution(
+                    source=source,
+                    selected=compound,
+                    reason=ResolutionReason.CORPUS_COMPOUND_SURNAME_ASSIGNMENT,
+                )
+            surname_first = self._token_order_prior_candidate(source, scalar_canonical.normalized)
+            if surname_first is not None:
+                return self._source_assignment_resolution(
+                    source=source,
+                    selected=surname_first,
+                    reason=ResolutionReason.CORPUS_TOKEN_ORDER_PRIOR_ASSIGNMENT,
                 )
             return self._materialize_selected_candidate(
                 source=source,
@@ -2488,6 +2493,9 @@ class _Resolver:
         parsed = chosen.parsed if chosen is not None and chosen.success else None
         if decision == "abstain" and (parsed is None or not parsed.surname):
             batch_reason = ResolutionReason.BATCH_ABSTAIN_MATERIALIZATION_FAILED
+        capped = given_chain_cap_parsed(parsed, raw_name, source) if decision in ("pp", "vys") else None
+        if capped is not None:
+            parsed, batch_reason = capped, ResolutionReason.GIVEN_CHAIN_CAP_INPUT
         prior_parsed = _corpus_order_prior_parsed(parsed) if decision != "not_person" else None
         if prior_parsed is not None:
             parsed, batch_reason = prior_parsed, ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT
@@ -2518,6 +2526,9 @@ class _Resolver:
         if decision == "pp":
             parsed = result.parsed if result.success else None
             batch_reason = ResolutionReason.PP_SELECTED
+            capped = given_chain_cap_parsed(parsed, raw_name, source)
+            if capped is not None:
+                parsed, batch_reason = capped, ResolutionReason.GIVEN_CHAIN_CAP_INPUT
         elif decision == "abstain":
             if _structural_roman_hyphen_key(source.last_name) in REVIEWED_TRAILING_HYPHENATED_COMPOUND_SURNAMES:
                 parsed = None
@@ -2533,7 +2544,7 @@ class _Resolver:
                 parsed = None
                 batch_reason = ResolutionReason.PP_ONLY_ABSTAIN_INPUT
             else:
-                parsed = pp_abstain_parsed(result, row, raw_name)
+                parsed = pp_abstain_parsed(result, row, raw_name, source)
                 batch_reason = ResolutionReason.PP_ONLY_ABSTAIN_INPUT
                 if parsed is None or not parsed.surname:
                     batch_reason = ResolutionReason.BATCH_ABSTAIN_MATERIALIZATION_FAILED

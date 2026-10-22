@@ -168,8 +168,9 @@ ABSTAIN_ECHO_CASES = [
     (("Tzung", "K.", "Hsiai"), ("Tzung", "K.", "Hsiai")),
     (("Son", "A.", "Hoang"), ("Son", "A.", "Hoang")),
     # two authored given words pinyinized into one four-syllable chain
-    (("Xiaojun", "Lance", "Lian"), ("Xiaojun Lance", "", "Lian")),
-    (("Leni", "Hiu Tong", "Cheung"), ("Leni Hiu Tong", "", "Cheung")),
+    # a structured source keeps its own fields when the echo fires (middle stays middle)
+    (("Xiaojun", "Lance", "Lian"), ("Xiaojun", "Lance", "Lian")),
+    (("Leni", "Hiu Tong", "Cheung"), ("Leni", "Hiu Tong", "Cheung")),
     # unchanged: resyllabifying one authored word, joining two short given words, joined initials
     ((None, None, "JihengLi"), ("Ji-Heng", "", "Li")),
     (("Weijun", None, "Li"), ("Wei-Jun", "", "Li")),
@@ -310,6 +311,21 @@ TOKEN_ORDER_CASES = [
     (("Prakash", None, "Sumit"), ("Prakash", "", "Sumit")),
     (("VV", None, "Robin"), ("VV", "", "Robin")),
 ]
+
+
+CHAIN_CAP_CASES = [
+    # a selected Chinese-path parse that chains more than one given name's worth of syllables keeps the authored words
+    (("Zhen-Yin", "Annie", "Chen"), ("Zhen-Yin", "Annie", "Chen")),
+    (("Ting-Wei", "Ernie", "Liao"), ("Ting-Wei", "Ernie", "Liao")),
+    (("Leni", "Hiu Tong", "Cheung"), ("Leni", "Hiu Tong", "Cheung")),
+    # two-syllable given names still hyphenate as before
+    (("Weijun", None, "Zhang"), ("Wei-Jun", "", "Zhang")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), CHAIN_CAP_CASES)
+def test_given_chain_cap_keeps_authored_words(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
 
 
 @pytest.mark.parametrize(("source", "expected"), TOKEN_ORDER_CASES)

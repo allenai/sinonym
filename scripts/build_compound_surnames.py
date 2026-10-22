@@ -23,6 +23,12 @@ gate. Letting any plain surname word be the tail was tried and rejected (690k ar
 split, 2.6:1): a rare pair's other sources usually abbreviate the head (``Lara / G. / Merino``), so a pair that
 the corpus itself rarely writes whole is not worth joining. ``rivera maza`` therefore stays a known limit.
 
+Tier ``corpus`` admits every 2-3 word tail the corpus itself writes whole in ``last`` at least CORPUS_MIN_MENTIONS *
+CORPUS_MIN_WHOLE_SHARE times (>= CORPUS_MIN_MENTIONS mentions, whole share >= CORPUS_MIN_WHOLE_SHARE, >=
+CORPUS_MIN_GIVEN_NAMES given names), with the same head-word and East Asian gates. On the 690k index 60% of the
+"surname word dropped" splits were really boundary placements (the word in ``middle`` on one mention, in ``last`` on
+another) whose surface was in the corpus but below the listed tier's thresholds.
+
 The asset carries only the surface, its tier and rounded counts. Rebuild with
   uv run python scripts/build_compound_surnames.py --partition ... --tokens ... --orcid-gate ... \\
       --output sinonym/data/compound_surnames.csv.gz
@@ -45,6 +51,9 @@ MIN_PEOPLE = 3
 MIN_PEOPLE_WHOLE = 2
 VOCAB_MIN_SURFACES = 5
 VOCAB_MIN_MENTIONS = 5
+CORPUS_MIN_MENTIONS = 5
+CORPUS_MIN_WHOLE_SHARE = 0.2
+CORPUS_MIN_GIVEN_NAMES = 2
 SUFFIX_TAILS = ("junior", "jr", "sr", "senior", "filho", "neto", "sobrinho", "ii", "iii", "iv")
 # family particles are allowed as head words even though "da" / "van" / "de" also occur as given names elsewhere
 PARTICLES = (
@@ -126,6 +135,21 @@ def main() -> None:
           AND heads.h NOT IN ({heads}) AND tails.t NOT IN ({vn_tails})
           AND NOT EXISTS (SELECT 1 FROM unnest(string_split(p.tail, ' ')) AS u(w) WHERE length(u.w) < 2)
         ORDER BY p.n_total DESC""").fetchall()  # noqa: S608
+    corpus = con.execute(f"""
+        SELECT p.tail, p.n_total, p.share_whole, p.firsts
+        FROM '{a.partition}' p
+        JOIN '{a.tokens}' th ON th.t = string_split(p.tail, ' ')[1]
+        WHERE p.words BETWEEN 2 AND 3 AND p.n_total >= {CORPUS_MIN_MENTIONS} AND p.share_whole >= {CORPUS_MIN_WHOLE_SHARE}
+          AND p.firsts >= {CORPUS_MIN_GIVEN_NAMES}
+          AND p.tail NOT IN (SELECT tail FROM listed)
+          AND (string_split(p.tail, ' ')[1] IN ({particles}) OR th.given_share <= {MAX_GIVEN_SHARE})
+          AND string_split(p.tail, ' ')[1] NOT IN ({heads}) AND string_split(p.tail, ' ')[-1] NOT IN ({vn_tails})
+          AND string_split(p.tail, ' ')[1] NOT IN ({cn_heads})
+          AND NOT {vietnamese}
+          AND regexp_extract(p.tail, '([^ ]+)$', 1) NOT IN ({sfx})
+          AND NOT EXISTS (SELECT 1 FROM unnest(string_split(p.tail, ' ')) AS u(w) WHERE length(u.w) < 2)
+        ORDER BY p.n_total DESC""").fetchall()  # noqa: S608
+    vocab = [v for v in vocab if v[0] not in {c[0] for c in corpus}]
     rows = con.execute("SELECT * FROM listed").fetchall()
     out = Path(a.output)
     with gzip.open(out, "wt", newline="") as fh:
@@ -135,8 +159,10 @@ def main() -> None:
             w.writerow([tail, "listed", int(n), round(share, 2), int(firsts), int(people), int(people_whole), int(both)])
         for tail, n, share, firsts in vocab:
             w.writerow([tail, "vocabulary", int(n), round(share, 2), int(firsts), "", "", ""])
+        for tail, n, share, firsts in corpus:
+            w.writerow([tail, "corpus", int(n), round(share, 2), int(firsts), "", "", ""])
     digest = hashlib.sha256(out.read_bytes()).hexdigest()[:16]
-    print(f"{len(rows):,} listed + {len(vocab):,} vocabulary surfaces -> {out} (sha256 {digest})")
+    print(f"{len(rows):,} listed + {len(vocab):,} vocabulary + {len(corpus):,} corpus surfaces -> {out} (sha256 {digest})")
     print("top by people split today:", [r[0] for r in sorted(rows, key=lambda r: -r[6])[:12]])
 
 
