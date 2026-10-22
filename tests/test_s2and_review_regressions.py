@@ -162,6 +162,8 @@ def test_vietnamese_family_name_is_recognized_past_a_middle_initial(predictor, s
 ABSTAIN_ECHO_CASES = [
     # footnote digits on an authored word never reach the echoed surname
     (("Song", None, "Chen1"), ("Song", "", "Chen")),
+    # a parenthetical nickname after the surname never becomes the surname
+    (("Fei", None, "Gao (Phoebe)"), ("Fei", "", "Gao")),
     # the abstain path promised "trailing authored word is the surname" but rebuilt the name from the parser's
     # re-split syllables (issue #35): a fragment of an authored word became the surname
     ((None, None, "Ya. G. Sinai"), ("Ya.", "G.", "Sinai")),

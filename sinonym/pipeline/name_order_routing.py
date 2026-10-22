@@ -811,11 +811,12 @@ def _fold_word(text: str) -> str:
 
 
 _FOOTNOTE_TAIL_RE = re.compile(r"[\d*†‡§¶]+$")
+_PARENTHETICAL_RE = re.compile(r"\([^()]*\)")
 
 
 def _authored_words(raw_name: str) -> list[str]:
-    """Authored words with footnote marks (``Chen1``, ``Li*``) removed, so an echo never carries them."""
-    words = (_FOOTNOTE_TAIL_RE.sub("", word) for word in raw_name.split())
+    """Authored words with footnote marks (``Chen1``, ``Li*``) and parentheticals (``Gao (Phoebe)``) removed."""
+    words = (_FOOTNOTE_TAIL_RE.sub("", word) for word in _PARENTHETICAL_RE.sub(" ", raw_name).split())
     return [word for word in words if _fold_word(word)]
 
 
@@ -861,9 +862,9 @@ def _echoes_authored_words(parsed: ParsedName, raw_name: str) -> bool:
 
 def structured_source_parsed(source) -> ParsedName | None:
     """The source's own first / middle / last fields as a parse, when it wrote all of them in a Latin-like script."""
-    first = (getattr(source, "first_name", None) or "").strip()
-    last = (getattr(source, "last_name", None) or "").strip()
-    middle = " ".join((getattr(source, "middle_names", None) or "").split())
+    first = " ".join(_PARENTHETICAL_RE.sub(" ", getattr(source, "first_name", None) or "").split())
+    last = " ".join(_PARENTHETICAL_RE.sub(" ", getattr(source, "last_name", None) or "").split())
+    middle = " ".join(_PARENTHETICAL_RE.sub(" ", getattr(source, "middle_names", None) or "").split())
     if not first or not last or any(ord(ch) > _LAST_LATIN_LIKE_CODEPOINT for ch in first + middle + last):
         return None
     return ParsedName(
