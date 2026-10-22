@@ -86,6 +86,7 @@ class ResolutionReason(str, Enum):
     PP_VYS_ABSTAIN_PP_INPUT = "pp_vys_abstain_pp_input"
     PP_VYS_ABSTAIN_VYS_INPUT = "pp_vys_abstain_vys_input"
     PP_ONLY_ABSTAIN_INPUT = "pp_only_abstain_input"
+    GIVEN_CHAIN_CAP_INPUT = "given_chain_cap_input"
     PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME = "pp_only_abstain_reviewed_compound_surname"
     BATCH_ABSTAIN_MATERIALIZATION_FAILED = "batch_abstain_materialization_failed"
 
@@ -144,6 +145,7 @@ _RESOLUTION_REASON_GROUPS = {
     (ResolutionProvenance.PP, ResolutionAction.PRESERVE_INPUT): (
         ResolutionReason.PP_VYS_ABSTAIN_PP_INPUT,
         ResolutionReason.PP_ONLY_ABSTAIN_INPUT,
+        ResolutionReason.GIVEN_CHAIN_CAP_INPUT,
     ),
     (ResolutionProvenance.PP, ResolutionAction.ASSIGN): (
         ResolutionReason.PP_SELECTED,

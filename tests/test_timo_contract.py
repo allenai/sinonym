@@ -266,6 +266,7 @@ def test_every_resolution_reason_has_one_complete_decision_spec() -> None:
         (ResolutionProvenance.PP, ResolutionAction.PRESERVE_INPUT): {
             ResolutionReason.PP_VYS_ABSTAIN_PP_INPUT,
             ResolutionReason.PP_ONLY_ABSTAIN_INPUT,
+            ResolutionReason.GIVEN_CHAIN_CAP_INPUT,
         },
         (ResolutionProvenance.PP, ResolutionAction.ASSIGN): {
             ResolutionReason.PP_SELECTED,

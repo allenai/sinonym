@@ -859,7 +859,38 @@ def _echoes_authored_words(parsed: ParsedName, raw_name: str) -> bool:
     return len(parsed.given_tokens) <= MAX_INPUT_ORDER_GIVEN_TOKENS
 
 
-def input_order_parsed(result: ParseResult, raw_name: str | None = None) -> ParsedName | None:
+def structured_source_parsed(source) -> ParsedName | None:
+    """The source's own first / middle / last fields as a parse, when it wrote all of them in a Latin-like script."""
+    first = (getattr(source, "first_name", None) or "").strip()
+    last = (getattr(source, "last_name", None) or "").strip()
+    middle = " ".join((getattr(source, "middle_names", None) or "").split())
+    if not first or not last or any(ord(ch) > _LAST_LATIN_LIKE_CODEPOINT for ch in first + middle + last):
+        return None
+    return ParsedName(
+        surname=last,
+        given_name=first,
+        surname_tokens=last.split(),
+        given_tokens=first.split(),
+        middle_name=middle,
+        middle_tokens=middle.split(),
+        order=["given", "middle", "surname"] if middle else ["given", "surname"],
+    )
+
+
+def given_chain_cap_parsed(parsed: ParsedName | None, raw_name: str | None, source=None) -> ParsedName | None:
+    """Keep the authored words when a selected Chinese-path parse chained more syllables than one given name holds.
+
+    A Chinese given name has at most two syllables; ``Zhen-Yin / Annie / Chen`` read as ``Zhen-Yin-An-Nie`` has
+    syllabified a Western given name, and ``Leni / Hiu Tong / Cheung`` as ``Le-Ni-Hiu-Tong`` has chained a middle
+    name. Beyond MAX_INPUT_ORDER_GIVEN_TOKENS syllables the structured source fields are kept as written, or the
+    authored words echoed when the source was one string. Order is not judged here (the order prior still runs).
+    """
+    if parsed is None or len(parsed.given_tokens) <= MAX_INPUT_ORDER_GIVEN_TOKENS:
+        return None
+    return structured_source_parsed(source) or (_input_order_echo(raw_name) if raw_name else None)
+
+
+def input_order_parsed(result: ParseResult, raw_name: str | None = None, source=None) -> ParsedName | None:
     """Materialize the preprocessed input-order (as-typed) parse for an abstain route.
 
     The input-order reading interprets the preprocessed tokens as already being in
@@ -902,11 +933,11 @@ def input_order_parsed(result: ParseResult, raw_name: str | None = None) -> Pars
             else None
         )
     if parsed is not None and raw_name and not _echoes_authored_words(parsed, raw_name):
-        return _input_order_echo(raw_name)
+        return structured_source_parsed(source) or _input_order_echo(raw_name)
     return parsed
 
 
-def pp_abstain_parsed(result: ParseResult, route_row: Row, raw_name: str | None = None) -> ParsedName | None:
+def pp_abstain_parsed(result: ParseResult, route_row: Row, raw_name: str | None = None, source=None) -> ParsedName | None:
     """Return the final parsed person components for a PP-only abstain row.
 
     Latin-only abstain keeps the as-typed given-first reading. Spaced Han rows
@@ -920,7 +951,7 @@ def pp_abstain_parsed(result: ParseResult, route_row: Row, raw_name: str | None 
     """
     if _pp_abstain_uses_pp_parse_for_abstain(route_row):
         return result.parsed if result.success else None
-    return input_order_parsed(result, raw_name)
+    return input_order_parsed(result, raw_name, source)
 
 
 def _result_text(result: ParseResult) -> str:
