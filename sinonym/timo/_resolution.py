@@ -2384,7 +2384,7 @@ class _Resolver:
                 parsed = None
                 batch_reason = ResolutionReason.PP_ONLY_ABSTAIN_INPUT
             else:
-                parsed = pp_abstain_parsed(result, row)
+                parsed = pp_abstain_parsed(result, row, raw_name)
                 batch_reason = ResolutionReason.PP_ONLY_ABSTAIN_INPUT
                 if parsed is None or not parsed.surname:
                     batch_reason = ResolutionReason.BATCH_ABSTAIN_MATERIALIZATION_FAILED

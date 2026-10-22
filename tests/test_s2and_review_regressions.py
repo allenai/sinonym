@@ -157,3 +157,45 @@ VIETNAMESE_INITIALLED_CASES = [
 @pytest.mark.parametrize(("source", "expected"), VIETNAMESE_INITIALLED_CASES)
 def test_vietnamese_family_name_is_recognized_past_a_middle_initial(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+ABSTAIN_ECHO_CASES = [
+    # the abstain path promised "trailing authored word is the surname" but rebuilt the name from the parser's
+    # re-split syllables (issue #35): a fragment of an authored word became the surname
+    ((None, None, "Ya. G. Sinai"), ("Ya.", "G.", "Sinai")),
+    (("Tzung", "K.", "Hsiai"), ("Tzung", "K.", "Hsiai")),
+    (("Son", "A.", "Hoang"), ("Son", "A.", "Hoang")),
+    # two authored given words pinyinized into one four-syllable chain
+    (("Xiaojun", "Lance", "Lian"), ("Xiaojun Lance", "", "Lian")),
+    (("Leni", "Hiu Tong", "Cheung"), ("Leni Hiu Tong", "", "Cheung")),
+    # unchanged: resyllabifying one authored word, joining two short given words, joined initials
+    ((None, None, "JihengLi"), ("Ji-Heng", "", "Li")),
+    (("Weijun", None, "Li"), ("Wei-Jun", "", "Li")),
+    (("Hiu Tong", None, "Cheung"), ("Hiu-Tong", "", "Cheung")),
+    (("J.", "J.", "Zhu"), ("J.-J.", "", "Zhu")),
+    (("Zhao-Rui", None, "Feng"), ("Zhao-Rui", "", "Feng")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), ABSTAIN_ECHO_CASES)
+def test_abstain_reading_keeps_authored_word_boundaries(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+CYRILLIC_CASES = [
+    # Ukrainian and Kazakh letters outside the Russian block leaked past the Roman filter and the residue was
+    # parsed as pinyin ("Ok Pa", "K. Ah"); Russian already failed the Chinese parse and was preserved
+    (("Віра", None, "Поліщук"), ("Віра", "", "Поліщук")),
+    (("Мілан", None, "Бєлік"), ("Мілан", "", "Бєлік")),
+    (("Світлана", None, "Гладьо"), ("Світлана", "", "Гладьо")),
+    (("Иван", None, "Петров"), ("Иван", "", "Петров")),
+    (("Γιώργος", None, "Παπαδόπουλος"), ("Γιώργος", "", "Παπαδόπουλος")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), CYRILLIC_CASES)
+def test_cyrillic_and_greek_names_never_parse_as_chinese(predictor, source, expected):
+    instance = Instance(pp_authors=[SourceAuthorFields(first_name=source[0], middle_names=source[1], last_name=source[2])])
+    author = predictor.predict_batch([instance])[0].authors[0]
+    assert (author.first_name, author.middle_names, author.last_name) == expected
+    assert author.chinese_detected is False

@@ -801,7 +801,60 @@ def _input_order_given_tokens(display: list[tuple[str, str]], original: ParsedNa
     return given_tokens
 
 
-def input_order_parsed(result: ParseResult) -> ParsedName | None:
+_AUTHORED_INITIAL_RE = re.compile(r"^(?:[A-Z]\.?|[A-Z][a-z]\.|(?:[A-Z]\.)+[A-Z]?\.?)$")
+MAX_INPUT_ORDER_GIVEN_TOKENS = 3
+_LAST_LATIN_LIKE_CODEPOINT = 0x2E7F  # Latin, Greek, Cyrillic and their extensions; CJK and Hangul lie above
+
+
+def _fold_word(text: str) -> str:
+    return "".join(ch for ch in unicodedata.normalize("NFKD", text).casefold() if ch.isalnum())
+
+
+def _authored_words(raw_name: str) -> list[str]:
+    return [word for word in raw_name.split() if _fold_word(word)]
+
+
+def _input_order_echo(raw_name: str) -> ParsedName | None:
+    """Input-order reading built from the authored words alone: last word surname, initials middle, rest given.
+
+    Used when the parser's resegmentation does not line up with the authored word boundaries, so an abstain
+    (which only promises "trailing word is the surname") never emits a fragment of an authored word as the
+    surname or chains several authored words into one hyphenated given name.
+    """
+    words = _authored_words(raw_name)
+    if len(words) < MIN_INPUT_ORDER_DISPLAY_TOKENS:
+        return None
+    surname = words[-1].strip(".,;")
+    middle_tokens = [word for word in words[:-1] if _AUTHORED_INITIAL_RE.fullmatch(word)]
+    given_tokens = [word for word in words[:-1] if not _AUTHORED_INITIAL_RE.fullmatch(word)]
+    if not given_tokens and middle_tokens:
+        # all-initial given names ("Ya. G. Sinai"): the leading initial is the given name, as a source would write it
+        given_tokens, middle_tokens = [words[0]], list(words[1:-1])
+    if not given_tokens or not surname:
+        return None
+    return ParsedName(
+        surname=surname,
+        given_name=" ".join(given_tokens),
+        surname_tokens=[surname],
+        given_tokens=given_tokens,
+        middle_name=" ".join(middle_tokens),
+        middle_tokens=middle_tokens,
+        order=["given", "middle", "surname"] if middle_tokens else ["given", "surname"],
+    )
+
+
+def _echoes_authored_words(parsed: ParsedName, raw_name: str) -> bool:
+    """Return whether an input-order parse keeps the authored surname word whole and a bounded given chain."""
+    words = _authored_words(raw_name)
+    if len(words) < MIN_INPUT_ORDER_DISPLAY_TOKENS or any(ord(ch) > _LAST_LATIN_LIKE_CODEPOINT for word in words for ch in word):
+        # a single glued word ("JihengLi") has no authored boundary to keep; the parser's split is the only reading
+        return True
+    if _fold_word(parsed.surname) != _fold_word(words[-1]):
+        return False
+    return len(parsed.given_tokens) <= MAX_INPUT_ORDER_GIVEN_TOKENS
+
+
+def input_order_parsed(result: ParseResult, raw_name: str | None = None) -> ParsedName | None:
     """Materialize the preprocessed input-order (as-typed) parse for an abstain route.
 
     The input-order reading interprets the preprocessed tokens as already being in
@@ -843,10 +896,12 @@ def input_order_parsed(result: ParseResult) -> ParsedName | None:
             if given_tokens
             else None
         )
+    if parsed is not None and raw_name and not _echoes_authored_words(parsed, raw_name):
+        return _input_order_echo(raw_name)
     return parsed
 
 
-def pp_abstain_parsed(result: ParseResult, route_row: Row) -> ParsedName | None:
+def pp_abstain_parsed(result: ParseResult, route_row: Row, raw_name: str | None = None) -> ParsedName | None:
     """Return the final parsed person components for a PP-only abstain row.
 
     Latin-only abstain keeps the as-typed given-first reading. Spaced Han rows
@@ -860,7 +915,7 @@ def pp_abstain_parsed(result: ParseResult, route_row: Row) -> ParsedName | None:
     """
     if _pp_abstain_uses_pp_parse_for_abstain(route_row):
         return result.parsed if result.success else None
-    return input_order_parsed(result)
+    return input_order_parsed(result, raw_name)
 
 
 def _result_text(result: ParseResult) -> str:
