@@ -368,6 +368,13 @@ CORPUS_SCALE_CASES = [
     (("Jennifer,", "Alyson", "Carter"), ("Jennifer", "Alyson", "Carter")),
     (("Jayne,", "L", "Astbury"), ("Jayne", "L.", "Astbury")),
     (("Thomas,", "W.", "Crowther"), ("Thomas", "W.", "Crowther")),
+    # construct prefixes open a family name even though each is a frequent given name (registry: 73-100% registered whole)
+    (("Mariani", "Abdul", "Hamid"), ("Mariani", "", "Abdul Hamid")),
+    (("Nadia", "Md", "Nor"), ("Nadia", "", "Md Nor")),
+    (("Adiratna", "Mat", "Ripen"), ("Adiratna", "", "Mat Ripen")),
+    (("Lahsen", "Ait", "Brahim"), ("Lahsen", "", "Ait Brahim")),
+    # `ul` is not one: half the people split on it registered the tail alone
+    (("Ehtesham", "Ul", "Haq"), ("Ehtesham", "Ul", "Haq")),
     # Hyun is a surname only as the last token; leading it is a given syllable
     (("Hyun", "Ho", "Sung"), ("Hyun", "Ho", "Sung")),
     (("Hyun", "Sik", "Jun"), ("Hyun", "Sik", "Jun")),

@@ -24,7 +24,8 @@ split, 2.6:1): a rare pair's other sources usually abbreviate the head (``Lara /
 the corpus itself rarely writes whole is not worth joining. ``rivera maza`` therefore stays a known limit.
 
 Tier ``corpus`` admits every 2-3 word tail the corpus itself writes whole in ``last`` at least CORPUS_MIN_MENTIONS *
-CORPUS_MIN_WHOLE_SHARE times (>= CORPUS_MIN_MENTIONS mentions, whole share >= CORPUS_MIN_WHOLE_SHARE, >=
+CORPUS_MIN_WHOLE_SHARE times (0.15: on every ORCID in the corpus the 0.15-0.2 band reunites 3 people per 1 it splits,
+and 60% of the people it affects registered the two-word family name with ORCID; the 0.1-0.15 band is 1.9:1 and 52%) (>= CORPUS_MIN_MENTIONS mentions, whole share >= CORPUS_MIN_WHOLE_SHARE, >=
 CORPUS_MIN_GIVEN_NAMES given names), with the same head-word and East Asian gates. On the 690k index 60% of the
 "surname word dropped" splits were really boundary placements (the word in ``middle`` on one mention, in ``last`` on
 another) whose surface was in the corpus but below the listed tier's thresholds.
@@ -52,14 +53,21 @@ MIN_PEOPLE_WHOLE = 2
 VOCAB_MIN_SURFACES = 5
 VOCAB_MIN_MENTIONS = 5
 CORPUS_MIN_MENTIONS = 5
-CORPUS_MIN_WHOLE_SHARE = 0.2
+CORPUS_MIN_WHOLE_SHARE = 0.15
 CORPUS_MIN_GIVEN_NAMES = 2
 SUFFIX_TAILS = ("junior", "jr", "sr", "senior", "filho", "neto", "sobrinho", "ii", "iii", "iv")
 # family particles are allowed as head words even though "da" / "van" / "de" also occur as given names elsewhere
 PARTICLES = (
     "de", "del", "della", "delle", "dello", "degli", "dei", "di", "da", "das", "dos", "do", "du", "des", "van", "von",
     "der", "den", "ter", "ten", "te", "la", "le", "les", "lo", "el", "al", "bin", "ibn", "abu", "mc", "mac", "o", "st",
-    "saint", "san", "santa", "sao", "fitz", "y", "e", "i",
+    "saint", "san", "santa", "sao", "fitz", "y", "e", "i", "dalla", "vander", "vanden",
+)
+# Construct / patronymic prefixes that open a family name (Abdul Rahman, Mohd Noor, Md Nor, Ait Brahim, Roy
+# Chowdhury). Each is also a frequent given name, which the head-word gate would veto; like particles they are
+# exempt. Chosen on the ORCID registry: of the split people carrying these surfaces, 73-100% registered the
+# two-word family name (`ul`, `do`, `ali`, `ahmad`, `maria` did not and stay out).
+CONSTRUCT_PREFIXES = (
+    "abdul", "abd", "abdel", "abou", "ait", "md", "ab", "mat", "bani", "mohd", "mohamed", "mohamad", "mohammad", "roy",
 )
 # Chinese compound surnames (Au Yeung, Ou Yang, Sze To, ...) stay with sinonym's curated list
 CHINESE_COMPOUND_HEADS = (
@@ -91,7 +99,7 @@ def main() -> None:
     con = duckdb.connect()
     sfx = ",".join(f"'{t}'" for t in SUFFIX_TAILS)
     heads = ",".join(f"'{t}'" for t in EAST_ASIAN_HEADS)
-    particles = ",".join(f"'{t}'" for t in PARTICLES)
+    particles = ",".join(f"'{t}'" for t in (*PARTICLES, *CONSTRUCT_PREFIXES))
     cn_heads = ",".join(f"'{t}'" for t in CHINESE_COMPOUND_HEADS)
     vn_middle = ",".join(f"'{t}'" for t in VIETNAMESE_MIDDLE)
     vn_tails = ",".join(f"'{t}'" for t in VIETNAMESE_TAILS)
