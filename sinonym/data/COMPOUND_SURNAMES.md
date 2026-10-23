@@ -11,7 +11,7 @@ parsed surname (`Silva dos Santos`) back to a listed suffix (`dos Santos`), neve
 never undoes a reordering the parser made (`Luong / Van / Viet` → `Viet Van Luong` stays). The first arm that
 allowed shrinking broke 101 ORCID people against 325 fixed on the 690k index; the no-shrink form is what ships.
 
-Two tiers, column `tier`:
+Three tiers, column `tier`:
 
 - `listed`: surfaces the corpus writes whole often enough *and* that distinct ORCID people carry in both shapes.
 - `vocabulary`: the Hispanic / Lusophone double-surname convention generalized from the listed tier. A 2-word
@@ -25,6 +25,19 @@ Two tiers, column `tier`:
   united but 105 split (2.6:1): when a pair is rare, the person's other sources usually abbreviate its head to an
   initial (`Lara / G. / Merino` vs `Lara / Garcia / Merino`), so joining splits them. A pair the corpus itself
   rarely writes whole is not worth joining; `Silvia / Rivera / Maza` stays a known limit of this approach.
+- `corpus`: every 2–3-word tail the corpus itself writes whole in `last` at least 5 × 0.15 times (≥ 5 mentions,
+  `whole_share` ≥ 0.15, ≥ 2 given names), with the listed tier's head-word, East Asian, Vietnamese and suffix gates.
+  On the 690k index 60 % of the "surname word dropped" splits were boundary placements whose surface was in the
+  corpus but under the listed thresholds; this tier is the largest single gain (690k: +1,354 united / 120 split at
+  floor 0.2; every ORCID: 16,053 / 1,587). The floor went from 0.2 to 0.15 on 2026-10-23: at corpus scale the
+  0.15–0.2 band reunites 3 ORCID people per 1 it splits (2,303 fewer split people) and 60 % of the people it touches
+  registered the two-word family name with ORCID; the 0.1–0.15 band (1.9:1, 52 %) stays out.
+
+Construct prefixes (`abdul`, `abd`, `abdel`, `abou`, `ait`, `md`, `ab`, `mat`, `bani`, `mohd`, `mohamed`, `mohamad`,
+`mohammad`, `roy`) are exempt from the head-word given-name gate like particles: `Abdul Rahman`, `Mohd Noor`,
+`Md Nor`, `Ait Brahim`, `Roy Chowdhury` open a family name even though each word is also a frequent given name.
+Chosen on the ORCID registry: of the 23k split people carrying such surfaces, 73–100 % per prefix registered the
+two-word family name; `ul`, `do`, `ali`, `ahmad`, `maria` (24–68 %) stay out.
 
 Columns: `surface` (folded: lower-case, accents stripped, single spaces), `tier`, `mentions`, `whole_share`
 (share of mentions that wrote the surface whole in `last`), `given_names` (distinct given names seen with it),
@@ -64,10 +77,14 @@ All steps are read-only and local except the first dump. Scripts live in
    keeps the `listed` surfaces where both signals agree (≥ 3 people, ≥ 2 of them whole), derives the
    `vocabulary` head and tail words from the listed 2-word pairs (≥ 5 pairs each) and adds every unlisted 2-word
    pair of the partition statistics built from them (≥ 5 mentions, same head-word given-name gate), then prints
-   the sha256. 2026-10-22 build: 4,564 listed + 2,534 vocabulary surfaces (72 KB).
-7. **Acceptance.** Route the 690k index with the new build (`run_690k_*.sh`), score with `conc_s2andfix.py`
+   the sha256, and adds the `corpus` tier. 2026-10-23 October build (floor 0.15, construct prefixes): 7,240 listed
+   + 1,719 vocabulary + 167,475 corpus surfaces.
+7. **Acceptance.** Route the 690k index with the new build (`run_690k_*.sh`), score with `conc_arms.py`
    (FIXED/BROKE ≥ 5:1 on half B, no shared-block growth), run the detector (`weird_bugs.py`) and a blind judge
-   sample (`judge_changes.py`), and the test suite at its baseline.
+   sample (`judge_changes.py`), and the test suite at its baseline. Then the corpus-scale run (every ORCID,
+   `author-names/ORCID_V4.md`): `scripts/v4/broke_v4.py` attributes every united / split person to the rule that
+   moved it, and `scripts/v4/registry_agreement.py` scores each arm's surnames against the ORCID registry's
+   self-declared family names (the name ground truth; the corpus share is a source convention, not a truth).
 
 Known limits: sources that drop a compound's head entirely (`Maza` alone) cannot be joined by any rule; the
 mention counts inherit MAG-style conventions that split particles into `middle`, which is why the whole-share
