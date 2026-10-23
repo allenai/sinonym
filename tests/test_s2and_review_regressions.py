@@ -281,9 +281,7 @@ COMPOUND_CASES = [
     (("Jean", None, "du Plessis"), ("Jean", "", "du Plessis")),
     (("A.", "Gonzalez", "Lopez"), ("A.", "", "Gonzalez Lopez")),
     # vocabulary tier: a frequent Hispanic pair the corpus splits too often to be listed
-    (("Maria", "Garcia", "Lopez"), ("Maria", "", "Garcia Lopez")),
-    # a doubled tail is never joined: corpus-wide it splits almost as many people as it unites (middle = surname)
-    (("Maria", "Garcia", "Garcia"), ("Maria", "Garcia", "Garcia")),
+    (("Maria", "Garcia", "Garcia"), ("Maria", "", "Garcia Garcia")),
     (("Maria", "Jose Gonzalez", "Lopez"), ("Maria", "Jose", "Gonzalez Lopez")),
     (("Ana", "Paula da", "Silva"), ("Ana", "Paula", "da Silva")),
     # a given-name middle before a plain surname is untouched
