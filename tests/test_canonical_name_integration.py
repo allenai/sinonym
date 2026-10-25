@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
+from sinonym.timo.interface import Instance, Predictor, PredictorConfig, SourceAuthorFields
 
 
 def test_token_lookup_normalization_removes_all_reviewed_roman_hyphens(detector):
@@ -260,34 +261,43 @@ def test_korean_native_name_surfaces_semantic_family_first_canonical_name(detect
     assert result.canonical_name.source.order == ("surname", "given")
 
 
-@pytest.mark.parametrize(
-    ("components", "expected"),
-    [
-        # a Slavic digraph initial is not a Chinese surname: ``Beikin`` is not cut into pinyin
-        (("Ya.", "B.", "Beikin"), ("Ya.", "B.", "Beikin")),
-        (("Yu.", "N.", "Kutlin"), ("Yu.", "N.", "Kutlin")),
-        # single-letter initials still read as a Chinese two-syllable given name
-        (("J.", "J.", "Zhu"), ("J.-J.", "", "Zhu")),
-        # the corpus writes these given-first; the dictionaries also list Yoko / Yuki as surnames
-        (("Yoko", None, "Kozuki"), ("Yoko", "", "Kozuki")),
-        (("Yuki", None, "Kawaji"), ("Yuki", "", "Kawaji")),
-        (("Tanaka", None, "Hiroshi"), ("Hiroshi", "", "Tanaka")),
-        # romanized given-first Japanese evidence vetoes the Chinese reading (``Ku-Me / Yu``)
-        (("Yu", None, "Kume"), ("Yu", "", "Kume")),
-        # the corpus writes these two-token Chinese pairs in the source order
-        (("Ding", None, "Zhang"), ("Ding", "", "Zhang")),
-        (("Ye", None, "Wang"), ("Ye", "", "Wang")),
-    ],
-)
-def test_canonical_apis_agree_with_the_writer_on_initials_and_japanese_order(detector, components, expected):
-    first, middle, last = components
-    structured = detector.normalize_person_name_components(first_name=first, middle_name=middle, last_name=last)
-    raw = detector.normalize_person_name(" ".join(part for part in components if part))
+SHARED_WRITER_RULE_CASES = [
+    # a Slavic digraph initial is not a Chinese surname: ``Beikin`` is not cut into pinyin
+    (("Ya.", "B.", "Beikin"), ("Ya.", "B.", "Beikin")),
+    (("Yu.", "N.", "Kutlin"), ("Yu.", "N.", "Kutlin")),
+    # single-letter initials still read as a Chinese two-syllable given name
+    (("J.", "J.", "Zhu"), ("J.-J.", "", "Zhu")),
+    # the corpus writes these given-first; the dictionaries also list Yoko / Yuki as surnames
+    (("Yoko", None, "Kozuki"), ("Yoko", "", "Kozuki")),
+    (("Yuki", None, "Kawaji"), ("Yuki", "", "Kawaji")),
+    (("Tanaka", None, "Hiroshi"), ("Hiroshi", "", "Tanaka")),
+    # romanized given-first Japanese evidence vetoes the Chinese reading (``Ku-Me / Yu``)
+    (("Yu", None, "Kume"), ("Yu", "", "Kume")),
+    # the corpus writes these two-token Chinese pairs in the source order
+    (("Ding", None, "Zhang"), ("Ding", "", "Zhang")),
+    (("Ye", None, "Wang"), ("Ye", "", "Wang")),
+]
 
-    for canonical in (structured, raw):
+
+def _triple(components):
+    return (components.given_name, components.middle_name, components.surname)
+
+
+@pytest.mark.parametrize(("components", "expected"), SHARED_WRITER_RULE_CASES)
+def test_canonical_apis_and_the_writer_agree_on_shared_rules(detector, components, expected):
+    first, middle, last = components
+    raw_name = " ".join(part for part in components if part)
+    structured = detector.normalize_person_name_components(first_name=first, middle_name=middle, last_name=last)
+    raw = detector.normalize_person_name(raw_name)
+    legacy = detector.normalize_name(raw_name).canonical_name
+    writer = Predictor(PredictorConfig(parallel="never"), ".").predict_batch(
+        [Instance(pp_authors=[SourceAuthorFields(first_name=first, middle_names=middle, last_name=last)])],
+    )[0].authors[0]
+
+    for canonical in (structured, raw, legacy):
         assert canonical is not None
-        normalized = canonical.normalized
-        assert (normalized.given_name, normalized.middle_name, normalized.surname) == expected
+        assert _triple(canonical.normalized) == expected
+    assert (writer.first_name, writer.middle_names or "", writer.last_name) == expected
 
 
 @pytest.mark.parametrize(
@@ -295,6 +305,9 @@ def test_canonical_apis_agree_with_the_writer_on_initials_and_japanese_order(det
     [
         (("Kosareva", None, "A.A."), ("A.", "A.", "Kosareva")),
         (("Назарова", None, "А.Р."), ("А.", "Р.", "Назарова")),
+        (("Lee", None, "W.M."), ("W.", "M.", "Lee")),
+        # common Chinese surnames keep the Chinese initials form
+        (("Zhang", None, "W.M."), ("W.-M.", "", "Zhang")),
         # a given name before the family initials stays
         (("Sowmya", None, "K. R."), ("Sowmya", "", "K. R.")),
     ],
@@ -307,3 +320,4 @@ def test_structured_surname_first_before_dotted_initials(detector, components, e
     normalized = canonical.normalized
     assert (normalized.given_name, normalized.middle_name, normalized.surname) == expected
     assert (canonical.source.given_name, canonical.source.surname) == (first, last)
+    assert canonical.source_text == " ".join(part for part in components if part)

@@ -35,8 +35,10 @@ def main() -> None:
     a = ap.parse_args()
     con = duckdb.connect()
     con.execute(f"""CREATE TABLE role AS SELECT w, SUM(as_first) as_first, SUM(as_last) as_last FROM (
-        SELECT {FOLD.format(x='first_name')} w, mention_count as_first, 0 as_last FROM read_parquet('{a.counts}') WHERE NOT contains(trim(first_name), ' ')
-        UNION ALL SELECT {FOLD.format(x='last_name')} w, 0, mention_count FROM read_parquet('{a.counts}') WHERE NOT contains(trim(last_name), ' ')) GROUP BY 1""")
+        SELECT {FOLD.format(x='first_name')} w, mention_count as_first, 0 as_last FROM read_parquet('{a.counts}')
+        WHERE NOT contains(trim(first_name), ' ')
+        UNION ALL SELECT {FOLD.format(x='last_name')} w, 0, mention_count FROM read_parquet('{a.counts}')
+        WHERE NOT contains(trim(last_name), ' ')) GROUP BY 1""")
     rows = con.execute(f"""
         WITH shape AS (
           SELECT {FOLD.format(x='first_name')} w, SUM(mention_count) n_shape FROM read_parquet('{a.counts}')
@@ -49,7 +51,7 @@ def main() -> None:
     with gzip.open(out, "wt", newline="", encoding="utf-8") as fh:
         wr = csv.writer(fh)
         wr.writerow(["word", "surname_first_mentions", "as_last", "as_first"])
-        wr.writerows((w, int(n), int(l), int(f)) for w, n, l, f in rows)
+        wr.writerows((w, int(n), int(n_last), int(n_first)) for w, n, n_last, n_first in rows)
     print(f"{len(rows):,} words -> {out} (sha256 {hashlib.sha256(out.read_bytes()).hexdigest()[:16]})")
 
 

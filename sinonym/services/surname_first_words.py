@@ -13,7 +13,9 @@ import re
 import unicodedata
 from functools import lru_cache
 
+from sinonym.chinese_names_data import NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES
 from sinonym.resources import read_bytes
+from sinonym.services.ethnicity import INITIAL_ONLY_CROSS_CULTURAL_SURNAMES
 
 
 def _fold(token: str) -> str:
@@ -39,12 +41,14 @@ def load_surname_first_words() -> None:
 
 
 def surname_first_initials(
-    first: str | None, middle: str | None, last: str | None, suffix: str | None
+    first: str | None, middle: str | None, last: str | None, suffix: str | None,
 ) -> tuple[str, str, str] | None:
     """``Dmitrieva / - / N.M.`` (or ``Назарова / - / А.Р.``) → ``("N.", "M.", "Dmitrieva")``.
 
     Only for 2-3 initials that each carry their own dot, and only when the corpus writes the word this way and uses it
-    mostly as a surname; ``Sowmya / - / K. R.``, where the initials are the family name, is left alone.
+    mostly as a surname; ``Sowmya / - / K. R.``, where the initials are the family name, is left alone. Common Chinese
+    surnames (``Zhang / - / W.M.``) stay with the Chinese pipeline, which writes the initials ``W.-M.``; cross-cultural
+    spellings it leaves alone (``Lee``, ``Tan``) do not.
     """
     if (suffix or "").strip() or (middle or "").strip():
         return None
@@ -56,6 +60,9 @@ def surname_first_initials(
         return None
     letters = [part for part in re.split(r"[.\s]+", tail) if part]
     if not all(letter.isupper() for letter in letters) or not is_surname_first_word(word):
+        return None
+    folded = _fold(word)
+    if folded in NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES and folded not in INITIAL_ONLY_CROSS_CULTURAL_SURNAMES:
         return None
     initials = [f"{letter}." for letter in letters]
     return initials[0], " ".join(initials[1:]), word

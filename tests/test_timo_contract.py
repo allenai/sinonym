@@ -5,6 +5,7 @@ import importlib.util
 import pytest
 from pydantic import Field, ValidationError
 
+from sinonym import ChineseNameDetector
 from sinonym.coretypes import CanonicalName, NameComponents
 from sinonym.coretypes.routing_resolution import (
     EAST_ASIAN_EVIDENCE_RESOLUTION_REASONS,
@@ -22,7 +23,14 @@ from sinonym.timo._resolution import (
     _Model,
     merge_resolved_suffix,
 )
-from sinonym.timo.interface import Instance, Prediction, ResolvedAuthorFields, SourceAuthorFields
+from sinonym.timo.interface import (
+    Instance,
+    Prediction,
+    Predictor,
+    PredictorConfig,
+    ResolvedAuthorFields,
+    SourceAuthorFields,
+)
 
 
 def test_public_interface_is_exactly_the_six_unversioned_classes() -> None:
@@ -449,17 +457,14 @@ def test_evidence_failure_is_typed_outside_the_hard_constraint_union() -> None:
     ],
 )
 def test_writer_only_corpus_rules_do_not_reach_the_canonical_apis(source, canonical, writer):
-    from sinonym import ChineseNameDetector
-    from sinonym.timo.interface import Instance, Predictor, PredictorConfig, SourceAuthorFields
-
     first, middle, last = source
     normalized = ChineseNameDetector().normalize_person_name_components(
-        first_name=first, middle_name=middle, last_name=last
+        first_name=first, middle_name=middle, last_name=last,
     ).normalized
     assert (normalized.given_name, normalized.middle_name, normalized.surname) == canonical
 
     predictor = Predictor(PredictorConfig(parallel="never"), ".")
     author = predictor.predict_batch(
-        [Instance(pp_authors=[SourceAuthorFields(first_name=first, middle_names=middle, last_name=last)])]
+        [Instance(pp_authors=[SourceAuthorFields(first_name=first, middle_names=middle, last_name=last)])],
     )[0].authors[0]
     assert (author.first_name, author.middle_names, author.last_name) == writer
