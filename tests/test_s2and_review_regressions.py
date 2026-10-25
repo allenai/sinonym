@@ -234,14 +234,19 @@ def test_small_deterministic_classes_from_the_corpus_scan(predictor, source, exp
 
 
 ORDER_PRIOR_CASES = [
-    # the corpus writes these pairs one way >= 80% of the time (pre-normalization names, 691M mentions): the
-    # reviewed S2AND labels agreed with the corpus on every one of them, the byline-only readings did not
-    (("Lu", None, "Xi"), ("Xi", "", "Lu")),
-    (("Gong", None, "Lei"), ("Lei", "", "Gong")),
+    # the corpus writes these pairs one way >= 80% of the time (pre-normalization names, 691M mentions): when the
+    # router picks the PP parse, the prior settles the orientation
+    (("Jie", None, "Shan"), ("Jie", "", "Shan")),
+    (("Ye", None, "Zhang"), ("Ye", "", "Zhang")),
     (("Huang", None, "Xi"), ("Xi", "", "Huang")),
     (("Gu", None, "Xin"), ("Xin", "", "Gu")),
     (("Chen", None, "Hong"), ("Hong", "", "Chen")),
     (("Lu", None, "Rong"), ("Rong", "", "Lu")),
+    # on abstain the source order stands even against the corpus majority: there the prior broke 19,574 registered
+    # surnames and fixed 2,275 (ORCID v4)
+    (("Lu", None, "Xi"), ("Lu", "", "Xi")),
+    (("Gong", None, "Lei"), ("Gong", "", "Lei")),
+    (("Liu", None, "Yang"), ("Liu", "", "Yang")),
     # already in the corpus orientation: untouched
     (("Xi", None, "Lu"), ("Xi", "", "Lu")),
     (("Fang", None, "Du"), ("Fang", "", "Du")),
@@ -258,7 +263,7 @@ def test_corpus_order_prior_settles_ambiguous_two_token_names(predictor, source,
 
 
 def test_corpus_order_prior_reason_is_reported(predictor):
-    instance = Instance(pp_authors=[SourceAuthorFields(first_name="Lu", last_name="Xi")])
+    instance = Instance(pp_authors=[SourceAuthorFields(first_name="Jie", last_name="Shan")])
     author = predictor.predict_batch([instance])[0].authors[0]
     assert author.resolution_reason.value == "corpus_order_prior_assignment"
 

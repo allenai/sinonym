@@ -2546,7 +2546,7 @@ class _Resolver:
         capped = given_chain_cap_parsed(parsed, raw_name, source) if decision in ("pp", "vys") else None
         if capped is not None:
             parsed, batch_reason = capped, ResolutionReason.GIVEN_CHAIN_CAP_INPUT
-        prior_parsed = _corpus_order_prior_parsed(parsed) if decision != "not_person" else None
+        prior_parsed = _corpus_order_prior_parsed(parsed) if decision in ("pp", "vys") else None
         if prior_parsed is not None:
             parsed, batch_reason = prior_parsed, ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT
         return self.terminal_resolution(
@@ -2604,7 +2604,7 @@ class _Resolver:
         else:
             message = f"pp-abstain router returned unexpected router_prediction={decision!r}"
             raise ValueError(message)
-        prior_parsed = _corpus_order_prior_parsed(parsed) if decision != "not_person" else None
+        prior_parsed = _corpus_order_prior_parsed(parsed) if decision == "pp" else None
         if prior_parsed is not None:
             parsed, batch_reason = prior_parsed, ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT
 

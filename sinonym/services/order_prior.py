@@ -4,7 +4,9 @@
 S2 corpus (May 2026 snapshot, 691M rows) were written as ``first=a last=b`` versus ``first=b last=a``. Only pairs
 with >= 100 mentions and a >= 80% majority that the Chinese parser can read are kept. The prior settles the
 orientation of an ambiguous two-token Chinese name (`Xi Lu` / `Lu Xi`) by how the corpus itself writes that pair,
-which keeps every mention of the pair on one surname.
+which keeps every mention of the pair on one surname. It applies only when the router picked a parse (PP or VYS); on
+abstain the source order stands, because there the corpus majority overrode the person's own surname far more often
+than it fixed it (ORCID registry: 19,574 broken vs 2,275 fixed).
 """
 from __future__ import annotations
 
