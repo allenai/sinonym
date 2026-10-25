@@ -51,6 +51,7 @@ from sinonym.services.person_name_normalization import (
     reviewed_closed_comma_credential_tail_head,
     reviewed_source_cleanup_pattern,
 )
+from sinonym.services.slavic_initials import is_digraph_initials_surname, is_dotted_initial
 from sinonym.services.surname_first_words import is_surname_first_word
 from sinonym.services.token_order_prior import surname_first_pair, token_role
 
@@ -1509,15 +1510,6 @@ def _reviewed_joined_uppercase_surname_assignment(
     return NameComponents(given_name=given, surname=surname.title())
 
 
-_DIGRAPH_INITIALS = frozenset({"Ya", "Yu", "Ye", "Yo", "Zh", "Ch", "Sh", "Kh", "Ts", "Ia", "Iu", "Dz", "Dj", "Lj", "Nj"})
-_DOTTED_SHORT_INITIAL_RE = re.compile(r"[A-Z][a-z]?\.")
-
-
-def _is_dotted_initial(token: str) -> bool:
-    """``A.`` or a dotted Slavic digraph initial (``Ya.``, ``Zh.``); never a title (``Dr.``, ``St.``)."""
-    if not _DOTTED_SHORT_INITIAL_RE.fullmatch(token):
-        return False
-    return len(token) == 2 or token[:-1] in _DIGRAPH_INITIALS  # noqa: PLR2004
 _PLAIN_SURNAME_TOKEN_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", re.UNICODE)
 
 
@@ -1582,14 +1574,7 @@ def _structured_initials_surname_assignment(source: SourceAuthorFields) -> NameC
         return None
     personal = f"{source.first_name or ''} {source.middle_names or ''}".split()
     surname = (source.last_name or "").strip()
-    if not personal or not surname or " " in surname:
-        return None
-    if not all(_is_dotted_initial(token) for token in personal):
-        return None
-    # single-letter initials alone stay with the Chinese pipeline (``J. J. Zhu`` -> ``J.-J. Zhu``)
-    if not any(token[:-1] in _DIGRAPH_INITIALS for token in personal):
-        return None
-    if not _PLAIN_SURNAME_TOKEN_RE.fullmatch(surname) or len(surname) < 3:  # noqa: PLR2004
+    if not is_digraph_initials_surname(personal, surname):
         return None
     first, *middle = personal
     if surname.isupper():
@@ -1643,7 +1628,7 @@ def _structured_leading_initials_assignment(source: SourceAuthorFields) -> NameC
         return None
     if not _PLAIN_SURNAME_TOKEN_RE.fullmatch(surname.replace(" ", "")):
         return None
-    if middle and not all(_is_dotted_initial(token) for token in middle.split()):
+    if middle and not all(is_dotted_initial(token) for token in middle.split()):
         return None
     if _source_component_key(source) in REVIEWED_SCALAR_COMPOUND_SURNAMES:
         return None
@@ -1661,7 +1646,7 @@ def _corpus_compound_extension(selected: NameComponents) -> NameComponents | Non
     """
     middle_words = selected.middle_name.split()
     last_words = selected.surname.split()
-    if not middle_words or not last_words or _is_dotted_initial(last_words[-1]):
+    if not middle_words or not last_words or is_dotted_initial(last_words[-1]):
         return None
     words = [*middle_words, *last_words]
     width = listed_compound_suffix(words)
@@ -1684,7 +1669,7 @@ def _ambiguous_credential_surname_assignment(source: SourceAuthorFields) -> Name
         return None
     first = (source.first_name or "").strip()
     surname = (source.last_name or "").strip()
-    if not first or _is_dotted_initial(first) or surname not in _AMBIGUOUS_CREDENTIAL_SURNAMES:
+    if not first or is_dotted_initial(first) or surname not in _AMBIGUOUS_CREDENTIAL_SURNAMES:
         return None
     return NameComponents(given_name=first, middle_name=" ".join((source.middle_names or "").split()), surname=surname.title())
 

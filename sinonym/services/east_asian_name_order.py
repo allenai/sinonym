@@ -29,6 +29,7 @@ from sinonym.chinese_names_data import (
 from sinonym.coretypes import NameComponents
 from sinonym.coretypes.routing_resolution import EastAsianEvidenceReason, EvidenceFailure, ResolutionReason
 from sinonym.resources import read_bytes
+from sinonym.services.token_order_prior import given_first_pair
 from sinonym.text_processing.text_normalizer import (
     exact_name_surface_key,
     is_name_variation_selector,
@@ -1297,6 +1298,9 @@ class EastAsianNameOrderService:
             last_keys,
         )
         if not surname_first or reverse_plausible or exact_given_first:
+            return None
+        # the dictionaries list ``Yoko`` as a surname too; the corpus writes ``Yoko Kozuki`` given-first
+        if given_first_pair(tokens[0], tokens[1]):
             return None
         return EastAsianNameOrderDecision(
             surface=" ".join(tokens),

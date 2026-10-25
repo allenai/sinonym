@@ -228,6 +228,8 @@ from sinonym.services.person_name_normalization import (
     PersonNameOutcome,
 )
 from sinonym.services.process_pool import PersistentMultiprocessNormalizer
+from sinonym.services.slavic_initials import is_digraph_initials_surname
+from sinonym.services.token_order_prior import load_token_role_prior
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 LOGGER = logging.getLogger(__name__)
@@ -334,6 +336,7 @@ class ChineseNameDetector:
     def _initialize_services(self, data: NameDataStructures) -> None:
         """Build dependent services and publish them only after all succeed."""
         context = ServiceContext(self._config, self._normalizer, data)
+        load_token_role_prior()
         surname_resolver = SurnameResolver(data, self._normalizer)
         ethnicity_service = EthnicityClassificationService(context)
         parsing_service = NameParsingService(context, weights=self._weights)
@@ -1573,6 +1576,9 @@ class ChineseNameDetector:
             return terminal.canonical_name
 
         if self._east_asian_name_order._is_reviewed_japanese_given_first_exact_surface(routing_surface):
+            return baseline
+        source = baseline.source
+        if is_digraph_initials_surname([*source.given_tokens, *source.middle_tokens], source.surname):
             return baseline
 
         chinese = self._canonical_chinese_name_with_source(

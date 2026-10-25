@@ -28,6 +28,10 @@ def _roles() -> dict[str, str]:
     return {row["token"]: row["role"] for row in csv.DictReader(io.StringIO(text))}
 
 
+def load_token_role_prior() -> None:
+    _roles()
+
+
 def token_role(token: str) -> str | None:
     """``"given"``, ``"surname"`` or ``None`` when the corpus has no strong opinion about this token."""
     return _roles().get(_fold(token))
@@ -36,3 +40,8 @@ def token_role(token: str) -> str | None:
 def surname_first_pair(given: str, surname: str) -> bool:
     """True when the corpus says ``given`` is a surname word and ``surname`` a given-name word."""
     return token_role(given) == "surname" and token_role(surname) == "given"
+
+
+def given_first_pair(first: str, last: str) -> bool:
+    """True when the corpus says ``first`` is a given-name word and ``last`` a surname word."""
+    return surname_first_pair(last, first)

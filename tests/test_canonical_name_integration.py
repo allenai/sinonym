@@ -258,3 +258,28 @@ def test_korean_native_name_surfaces_semantic_family_first_canonical_name(detect
     assert result.canonical_name is not None
     assert result.canonical_name.text == "민준 김"
     assert result.canonical_name.source.order == ("surname", "given")
+
+
+@pytest.mark.parametrize(
+    ("components", "expected"),
+    [
+        # a Slavic digraph initial is not a Chinese surname: ``Beikin`` is not cut into pinyin
+        (("Ya.", "B.", "Beikin"), ("Ya.", "B.", "Beikin")),
+        (("Yu.", "N.", "Kutlin"), ("Yu.", "N.", "Kutlin")),
+        # single-letter initials still read as a Chinese two-syllable given name
+        (("J.", "J.", "Zhu"), ("J.-J.", "", "Zhu")),
+        # the corpus writes these given-first; the dictionaries also list Yoko / Yuki as surnames
+        (("Yoko", None, "Kozuki"), ("Yoko", "", "Kozuki")),
+        (("Yuki", None, "Kawaji"), ("Yuki", "", "Kawaji")),
+        (("Tanaka", None, "Hiroshi"), ("Hiroshi", "", "Tanaka")),
+    ],
+)
+def test_canonical_apis_agree_with_the_writer_on_initials_and_japanese_order(detector, components, expected):
+    first, middle, last = components
+    structured = detector.normalize_person_name_components(first_name=first, middle_name=middle, last_name=last)
+    raw = detector.normalize_person_name(" ".join(part for part in components if part))
+
+    for canonical in (structured, raw):
+        assert canonical is not None
+        normalized = canonical.normalized
+        assert (normalized.given_name, normalized.middle_name, normalized.surname) == expected
