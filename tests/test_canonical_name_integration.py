@@ -272,6 +272,11 @@ def test_korean_native_name_surfaces_semantic_family_first_canonical_name(detect
         (("Yoko", None, "Kozuki"), ("Yoko", "", "Kozuki")),
         (("Yuki", None, "Kawaji"), ("Yuki", "", "Kawaji")),
         (("Tanaka", None, "Hiroshi"), ("Hiroshi", "", "Tanaka")),
+        # romanized given-first Japanese evidence vetoes the Chinese reading (``Ku-Me / Yu``)
+        (("Yu", None, "Kume"), ("Yu", "", "Kume")),
+        # the corpus writes these two-token Chinese pairs in the source order
+        (("Ding", None, "Zhang"), ("Ding", "", "Zhang")),
+        (("Ye", None, "Wang"), ("Ye", "", "Wang")),
     ],
 )
 def test_canonical_apis_agree_with_the_writer_on_initials_and_japanese_order(detector, components, expected):
@@ -283,3 +288,22 @@ def test_canonical_apis_agree_with_the_writer_on_initials_and_japanese_order(det
         assert canonical is not None
         normalized = canonical.normalized
         assert (normalized.given_name, normalized.middle_name, normalized.surname) == expected
+
+
+@pytest.mark.parametrize(
+    ("components", "expected"),
+    [
+        (("Kosareva", None, "A.A."), ("A.", "A.", "Kosareva")),
+        (("Назарова", None, "А.Р."), ("А.", "Р.", "Назарова")),
+        # a given name before the family initials stays
+        (("Sowmya", None, "K. R."), ("Sowmya", "", "K. R.")),
+    ],
+)
+def test_structured_surname_first_before_dotted_initials(detector, components, expected):
+    first, middle, last = components
+    canonical = detector.normalize_person_name_components(first_name=first, middle_name=middle, last_name=last)
+
+    assert canonical is not None
+    normalized = canonical.normalized
+    assert (normalized.given_name, normalized.middle_name, normalized.surname) == expected
+    assert (canonical.source.given_name, canonical.source.surname) == (first, last)

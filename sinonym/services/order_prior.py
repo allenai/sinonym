@@ -42,6 +42,10 @@ def _table() -> dict[tuple[str, str], tuple[str, float, int]]:
     return rows
 
 
+def load_order_prior() -> None:
+    _table()
+
+
 def corpus_surname_for(given: str, surname: str) -> str | None:
     """Return the token the corpus writes as the surname for this pair, or None when the prior is silent."""
     g, s = _fold(given), _fold(surname)

@@ -52,7 +52,7 @@ from sinonym.services.person_name_normalization import (
     reviewed_source_cleanup_pattern,
 )
 from sinonym.services.slavic_initials import is_digraph_initials_surname, is_dotted_initial
-from sinonym.services.surname_first_words import is_surname_first_word
+from sinonym.services.surname_first_words import surname_first_initials
 from sinonym.services.token_order_prior import surname_first_pair, token_role
 
 if TYPE_CHECKING:
@@ -1582,30 +1582,13 @@ def _structured_initials_surname_assignment(source: SourceAuthorFields) -> NameC
     return NameComponents(given_name=first, middle_name=" ".join(middle), surname=surname)
 
 
-_SURNAME_FIRST_WORD_RE = re.compile(r"[^\W\d_][^\W\d_'-]{2,}", re.UNICODE)
-_DOTTED_INITIALS_TAIL_RE = re.compile(r"[^\W\d_]\.(?:\s*[^\W\d_]\.){1,2}", re.UNICODE)
-
-
 def _surname_first_initials_assignment(source: SourceAuthorFields) -> NameComponents | None:
-    """``Dmitrieva / - / N.M.`` (or ``Назарова / - / А.Р.``): a surname written first, the given-name initials after it.
-
-    Only for 2-3 initials that each carry their own dot, and only when the corpus writes the word this way and uses it
-    mostly as a surname (``services/surname_first_words.py``); ``Sowmya / - / K. R.``, where the initials are the family
-    name, is left alone.
-    """
-    if (source.suffix or "").strip() or (source.middle_names or "").strip():
+    """``Dmitrieva / - / N.M.``: a surname written first, the given-name initials after it (``surname_first_words``)."""
+    selected = surname_first_initials(source.first_name, source.middle_names, source.last_name, source.suffix)
+    if selected is None:
         return None
-    word = (source.first_name or "").strip()
-    tail = (source.last_name or "").strip()
-    if not _SURNAME_FIRST_WORD_RE.fullmatch(word) or not word[0].isupper() or not word[1:].islower():
-        return None
-    if not _DOTTED_INITIALS_TAIL_RE.fullmatch(tail):
-        return None
-    letters = [part for part in re.split(r"[.\s]+", tail) if part]
-    if not all(letter.isupper() for letter in letters) or not is_surname_first_word(word):
-        return None
-    initials = [f"{letter}." for letter in letters]
-    return NameComponents(given_name=initials[0], middle_name=" ".join(initials[1:]), surname=word)
+    given, middle, surname = selected
+    return NameComponents(given_name=given, middle_name=middle, surname=surname)
 
 
 _AMBIGUOUS_CREDENTIAL_SURNAMES = frozenset({"DO"})
