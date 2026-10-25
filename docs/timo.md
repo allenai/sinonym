@@ -233,6 +233,10 @@ These are shared by TIMO and the canonical APIs:
 | a romanized given-first Japanese name is not reversed (`Yu Kume`); the canonical APIs use the focal name only, TIMO also uses the paper | `japanese_given_first_reorder_veto_preserve_input` | all |
 | the directional Japanese dictionary flip stands down when the corpus token roles say the input is given-first (`Yoko Kozuki`) | `scalar_baseline` | all |
 
+The corpus tables cover names seen often enough in the 2026 snapshots; other names fall back to the behavior without
+the rule. See [Corpus-derived name assets](../sinonym/data/README.md#corpus-derived-name-assets-coverage-provenance-and-refresh)
+for coverage, provenance and the refresh procedure.
+
 So the same name can come out differently from TIMO and from the canonical APIs (pinned in
 `tests/test_timo_contract.py`). Submit the source fields as received: feeding TIMO's output back through TIMO or the
 canonical APIs is not guaranteed to return it unchanged.
