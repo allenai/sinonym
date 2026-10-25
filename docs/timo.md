@@ -219,9 +219,9 @@ Some rules use statistics of the Semantic Scholar corpus and run only in TIMO; t
 | reason | what it does | why writer-only |
 |---|---|---|
 | `corpus_compound_surname_assignment` | joins a listed compound surname (`Ana / Silva / Santos` → `Ana / Silva Santos`) | needs the source first/middle/last fields; list built from the S2 corpus and ORCID |
-| `corpus_order_prior_assignment` | settles a two-token Chinese name to the order the corpus writes for that pair | runs only after the router picks a PP or VYS parse, which the canonical APIs do not have |
+| `corpus_order_prior_assignment` | settles a two-token Chinese name to the order the corpus writes for that pair | runs only after the router picks a PP or VYS parse, which the canonical APIs do not have; the canonical APIs use the same table only to undo a Chinese reversal of the source order |
 | `corpus_token_order_prior_assignment` | swaps a two-token Latin name written surname-first (`Schoenmakers / Birgitte` → `Birgitte / Schoenmakers`) | S2-corpus token roles; tuned on S2 bylines |
-| `structured_surname_first_initials_assignment` | `Dmitrieva / - / N.M.` → `N. / M. / Dmitrieva` | needs the source fields |
+| `structured_surname_first_initials_assignment` | `Dmitrieva / - / N.M.` → `N. / M. / Dmitrieva` | needs the source fields; `normalize_person_name_components` applies it too, the raw-text APIs cannot |
 | `structured_initials_surname_assignment` (glued initial in the first name) | `J.Dias / de / Deus` → `J. / Dias de Deus` | needs the source fields |
 
 So the same name can come out differently from TIMO and from the canonical APIs (pinned in
