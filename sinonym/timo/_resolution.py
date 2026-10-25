@@ -1545,6 +1545,31 @@ def _glued_single_initial_assignment(source: SourceAuthorFields) -> NameComponen
     return NameComponents(given_name=initial + ".", surname=surname)
 
 
+_GLUED_GIVEN_INITIAL_RE = re.compile(r"([A-Z])\.([A-Z][a-z]{2,}(?:-[A-Z][a-z]+)*)")
+
+
+def _glued_given_initial_assignment(source: SourceAuthorFields) -> NameComponents | None:
+    """Unglue an initial written against the next given word: ``J.Dias / - / Santos`` → ``J. / Dias / Santos``.
+
+    The word becomes the first middle name, so a listed compound surname can then take it (``J. / Dias Santos``).
+    """
+    if (source.suffix or "").strip():
+        return None
+    match = _GLUED_GIVEN_INITIAL_RE.fullmatch((source.first_name or "").strip())
+    surname = " ".join((source.last_name or "").split())
+    if match is None or not surname:
+        return None
+    initial, word = match.groups()
+    selected = NameComponents(
+        given_name=initial + ".",
+        middle_name=" ".join([word, *(source.middle_names or "").split()]),
+        surname=surname,
+    )
+    if word.casefold() == surname.split()[0].casefold():
+        return selected
+    return _corpus_compound_extension(selected) or selected
+
+
 def _structured_initials_surname_assignment(source: SourceAuthorFields) -> NameComponents | None:
     """Keep a source made of dotted initials and one surname token: ``Ya. G. / Sinai``.
 
@@ -2185,6 +2210,7 @@ class _Resolver:
                 ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT,
             ),
             (lambda: _glued_single_initial_assignment(source), ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT),
+            (lambda: _glued_given_initial_assignment(source), ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT),
             (lambda: _ambiguous_credential_surname_assignment(source), pattern_reason),
             (lambda: _structured_leading_initials_assignment(source), pattern_reason),
             (

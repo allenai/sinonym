@@ -143,6 +143,22 @@ def test_one_glued_initial_is_split_off_the_surname(predictor, source, expected)
     assert resolve(predictor, *source) == expected
 
 
+GLUED_GIVEN_INITIAL_CASES = [
+    # an initial glued to the next given word: the word becomes a middle name
+    (("M.Hesham", None, "El Naggar"), ("M.", "Hesham", "El Naggar")),
+    (("M.Cristina", "L.", "Martins"), ("M.", "Cristina L.", "Martins")),
+    # ... and a listed compound surname takes it
+    (("J.Dias", "de", "Deus"), ("J.", "", "Dias de Deus")),
+    # a word repeating the surname stays a middle name
+    (("A.Nag", None, "Nag"), ("A.", "Nag", "Nag")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), GLUED_GIVEN_INITIAL_CASES)
+def test_glued_given_initial_is_split_off(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
 VIETNAMESE_INITIALLED_CASES = [
     # paper 122189999's author: the spelled-out mentions already flip; the initialled ones did not,
     # splitting one person between ``p hung`` and ``h pham``
