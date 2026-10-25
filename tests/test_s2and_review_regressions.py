@@ -385,3 +385,20 @@ CORPUS_SCALE_CASES = [
 @pytest.mark.parametrize(("source", "expected"), CORPUS_SCALE_CASES)
 def test_corpus_scale_regressions(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+SURNAME_FIRST_INITIALS_CASES = [
+    # a surname written first, dotted given-name initials after it; the corpus uses the word as a surname
+    (("Dmitrieva", None, "N.M."), ("N.", "M.", "Dmitrieva")),
+    (("Kazachenko", None, "A. V."), ("A.", "V.", "Kazachenko")),
+    (("Назарова", None, "А.Р."), ("А.", "Р.", "Назарова")),
+    # the word is a given name and the initials the family name: unchanged
+    (("Sowmya", None, "K. R."), ("Sowmya", "K.", "R.")),
+    # a single bare initial is not this shape
+    (("Priya", None, "S"), ("Priya", "", "S")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), SURNAME_FIRST_INITIALS_CASES)
+def test_surname_first_initials(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
