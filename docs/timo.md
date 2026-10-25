@@ -211,6 +211,23 @@ is not a global middle-dot split: populated first/middle fields, Latin-only
 text, four-or-more components, organization markers, and malformed segments
 remain outside the rule.
 
+## Writer-only corpus rules
+
+Some rules use statistics of the Semantic Scholar corpus and run only in TIMO; the canonical APIs
+(`normalize_name`, `normalize_person_name`, `normalize_person_name_components`) deliberately leave them out:
+
+| reason | what it does | why writer-only |
+|---|---|---|
+| `corpus_compound_surname_assignment` | joins a listed compound surname (`Ana / Silva / Santos` → `Ana / Silva Santos`) | needs the source first/middle/last fields; list built from the S2 corpus and ORCID |
+| `corpus_order_prior_assignment` | settles a two-token Chinese name to the order the corpus writes for that pair | runs only after the router picks a PP or VYS parse, which the canonical APIs do not have |
+| `corpus_token_order_prior_assignment` | swaps a two-token Latin name written surname-first (`Schoenmakers / Birgitte` → `Birgitte / Schoenmakers`) | S2-corpus token roles; tuned on S2 bylines |
+| `structured_surname_first_initials_assignment` | `Dmitrieva / - / N.M.` → `N. / M. / Dmitrieva` | needs the source fields |
+| `structured_initials_surname_assignment` (glued initial in the first name) | `J.Dias / de / Deus` → `J. / Dias de Deus` | needs the source fields |
+
+So the same name can come out differently from TIMO and from the canonical APIs (pinned in
+`tests/test_timo_contract.py`). Submit the source fields as received: feeding TIMO's output back through TIMO or the
+canonical APIs is not guaranteed to return it unchanged.
+
 ## `not_person` is not automatically suppression
 
 The raw PP/VYS router's `not_person` result describes an intermediate batch

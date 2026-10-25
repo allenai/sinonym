@@ -437,3 +437,29 @@ def test_hard_assignment_rejects_other_east_asian_rules() -> None:
 
 def test_evidence_failure_is_typed_outside_the_hard_constraint_union() -> None:
     assert issubclass(EvidenceFailure, RuntimeError)
+
+
+@pytest.mark.parametrize(
+    ("source", "canonical", "writer"),
+    [
+        # writer-only corpus rules (docs/timo.md, "Writer-only corpus rules"): the canonical APIs keep the source
+        # order and fields
+        (("Schoenmakers", None, "Birgitte"), ("Schoenmakers", "", "Birgitte"), ("Birgitte", "", "Schoenmakers")),
+        (("Ana", "Silva", "Santos"), ("Ana", "Silva", "Santos"), ("Ana", "", "Silva Santos")),
+    ],
+)
+def test_writer_only_corpus_rules_do_not_reach_the_canonical_apis(source, canonical, writer):
+    from sinonym import ChineseNameDetector
+    from sinonym.timo.interface import Instance, Predictor, PredictorConfig, SourceAuthorFields
+
+    first, middle, last = source
+    normalized = ChineseNameDetector().normalize_person_name_components(
+        first_name=first, middle_name=middle, last_name=last
+    ).normalized
+    assert (normalized.given_name, normalized.middle_name, normalized.surname) == canonical
+
+    predictor = Predictor(PredictorConfig(parallel="never"), ".")
+    author = predictor.predict_batch(
+        [Instance(pp_authors=[SourceAuthorFields(first_name=first, middle_names=middle, last_name=last)])]
+    )[0].authors[0]
+    assert (author.first_name, author.middle_names, author.last_name) == writer
