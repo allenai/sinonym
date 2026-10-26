@@ -5,6 +5,7 @@ import importlib.util
 import pytest
 from pydantic import Field, ValidationError
 
+from sinonym import ChineseNameDetector
 from sinonym.coretypes import CanonicalName, NameComponents
 from sinonym.coretypes.routing_resolution import (
     EAST_ASIAN_EVIDENCE_RESOLUTION_REASONS,
@@ -22,7 +23,14 @@ from sinonym.timo._resolution import (
     _Model,
     merge_resolved_suffix,
 )
-from sinonym.timo.interface import Instance, Prediction, ResolvedAuthorFields, SourceAuthorFields
+from sinonym.timo.interface import (
+    Instance,
+    Prediction,
+    Predictor,
+    PredictorConfig,
+    ResolvedAuthorFields,
+    SourceAuthorFields,
+)
 
 
 def test_public_interface_is_exactly_the_six_unversioned_classes() -> None:
@@ -240,8 +248,12 @@ def test_every_resolution_reason_has_one_complete_decision_spec() -> None:
         (ResolutionProvenance.SOURCE, ResolutionAction.ASSIGN): {
             ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT,
             ResolutionReason.STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT,
+            ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT,
             ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT,
             ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
+            ResolutionReason.CORPUS_COMPOUND_SURNAME_ASSIGNMENT,
+            ResolutionReason.CORPUS_TOKEN_ORDER_PRIOR_ASSIGNMENT,
+            ResolutionReason.STRUCTURED_SURNAME_FIRST_INITIALS_ASSIGNMENT,
         },
         (ResolutionProvenance.SOURCE, ResolutionAction.SUPPRESS): {
             ResolutionReason.REVIEWED_NON_PERSON_PATTERN,
@@ -262,8 +274,12 @@ def test_every_resolution_reason_has_one_complete_decision_spec() -> None:
         (ResolutionProvenance.PP, ResolutionAction.PRESERVE_INPUT): {
             ResolutionReason.PP_VYS_ABSTAIN_PP_INPUT,
             ResolutionReason.PP_ONLY_ABSTAIN_INPUT,
+            ResolutionReason.GIVEN_CHAIN_CAP_INPUT,
         },
-        (ResolutionProvenance.PP, ResolutionAction.ASSIGN): {ResolutionReason.PP_SELECTED},
+        (ResolutionProvenance.PP, ResolutionAction.ASSIGN): {
+            ResolutionReason.PP_SELECTED,
+            ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT,
+        },
         (ResolutionProvenance.VYS, ResolutionAction.PRESERVE_INPUT): {
             ResolutionReason.PP_VYS_ABSTAIN_VYS_INPUT,
         },
@@ -429,3 +445,26 @@ def test_hard_assignment_rejects_other_east_asian_rules() -> None:
 
 def test_evidence_failure_is_typed_outside_the_hard_constraint_union() -> None:
     assert issubclass(EvidenceFailure, RuntimeError)
+
+
+@pytest.mark.parametrize(
+    ("source", "canonical", "writer"),
+    [
+        # writer-only corpus rules (docs/timo.md, "Writer-only corpus rules"): the canonical APIs keep the source
+        # order and fields
+        (("Schoenmakers", None, "Birgitte"), ("Schoenmakers", "", "Birgitte"), ("Birgitte", "", "Schoenmakers")),
+        (("Ana", "Silva", "Santos"), ("Ana", "Silva", "Santos"), ("Ana", "", "Silva Santos")),
+    ],
+)
+def test_writer_only_corpus_rules_do_not_reach_the_canonical_apis(source, canonical, writer):
+    first, middle, last = source
+    normalized = ChineseNameDetector().normalize_person_name_components(
+        first_name=first, middle_name=middle, last_name=last,
+    ).normalized
+    assert (normalized.given_name, normalized.middle_name, normalized.surname) == canonical
+
+    predictor = Predictor(PredictorConfig(parallel="never"), ".")
+    author = predictor.predict_batch(
+        [Instance(pp_authors=[SourceAuthorFields(first_name=first, middle_names=middle, last_name=last)])],
+    )[0].authors[0]
+    assert (author.first_name, author.middle_names, author.last_name) == writer

@@ -132,6 +132,7 @@ PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT = 2
 PP_ABSTAIN_MIXED_LONG_RAW_TOKEN_MIN = 3
 PP_ABSTAIN_CLEAN_BILINGUAL_RAW_TOKEN_COUNT = 2
 PP_ABSTAIN_RELIABLE_BATCH_COUNT_MIN = 2
+PP_ABSTAIN_TWO_TOKEN_WEAK_RATIO_MAX = 0.05
 PP_VYS_REAL_PAPER_VOTES_MIN = 3
 PP_VYS_LOW_BATCH_MAX = 2
 PP_VYS_VERY_LOW_BATCH_MAX = 1
@@ -202,6 +203,7 @@ def build_pp_abstain_rows(batch_result: BatchParseResult, detector_context: Any)
                 "has_latin": _has_latin(script_representation),
                 "cjk_has_space": script_representation == "han_only" and len(normalized_input.tokens) > 1,
                 "raw_tokens": evidence.raw_token_count,
+                "selected_surname_frequency_ratio": evidence.selected_over_alternate_surname_frequency_ratio,
             },
         )
     return rows
@@ -593,6 +595,7 @@ def route_pp_abstain_rows(rows: Iterable[Row]) -> list[MutableRow]:
                 predicates,
                 (
                     "spaced_cjk_zero_batch_surname_first",
+                    "weak_two_token_guess",
                     "weak_zero_batch",
                     "zero_batch_mixed_long",
                 ),
@@ -798,7 +801,97 @@ def _input_order_given_tokens(display: list[tuple[str, str]], original: ParsedNa
     return given_tokens
 
 
-def input_order_parsed(result: ParseResult) -> ParsedName | None:
+_AUTHORED_INITIAL_RE = re.compile(r"^(?:[A-Z]\.?|[A-Z][a-z]\.|(?:[A-Z]\.)+[A-Z]?\.?)$")
+MAX_INPUT_ORDER_GIVEN_TOKENS = 3
+_LAST_LATIN_LIKE_CODEPOINT = 0x2E7F  # Latin, Greek, Cyrillic and their extensions; CJK and Hangul lie above
+
+
+def _fold_word(text: str) -> str:
+    return "".join(ch for ch in unicodedata.normalize("NFKD", text).casefold() if ch.isalnum())
+
+
+_FOOTNOTE_TAIL_RE = re.compile(r"[\d*†‡§¶]+$")
+_PARENTHETICAL_RE = re.compile(r"\([^()]*\)")
+
+
+def _authored_words(raw_name: str) -> list[str]:
+    """Authored words with footnote marks (``Chen1``, ``Li*``) and parentheticals (``Gao (Phoebe)``) removed."""
+    words = (_FOOTNOTE_TAIL_RE.sub("", word) for word in _PARENTHETICAL_RE.sub(" ", raw_name).split())
+    return [word for word in words if _fold_word(word)]
+
+
+def _input_order_echo(raw_name: str) -> ParsedName | None:
+    """Input-order reading built from the authored words alone: last word surname, initials middle, rest given.
+
+    Used when the parser's resegmentation does not line up with the authored word boundaries, so an abstain
+    (which only promises "trailing word is the surname") never emits a fragment of an authored word as the
+    surname or chains several authored words into one hyphenated given name.
+    """
+    words = _authored_words(raw_name)
+    if len(words) < MIN_INPUT_ORDER_DISPLAY_TOKENS:
+        return None
+    surname = words[-1].strip(".,;")
+    middle_tokens = [word for word in words[:-1] if _AUTHORED_INITIAL_RE.fullmatch(word)]
+    given_tokens = [word for word in words[:-1] if not _AUTHORED_INITIAL_RE.fullmatch(word)]
+    if not given_tokens and middle_tokens:
+        # all-initial given names ("Ya. G. Sinai"): the leading initial is the given name, as a source would write it
+        given_tokens, middle_tokens = [words[0]], list(words[1:-1])
+    if not given_tokens or not surname:
+        return None
+    return ParsedName(
+        surname=surname,
+        given_name=" ".join(given_tokens),
+        surname_tokens=[surname],
+        given_tokens=given_tokens,
+        middle_name=" ".join(middle_tokens),
+        middle_tokens=middle_tokens,
+        order=["given", "middle", "surname"] if middle_tokens else ["given", "surname"],
+    )
+
+
+def _echoes_authored_words(parsed: ParsedName, raw_name: str) -> bool:
+    """Return whether an input-order parse keeps the authored surname word whole and a bounded given chain."""
+    words = _authored_words(raw_name)
+    if len(words) < MIN_INPUT_ORDER_DISPLAY_TOKENS or any(ord(ch) > _LAST_LATIN_LIKE_CODEPOINT for word in words for ch in word):
+        # a single glued word ("JihengLi") has no authored boundary to keep; the parser's split is the only reading
+        return True
+    if _fold_word(parsed.surname) != _fold_word(words[-1]):
+        return False
+    return len(parsed.given_tokens) <= MAX_INPUT_ORDER_GIVEN_TOKENS
+
+
+def structured_source_parsed(source) -> ParsedName | None:
+    """The source's own first / middle / last fields as a parse, when it wrote all of them in a Latin-like script."""
+    first = " ".join(_PARENTHETICAL_RE.sub(" ", getattr(source, "first_name", None) or "").split())
+    last = " ".join(_PARENTHETICAL_RE.sub(" ", getattr(source, "last_name", None) or "").split())
+    middle = " ".join(_PARENTHETICAL_RE.sub(" ", getattr(source, "middle_names", None) or "").split())
+    if not first or not last or any(ord(ch) > _LAST_LATIN_LIKE_CODEPOINT for ch in first + middle + last):
+        return None
+    return ParsedName(
+        surname=last,
+        given_name=first,
+        surname_tokens=last.split(),
+        given_tokens=first.split(),
+        middle_name=middle,
+        middle_tokens=middle.split(),
+        order=["given", "middle", "surname"] if middle else ["given", "surname"],
+    )
+
+
+def given_chain_cap_parsed(parsed: ParsedName | None, raw_name: str | None, source=None) -> ParsedName | None:
+    """Keep the authored words when a selected Chinese-path parse chained more syllables than one given name holds.
+
+    A Chinese given name has at most two syllables; ``Zhen-Yin / Annie / Chen`` read as ``Zhen-Yin-An-Nie`` has
+    syllabified a Western given name, and ``Leni / Hiu Tong / Cheung`` as ``Le-Ni-Hiu-Tong`` has chained a middle
+    name. Beyond MAX_INPUT_ORDER_GIVEN_TOKENS syllables the structured source fields are kept as written, or the
+    authored words echoed when the source was one string. Order is not judged here (the order prior still runs).
+    """
+    if parsed is None or len(parsed.given_tokens) <= MAX_INPUT_ORDER_GIVEN_TOKENS:
+        return None
+    return structured_source_parsed(source) or (_input_order_echo(raw_name) if raw_name else None)
+
+
+def input_order_parsed(result: ParseResult, raw_name: str | None = None, source=None) -> ParsedName | None:
     """Materialize the preprocessed input-order (as-typed) parse for an abstain route.
 
     The input-order reading interprets the preprocessed tokens as already being in
@@ -840,10 +933,12 @@ def input_order_parsed(result: ParseResult) -> ParsedName | None:
             if given_tokens
             else None
         )
+    if parsed is not None and raw_name and not _echoes_authored_words(parsed, raw_name):
+        return structured_source_parsed(source) or _input_order_echo(raw_name)
     return parsed
 
 
-def pp_abstain_parsed(result: ParseResult, route_row: Row) -> ParsedName | None:
+def pp_abstain_parsed(result: ParseResult, route_row: Row, raw_name: str | None = None, source=None) -> ParsedName | None:
     """Return the final parsed person components for a PP-only abstain row.
 
     Latin-only abstain keeps the as-typed given-first reading. Spaced Han rows
@@ -857,7 +952,7 @@ def pp_abstain_parsed(result: ParseResult, route_row: Row) -> ParsedName | None:
     """
     if _pp_abstain_uses_pp_parse_for_abstain(route_row):
         return result.parsed if result.success else None
-    return input_order_parsed(result)
+    return input_order_parsed(result, raw_name, source)
 
 
 def _result_text(result: ParseResult) -> str:
@@ -1003,10 +1098,23 @@ def _pp_abstain_predicates(row: Row) -> dict[str, bool]:
     spaced_cjk_zero_batch_surname_first = (
         surname_first_at_input_start and below_reliable_batch_min and has_cjk and not has_latin and cjk_has_space
     )
+    # A lone two-token Latin name whose chosen surname is 20x rarer than the alternative is a
+    # guess, not evidence. On the 2026-09 S2AND review the wrong lone flips had a median ratio of
+    # 0.08 and the right ones 23.7; below 0.05 the flip was wrong 145 times and right 13.
+    ratio = row.get("selected_surname_frequency_ratio")
+    weak_two_token_guess = (
+        surname_first_two_token
+        and below_reliable_batch_min
+        and has_latin
+        and not has_cjk
+        and ratio is not None
+        and ratio < PP_ABSTAIN_TWO_TOKEN_WEAK_RATIO_MAX
+    )
     accept_surname_first = (
         (surname_first_two_token or compound_surname_first_input_start)
         and not zero_batch_mixed_long
         and not spaced_cjk_zero_batch_surname_first
+        and not weak_two_token_guess
     )
     clean_bilingual_given_first = (
         pp_result_token_count == PP_ABSTAIN_TWO_TOKEN_RESULT_COUNT
@@ -1024,6 +1132,7 @@ def _pp_abstain_predicates(row: Row) -> dict[str, bool]:
         "zero_batch_mixed_long": zero_batch_mixed_long,
         "spaced_cjk_zero_batch_surname_first": spaced_cjk_zero_batch_surname_first,
         "accept_surname_first": accept_surname_first,
+        "weak_two_token_guess": weak_two_token_guess,
         "clean_bilingual_given_first": clean_bilingual_given_first,
     }
 

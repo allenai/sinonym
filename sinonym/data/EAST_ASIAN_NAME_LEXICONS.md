@@ -48,7 +48,10 @@ votes. The reviewed CSV keeps surname evidence separate from exact repairs. An
 example surface documents each surname addition, while only a non-empty
 `given_first_exact_surface` cell becomes a no-context repair. The exact tier
 contains `Kou Hiroya`, `Takaya Miwa`, `Haruki Kadono`, `Shoji Kagami`, `Masaki
-Takamoto`, and `Masaki Tomonaga`. The latter four were promoted only after all
+Takamoto`, `Masaki Tomonaga`, `Takao Asaka`, and `Masaki Shigemori`. The last
+two come from the 2026-09 S2AND name-order review: every reviewed occurrence (31
+and 24 INSPIRE records) was given-first, the surnames are absent from both open
+sources, and the ORCID records are the identity evidence. The latter four were promoted only after all
 692 exact normalized occurrences in the 691,008,961-row author corpus were
 reviewed with no contrary or uncertain ordering. They are post-selection
 reversal vetoes: unlike the two previously released surfaces, they do not

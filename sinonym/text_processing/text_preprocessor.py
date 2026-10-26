@@ -13,9 +13,13 @@ This module handles input cleaning and preparation before normalization.
 from __future__ import annotations
 
 import re
+
+from sinonym.name_punctuation import attach_detached_diacritics
 from typing import TYPE_CHECKING
 
 from sinonym.utils.string_manipulation import StringManipulationUtils
+
+
 
 if TYPE_CHECKING:
     from sinonym.coretypes import ChineseNameConfig
@@ -49,6 +53,7 @@ class TextPreprocessor:
         """
 
         surname_first_parenthetical = bool(self._surname_first_parenthetical_re.match(raw))
+        raw = attach_detached_diacritics(raw)
 
         # Single pass for most cleaning operations
         raw = self._config.clean_pattern.sub(self._clean_replacement, raw)
@@ -211,6 +216,7 @@ class TextPreprocessor:
         # Vietnamese-specific characters (conservative list to avoid Pinyin overlap)
         vietnamese_specific = "ĐđăâêôơưĂÂÊÔƠƯ"
 
+        saw_greek_or_cyrillic = False
         for char in text:
             char_code = ord(char)
 
@@ -232,5 +238,10 @@ class TextPreprocessor:
             # Vietnamese-specific characters only
             if char in vietnamese_specific:
                 return True
+            if 0x0370 <= char_code <= 0x03FF or 0x0400 <= char_code <= 0x052F:
+                saw_greek_or_cyrillic = True
 
-        return False
+        # Greek or Cyrillic letters without any Han are never a Chinese romanization. Without this, letters
+        # outside the Russian block (Ukrainian U+0456/U+0454, Kazakh U+04B1/U+0493) leak through the Roman
+        # filter and the residue parses as pinyin. Mixed Han+Cyrillic keeps its existing rejection path.
+        return saw_greek_or_cyrillic and not self._config.cjk_pattern.search(text)

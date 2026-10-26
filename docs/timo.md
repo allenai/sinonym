@@ -211,6 +211,36 @@ is not a global middle-dot split: populated first/middle fields, Latin-only
 text, four-or-more components, organization markers, and malformed segments
 remain outside the rule.
 
+## Writer-only corpus rules
+
+Some TIMO rules use statistics of the Semantic Scholar corpus or the source field boundaries. The canonical APIs
+(`normalize_name(...).canonical_name`, `normalize_person_name`, `normalize_person_name_components`) leave these out:
+
+| reason | what it does | why TIMO only |
+|---|---|---|
+| `corpus_compound_surname_assignment` | joins a listed compound surname (`Ana / Silva / Santos` → `Ana / Silva Santos`) | reorders on corpus evidence alone; list built from the S2 corpus and ORCID |
+| `corpus_order_prior_assignment` | settles a two-token Chinese name to the order the corpus writes for that pair, after the router picks a PP or VYS parse | the canonical APIs have no router decision |
+| `corpus_token_order_prior_assignment` | swaps a two-token Latin name written surname-first (`Schoenmakers / Birgitte` → `Birgitte / Schoenmakers`) | reorders on corpus evidence alone; tuned on S2 bylines |
+| `structured_initials_surname_assignment` for a glued given initial | `J.Dias / de / Deus` → `J. / Dias de Deus` | measured in TIMO only |
+
+These are shared by TIMO and the canonical APIs:
+
+| rule | TIMO reason | canonical APIs |
+|---|---|---|
+| a surname written before 2-3 dotted initials (`Dmitrieva / - / N.M.`), when the corpus uses the word mostly as a surname; common Chinese surnames keep the Chinese initials form (`W.-M. Zhang`) | `structured_surname_first_initials_assignment` | `normalize_person_name_components` only (needs the fields) |
+| dotted initials with a Slavic digraph before one surname word stay as written (`Ya. B. Beikin`) | `structured_initials_surname_assignment` | all |
+| a Chinese reversal of a two-token name is undone when the corpus writes the pair in the source order (`Ding Zhang`) | `corpus_order_prior_assignment` | all |
+| a romanized given-first Japanese name is not reversed (`Yu Kume`); the canonical APIs use the focal name only, TIMO also uses the paper | `japanese_given_first_reorder_veto_preserve_input` | all |
+| the directional Japanese dictionary flip stands down when the corpus token roles say the input is given-first (`Yoko Kozuki`) | `scalar_baseline` | all |
+
+The corpus tables cover names seen often enough in the 2026 snapshots; other names fall back to the behavior without
+the rule. See [Corpus-derived name assets](../sinonym/data/README.md#corpus-derived-name-assets-coverage-provenance-and-refresh)
+for coverage, provenance and the refresh procedure.
+
+So the same name can come out differently from TIMO and from the canonical APIs (pinned in
+`tests/test_timo_contract.py`). Submit the source fields as received: feeding TIMO's output back through TIMO or the
+canonical APIs is not guaranteed to return it unchanged.
+
 ## `not_person` is not automatically suppression
 
 The raw PP/VYS router's `not_person` result describes an intermediate batch

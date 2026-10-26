@@ -62,6 +62,7 @@ class ResolutionReason(str, Enum):
     SCALAR_KNOWN_COMPOUND_SURNAME_PRESERVE_INPUT = "scalar_known_compound_surname_preserve_input"
     SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT = "scalar_clean_source_surname_repartition_assignment"
     STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT = "structured_surname_initial_tail_assignment"
+    STRUCTURED_INITIALS_SURNAME_ASSIGNMENT = "structured_initials_surname_assignment"
 
     JAPANESE_ITERATION_MARK_ASSIGNMENT = "japanese_iteration_mark_assignment"
     JAPANESE_NATIVE_SPACED_STRICT_ASSIGNMENT = "japanese_native_spaced_strict_assignment"
@@ -79,9 +80,14 @@ class ResolutionReason(str, Enum):
 
     PP_SELECTED = "pp_selected"
     VYS_SELECTED = "vys_selected"
+    CORPUS_ORDER_PRIOR_ASSIGNMENT = "corpus_order_prior_assignment"
+    CORPUS_COMPOUND_SURNAME_ASSIGNMENT = "corpus_compound_surname_assignment"
+    CORPUS_TOKEN_ORDER_PRIOR_ASSIGNMENT = "corpus_token_order_prior_assignment"  # noqa: S105
+    STRUCTURED_SURNAME_FIRST_INITIALS_ASSIGNMENT = "structured_surname_first_initials_assignment"
     PP_VYS_ABSTAIN_PP_INPUT = "pp_vys_abstain_pp_input"
     PP_VYS_ABSTAIN_VYS_INPUT = "pp_vys_abstain_vys_input"
     PP_ONLY_ABSTAIN_INPUT = "pp_only_abstain_input"
+    GIVEN_CHAIN_CAP_INPUT = "given_chain_cap_input"
     PP_ONLY_ABSTAIN_REVIEWED_COMPOUND_SURNAME = "pp_only_abstain_reviewed_compound_surname"
     BATCH_ABSTAIN_MATERIALIZATION_FAILED = "batch_abstain_materialization_failed"
 
@@ -117,8 +123,12 @@ _RESOLUTION_REASON_GROUPS = {
     (ResolutionProvenance.SOURCE, ResolutionAction.ASSIGN): (
         ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT,
         ResolutionReason.STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT,
+        ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT,
         ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT,
         ResolutionReason.REVIEWED_SOURCE_PATTERN_ASSIGNMENT,
+        ResolutionReason.CORPUS_COMPOUND_SURNAME_ASSIGNMENT,
+        ResolutionReason.CORPUS_TOKEN_ORDER_PRIOR_ASSIGNMENT,
+        ResolutionReason.STRUCTURED_SURNAME_FIRST_INITIALS_ASSIGNMENT,
     ),
     (ResolutionProvenance.SOURCE, ResolutionAction.SUPPRESS): (ResolutionReason.REVIEWED_NON_PERSON_PATTERN,),
     (ResolutionProvenance.SCALAR, ResolutionAction.PRESERVE_INPUT): (
@@ -137,8 +147,12 @@ _RESOLUTION_REASON_GROUPS = {
     (ResolutionProvenance.PP, ResolutionAction.PRESERVE_INPUT): (
         ResolutionReason.PP_VYS_ABSTAIN_PP_INPUT,
         ResolutionReason.PP_ONLY_ABSTAIN_INPUT,
+        ResolutionReason.GIVEN_CHAIN_CAP_INPUT,
     ),
-    (ResolutionProvenance.PP, ResolutionAction.ASSIGN): (ResolutionReason.PP_SELECTED,),
+    (ResolutionProvenance.PP, ResolutionAction.ASSIGN): (
+        ResolutionReason.PP_SELECTED,
+        ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT,
+    ),
     (ResolutionProvenance.VYS, ResolutionAction.PRESERVE_INPUT): (ResolutionReason.PP_VYS_ABSTAIN_VYS_INPUT,),
     (ResolutionProvenance.VYS, ResolutionAction.ASSIGN): (ResolutionReason.VYS_SELECTED,),
 }

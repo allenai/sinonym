@@ -14,12 +14,19 @@ import unicodedata
 from dataclasses import dataclass, replace
 from enum import Enum
 
+from sinonym.chinese_names_data import (
+    NAME_ORDER_ROUTING_CANTONESE_GIVEN_SYLLABLES,
+    NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES,
+    VIETNAMESE_GIVEN_PATTERNS,
+)
 from sinonym.coretypes import CanonicalName, NameComponents
 from sinonym.name_punctuation import (
     INVISIBLE_MARKUP_DELETE_TRANSLATION,
     PERSON_JOINER_FOLD_TRANSLATION,
+    attach_detached_diacritics,
     fold_internal_name_joiners,
     fold_spaced_transliteration_apostrophes,
+    strip_soft_hyphens,
 )
 from sinonym.services.non_person import reviewed_non_person_text_pattern
 
@@ -112,6 +119,14 @@ _PARENTHETICAL_DUPLICATE_RE = re.compile(r"^(\S+)\s+\(([^)]+)\)\s+(.+)$")
 _ASCII_JOINER_TRANSLATION = str.maketrans({"`": "'"})
 _PRE_NFKC_JOINER_TRANSLATION = str.maketrans({"\u00b4": "'"})
 
+# "Hon" is a Cantonese given name far more often than the Honourable; only the dotted form is a title
+_DOT_REQUIRED_TITLE_KEYS = frozenset({"hon"})
+
+
+def _bare_title_name(key: str, surface: str) -> bool:
+    return key in _DOT_REQUIRED_TITLE_KEYS and not surface.endswith(".")
+
+
 _TITLE_KEYS = frozenset(
     {
         "capt",
@@ -140,6 +155,7 @@ _TITLE_KEYS = frozenset(
     },
 )
 _TITLE_QUALIFIER_KEYS = frozenset({"hc", "habil", "honoraire", "med", "nat", "rer"})
+_CAPS_TITLE_INITIAL_KEYS = frozenset({"dr", "mr"})
 _LEADING_NAME_ABBREVIATION_KEYS = frozenset({"md"})
 _LONG_NAME_ABBREVIATION_KEYS = frozenset({"mohd", "most"})
 _CREDENTIAL_KEYS = frozenset(
@@ -268,6 +284,13 @@ _FAMILY_PARTICLES = frozenset(
         "zum",
         "zur",
     },
+)
+# all-caps two-letter tokens the corpus almost never uses as a capitalized particle (dotted-initial evidence
+# AL 321:7, LA 318:3, EL 208:19, DA 160:11, ST 57:0, TE 23:0, LE 87:5 in the October 2026 counts)
+_CAPITALIZED_INITIALS_NOT_PARTICLES = frozenset({"al", "la", "el", "da", "st", "te", "le"})
+EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES = frozenset({"bin", "van", "da", "do", "le", "ta"})
+EAST_ASIAN_GIVEN_SYLLABLES = frozenset(
+    NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES | NAME_ORDER_ROUTING_CANTONESE_GIVEN_SYLLABLES | VIETNAMESE_GIVEN_PATTERNS,
 )
 _LOWERCASE_RELATIONAL_TOKENS = frozenset({"'t", "b.", "d.", "e", "kizi", "kyzy", "oglu", "o'g'li", "oğlu", "qizi"})
 _STRONG_FAMILY_PARTICLE_SPANS = (
@@ -668,6 +691,7 @@ class PersonNameNormalizationService:
         """Normalize one raw name string into semantic canonical components."""
         if not isinstance(raw_name, str):
             return self._invalid("name must be a string")
+        raw_name = attach_detached_diacritics(strip_soft_hyphens(raw_name))
         if reviewed_non_person_text_pattern(raw_name) is not None:
             return self._non_person("reviewed non-person input")
 
@@ -810,6 +834,10 @@ class PersonNameNormalizationService:
         }
         if any(value is not None and not isinstance(value, str) for value in values.values()):
             return self._invalid("name components must be strings or null")
+        values = {
+            role: attach_detached_diacritics(strip_soft_hyphens(value)) if value else value for role, value in values.items()
+        }
+        first_name, middle_name, last_name, suffix = values["given"], values["middle"], values["surname"], values["suffix"]
         source_surface = " ".join(value for value in (first_name, middle_name, last_name) if value)
         if not (suffix or "").strip() and reviewed_non_person_text_pattern(source_surface) is not None:
             return self._non_person("reviewed non-person input")
@@ -1298,9 +1326,27 @@ class PersonNameNormalizationService:
             )
             # An all-caps token that reads as initials ("MS", "M-S.") must not be dropped
             # as the honorific "Ms": all-caps = initials, Title-case "Ms"/"Ms." = honorific.
-            title_is_really_initials = ambiguous_name_token and token.text.isupper()
+            # The same holds for a bare all-caps "MR"/"DR" alone before a mixed-case surname
+            # ("MR / Islam": the registered given name starts with M in most such rows), and for
+            # hyphenated initials whose letters spell a title ("M-R", "M.-R.").
+            title_is_really_initials = (
+                (ambiguous_name_token and token.text.isupper())
+                or bool(_HYPHEN_INITIAL_RE.fullmatch(token.text))
+                or (
+                    key in _CAPS_TITLE_INITIAL_KEYS
+                    and token.text.isalpha()
+                    and token.text.isupper()
+                    and len(remaining) == _TWO_COMPONENTS
+                    and not remaining[1].text.isupper()
+                )
+            )
             if (
-                (key in _TITLE_KEYS and not multi_initial and not title_is_really_initials)
+                (
+                    key in _TITLE_KEYS
+                    and not multi_initial
+                    and not title_is_really_initials
+                    and not _bare_title_name(key, token.text)
+                )
                 or (stripped_title and key in _TITLE_QUALIFIER_KEYS)
                 or prefixed_academic_title
             ):
@@ -1941,7 +1987,9 @@ class PersonNameNormalizationService:
                 anchor = strong_particle[0]
             surname_start = anchor
         elif particle_positions := [
-            index for index, token in enumerate(tokens[1:-1], start=1) if self._particle_key(token.text) in _FAMILY_PARTICLES
+            index
+            for index, token in enumerate(tokens[1:-1], start=1)
+            if self._particle_key(token.text) in _FAMILY_PARTICLES and self._particle_reading_allowed(tokens, index)
         ]:
             surname_start = particle_positions[0]
         elif len(tokens) == _FOUR_COMPONENTS and self._is_initial(tokens[1].text) and not self._is_initial(tokens[2].text):
@@ -1952,6 +2000,31 @@ class PersonNameNormalizationService:
         middle = [replace(token, source_role="middle") for token in tokens[1:surname_start]]
         surname = [replace(token, source_role="surname") for token in tokens[surname_start:]]
         return given, middle, surname
+
+    def _particle_reading_allowed(self, tokens: list[_Token], index: int) -> bool:
+        """Two corpus-measured false particles: capitalized initials and East Asian given syllables.
+
+        ``Nicholas AL Garalleh``, ``Michelle LA Nelson``: a two-letter all-caps token between a mixed-case given name
+        and a mixed-case surname is initials (the October counts write such names with dotted initials 320:7 for AL
+        and LA); DE / VAN / VON / DI are excluded because sources that capitalize the surname also capitalize a real
+        particle (``Peter VAN OOSTEROM``). ``Young Bin Kim``, ``Quan Van Dau``: after a Korean, Cantonese or
+        Vietnamese given syllable, ``bin`` / ``van`` / ``da`` is the second given syllable, not a particle.
+        """
+        key = self._particle_key(tokens[index].text)
+        text = tokens[index].text
+        if (
+            key in _CAPITALIZED_INITIALS_NOT_PARTICLES
+            and text.isupper()
+            and len(text) == _TWO_COMPONENTS
+            and not tokens[0].text.isupper()
+            and not tokens[-1].text.isupper()
+        ):
+            return False
+        if key in EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES and index >= 1:
+            previous = tokens[index - 1].text.casefold()
+            if previous in EAST_ASIAN_GIVEN_SYLLABLES and not text.islower():
+                return False
+        return True
 
     def _structured_particle_surname_first_roles(
         self,

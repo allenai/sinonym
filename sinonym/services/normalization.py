@@ -31,6 +31,10 @@ ScriptRepresentation = Literal["latin_only", "han_only", "bilingual_aligned", "m
 MIN_BILINGUAL_ALIGNMENT_PAIRS = 2
 
 
+# pinyin ü written as v (lü -> lv): a syllable, never two initials ("Xv Wu" is not "X.-V. Wu")
+_PINYIN_UMLAUT_SPELLINGS = frozenset({"lv", "nv", "xv", "lve", "nve"})
+
+
 @dataclass(frozen=True)
 class BilingualTokenPair:
     """Explicit Roman/Han token alignment from bilingual author-name strings."""
@@ -185,6 +189,7 @@ class NormalizationService:
             token.isalpha()
             and 2 <= len(folded) <= 3
             and not any(character in "aeiou" for character in folded)
+            and folded not in _PINYIN_UMLAUT_SPELLINGS
             and not self.is_attested_remapped_given_syllable(token),
         )
 

@@ -220,6 +220,7 @@ from sinonym.services.east_asian_name_order import (
 from sinonym.services.ethnicity import INITIAL_ONLY_CROSS_CULTURAL_SURNAMES
 from sinonym.services.formatting import REVIEWED_UNBOUNDED_PREFIX_GIVEN_FORMS, SINGLE_LETTER_PINYIN_SYLLABLES
 from sinonym.services.non_person import reviewed_non_person_source_pattern
+from sinonym.services.order_prior import corpus_surname_for, load_order_prior
 from sinonym.services.parsing import validate_parsing_weights
 from sinonym.services.person_name_normalization import (
     DropReason,
@@ -228,6 +229,9 @@ from sinonym.services.person_name_normalization import (
     PersonNameOutcome,
 )
 from sinonym.services.process_pool import PersistentMultiprocessNormalizer
+from sinonym.services.slavic_initials import is_digraph_initials_surname
+from sinonym.services.surname_first_words import load_surname_first_words, surname_first_initials
+from sinonym.services.token_order_prior import load_token_role_prior
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 LOGGER = logging.getLogger(__name__)
@@ -334,6 +338,9 @@ class ChineseNameDetector:
     def _initialize_services(self, data: NameDataStructures) -> None:
         """Build dependent services and publish them only after all succeed."""
         context = ServiceContext(self._config, self._normalizer, data)
+        load_token_role_prior()
+        load_order_prior()
+        load_surname_first_words()
         surname_resolver = SurnameResolver(data, self._normalizer)
         ethnicity_service = EthnicityClassificationService(context)
         parsing_service = NameParsingService(context, weights=self._weights)
@@ -1574,6 +1581,8 @@ class ChineseNameDetector:
 
         if self._east_asian_name_order._is_reviewed_japanese_given_first_exact_surface(routing_surface):
             return baseline
+        if self._is_digraph_initials_baseline(baseline):
+            return baseline
 
         chinese = self._canonical_chinese_name_with_source(
             raw_name,
@@ -1581,10 +1590,45 @@ class ChineseNameDetector:
             result=chinese_result,
         )
         if chinese is not None:
-            return chinese
+            return baseline if self._writer_vetoes_chinese_reversal(raw_name, baseline, chinese) else chinese
         if not isinstance(resolution, EastAsianNameOrderDecision):
             return baseline
-        return self._canonical_name_from_order_decision(baseline, resolution) or baseline
+        ordered = self._canonical_name_from_order_decision(baseline, resolution)
+        if ordered is None or self._japanese_given_first_veto(raw_name, ordered):
+            return baseline
+        return ordered
+
+    @staticmethod
+    def _is_digraph_initials_baseline(baseline: CanonicalName) -> bool:
+        source = baseline.source
+        return is_digraph_initials_surname([*source.given_tokens, *source.middle_tokens], source.surname)
+
+    def _japanese_given_first_veto(self, raw_name: str, selected: CanonicalName) -> bool:
+        """The TIMO writer's veto on a reversal of a romanized given-first Japanese name (``Yu Kume``), without paper
+        context; native-script decisions keep their own dictionary routing."""
+        if not raw_name.isascii():
+            return False
+        veto = self._east_asian_name_order.reorder_conflict_reason(
+            raw_name,
+            selected.normalized,
+            paper_names=[raw_name],
+            focal_index=0,
+        )
+        return veto is ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
+
+    def _writer_vetoes_chinese_reversal(self, raw_name: str, baseline: CanonicalName, chinese: CanonicalName) -> bool:
+        """Keep the source order where the TIMO writer would: Japanese given-first evidence, or a two-token Chinese
+        pair the corpus writes in the source order (``Ding Zhang``)."""
+        if self._japanese_given_first_veto(raw_name, chinese):
+            return True
+        source, selected = baseline.source, chinese.normalized
+        if source.middle_tokens or selected.middle_tokens:
+            return False
+        if len(source.given_tokens) != 1 or len(source.surname_tokens) != 1:
+            return False
+        given, surname = source.given_tokens[0], source.surname_tokens[0]
+        reversed_pair = (selected.given_name.casefold(), selected.surname.casefold()) == (surname.casefold(), given.casefold())
+        return reversed_pair and corpus_surname_for(given, surname) == surname
 
     def _canonical_chinese_name_with_source(
         self,
@@ -2037,6 +2081,14 @@ class ChineseNameDetector:
         if reviewed_non_person_source_pattern(first_name, middle_name, last_name, suffix) is not None:
             return None
         baseline = normalized.canonical_name
+        reordered = surname_first_initials(first_name, middle_name, last_name, suffix)
+        if reordered is not None:
+            given, middle, surname = reordered
+            swapped = self._person_name_normalizer.normalize_components(
+                first_name=given, middle_name=middle, last_name=surname, suffix=suffix,
+            )
+            if swapped.outcome is PersonNameOutcome.PERSON and swapped.canonical_name is not None:
+                return replace(swapped.canonical_name, source=baseline.source, source_text=baseline.source_text)
         selected = self._canonical_person_name_from_baseline(baseline.source_text, baseline)
         return replace(selected, source=baseline.source)
 
@@ -2101,10 +2153,14 @@ class ChineseNameDetector:
                 return baseline
             if terminal is not None:
                 return terminal.canonical_name
+            if self._is_digraph_initials_baseline(baseline):
+                return baseline
 
         canonical_name = self._canonical_name_from_chinese_result(raw_name, result)
         if canonical_name is None:
-            canonical_name = self._normalize_person_name_with_chinese_result(raw_name, result)
+            return self._normalize_person_name_with_chinese_result(raw_name, result)
+        if baseline is not None and self._writer_vetoes_chinese_reversal(raw_name, baseline, canonical_name):
+            return baseline
         return canonical_name
 
     def normalize_name(self, raw_name: str) -> ParseResult:

@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field, StrictStr, root_validator
 
 from sinonym.chinese_names_data import HAN_SURNAME_POSITION_READINGS, REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS
-from sinonym.coretypes import NameComponents, ParseResult
+from sinonym.coretypes import NameComponents, ParsedName, ParseResult
 from sinonym.coretypes.routing_resolution import (
     ApplyAssignment,
     EvidenceFailure,
@@ -34,19 +34,26 @@ from sinonym.coretypes.routing_resolution import (
     resolution_decision_spec,
 )
 from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
-from sinonym.pipeline.name_order_routing import pp_abstain_parsed
+from sinonym.pipeline.name_order_routing import given_chain_cap_parsed, pp_abstain_parsed
+from sinonym.services.compound_surnames import listed_compound_suffix
 from sinonym.services.east_asian_name_order import JAPANESE_ML_THRESHOLD
 from sinonym.services.non_person import (
     CJK_NON_PERSON_SUFFIX_MARKERS,
     REVIEWED_HANGUL_ORGANIZATION_MARKERS,
     reviewed_non_person_source_pattern,
 )
+from sinonym.services.order_prior import corpus_surname_for
 from sinonym.services.person_name_normalization import (
+    EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES,
+    EAST_ASIAN_GIVEN_SYLLABLES,
     PersonNameNormalizationService,
     PersonNameOutcome,
     reviewed_closed_comma_credential_tail_head,
     reviewed_source_cleanup_pattern,
 )
+from sinonym.services.slavic_initials import is_digraph_initials_surname, is_dotted_initial
+from sinonym.services.surname_first_words import surname_first_initials
+from sinonym.services.token_order_prior import surname_first_pair, token_role
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -138,7 +145,7 @@ _ASCII_WORD_RE = re.compile(r"[A-Za-z]+")
 _ASCII_HYPHENATED_WORD_RE = re.compile(r"[A-Za-z]+(?:-[A-Za-z]+)*")
 _ASCII_INITIAL_RE = re.compile(r"[A-Za-z]\.?")
 _DOTTED_INITIAL_RE = re.compile(r"[^\W\d_]\.", re.UNICODE)
-_JOINED_UPPERCASE_SURNAME_RE = re.compile(r"([A-Z]{2,})([A-Z][a-z]+(?:-[a-z]+)*)")
+_JOINED_UPPERCASE_SURNAME_RE = re.compile(r"([A-Z]{2,})([A-Z][a-z]+(?:-[A-Za-z][a-z]+)*)")
 _TITLED_GIVEN_RE = re.compile(r"(?:Dr\.|Prof\.) ([^\s]+)")
 _TRAILING_AFFILIATION_SURNAME_RE = re.compile(r"[A-Z][a-z]+a")
 _MIN_DOTTED_SOURCE_INITIALS = 2
@@ -1195,8 +1202,59 @@ class SourceAuthorFields(_Model):
     suffix: StrictStr | None = Field(default=None)
 
     def full_name(self) -> str:
-        """Derive the current scalar/PP input; suffix is intentionally excluded."""
-        return " ".join(part for part in (self.first_name or "", self.middle_names or "", self.last_name or "") if part).strip()
+        """Derive the current scalar/PP input; suffix is intentionally excluded.
+
+        A comma closing a full given word before a real surname ("Thomas," / "W." / "Crowther") is field
+        punctuation; flattened verbatim it would read as the surname-first "Thomas, W. Crowther". Before
+        initials ("Adamu," / "D. A.") the comma is the surname-first marker and stays. When the middle field is a
+        full word too ("Anih," / "David" / "Chinonso", Crossref bylines from Nigeria), or empty ("Opoku," / "Albert"),
+        the comma is the marker unless the corpus knows the closed word as a given name ("Jennifer," / "Alyson" /
+        "Carter"), or, with no middle, the last word as a surname ("Roshini," / "Pillay"): on every ORCID in the
+        corpus the unconditional reading split 62 people for 175 united, the conditional one 0 for 138.
+        """
+        first, middle, last = self.first_name or "", self.middle_names or "", self.last_name or ""
+        given_word = first.rstrip(" ,")
+        surname_words = [token for token in last.replace(".", " ").split() if len(token) > 1]
+        middle_words = [token for token in middle.replace(".", " ").split() if len(token) > 1]
+        if (
+            surname_words
+            and len(given_word) > 1
+            and given_word.isalpha()
+            and (
+                (middle.strip() and not middle_words)
+                or token_role(given_word) == "given"
+                or (not middle.strip() and token_role(surname_words[-1]) == "surname")
+            )
+        ):
+            first = given_word
+        return " ".join(part for part in (first, middle, last) if part).strip()
+
+
+def _corpus_order_prior_parsed(parsed: ParsedName | None, raw_name: str) -> ParsedName | None:
+    """Flip a two-token parse to the orientation the corpus writes for that pair, when the prior is strong.
+
+    A name written only in a CJK script is surname-first, so the romanized-pair prior never overrides it."""
+    if any(_is_cjk_letter(character) for character in raw_name) and not any(
+        character.isascii() and character.isalpha() for character in raw_name
+    ):
+        return None
+    if parsed is None or parsed.middle_tokens or len(parsed.given_tokens) != 1 or len(parsed.surname_tokens) != 1:
+        return None
+    given, surname = parsed.given_tokens[0], parsed.surname_tokens[0]
+    if "-" in given or "-" in surname or not given.isalpha() or not surname.isalpha():
+        return None
+    corpus_surname = corpus_surname_for(given, surname)
+    if corpus_surname is None or corpus_surname == surname:
+        return None
+    return ParsedName(
+        surname=given,
+        given_name=surname,
+        surname_tokens=[given],
+        given_tokens=[surname],
+        middle_name="",
+        middle_tokens=[],
+        order=["given", "surname"],
+    )
 
 
 def _normalized_exact_endpoints(
@@ -1461,6 +1519,153 @@ def _reviewed_joined_uppercase_surname_assignment(
         return None
     surname, given = focal_match.groups()
     return NameComponents(given_name=given, surname=surname.title())
+
+
+_PLAIN_SURNAME_TOKEN_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", re.UNICODE)
+
+
+_GLUED_SINGLE_INITIAL_SURNAME_RE = re.compile(r"([A-Z])\.([A-Z][a-z]+(?:-[A-Z][a-z]+)*)")
+_SINGLE_INITIAL_RE = re.compile(r"[A-Z]\.?")
+
+
+def _glued_single_initial_assignment(source: SourceAuthorFields) -> NameComponents | None:
+    """Unglue one initial written against the surname: ``- / M.Nguyen`` → ``M. / Nguyen``.
+
+    The Chinese path already does this for its names (``Z.Li`` → ``Z. / Li``); the person-name
+    path returned the glued token verbatim, with no first name. ``J / A.Minahan`` → ``J. / A. /
+    Minahan``. Two or more glued initials are left to the Chinese formatter (``Z.Y.Li`` →
+    ``Z.-Y. Li``).
+    """
+    if (source.suffix or "").strip() or (source.middle_names or "").strip():
+        return None
+    first = (source.first_name or "").strip()
+    match = _GLUED_SINGLE_INITIAL_SURNAME_RE.fullmatch((source.last_name or "").strip())
+    if match is None or (first and not _SINGLE_INITIAL_RE.fullmatch(first)):
+        return None
+    initial, surname = match.groups()
+    if first:
+        return NameComponents(given_name=first.rstrip(".") + ".", middle_name=initial + ".", surname=surname)
+    return NameComponents(given_name=initial + ".", surname=surname)
+
+
+_GLUED_GIVEN_INITIAL_RE = re.compile(r"([A-Z])\.([A-Z][a-z]{2,}(?:-[A-Z][a-z]+)*)")
+
+
+def _glued_given_initial_assignment(source: SourceAuthorFields) -> NameComponents | None:
+    """Unglue an initial written against the next given word: ``J.Dias / - / Santos`` → ``J. / Dias / Santos``.
+
+    The word becomes the first middle name, so a listed compound surname can then take it (``J. / Dias Santos``).
+    """
+    if (source.suffix or "").strip():
+        return None
+    match = _GLUED_GIVEN_INITIAL_RE.fullmatch((source.first_name or "").strip())
+    surname = " ".join((source.last_name or "").split())
+    if match is None or not surname:
+        return None
+    initial, word = match.groups()
+    selected = NameComponents(
+        given_name=initial + ".",
+        middle_name=" ".join([word, *(source.middle_names or "").split()]),
+        surname=surname,
+    )
+    if word.casefold() == surname.split()[0].casefold():
+        return selected
+    return _corpus_compound_extension(selected) or selected
+
+
+def _structured_initials_surname_assignment(source: SourceAuthorFields) -> NameComponents | None:
+    """Keep a source made of dotted initials and one surname token: ``Ya. G. / Sinai``.
+
+    Every given/middle token is a dotted initial (one letter, or a Slavic digraph such as
+    ``Ya.``/``Zh.``) and the surname is a single word, so the source has exactly one reading.
+    Letting it reach the Chinese parser is how ``Ya.`` (a Russian digraph initial) became the
+    surname and ``Sinai`` was cut into pinyin syllables.
+    """
+    if (source.suffix or "").strip():
+        return None
+    personal = f"{source.first_name or ''} {source.middle_names or ''}".split()
+    surname = (source.last_name or "").strip()
+    if not is_digraph_initials_surname(personal, surname):
+        return None
+    first, *middle = personal
+    if surname.isupper():
+        surname = surname.title()
+    return NameComponents(given_name=first, middle_name=" ".join(middle), surname=surname)
+
+
+def _surname_first_initials_assignment(source: SourceAuthorFields) -> NameComponents | None:
+    """``Dmitrieva / - / N.M.``: a surname written first, the given-name initials after it (``surname_first_words``)."""
+    selected = surname_first_initials(source.first_name, source.middle_names, source.last_name, source.suffix)
+    if selected is None:
+        return None
+    given, middle, surname = selected
+    return NameComponents(given_name=given, middle_name=middle, surname=surname)
+
+
+_AMBIGUOUS_CREDENTIAL_SURNAMES = frozenset({"DO"})
+_DOTTED_INITIALS_RUN_RE = re.compile(r"(?:[^\W\d_]\.){2,}", re.UNICODE)
+
+
+def _structured_leading_initials_assignment(source: SourceAuthorFields) -> NameComponents | None:
+    """``M.A. / - / Medina Alcaide``: a dotted-initials run in the given field before a multi-token surname.
+
+    Flattened, ``M.A.`` reads as the degree and is dropped, after which the surname's first word is promoted
+    to the given name. Single-token surnames stay with the Chinese pipeline (``Z.Y. / Li`` -> ``Z.-Y. / Li``)
+    and reviewed compound sources keep their byte-exact preservation.
+    """
+    if (source.suffix or "").strip():
+        return None
+    first = (source.first_name or "").strip()
+    middle = " ".join((source.middle_names or "").split())
+    surname = " ".join((source.last_name or "").split())
+    if not _DOTTED_INITIALS_RUN_RE.fullmatch(first) or len(surname.split()) < 2:  # noqa: PLR2004
+        return None
+    if not _PLAIN_SURNAME_TOKEN_RE.fullmatch(surname.replace(" ", "")):
+        return None
+    if middle and not all(is_dotted_initial(token) for token in middle.split()):
+        return None
+    if _source_component_key(source) in REVIEWED_SCALAR_COMPOUND_SURNAMES:
+        return None
+    initials = [f"{letter}." for letter in first.replace(".", "")]
+    return NameComponents(given_name=initials[0], middle_name=" ".join([*initials[1:], *middle.split()]), surname=surname)
+
+
+def _corpus_compound_extension(selected: NameComponents) -> NameComponents | None:
+    """Extend a parsed surname leftwards over a corpus-backed compound: ``Rivera / Maza`` ends as ``Rivera Maza``.
+
+    The surface list (data/COMPOUND_SURNAMES.md) holds multi-word surnames the corpus writes as one surname and
+    that ORCID people carry in both shapes; keying both shapes to the same surname is what unites those people.
+    Only middle-name words move into the surname: the given name and every surname word the parse already kept
+    stay, so a parse that joined more (``Silva dos Santos``) or reordered the fields is never undone.
+    """
+    middle_words = selected.middle_name.split()
+    last_words = selected.surname.split()
+    if not middle_words or not last_words or is_dotted_initial(last_words[-1]):
+        return None
+    words = [*middle_words, *last_words]
+    width = listed_compound_suffix(words)
+    if width <= len(last_words):
+        return None
+    return NameComponents(
+        given_name=selected.given_name,
+        middle_name=" ".join(words[: len(words) - width]),
+        surname=" ".join(words[len(words) - width :]),
+        suffix=selected.suffix,
+    )
+
+
+def _ambiguous_credential_surname_assignment(source: SourceAuthorFields) -> NameComponents | None:
+    """An all-caps ``DO`` alone in the surname field of a structured source is a surname (``Hue Thi DO``).
+
+    Flattened, the token reads as a trailing credential and is dropped, leaving the middle name as the surname.
+    """
+    if (source.suffix or "").strip():
+        return None
+    first = (source.first_name or "").strip()
+    surname = (source.last_name or "").strip()
+    if not first or is_dotted_initial(first) or surname not in _AMBIGUOUS_CREDENTIAL_SURNAMES:
+        return None
+    return NameComponents(given_name=first, middle_name=" ".join((source.middle_names or "").split()), surname=surname.title())
 
 
 def _joined_uppercase_candidate_adds_normalization(
@@ -1826,6 +2031,44 @@ class _Resolver:
             selected.surname.split(),
         ) == surface_key(surname[-1:])
 
+    def _token_order_prior_candidate(self, source: SourceAuthorFields, selected: NameComponents) -> NameComponents | None:
+        """A two-token Latin name written surname-first: ``Ferrari / Giulia`` becomes ``Giulia / Ferrari``.
+
+        Fires only when the corpus role prior (services/token_order_prior.py) is strong on both tokens, the parse
+        has no middle name, and both tokens are plain alphabetic words.
+        """
+        if (source.suffix or "").strip() or selected.middle_name or selected.suffix:
+            return None
+        given, surname = selected.given_name.strip(), selected.surname.strip()
+        if " " in given or " " in surname or "-" in given or "-" in surname or not given.isalpha() or not surname.isalpha():
+            return None
+        if len(given) < 3 or len(surname) < 3 or not surname_first_pair(given, surname):  # noqa: PLR2004
+            # two-letter tokens are too often glued initials ("VV Robin") for the role prior to be trusted
+            return None
+        return NameComponents(given_name=surname, middle_name="", surname=given, suffix="")
+
+    def _corpus_compound_candidate(self, source: SourceAuthorFields, selected: NameComponents) -> NameComponents | None:
+        """A corpus-backed compound the scalar parse did not keep whole (data/COMPOUND_SURNAMES.md)."""
+        if (source.suffix or "").strip() or not selected.given_name:
+            return None
+        full = f"{selected.middle_name} {selected.surname}".strip()
+        if self._detector.is_curated_compound_surname(full) or self._detector.is_curated_compound_surname(selected.surname):
+            return None
+        middle_words = selected.middle_name.split()
+        if (
+            middle_words
+            and middle_words[-1].casefold() in EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES
+            and selected.given_name.split()[-1].casefold() in EAST_ASIAN_GIVEN_SYLLABLES
+        ):
+            # ``Quan / Van / Dau``: after a Vietnamese / Korean / Cantonese given syllable the middle is a given syllable,
+            # even when the corpus happens to write ``Van Dau`` whole somewhere
+            return None
+        candidate = _corpus_compound_extension(selected)
+        if candidate is None or len(candidate.surname.split()) < len((source.last_name or "").split()):
+            # never fewer surname words than the source wrote; that shape belongs to the repartition rules
+            return None
+        return candidate
+
     def _structured_surname_initial_tail_candidate(
         self,
         source: SourceAuthorFields,
@@ -1942,6 +2185,14 @@ class _Resolver:
         assignment_rules: tuple[tuple[Callable[[], NameComponents | None], ResolutionReason], ...] = (
             (lambda: reviewed_exact_source_assignment(source), ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT),
             (
+                lambda: _structured_initials_surname_assignment(source),
+                ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT,
+            ),
+            (lambda: _glued_single_initial_assignment(source), ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT),
+            (lambda: _glued_given_initial_assignment(source), ResolutionReason.STRUCTURED_INITIALS_SURNAME_ASSIGNMENT),
+            (lambda: _ambiguous_credential_surname_assignment(source), pattern_reason),
+            (lambda: _structured_leading_initials_assignment(source), pattern_reason),
+            (
                 lambda: _reviewed_detached_diacritic_assignment(source, paper_authors, self._source_normalizer),
                 pattern_reason,
             ),
@@ -1953,6 +2204,10 @@ class _Resolver:
             (
                 lambda: _reviewed_paper_wide_dotted_surname_initial_assignment(source, paper_authors),
                 ResolutionReason.STRUCTURED_SURNAME_INITIAL_TAIL_ASSIGNMENT,
+            ),
+            (
+                lambda: _surname_first_initials_assignment(source),
+                ResolutionReason.STRUCTURED_SURNAME_FIRST_INITIALS_ASSIGNMENT,
             ),
             (
                 lambda: _reviewed_paper_wide_trailing_affiliation_assignment(
@@ -1974,7 +2229,12 @@ class _Resolver:
         for rule, reason in assignment_rules:
             selected = rule()
             if selected is not None:
-                return self._source_assignment_resolution(source=source, selected=selected, reason=reason)
+                try:
+                    return self._source_assignment_resolution(source=source, selected=selected, reason=reason)
+                except RuntimeError:
+                    # a pattern matched a shape the normalizer rejects ("E. / A. / and Solomon"): let the later
+                    # stages read the row instead of failing the whole paper
+                    continue
         return None
 
     def _reviewed_cleanup_resolution(
@@ -2158,6 +2418,20 @@ class _Resolver:
                     selected=source_surname_candidate,
                     reason=ResolutionReason.SCALAR_CLEAN_SOURCE_SURNAME_REPARTITION_ASSIGNMENT,
                 )
+            compound = self._corpus_compound_candidate(source, scalar_canonical.normalized)
+            if compound is not None:
+                return self._source_assignment_resolution(
+                    source=source,
+                    selected=compound,
+                    reason=ResolutionReason.CORPUS_COMPOUND_SURNAME_ASSIGNMENT,
+                )
+            surname_first = self._token_order_prior_candidate(source, scalar_canonical.normalized)
+            if surname_first is not None:
+                return self._source_assignment_resolution(
+                    source=source,
+                    selected=surname_first,
+                    reason=ResolutionReason.CORPUS_TOKEN_ORDER_PRIOR_ASSIGNMENT,
+                )
             return self._materialize_selected_candidate(
                 source=source,
                 paper_authors=paper_authors,
@@ -2274,6 +2548,12 @@ class _Resolver:
         parsed = chosen.parsed if chosen is not None and chosen.success else None
         if decision == "abstain" and (parsed is None or not parsed.surname):
             batch_reason = ResolutionReason.BATCH_ABSTAIN_MATERIALIZATION_FAILED
+        capped = given_chain_cap_parsed(parsed, raw_name, source) if decision in ("pp", "vys") else None
+        if capped is not None:
+            parsed, batch_reason = capped, ResolutionReason.GIVEN_CHAIN_CAP_INPUT
+        prior_parsed = _corpus_order_prior_parsed(parsed, raw_name) if decision in ("pp", "vys") else None
+        if prior_parsed is not None:
+            parsed, batch_reason = prior_parsed, ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT
         return self.terminal_resolution(
             source=source,
             paper_authors=paper_authors,
@@ -2301,6 +2581,9 @@ class _Resolver:
         if decision == "pp":
             parsed = result.parsed if result.success else None
             batch_reason = ResolutionReason.PP_SELECTED
+            capped = given_chain_cap_parsed(parsed, raw_name, source)
+            if capped is not None:
+                parsed, batch_reason = capped, ResolutionReason.GIVEN_CHAIN_CAP_INPUT
         elif decision == "abstain":
             if _structural_roman_hyphen_key(source.last_name) in REVIEWED_TRAILING_HYPHENATED_COMPOUND_SURNAMES:
                 parsed = None
@@ -2316,7 +2599,7 @@ class _Resolver:
                 parsed = None
                 batch_reason = ResolutionReason.PP_ONLY_ABSTAIN_INPUT
             else:
-                parsed = pp_abstain_parsed(result, row)
+                parsed = pp_abstain_parsed(result, row, raw_name, source)
                 batch_reason = ResolutionReason.PP_ONLY_ABSTAIN_INPUT
                 if parsed is None or not parsed.surname:
                     batch_reason = ResolutionReason.BATCH_ABSTAIN_MATERIALIZATION_FAILED
@@ -2326,6 +2609,9 @@ class _Resolver:
         else:
             message = f"pp-abstain router returned unexpected router_prediction={decision!r}"
             raise ValueError(message)
+        prior_parsed = _corpus_order_prior_parsed(parsed, raw_name) if decision == "pp" else None
+        if prior_parsed is not None:
+            parsed, batch_reason = prior_parsed, ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT
 
         return self.terminal_resolution(
             source=source,
