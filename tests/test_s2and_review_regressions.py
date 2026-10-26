@@ -412,6 +412,11 @@ CORPUS_SCALE_CASES = [
     (("Hyun", "Ho", "Sung"), ("Hyun", "Ho", "Sung")),
     (("Hyun", "Sik", "Jun"), ("Hyun", "Sik", "Jun")),
     (("Chang", "Ho", "Hyun"), ("Chang", "Ho", "Hyun")),
+    # a name written only in Chinese characters is surname-first; the romanized-pair order prior must not flip it,
+    # but it still applies when the source also carries a romanized form
+    ((None, None, "杨柳"), ("Liu", "", "Yang")),
+    ((None, None, "董江"), ("Jiang", "", "Dong")),
+    (("庞", "璐", "Pang Lu"), ("Lu", "", "Pang")),
 ]
 
 
