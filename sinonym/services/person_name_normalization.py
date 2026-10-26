@@ -155,6 +155,7 @@ _TITLE_KEYS = frozenset(
     },
 )
 _TITLE_QUALIFIER_KEYS = frozenset({"hc", "habil", "honoraire", "med", "nat", "rer"})
+_CAPS_TITLE_INITIAL_KEYS = frozenset({"dr", "mr"})
 _LEADING_NAME_ABBREVIATION_KEYS = frozenset({"md"})
 _LONG_NAME_ABBREVIATION_KEYS = frozenset({"mohd", "most"})
 _CREDENTIAL_KEYS = frozenset(
@@ -1325,7 +1326,20 @@ class PersonNameNormalizationService:
             )
             # An all-caps token that reads as initials ("MS", "M-S.") must not be dropped
             # as the honorific "Ms": all-caps = initials, Title-case "Ms"/"Ms." = honorific.
-            title_is_really_initials = ambiguous_name_token and token.text.isupper()
+            # The same holds for a bare all-caps "MR"/"DR" alone before a mixed-case surname
+            # ("MR / Islam": the registered given name starts with M in most such rows), and for
+            # hyphenated initials whose letters spell a title ("M-R", "M.-R.").
+            title_is_really_initials = (
+                (ambiguous_name_token and token.text.isupper())
+                or bool(_HYPHEN_INITIAL_RE.fullmatch(token.text))
+                or (
+                    key in _CAPS_TITLE_INITIAL_KEYS
+                    and token.text.isalpha()
+                    and token.text.isupper()
+                    and len(remaining) == _TWO_COMPONENTS
+                    and not remaining[1].text.isupper()
+                )
+            )
             if (
                 (
                     key in _TITLE_KEYS

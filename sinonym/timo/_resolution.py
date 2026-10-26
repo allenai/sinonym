@@ -1207,8 +1207,9 @@ class SourceAuthorFields(_Model):
         A comma closing a full given word before a real surname ("Thomas," / "W." / "Crowther") is field
         punctuation; flattened verbatim it would read as the surname-first "Thomas, W. Crowther". Before
         initials ("Adamu," / "D. A.") the comma is the surname-first marker and stays. When the middle field is a
-        full word too ("Anih," / "David" / "Chinonso", Crossref bylines from Nigeria) the comma is the marker unless
-        the corpus knows the closed word as a given name ("Jennifer," / "Alyson" / "Carter"): on every ORCID in the
+        full word too ("Anih," / "David" / "Chinonso", Crossref bylines from Nigeria), or empty ("Opoku," / "Albert"),
+        the comma is the marker unless the corpus knows the closed word as a given name ("Jennifer," / "Alyson" /
+        "Carter"), or, with no middle, the last word as a surname ("Roshini," / "Pillay"): on every ORCID in the
         corpus the unconditional reading split 62 people for 175 united, the conditional one 0 for 138.
         """
         first, middle, last = self.first_name or "", self.middle_names or "", self.last_name or ""
@@ -1219,7 +1220,11 @@ class SourceAuthorFields(_Model):
             surname_words
             and len(given_word) > 1
             and given_word.isalpha()
-            and (not middle_words or token_role(given_word) == "given")
+            and (
+                (middle.strip() and not middle_words)
+                or token_role(given_word) == "given"
+                or (not middle.strip() and token_role(surname_words[-1]) == "surname")
+            )
         ):
             first = given_word
         return " ".join(part for part in (first, middle, last) if part).strip()

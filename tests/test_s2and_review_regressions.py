@@ -389,6 +389,18 @@ CORPUS_SCALE_CASES = [
     (("Jennifer,", "Alyson", "Carter"), ("Jennifer", "Alyson", "Carter")),
     (("Jayne,", "L", "Astbury"), ("Jayne", "L.", "Astbury")),
     (("Thomas,", "W.", "Crowther"), ("Thomas", "W.", "Crowther")),
+    # with no middle the comma is the marker too, unless the last word is a known surname
+    (("Opoku,", None, "Albert"), ("Albert", "", "Opoku")),
+    (("Jennifer,", None, "Carter"), ("Jennifer", "", "Carter")),
+    (("Roshini,", None, "Pillay"), ("Roshini", "", "Pillay")),
+    # an all-caps MR / DR alone before a mixed-case surname, and hyphenated initials, are initials, not titles
+    (("MR", None, "Islam"), ("MR", "", "Islam")),
+    (("DR", None, "Patel"), ("DR", "", "Patel")),
+    (("M-R", None, "Christiaens"), ("M.-R.", "", "Christiaens")),
+    (("M.-R.", None, "Taskinen"), ("M.-R.", "", "Taskinen")),
+    (("Dr.", None, "Smith"), ("", "", "Smith")),
+    (("Mr", None, "Islam"), ("", "", "Islam")),
+    (("DR", "JOHN", "SMITH"), ("John", "", "Smith")),
     # construct prefixes open a family name even though each is a frequent given name (registry: 73-100% registered whole)
     (("Mariani", "Abdul", "Hamid"), ("Mariani", "", "Abdul Hamid")),
     (("Nadia", "Md", "Nor"), ("Nadia", "", "Md Nor")),
