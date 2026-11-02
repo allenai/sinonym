@@ -1376,8 +1376,14 @@ NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES = frozenset(
     },
 )
 
+# Surnames that are far more often a given syllable: they count only as the last token (Chang Ho Hyun), never as
+# a leading surname (Hyun Ho Sung is given-first; the leading reading split as many ORCID people as it united).
+NAME_ORDER_ROUTING_KOREAN_TAIL_ONLY_SURNAMES = frozenset({"hyun"})
+
 NAME_ORDER_ROUTING_KOREAN_SURNAMES = frozenset(
     {
+        "hyun",  # 현 — Chang Ho Hyun; tail only, see above
+        "myung",  # 명 — Yun Soo Myung
         "ahn",
         "an",
         "bae",

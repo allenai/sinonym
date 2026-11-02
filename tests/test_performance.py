@@ -179,16 +179,16 @@ class TestChineseNameDetectorPerformance:
 
         print(f"\nTesting performance with {len(test_names)} diverse names...")
 
-        # Measure processing time
-        start_time = time.perf_counter()
-        results = []
-        for name in test_names:
-            result = detector.normalize_name(name)
-            results.append(result)
-        end_time = time.perf_counter()
+        # Best of 3 passes, each on a fresh detector so no pass reuses another's caches: a single
+        # 0.3 s pass on a shared CI runner swung between 2,985 and 5,259 names/second on the same code
+        total_time = float("inf")
+        for _ in range(3):
+            fresh = ChineseNameDetector()
+            start_time = time.perf_counter()
+            results = [fresh.normalize_name(name) for name in test_names]
+            total_time = min(total_time, time.perf_counter() - start_time)
 
         # Calculate performance metrics
-        total_time = end_time - start_time
         names_per_second = len(test_names) / total_time
         microseconds_per_name = (total_time / len(test_names)) * 1_000_000
 

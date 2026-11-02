@@ -106,8 +106,21 @@ def test_single_token_source_surname_cannot_activate(predictor: Predictor) -> No
     assert resolved.resolution_reason is not _REPARTITION_REASON
 
 
-def test_initial_in_the_source_first_name_blocks_activation(predictor: Predictor) -> None:
-    resolved = _route(predictor, SourceAuthorFields(first_name="A.", last_name="Vicens Poveda"))
+def test_initial_in_the_source_first_name_keeps_a_known_double_surname(predictor: Predictor) -> None:
+    resolved = _route(predictor, SourceAuthorFields(first_name="S.", last_name="Rivera Maza"))
+
+    assert resolved.resolution_reason is _REPARTITION_REASON
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("S.", "", "Rivera Maza")
+
+
+def test_initial_in_the_source_first_name_needs_a_known_surname(predictor: Predictor) -> None:
+    resolved = _route(predictor, SourceAuthorFields(first_name="P.", last_name="Jyoteeshkumar Reddy"))
+
+    assert resolved.resolution_reason is not _REPARTITION_REASON
+
+
+def test_initial_in_the_source_first_name_blocks_an_east_asian_source_surname(predictor: Predictor) -> None:
+    resolved = _route(predictor, SourceAuthorFields(first_name="T.", last_name="Ngoc Mai"))
 
     assert resolved.resolution_reason is not _REPARTITION_REASON
 
@@ -182,9 +195,9 @@ def test_predicate_accepts_a_clean_peel(resolver: _Resolver) -> None:
     ("source", "selected"),
     [
         pytest.param(
-            SourceAuthorFields(first_name="A.", last_name="Vicens Poveda"),
-            NameComponents(given_name="A.", middle_name="Vicens", surname="Poveda"),
-            id="initial_in_source_first_name",
+            SourceAuthorFields(first_name="T.", last_name="Ngoc Mai"),
+            NameComponents(given_name="T.", middle_name="Ngoc", surname="Mai"),
+            id="initial_before_east_asian_source_surname",
         ),
         pytest.param(
             SourceAuthorFields(first_name="Ana", last_name="M. Vicens Poveda"),

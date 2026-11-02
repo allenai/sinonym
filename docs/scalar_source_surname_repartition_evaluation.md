@@ -74,3 +74,9 @@ the selected behavior.
 Any future refinement should be treated as a new experiment on an untouched
 bucket. Buckets 95, 96, and 97 have all informed the current decision and must
 not be reused as fresh validation data.
+
+## Extension: initial or two given names in the source first name (2026-10-31, not yet validated)
+
+The rule now also keeps the source's multi-word last name when the source first name is an initial (`S. / Rivera Maza`) or holds two given names that scalar splits into given and middle (`Martha Leonor / Ayala Rengifo`). For these new activations only, the peeled word must be a known surname in the token-role prior (sources also put a middle given name there: `P. / Jyoteeshkumar Reddy`), and after an initial the last name must not contain an East Asian syllable or a Vietnamese surname (`T. / Ngoc Mai` keeps the earlier behavior). Activations of the frozen rule are unchanged. This is a new experiment: buckets 95–97 must not be used to validate it.
+
+Measured against 60ecd54 (89,299 candidate ORCID v4 papers re-routed, all 5,249,478 ORCID people scored with the production block key): 319 people reunited, 242 newly split (net +77); 1,878 mentions gain the registered family name, 365 lose it. S2AND `repaired-s2and-v5` gold clusters: 1 reunited, 4 split. A first version that only refused known given names split 1,993 people and reunited 746.
