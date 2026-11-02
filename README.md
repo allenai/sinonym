@@ -320,7 +320,10 @@ transliterations packed into a last field with an authored middle dot. The
 delimiter boundary is preserved without treating every middle dot, or every
 source-field label, as semantic role evidence.
 
-TIMO clients select `sinonym` for terminal writer-ready fields.
+TIMO clients select `sinonym` for terminal writer-ready fields. TIMO also
+applies corpus-derived rules that the canonical APIs leave out, so the two can
+return different fields for the same name; see
+[Writer-only corpus rules](docs/timo.md#writer-only-corpus-rules).
 
 ### Conservative East Asian routing
 
@@ -338,7 +341,9 @@ For spaced native Japanese names, mutually exclusive dictionary evidence is a
 hard writer decision: strict family-first evidence assigns the exchanged
 endpoints, while strict given-first evidence preserves them. TIMO applies those
 decisions before PP/VYS candidates, and the public canonical APIs apply every
-terminal mapped decision before a competing Chinese interpretation. One-sided
+terminal mapped decision before a competing Chinese interpretation.
+This agreement covers the East Asian order decisions only; TIMO also applies
+writer-only corpus rules (see [Writer-only corpus rules](docs/timo.md#writer-only-corpus-rules)). One-sided
 or conflicting dictionary shapes remain soft and retain the existing
 conservative arbitration. Soft Japanese dictionary assignments preserve the
 authored display order while recording the inferred semantic roles, so feeding
