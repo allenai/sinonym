@@ -4,6 +4,8 @@ Each case is a structured source exactly as the author-refresh backfill sent it 
 reviewer-confirmed correct fields.
 """
 
+import unicodedata
+
 import pytest
 
 from sinonym.coretypes.routing_resolution import ResolutionProvenance, ResolutionReason
@@ -66,18 +68,34 @@ def test_scalar_baseline_still_canonicalizes_initials_without_moving_boundary(pr
     assert resolve(predictor, "J", None, "Smith") == ("J.", "", "Smith")
 
 
-DETACHED_DIACRITIC_CASES = [
-    # inspire: a spacing diaeresis/ring left by PDF extraction split the surname
-    (("H", None, "Arenh¨ovel"), ("H.", "", "Arenhövel")),
-    (("M.", None, "B¨oge"), ("M.", "", "Böge")),
-    (("H.", None, "Pru˚chová"), ("H.", "", "Průchová")),
-    # a mark that composes with nothing is left alone
-    (("Nicolas", None, "D´ Amelio"), ("Nicolas", "", "D' Amelio")),
+DECOMPOSED_ACCENT_CASES = [
+    # names written in NFD (each accent a combining mark after its letter); adjacent accented letters and stacked
+    # marks used to be moved onto the neighbouring letter (Dvořaḱ, Núnẽz, Nguyêñ)
+    (("Antonín", None, "Dvořák"), ("Antonín", "", "Dvořák")),
+    (("José", None, "Núñez"), ("José", "", "Núñez")),
+    (("Jiří", None, "Kořínek"), ("Jiří", "", "Kořínek")),
+    (("Aracelis", None, "Calzadilla-Núñez"), ("Aracelis", "", "Calzadilla-Núñez")),
+    (("Văn", None, "Nguyễn"), ("Văn", "", "Nguyễn")),
 ]
 
 
-@pytest.mark.parametrize(("source", "expected"), DETACHED_DIACRITIC_CASES)
-def test_detached_diacritic_rejoins_its_letter(predictor, source, expected):
+@pytest.mark.parametrize(("source", "expected"), DECOMPOSED_ACCENT_CASES)
+def test_decomposed_accents_stay_on_their_letters(predictor, source, expected):
+    decomposed = tuple(unicodedata.normalize("NFD", part) if part else part for part in source)
+    assert tuple(unicodedata.normalize("NFC", part) for part in resolve(predictor, *decomposed)) == expected
+
+
+def test_stacked_dot_marks_are_kept_as_written(predictor):
+    # Turkish names with a dotted capital plus combining dots used to have a dot moved onto the next letter (İ̇ṡmail)
+    assert resolve(predictor, "İ̇̇smail", None, "Sağir") == ("İ̇̇smail", "", "Sağir")
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    (("John", None, "Smith^1"), ("John", "", "Smith^1")),
+    (("Mazen`", None, "Abdalla"), ("Mazen'", "", "Abdalla")),
+])
+def test_ascii_caret_and_backtick_are_not_accents(predictor, source, expected):
+    # a caret footnote or a backtick used as an apostrophe used to become an accent (Smitĥ, Mazeǹ)
     assert resolve(predictor, *source) == expected
 
 
@@ -325,11 +343,7 @@ def test_corpus_order_prior_applies_without_a_pool_below_the_old_pool_bar(predic
     instance = Instance(pp_authors=[SourceAuthorFields(first_name="Jing", last_name="Yu")])
     author = predictor.predict_batch([instance])[0].authors[0]
     assert author.resolution_reason == ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT
-
-
-def test_leading_combining_mark_does_not_glue_words(predictor):
-    # ``Mithat ̈unsal`` (NFKC remnant of a spacing diaeresis before the surname) stays two words
-    assert resolve(predictor, "Mithat", None, "\u0308unsal") == ("Mithat", "", "Ünsal")
+    assert (author.first_name, author.last_name) == ("Jing", "Yu")
 
 
 @pytest.mark.parametrize("surname", ["Efendi̇oğlu", "Çi̇ner", "Yerlikaya Aydemi̇r"])
@@ -671,3 +685,68 @@ def test_order_prior_does_not_rewrite_a_pp_pick_made_with_a_venue_pool(predictor
     author = predictor.predict_batch([Instance(pp_authors=authors, vys_other_names=VYS_PRIOR_POOL)])[0].authors[5]
     assert (author.first_name, author.last_name) == ("Sun", "Xu")
     assert author.resolution_reason == ResolutionReason.PP_SELECTED
+
+
+def test_rejected_source_assignment_keeps_the_paper(predictor):
+    # a source put collaboration text in one surname; that author is passed through as written and the paper still resolves
+    authors = [
+        SourceAuthorFields(first_name="Heba", last_name="Bintalib"),
+        SourceAuthorFields(first_name="S", middle_names="Hamza", last_name="Abbas"),
+        SourceAuthorFields(first_name="Klaus", last_name="Warnatz"),
+        SourceAuthorFields(first_name="John", middle_names="R", last_name="Hurst (and On Behalf Of The Eglildnet Consort"),
+    ]
+    rows = predictor.predict_batch([Instance(pp_authors=authors)])[0].authors
+    assert len(rows) == 4
+    assert [(r.first_name, r.last_name) for r in rows[:3]] == [("Heba", "Bintalib"), ("S.", "Abbas"), ("Klaus", "Warnatz")]
+    assert (rows[3].first_name, rows[3].middle_names, rows[3].last_name) == (
+        "John",
+        "R",
+        "Hurst (and On Behalf Of The Eglildnet Consort",
+    )
+    assert rows[3].resolution_reason == ResolutionReason.NON_PERSON_SOURCE_PASSTHROUGH
+
+
+def test_rejected_given_phrase_assignment_is_passed_through(predictor):
+    author = predictor.predict_batch(
+        [Instance(pp_authors=[SourceAuthorFields(first_name="M.", middle_names="del Carmen", last_name="Garcia Lopez 1,2")])],
+    )[0].authors[0]
+    assert (author.first_name, author.middle_names, author.last_name) == ("M.", "del Carmen", "Garcia Lopez 1,2")
+    assert author.resolution_reason == ResolutionReason.NON_PERSON_SOURCE_PASSTHROUGH
+
+
+def test_rejected_reviewed_rule_pick_keeps_the_author(predictor):
+    # a reviewed pattern matches but the normalizer rejects its pick: the rule is skipped and the author is still written
+    instance = Instance(pp_authors=[SourceAuthorFields(first_name="E.A.", last_name="and Solomon")])
+    author = predictor.predict_batch([instance])[0].authors[0]
+    assert (author.first_name, author.middle_names, author.last_name) == ("E.A.", "", "and Solomon")
+    assert author.resolution_reason == ResolutionReason.NON_PERSON_SOURCE_PASSTHROUGH
+
+
+def test_rejected_hangul_affiliation_pick_does_not_fail_the_paper(predictor):
+    source = SourceAuthorFields(first_name="MD", middle_names="PhD 서울대학교", last_name="J University")
+    author = predictor.predict_batch([Instance(pp_authors=[source])])[0].authors[0]
+    assert (author.first_name, author.middle_names, author.last_name) == ("MD", "PhD 서울대학교", "J University")
+    assert author.resolution_reason == ResolutionReason.NON_PERSON_SOURCE_PASSTHROUGH
+
+
+def test_reviewed_roster_check_is_skipped_for_papers_of_other_sizes(predictor, monkeypatch):
+    # the roster rule runs once per author; building its roster key on every author of a large paper is quadratic
+    from sinonym.timo import _resolution  # noqa: PLC0415
+
+    key_calls = []
+    original_key = _resolution._source_component_key  # noqa: SLF001
+    monkeypatch.setattr(_resolution, "_source_component_key", lambda s: key_calls.append(s) or original_key(s))
+    keys_per_rule_call = []
+    original = _resolution._reviewed_paper_wide_trailing_affiliation_assignment  # noqa: SLF001
+
+    def counting(source, paper_authors, normalizer, surname_is_recognized):
+        before = len(key_calls)
+        result = original(source, paper_authors, normalizer, surname_is_recognized)
+        keys_per_rule_call.append(len(key_calls) - before)
+        return result
+
+    monkeypatch.setattr(_resolution, "_reviewed_paper_wide_trailing_affiliation_assignment", counting)
+    authors = [SourceAuthorFields(first_name=f"Given{i}", last_name=f"Surname{i}") for i in range(50)]
+    predictor.predict_batch([Instance(pp_authors=authors)])
+    assert len(keys_per_rule_call) == 50
+    assert sum(keys_per_rule_call) == 0
