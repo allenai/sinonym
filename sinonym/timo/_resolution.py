@@ -219,6 +219,7 @@ _REVIEWED_TRAILING_AFFILIATION_ROSTERS = frozenset(
         ),
     },
 )
+_REVIEWED_TRAILING_AFFILIATION_ROSTER_SIZES = frozenset(len(roster) for roster in _REVIEWED_TRAILING_AFFILIATION_ROSTERS)
 _REVIEWED_CLEANUP_PREFIX_CREDENTIAL_KEYS = frozenset({"dnb"})
 _CYRILLIC_NAME_TOKEN_RE = re.compile(r"[\u0410-\u042f\u0401][\u0410-\u044f\u0401\u0451'\u2019-]+")
 _FEMININE_CYRILLIC_SURNAME_SUFFIXES = (
@@ -1431,6 +1432,9 @@ def _reviewed_paper_wide_trailing_affiliation_assignment(
     surname_is_recognized: Callable[[str], bool],
 ) -> NameComponents | None:
     """Repair a leaked trailing ``a`` only on a fully reviewed paper roster."""
+    # runs once per author, so building the roster key for every author of a huge paper is quadratic
+    if len(paper_authors) not in _REVIEWED_TRAILING_AFFILIATION_ROSTER_SIZES:
+        return None
     roster_key = tuple(_source_component_key(peer) for peer in paper_authors)
     if roster_key not in _REVIEWED_TRAILING_AFFILIATION_ROSTERS:
         return None
@@ -2032,6 +2036,21 @@ class _Resolver:
                     return True
         return False
 
+    def _canonicalized_assignment(self, selected: NameComponents) -> NameComponents | None:
+        """Return ``selected`` with its initials canonicalized, or None when the normalizer rejects it."""
+
+        if not self._selected_has_personal_initials(selected):
+            return selected
+        normalized = self._source_normalizer.normalize_components(
+            first_name=selected.given_name,
+            middle_name=selected.middle_name,
+            last_name=selected.surname,
+            suffix=selected.suffix,
+        )
+        if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
+            return None
+        return normalized.canonical_name.normalized
+
     def _source_assignment_resolution(
         self,
         *,
@@ -2043,25 +2062,17 @@ class _Resolver:
 
         SOURCE non-assignment resolutions remain byte-exact. These assignments
         already have proven semantic roles, but their source-derived components
-        bypass the ordinary formatters.
+        bypass the ordinary formatters. A terminal assignment the normalizer
+        rejects (e.g. collaboration text a source put in the surname) is passed
+        through as a non-person source instead of failing the whole paper; the
+        reviewed-rule loop skips rejected rules instead (see
+        ``_reviewed_source_rules_resolution``).
         """
 
-        if self._selected_has_personal_initials(selected):
-            normalized = self._source_normalizer.normalize_components(
-                first_name=selected.given_name,
-                middle_name=selected.middle_name,
-                last_name=selected.surname,
-                suffix=selected.suffix,
-            )
-            if normalized.outcome is not PersonNameOutcome.PERSON or normalized.canonical_name is None:
-                message = f"source assignment could not be normalized: {selected!r}"
-                raise RuntimeError(message)
-            selected = normalized.canonical_name.normalized
-        return ResolvedAuthorFields.from_selected_components(
-            source=source,
-            selected=selected,
-            reason=reason,
-        )
+        canonical = self._canonicalized_assignment(selected)
+        if canonical is None:
+            return self._source_resolution(source, ResolutionReason.NON_PERSON_SOURCE_PASSTHROUGH)
+        return ResolvedAuthorFields.from_selected_components(source=source, selected=canonical, reason=reason)
 
     def _hard_scalar_resolution(
         self,
@@ -2306,11 +2317,9 @@ class _Resolver:
                 )
         hangul_assignment = reviewed_hangul_affiliation_person_assignment(source)
         if hangul_assignment is not None:
-            return self._source_assignment_resolution(
-                source=source,
-                selected=hangul_assignment,
-                reason=pattern_reason,
-            )
+            canonical = self._canonicalized_assignment(hangul_assignment)
+            if canonical is not None:
+                return ResolvedAuthorFields.from_selected_components(source=source, selected=canonical, reason=pattern_reason)
         middle_dot_assignment = reviewed_middle_dot_packed_transliteration_assignment(source)
         if middle_dot_assignment is not None:
             return ResolvedAuthorFields.from_selected_components(
@@ -2369,13 +2378,14 @@ class _Resolver:
         )
         for rule, reason in assignment_rules:
             selected = rule()
-            if selected is not None:
-                try:
-                    return self._source_assignment_resolution(source=source, selected=selected, reason=reason)
-                except RuntimeError:
-                    # a pattern matched a shape the normalizer rejects ("E. / A. / and Solomon"): let the later
-                    # stages read the row instead of failing the whole paper
-                    continue
+            if selected is None:
+                continue
+            canonical = self._canonicalized_assignment(selected)
+            if canonical is None:
+                # a pattern matched a shape the normalizer rejects ("E. / A. / and Solomon"): let the later
+                # stages read the row instead of failing the whole paper
+                continue
+            return ResolvedAuthorFields.from_selected_components(source=source, selected=canonical, reason=reason)
         return None
 
     def _reviewed_cleanup_resolution(
