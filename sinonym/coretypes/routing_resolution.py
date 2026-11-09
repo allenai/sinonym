@@ -81,6 +81,7 @@ class ResolutionReason(str, Enum):
     PP_SELECTED = "pp_selected"
     VYS_SELECTED = "vys_selected"
     CORPUS_ORDER_PRIOR_ASSIGNMENT = "corpus_order_prior_assignment"
+    # kept for API compatibility; not emitted since 0.6.1 (the order prior no longer applies with a venue pool)
     VYS_CORPUS_ORDER_PRIOR_ASSIGNMENT = "vys_corpus_order_prior_assignment"
     CORPUS_COMPOUND_SURNAME_ASSIGNMENT = "corpus_compound_surname_assignment"
     EDGE_PARTICLE_SURNAME_ASSIGNMENT = "edge_particle_surname_assignment"
