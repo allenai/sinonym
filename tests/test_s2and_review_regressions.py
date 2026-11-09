@@ -295,7 +295,7 @@ ORDER_PRIOR_CASES = [
     (("Chen", None, "Hong"), ("Hong", "", "Chen")),
     (("Lu", None, "Rong"), ("Rong", "", "Lu")),
     # on abstain the source order stands even against the corpus majority: there the prior broke 19,574 registered
-    # surnames and fixed 2,275 (ORCID v4)
+    # surnames and fixed 2,275 (ORCID registry)
     (("Lu", None, "Xi"), ("Lu", "", "Xi")),
     (("Gong", None, "Lei"), ("Gong", "", "Lei")),
     (("Liu", None, "Yang"), ("Liu", "", "Yang")),
@@ -318,6 +318,13 @@ def test_corpus_order_prior_reason_is_reported(predictor):
     instance = Instance(pp_authors=[SourceAuthorFields(first_name="Jie", last_name="Shan")])
     author = predictor.predict_batch([instance])[0].authors[0]
     assert author.resolution_reason.value == "corpus_order_prior_assignment"
+
+
+def test_corpus_order_prior_applies_without_a_pool_below_the_old_pool_bar(predictor):
+    # the corpus writes Jing Yu 82% of the time: below the 86% bar 0.6.0 used with a pool, above the 80% no-pool bar
+    instance = Instance(pp_authors=[SourceAuthorFields(first_name="Jing", last_name="Yu")])
+    author = predictor.predict_batch([instance])[0].authors[0]
+    assert author.resolution_reason == ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT
 
 
 def test_leading_combining_mark_does_not_glue_words(predictor):
@@ -644,12 +651,23 @@ def test_order_prior_does_not_override_a_router_decision_made_with_a_venue_pool(
     assert with_pool.resolution_reason != ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT
 
 
-def test_order_prior_after_a_venue_pool_decision_reports_vys_provenance(predictor):
-    # a VYS pick that the order prior rewrites keeps VYS provenance (writer metrics count PP vs VYS by provenance)
+def test_order_prior_does_not_rewrite_a_vys_pick(predictor):
+    # with a venue pool the router's pick stands against the corpus majority; this source wrote `Zhou YI`, so Yi is the
+    # surname, and 0.6.0's prior flipped it
     byline = list(VYS_PRIOR_BYLINE)
-    byline[5] = ("Chen", "Junjie")
+    byline[5] = ("Zhou", "Yi")
     authors = [SourceAuthorFields(first_name=first, last_name=last) for first, last in byline]
     author = predictor.predict_batch([Instance(pp_authors=authors, vys_other_names=VYS_PRIOR_POOL)])[0].authors[5]
-    assert (author.first_name, author.last_name) == ("Junjie", "Chen")
-    assert author.resolution_reason == ResolutionReason.VYS_CORPUS_ORDER_PRIOR_ASSIGNMENT
+    assert (author.first_name, author.last_name) == ("Zhou", "Yi")
+    assert author.resolution_reason == ResolutionReason.VYS_SELECTED
     assert author.resolution_provenance == ResolutionProvenance.VYS
+
+
+def test_order_prior_does_not_rewrite_a_pp_pick_made_with_a_venue_pool(predictor):
+    # as above for a PP pick: this source wrote `Sun XU`, so Xu is the surname, and 0.6.0's prior flipped it
+    byline = list(VYS_PRIOR_BYLINE)
+    byline[5] = ("Sun", "Xu")
+    authors = [SourceAuthorFields(first_name=first, last_name=last) for first, last in byline]
+    author = predictor.predict_batch([Instance(pp_authors=authors, vys_other_names=VYS_PRIOR_POOL)])[0].authors[5]
+    assert (author.first_name, author.last_name) == ("Sun", "Xu")
+    assert author.resolution_reason == ResolutionReason.PP_SELECTED

@@ -49,7 +49,7 @@ from sinonym.services.non_person import (
     REVIEWED_HANGUL_ORGANIZATION_MARKERS,
     reviewed_non_person_source_pattern,
 )
-from sinonym.services.order_prior import POOL_PRIOR_MIN_SHARE, PRIOR_MIN_SHARE, corpus_surname_for
+from sinonym.services.order_prior import corpus_surname_for
 from sinonym.services.person_name_normalization import (
     EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES,
     EAST_ASIAN_GIVEN_SYLLABLES,
@@ -1261,9 +1261,7 @@ class SourceAuthorFields(_Model):
         return " ".join(part for part in (first, middle, last) if part).strip()
 
 
-def _corpus_order_prior_parsed(
-    parsed: ParsedName | None, raw_name: str, min_share: float = PRIOR_MIN_SHARE,
-) -> ParsedName | None:
+def _corpus_order_prior_parsed(parsed: ParsedName | None, raw_name: str) -> ParsedName | None:
     """Flip a two-token parse to the orientation the corpus writes for that pair, when the prior is strong.
 
     A name written only in a CJK script is surname-first, so the romanized-pair prior never overrides it."""
@@ -1272,7 +1270,7 @@ def _corpus_order_prior_parsed(
     given, surname = parsed.given_tokens[0], parsed.surname_tokens[0]
     if "-" in given or "-" in surname or not given.isalpha() or not surname.isalpha():
         return None
-    corpus_surname = corpus_surname_for(given, surname, min_share)
+    corpus_surname = corpus_surname_for(given, surname)
     if corpus_surname is None or corpus_surname == surname:
         return None
     # the per-character script scan runs last: it is the costliest check and only matters for a flip
@@ -2710,12 +2708,6 @@ class _Resolver:
         if capped is not None:
             reason = ResolutionReason.VYS_GIVEN_CHAIN_CAP_INPUT if vys else ResolutionReason.GIVEN_CHAIN_CAP_INPUT
             parsed, batch_reason = capped, reason
-        prior_parsed = (
-            _corpus_order_prior_parsed(parsed, raw_name, POOL_PRIOR_MIN_SHARE) if decision in ("pp", "vys") else None
-        )
-        if prior_parsed is not None:
-            reason = ResolutionReason.VYS_CORPUS_ORDER_PRIOR_ASSIGNMENT if vys else ResolutionReason.CORPUS_ORDER_PRIOR_ASSIGNMENT
-            parsed, batch_reason = prior_parsed, reason
         return self.terminal_resolution(
             source=source,
             paper_authors=paper_authors,

@@ -4,14 +4,15 @@
 S2 corpus (May 2026 snapshot, 691M rows) were written as ``first=a last=b`` versus ``first=b last=a``. Only pairs
 with >= 100 mentions and a >= 80% majority that the Chinese parser can read are kept. The prior settles the
 orientation of an ambiguous two-token Chinese name (`Xi Lu` / `Lu Xi`) by how the corpus itself writes that pair,
-which keeps every mention of the pair on one surname. It applies when the router picked a parse (PP, or PP or VYS with a
-venue pool). On abstain the source order stands: the corpus majority overrode the person's own surname far more often
-than it fixed it (ORCID registry: 19,574 broken vs 2,275 fixed). With a venue pool the router has already weighed the
-venue's convention, so there the prior needs an 86% majority (``POOL_PRIOR_MIN_SHARE``). Pairs just above 80% are the
-names a sizeable minority of people write the other way, where the flip broke the person's own surname; higher up it
-mostly repairs a mention the router flipped and keeps the person in one block. 86% is the highest bar that splits no more
-people across blocks than an 80% bar (full ORCID v4 with production-style pools, held-out registry half: net +6,566
-surnames against 80%, 14 fewer people split; dropping the prior with a pool gave +8,161 but 849 more people split).
+which keeps every mention of the pair on one surname. In TIMO it applies only when the router picks a parse without a
+venue pool (PP-only routing); the canonical APIs use it to keep the source order of a reversed two-token Chinese name. On
+abstain the source order stands: the corpus majority overrode the person's own surname far more often than it fixed it
+(ORCID registry: 19,574 broken vs 2,275 fixed). With a venue pool the router has already weighed the venue's convention,
+and the prior overrode it wrongly about twice as often as rightly even when it required an 86% majority (publisher
+ORCID-linked author rows routed with production-style venue pools, against the registered family name: 2,675 surnames
+fixed vs 5,685 broken). The cost is block consistency: without the prior some mentions of a pair keep the other
+orientation, so more of a person's papers land in different disambiguation blocks (863 more people split in the same
+evaluation).
 """
 from __future__ import annotations
 
@@ -25,7 +26,6 @@ from sinonym.resources import read_bytes
 
 PRIOR_MIN_MENTIONS = 100
 PRIOR_MIN_SHARE = 0.8
-POOL_PRIOR_MIN_SHARE = 0.86
 
 
 def _fold(token: str) -> str:
@@ -52,14 +52,14 @@ def load_order_prior() -> None:
     _table()
 
 
-def corpus_surname_for(given: str, surname: str, min_share: float = PRIOR_MIN_SHARE) -> str | None:
+def corpus_surname_for(given: str, surname: str) -> str | None:
     """Return the token the corpus writes as the surname for this pair, or None when the prior is silent."""
     g, s = _fold(given), _fold(surname)
     if not g or not s or g == s:
         return None
     a, b = (g, s) if g < s else (s, g)
     entry = _table().get((a, b))
-    if entry is None or entry[1] < min_share:
+    if entry is None:
         return None
     majority = entry[0]
     corpus_surname = b if majority == "ab" else a
