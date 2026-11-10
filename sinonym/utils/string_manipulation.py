@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 # Import at module level to avoid repeated imports in hot paths
 from sinonym.chinese_names_data import COMPOUND_VARIANTS, HIGH_CONFIDENCE_ANCHORS, REVIEWED_ATOMIC_GIVEN_FORMS
 from sinonym.name_punctuation import APOSTROPHE_LIKE
+from sinonym.utils.unsplit_given_words import is_unsplit_given_word
 
 if TYPE_CHECKING:
     from sinonym.services.normalization import CompoundMetadata
@@ -29,6 +30,35 @@ if TYPE_CHECKING:
 MIN_SPLIT_TOKEN_LENGTH = 3
 MAX_UNBALANCED_SPLIT_REST_LENGTH = 4
 MIN_SPLIT_PART_LENGTH = 2
+
+
+_PINYIN_TONE_MARKS = frozenset("\u0304\u0301\u030c\u0300")
+_PINYIN_VOWELS = frozenset("aeiouvü")
+_DIAERESIS = "\u0308"
+_WADE_GILES_MARKS = frozenset({("u", "\u0306"), ("e", "\u0302")})
+
+
+def _is_diacritic(character: str) -> bool:
+    return "\u0300" <= character <= "\u036f"
+
+
+def _only_pinyin_marks(decomposed: str) -> bool:
+    """True when every diacritic in an NFD string is a pinyin tone mark on a vowel, the diaeresis of ü or Wade-Giles ŭ/ê."""
+    base = ""
+    for character in decomposed:
+        if not _is_diacritic(character):
+            if unicodedata.category(character) != "Mn":
+                base = character.casefold()
+            continue
+        if character == _DIAERESIS:
+            if base != "u":
+                return False
+            base = "ü"
+        elif (base, character) in _WADE_GILES_MARKS:
+            continue
+        elif character not in _PINYIN_TONE_MARKS or base not in _PINYIN_VOWELS:
+            return False
+    return True
 
 
 def _single_letter_side(a: str, b: str) -> str | None:
@@ -365,9 +395,11 @@ class StringManipulationUtils:
             # Preserve the existing transliteration and positional-split path when the
             # author-supplied location is not itself a valid boundary.
 
+        unsplit_word = is_unsplit_given_word(token)
+
         # Pattern 1: Repeated syllable patterns (e.g., "huihui" → ["hui", "hui"]) — only when no hyphen present
         raw = token.translate(config.hyphens_apostrophes_tr)
-        if len(raw) >= 4 and len(raw) % 2 == 0:
+        if not unsplit_word and len(raw) >= 4 and len(raw) % 2 == 0:
             mid = len(raw) // 2
             first_half = raw[:mid]
             second_half = raw[mid:]
@@ -400,7 +432,7 @@ class StringManipulationUtils:
         # inferred pinyin boundary. Explicit hyphens, apostrophes, and authored
         # CamelCase were handled above and retain precedence. Do not cache this
         # refusal: the cache is case-insensitive, while CamelCase is evidence.
-        if normalizer.norm_light(token) in REVIEWED_ATOMIC_GIVEN_FORMS:
+        if unsplit_word or normalizer.norm_light(token) in REVIEWED_ATOMIC_GIVEN_FORMS:
             return None
 
         # ================================================================
@@ -673,12 +705,21 @@ class StringManipulationUtils:
     @staticmethod
     @lru_cache(maxsize=2048)
     def _normalize_and_capitalize_single_part(part: str) -> str:
-        """Helper to normalize and capitalize a single part (no hyphens) - cached for performance."""
+        """Helper to normalize and capitalize a single part (no hyphens) - cached for performance.
+
+        Pinyin tone marks, ü and Wade-Giles ŭ/ê are folded (``Zhāng`` -> ``Zhang``, ``Lü`` -> ``Lu``). A part carrying
+        any other mark is not pinyin and keeps its accents (``Šíma``, ``Kök``, ``Nguyễn``). The decision is per part,
+        so an acute-only part beside an accented one is still folded (``Chí`` -> ``Chi``).
+        """
         if not part:
             return part
-        # Normalize Unicode and remove diacritical marks
         normalized = unicodedata.normalize("NFD", part)
         without_diacritics = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+        if without_diacritics and not _only_pinyin_marks(normalized):
+            accented = unicodedata.normalize(
+                "NFC", "".join(c for c in normalized if unicodedata.category(c) != "Mn" or _is_diacritic(c)),
+            )
+            return accented[0].upper() + accented[1:].lower()
         if not without_diacritics:
             # Token was made up entirely of combining marks / variation selectors (all
             # category Mn), so stripping them leaves nothing to capitalize. Return the
@@ -692,7 +733,7 @@ class StringManipulationUtils:
 
         Standard .title() incorrectly capitalizes after apostrophes (ts'ai -> Ts'Ai).
         This function:
-        1. Removes diacritical marks for consistent output
+        1. Folds pinyin tone marks and keeps every other accent (see ``_normalize_and_capitalize_single_part``)
         2. Handles hyphenated compound parts: ou-yang -> Ou-Yang
         3. Only capitalizes the first letter: ts'ai -> Ts'ai
 
@@ -700,7 +741,7 @@ class StringManipulationUtils:
             part: The name part to capitalize (may contain diacritics or hyphens)
 
         Returns:
-            Capitalized name part without diacritics, with proper hyphen handling
+            Capitalized name part, with proper hyphen handling
         """
         if not part:
             return part

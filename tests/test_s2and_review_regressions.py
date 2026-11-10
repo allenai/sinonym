@@ -948,3 +948,113 @@ def test_reviewed_roster_check_is_skipped_for_papers_of_other_sizes(predictor, m
     predictor.predict_batch([Instance(pp_authors=authors)])
     assert len(keys_per_rule_call) == 50
     assert sum(keys_per_rule_call) == 0
+
+
+NON_CHINESE_WORD_CASES = [
+    # the Chinese path cut common non-Chinese words into two pinyin syllables (and swapped surnames given-first)
+    (("Annie", None, "Chen"), ("Annie", "", "Chen")),
+    (("Luke", None, "Lu"), ("Luke", "", "Lu")),
+    (("Gene", None, "Ho"), ("Gene", "", "Ho")),
+    (("Gene", None, "Cheung"), ("Gene", "", "Cheung")),
+    (("Jihye", None, "Lee"), ("Jihye", "", "Lee")),
+    (("Hoang", None, "Le"), ("Hoang", "", "Le")),
+    (("Tuan", None, "Hoang"), ("Tuan", "", "Hoang")),
+    (("Lee", None, "Baer"), ("Lee", "", "Baer")),
+    (("Kai", None, "Zenger"), ("Kai", "", "Zenger")),
+    (("Mai", None, "Hata"), ("Mai", "", "Hata")),
+    # Thai / Hebrew
+    (("Niran", None, "Chen"), ("Niran", "", "Chen")),
+    (("Niran", None, "Li"), ("Niran", "", "Li")),
+    (("Moshe", None, "Lin"), ("Moshe", "", "Lin")),
+    (("Moshe", None, "Han"), ("Moshe", "", "Han")),
+    # Korean
+    (("Mihye", None, "Lee"), ("Mihye", "", "Lee")),
+    (("Yewon", None, "Jang"), ("Yewon", "", "Jang")),
+    (("Jihyun", None, "Choi"), ("Jihyun", "", "Choi")),
+    # English, German, French, Japanese
+    (("Katie", None, "Wang"), ("Katie", "", "Wang")),
+    (("Lance", None, "Liu"), ("Lance", "", "Liu")),
+    (("Fabian", None, "Lu"), ("Fabian", "", "Lu")),
+    (("Rene", None, "Lu"), ("Rene", "", "Lu")),
+    (("Kenji", None, "Wang"), ("Kenji", "", "Wang")),
+]
+
+CHINESE_GIVEN_SPLIT_CASES = [
+    # Chinese given names keep their pinyin split, whether or not the corpus lists them
+    (("Xiaoming", None, "Wang"), ("Xiao-Ming", "", "Wang")),
+    (("Xiao Ming", None, "Wang"), ("Xiao-Ming", "", "Wang")),
+    (("Jianguo", None, "Li"), ("Jian-Guo", "", "Li")),
+    (("Wei", None, "Zhang"), ("Wei", "", "Zhang")),
+    (("Bangti", None, "Jin"), ("Bang-Ti", "", "Jin")),
+    # an author's own boundary still splits a listed word
+    (("An-Nie", None, "Chen"), ("An-Nie", "", "Chen")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), NON_CHINESE_WORD_CASES)
+def test_non_chinese_words_are_not_split_into_pinyin(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(("source", "expected"), CHINESE_GIVEN_SPLIT_CASES)
+def test_chinese_given_names_keep_their_pinyin_split(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+ACCENT_CASES = [
+    # the Chinese path dropped every mark; only pinyin tone marks and ü are folded now
+    (("Jan", None, "Šíma"), ("Jan", "", "Šíma")),
+    (("René", None, "Kok"), ("René", "", "Kok")),
+    (("Şahin", None, "Kök"), ("Şahin", "", "Kök")),
+    (("Bo", None, "Ahrén"), ("Bo", "", "Ahrén")),
+    (("Chu", "Hoàng", "Mậu"), ("Chu", "Hoàng", "Mậu")),
+    (("Wěi", None, "Zhāng"), ("Wei", "", "Zhang")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), ACCENT_CASES)
+def test_chinese_path_keeps_non_pinyin_accents(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    ("part", "expected"),
+    [
+        ("šíma", "Šíma"),
+        ("kök", "Kök"),
+        ("nguyễn", "Nguyễn"),
+        ("đặng", "Đặng"),
+        ("zhāng", "Zhang"),
+        ("lǚ", "Lu"),
+        ("hsŭ", "Hsu"),
+        ("chên", "Chen"),
+        ("josé", "Jose"),
+    ],
+)
+def test_capitalize_name_part_folds_only_pinyin_marks(part, expected):
+    from sinonym.utils.string_manipulation import StringManipulationUtils  # noqa: PLC0415
+
+    assert StringManipulationUtils.capitalize_name_part(part) == expected
+
+
+def test_clean_roman_pattern_keeps_vietnamese_precomposed_letters():
+    from sinonym.coretypes.config import ChineseNameConfig  # noqa: PLC0415
+
+    assert ChineseNameConfig.create_default().clean_roman_pattern.sub("", "Mậu-Nguyễn") == "Mậu-Nguyễn"
+
+
+PARTICLE_ORDER_CASES = [
+    # a strong particle opening the middle field flipped a given-first name surname-first
+    (("Maria", "das Graças Carvalho", "Ferriani"), ("Maria", "", "das Graças Carvalho Ferriani")),
+    (("Lucas", "da Fonseca Roberti", "Garcia"), ("Lucas", "", "da Fonseca Roberti Garcia")),
+    (("Francisco", "das Chagas Araújo", "Sousa"), ("Francisco", "", "das Chagas Araújo Sousa")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), PARTICLE_ORDER_CASES)
+def test_particle_in_the_middle_does_not_flip_a_given_name_surname_first(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+def test_particle_surname_first_flip_still_applies_to_a_corpus_surname(predictor):
+    assert resolve(predictor, "Carvalho", "da Silva Roberto", "José") == ("Roberto", "José", "Carvalho da Silva")

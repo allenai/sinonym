@@ -29,6 +29,7 @@ from sinonym.name_punctuation import (
     strip_soft_hyphens,
 )
 from sinonym.services.non_person import reviewed_non_person_text_pattern
+from sinonym.services.token_order_prior import token_role
 
 
 class PersonNameOutcome(str, Enum):
@@ -1911,8 +1912,16 @@ class PersonNameNormalizationService:
         self,
         tokens: list[_Token],
     ) -> tuple[list[_Token], list[_Token], list[_Token]] | None:
-        """Parse ``Carvalho da Silva Roberto José`` behind an exact strong span."""
-        if len(tokens) < _FOUR_COMPONENTS or not self._is_full_name_token(tokens[0].text):
+        """Parse ``Carvalho da Silva Roberto José`` behind an exact strong span.
+
+        Only when the corpus uses the leading word as a surname: ``Maria das Graças Carvalho Ferriani`` and
+        ``Lucas da Fonseca Roberti Garcia`` have the same shape but are written given name first.
+        """
+        if (
+            len(tokens) < _FOUR_COMPONENTS
+            or not self._is_full_name_token(tokens[0].text)
+            or token_role(tokens[0].text) != "surname"
+        ):
             return None
         particle_width = self._strong_particle_width(tokens, 1)
         if not particle_width:
@@ -2041,6 +2050,7 @@ class PersonNameNormalizationService:
             or len(surname) != 1
             or not self._is_full_name_token(given[0].text)
             or not self._is_full_name_token(surname[0].text)
+            or token_role(given[0].text) != "surname"
         ):
             return None
         particle_width = self._strong_particle_width(middle, 0) if middle else 0

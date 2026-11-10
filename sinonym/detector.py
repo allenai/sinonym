@@ -233,6 +233,7 @@ from sinonym.services.slavic_initials import is_digraph_initials_surname
 from sinonym.services.surname_first_words import load_surname_first_words, surname_first_initials
 from sinonym.services.token_order_prior import load_token_role_prior
 from sinonym.utils.string_manipulation import StringManipulationUtils
+from sinonym.utils.unsplit_given_words import load_unsplit_given_words
 
 LOGGER = logging.getLogger(__name__)
 
@@ -341,6 +342,7 @@ class ChineseNameDetector:
         load_token_role_prior()
         load_order_prior()
         load_surname_first_words()
+        load_unsplit_given_words()
         surname_resolver = SurnameResolver(data, self._normalizer)
         ethnicity_service = EthnicityClassificationService(context)
         parsing_service = NameParsingService(context, weights=self._weights)
