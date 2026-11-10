@@ -8,6 +8,7 @@ mixed script handling, and compound name splitting with cultural validation.
 from __future__ import annotations
 
 import string
+import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, Literal
@@ -381,7 +382,7 @@ class NormalizationService:
                 # Clean Roman token
                 clean_token = self._config.clean_roman_pattern.sub(
                     "",
-                    token.translate(self._config.roman_punctuation_fold_tr),
+                    unicodedata.normalize("NFC", token.translate(self._config.roman_punctuation_fold_tr)),
                 )
                 # Filter out empty tokens and tokens that are only punctuation
                 if clean_token and not all(c in string.punctuation for c in clean_token):
@@ -521,7 +522,7 @@ class NormalizationService:
 
     def _clean_roman_token(self, token: str) -> str:
         """Clean a Roman token without changing its source capitalization."""
-        folded = token.translate(self._config.roman_punctuation_fold_tr)
+        folded = unicodedata.normalize("NFC", token.translate(self._config.roman_punctuation_fold_tr))
         return self._config.clean_roman_pattern.sub("", folded)
 
     def _roman_matches_han_token(self, roman_token: str, han_pinyin: tuple[str, ...]) -> bool:

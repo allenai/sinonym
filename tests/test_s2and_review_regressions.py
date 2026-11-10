@@ -1026,6 +1026,7 @@ ACCENT_CASES = [
     (("Şahin", None, "Kök"), ("Şahin", "", "Kök")),
     (("Bo", None, "Ahrén"), ("Bo", "", "Ahrén")),
     (("Chu", "Hoàng", "Mậu"), ("Chu", "Hoàng", "Mậu")),
+    (("Jan", None, "S\u030ci\u0301ma"), ("Jan", "", "Šíma")),
     (("Wěi", None, "Zhāng"), ("Wei", "", "Zhang")),
 ]
 
@@ -1099,3 +1100,4 @@ def test_particle_in_the_middle_does_not_flip_a_given_name_surname_first(predict
 
 def test_particle_surname_first_flip_still_applies_to_a_corpus_surname(predictor):
     assert resolve(predictor, "Carvalho", "da Silva Roberto", "José") == ("Roberto", "José", "Carvalho da Silva")
+
