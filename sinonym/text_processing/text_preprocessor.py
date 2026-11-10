@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from sinonym.name_punctuation import attach_detached_diacritics
 from sinonym.utils.string_manipulation import StringManipulationUtils
 
 if TYPE_CHECKING:
@@ -49,6 +50,7 @@ class TextPreprocessor:
         """
 
         surname_first_parenthetical = bool(self._surname_first_parenthetical_re.match(raw))
+        raw = attach_detached_diacritics(raw)
 
         # Single pass for most cleaning operations
         raw = self._config.clean_pattern.sub(self._clean_replacement, raw)
