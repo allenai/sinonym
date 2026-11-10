@@ -35,6 +35,7 @@ MIN_SPLIT_PART_LENGTH = 2
 _PINYIN_TONE_MARKS = frozenset("\u0304\u0301\u030c\u0300")
 _PINYIN_VOWELS = frozenset("aeiouvü")
 _DIAERESIS = "\u0308"
+_DOT_ABOVE = "\u0307"
 _WADE_GILES_MARKS = frozenset({("u", "\u0306"), ("e", "\u0302")})
 
 
@@ -67,7 +68,7 @@ def _only_pinyin_marks(decomposed: str) -> bool:
             if base != "u":
                 return False
             base = "ü"
-        elif (base, character) in _WADE_GILES_MARKS:
+        elif (base, character) in _WADE_GILES_MARKS or (base, character) == ("i", _DOT_ABOVE):
             continue
         elif character not in _PINYIN_TONE_MARKS or base not in _PINYIN_VOWELS:
             return False

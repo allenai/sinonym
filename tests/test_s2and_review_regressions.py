@@ -1047,6 +1047,7 @@ def test_chinese_path_keeps_non_pinyin_accents(predictor, source, expected):
         ("lǚ", "Lü"),
         ("lü", "Lü"),
         ("hsŭ", "Hsu"),
+        ("ji\u0307ang", "Jiang"),
         ("chên", "Chen"),
         ("josé", "Jose"),
     ],
