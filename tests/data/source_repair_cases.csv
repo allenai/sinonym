@@ -33,3 +33,21 @@ glued_initial,control,CityU,,Library,CityU,,Library,CityU,,Library,not a given w
 glued_initial,control,UniKL,,Library,UniKL,,Library,UniKL,,Library,two capitals after a word
 glued_initial,control,PharmD,,Estes,,,Estes,,,Estes,degree
 glued_initial,control,JohnS,Mill,Smith,JohnS,Mill,Smith,JohnS,Mill,Smith,a middle name is present
+doubled_period,bug,D.G..,,Downey,D.,G.,Downey,D.g..,,Downey,MAG D.G.. Downey; 0.6.4 wrote D.g..
+doubled_period,bug,M..,,Parlar,M.,,Parlar,M..,,Parlar,corpus
+doubled_period,bug,M..,,PARLAR,M.,,Parlar,M..,,Parlar,all-caps one-word surname
+doubled_period,control,M..,,C..,M..,,C..,M..,,C..,the surname is not a word
+doubled_period,control,D...G..,,Downey,D...g..,,Downey,D...g..,,Downey,ellipsis in the given name
+doubled_period,control,.M..,,Parlar,.m..,,Parlar,.m..,,Parlar,stray leading period
+doubled_period,bug,S..,L..,Bali,S.,L.,Bali,S..,L..,Bali,corpus
+doubled_period,bug,I.A..,,Helmholtz,I.,A.,Helmholtz,I.a..,,Helmholtz,corpus
+doubled_period,bug,G.I.A..,,Okoroiwu,G.,I. A.,Okoroiwu,G.i.a..,,Okoroiwu,corpus
+doubled_period,bug,E..,,Cazenove,E.,,Cazenove,E..,,Cazenove,corpus
+doubled_period,surname,L.,M. L..,Ong,L.,M. L.,Ong,L.,M.,L.. Ong,0.6.4 moved the doubled initial into the surname
+doubled_period,surname,S.,U. C..,Sankatsing,S.,U. C.,Sankatsing,S.,U.,C.. Sankatsing,0.6.4 moved the doubled initial into the surname
+doubled_period,control,Joseph,A.,Abate...,Joseph,A.,Abate...,Joseph,A.,Abate...,ellipsis
+doubled_period,control,Pat,...,Maier,Pat,...,Maier,Pat,...,Maier,ellipsis
+doubled_period,control,B.,C.. John,Cho,B.,C.. John,Cho,B.,C.. John,Cho,a full word among the initials
+doubled_period,control,John M..,,Telle,John,M..,Telle,John,M..,Telle,a full word among the initials
+doubled_period,control,A..,,Abed El-Rahim,A..,,Abed El-Rahim,A..,,Abed El-Rahim,multi-word surname
+doubled_period,control,D.G.,,Downey,D.,G.,Downey,D.,G.,Downey,nothing to repair
