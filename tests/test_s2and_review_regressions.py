@@ -68,9 +68,207 @@ def test_scalar_baseline_still_canonicalizes_initials_without_moving_boundary(pr
     assert resolve(predictor, "J", None, "Smith") == ("J.", "", "Smith")
 
 
+DETACHED_DIACRITIC_CASES = [
+    # inspire: a spacing diaeresis/ring left by PDF extraction split the surname
+    (("H", None, "Arenh¨ovel"), ("H.", "", "Arenhövel")),
+    (("M.", None, "B¨oge"), ("M.", "", "Böge")),
+    (("H.", None, "Pru˚chová"), ("H.", "", "Průchová")),
+    (("Emine", "S¸ule", "Yazıcı"), ("Emine", "Şule", "Yazıcı")),
+    # a mark that composes with nothing is left alone
+    (("Nicolas", None, "D´ Amelio"), ("Nicolas", "", "D' Amelio")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), DETACHED_DIACRITIC_CASES)
+def test_detached_diacritic_rejoins_its_letter(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    # a detached mark next to NFD text joins only an unaccented letter (Ożóg, Urnėžius), never stacks on an accent
+    (("Mariola", None, "Oz˙o\u0301g"), ("Mariola", "", "Ożóg")),
+    (("Eugenijus", None, "Urne˙žius"), ("Eugenijus", "", "Urnėžius")),
+    (("Elçin", None, "\u0308O\u0308lmezer-Öztürk"), ("Elçin", "", "\u0308Ölmezer-Öztürk")),
+    # with an ASCII backtick in the word, ´ stays an apostrophe variant
+    (("Yves", None, "Le Bloc´`'h"), ("Yves", "", "Le Bloc'h")),
+    (("Nerea", None, "L´`ópez-Bouzas"), ("Nerea", "", "L'ópez-Bouzas")),
+])
+def test_detached_mark_next_to_other_marks(predictor, source, expected):
+    assert tuple(unicodedata.normalize("NFC", part) for part in resolve(predictor, *source)) == tuple(
+        unicodedata.normalize("NFC", part) for part in expected
+    )
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    # a tilde next to n is ñ on either side; Portuguese ã between vowels is unchanged
+    (("R.", None, "Ya˜nez"), ("R.", "", "Yañez")),
+    (("A.", None, "Mun˜oz"), ("A.", "", "Muñoz")),
+    (("Joa˜o", None, "Magalha˜es"), ("João", "", "Magalhães")),
+    # marks one letter apart each see that letter
+    (("Maria", None, "Conceic¸a˜o"), ("Maria", "", "Conceição")),
+    # a mid-word ´ is an acute or an apostrophe, so it is left as written; right after a repaired letter it is the
+    # next vowel's acute
+    (("Jos´e", None, "Dvoˇr´ak"), ("Jos'e", "", "Dvořák")),
+    (("JIˇR´I", None, "NOVAK"), ("Jiří", "", "Novak")),
+    (("Carlos", None, "Sag¨u´es"), ("Carlos", "", "Sagüés")),
+    (("Ana", None, "L´´opez"), ("Ana", "", "L'opez")),
+    # elisions and apostrophes stay apostrophes; an ambiguous acute is left alone
+    (("Gina", None, "D´Angelo"), ("Gina", "", "D'Angelo")),
+    (("Pietro", None, "Dall´aglio"), ("Pietro", "", "Dall'aglio")),
+    (("Solange", None, "L´Abbate"), ("Solange", "", "L'Abbate")),
+    (("Rosane", None, "Sant´ana"), ("Rosane", "", "Sant'ana")),
+    # a transliterated Russian soft sign is an apostrophe (Vladimir G. Maz'ya), not an acute
+    (("Vladimir", "G.", "Maz´ya"), ("Vladimir", "G.", "Maz'ya")),
+    (("V.", "G.", "Vasil´ev"), ("V.", "G.", "Vasil'ev")),
+    (("Konstantin", None, "Il´in"), ("Konstantin", "", "Il'in")),
+    # a mid-word ´ after ng stays an apostrophe; a breve next to g is the Turkish ğ
+    (("James", "B.", "Kung´u"), ("James", "B.", "Kung'u")),
+    (("Bora", None, "C¸a˘glayan"), ("Bora", "", "Çağlayan")),
+    (("A.", None, "Do˘gan"), ("A.", "", "Doğan")),
+    # a mid-word ´ is left as written: an apostrophe here, and in Ren´e as 0.6.1 had it
+    (("Xin´e", None, "Shi"), ("Xin'e", "", "Shi")),
+    (("Ren´e", None, "Kok"), ("Ren'e", "", "Kok")),
+    # an acute after an accented vowel is the consonant's; elisions after a hyphen or at a word end stay apostrophes
+    (("K.", "M.", "Szcz¸e´sniak"), ("K.", "M.", "Szczȩśniak")),
+    (("Helena", None, "Pinheiro-Sant´ana"), ("Helena", "", "Pinheiro-Sant'ana")),
+    (("I.", "A.", "Il´inskaya"), ("I.", "A.", "Il'inskaya")),
+    # a caret between a vowel and a consonant is a circumflex; any other caret leaves the word alone
+    (("Jéro^me", None, "Lemai^tre"), ("Jérôme", "", "Lemaître")),
+    (("John", None, "Smith^1"), ("John", "", "Smith^1")),
+    # ogonek
+    (("Anna", None, "Ste˛pień"), ("Anna", "", "Stępień")),
+])
+def test_detached_mark_placement(predictor, source, expected):
+    assert tuple(unicodedata.normalize("NFC", part) for part in resolve(predictor, *source)) == expected
+
+
+@pytest.mark.parametrize("invisible", ["\u200e", "\u200f", "\u2060", "\ufeff"])
+def test_invisible_markup_does_not_detach_an_accent(predictor, invisible):
+    decomposed = unicodedata.normalize("NFD", "Ibáñez").replace("n\u0303", f"n{invisible}\u0303")
+    result = tuple(unicodedata.normalize("NFC", part) for part in resolve(predictor, "José", None, decomposed))
+    assert result == ("José", "", "Ibáñez")
+
+
+@pytest.mark.parametrize(("raw", "expected"), [
+    # a mid-word ´ that is an apostrophe stays one (Natal'ia, Ken'ichi, Mas'ud), and so does one inside mojibake
+    ("Natal´ia", "Natal´ia"),
+    ("Ken´ichi", "Ken´ichi"),
+    ("Mas´ud", "Mas´ud"),
+    ("AntÃ´nio", "Antônio"),
+    # quote marks
+    ("´Iñaki´", "´Iñaki´"),
+    ("Ángel´´", "Ángel´´"),
+    # a word-final ´ after an elision word is its apostrophe; after another word it is the last letter's acute
+    ("Dell´", "Dell´"),
+    ("Nikolic´", "Nikolić"),
+    # the tilde opens an ão diphthong
+    ("Jo˜ao", "João"),
+    # the dot above: an i's own dot, else only ż ė ċ ġ
+    ("Meli˙ha", "Meliha"),
+    ("I˙nci", "İnci"),
+    ("Z˙ylicz", "Żylicz"),
+    ("Grublyt˙", "Grublyt˙"),
+    # a cedilla prefers c s t, an ogonek a e, and no word starts with ğ
+    ("Du¨zgu¨n¸cınar", "Düzgünçınar"),
+    ("Güne¸s", "Güneş"),
+    ("Ta¸skıran", "Taşkıran"),
+    ("ˇS´CETA", "ŠĆETA"),
+    # after an acute, macron, tilde or circumflex a mid-word ´ is an apostrophe, not a second accent
+    ("Sā´id", "Sā´id"),
+    ("Marí´a", "Marí´a"),
+    ("Iñ´aki", "Iñ´aki"),
+    # an ogonek goes only on a or e, and before its vowel only in a Polish word
+    ("Franc˛ois", "Franc˛ois"),
+    ("S˛ahin", "S˛ahin"),
+    ("˛aczkowska", "˛aczkowska"),
+    # a dot between i and z is the z's (Giżewska)
+    ("Gi˙zewska", "Giżewska"),
+    ("I˙zzet", "İzzet"),
+    ("SEZG˙IN", "SEZGİN"),
+    # no ğ in a Romanian word or at a word start
+    ("C˘alug˘areanu", "Călugăreanu"),
+    ("Dra˘gan", "Drăgan"),
+    ("˘gain", "˘gain"),
+    # a word-final ´ after r l m s z p k is a soft sign or stray, not an accent
+    ("Igor´", "Igor´"),
+    ("Vasyl´", "Vasyl´"),
+    ("Fernandes´", "Fernandes´"),
+    # ... but on y in a Czech word it is ý, and on s/z in a Polish word the ś/ź; without such a sign y´ is left
+    ("Sechovsky´", "Sechovský"),
+    ("Sˇedivy´", "Šedivý"),
+    ("Nancy´", "Nancy´"),
+    ("Grzes´", "Grześ"),
+    # UTF-8 read as Latin-1 is decoded when it round-trips exactly, and left as written when it does not
+    ("SÃ¸ren", "Søren"),
+    ("RISTICÂ´", "RISTIĆ"),
+    ("Ä˝ubica", "Ä˝ubica"),
+    # a word-initial ´ goes on a vowel, or on ć ń ś ź in a Polish word; a word-final n´ is ń only in a Polish word
+    ("´Pedraza", "´Pedraza"),
+    ("´Swia¸tek", "Świątek"),
+    ("Istvan´", "Istvan´"),
+    ("Kwiecien´", "Kwiecień"),
+    ("Brown´", "Brown´"),
+    ("To˜nu", "Tõnu"),
+    ("Fi˙li˙z", "Filiz"),
+    ("SUKHORUKOVA˛", "SUKHORUKOVA˛"),
+    ("STOJANOVICÂ´", "STOJANOVIĆ"),
+    ("MÄ¨KINEN", "MÄ¨KINEN"),
+    ("Bien´", "Bień"),
+    ("Leon´", "Leon´"),
+    ("´Sciana", "Ściana"),
+    ("´Silva", "´Silva"),
+    ("O \u0301 connor", "O ´ connor"),
+    # a dot by c or g is left (more often a misread dot below)
+    ("Ngo˙c", "Ngo˙c"),
+    # in NFD, an acute already on the letter before ´ makes it an apostrophe, a caron makes it the next vowel's acute
+    ("Mari\u0301´a", "Mari\u0301´a"),
+    ("Dvor\u030c´ak", "Dvořák"),
+    # a word longer than any name is left as written
+    ("Mu¨ller" * 30, "Mu¨ller" * 30),
+    # invisible markup is removed only before an accent
+    ("Li\u200eWei", "Li\u200eWei"),
+    # doubled marks count once, and a word whose repair fails is returned exactly as written
+    ("Mu¨¨ller", "Müller"),
+    ("Ab¨¨1", "Ab¨¨1"),
+    # an elision word after a hyphen keeps its apostrophe; a combining mark after a hyphen is placed
+    ("Pinheiro-Dell´", "Pinheiro-Dell´"),
+    ("Jean-\u0301Eric", "Jean-Éric"),
+    # the Polish-word markers: anchored -ski/-cki, and ie¸ on its own
+    ("Eski¸sehir", "Eskişehir"),
+    ("Ba¸skin", "Başkin"),
+    ("Zie¸tara", "Ziętara"),
+    # a mark left alone still lets the next mark see its own neighbour (Fran´çois)
+    ("Fran´c¸ois", "Fran´çois"),
+    ("Kata¸tski", "Katątski"),
+    ("Oświe¸cimka", "Oświęcimka"),
+    ("Wa¸s", "Wąs"),
+    ("Pi˛ekos", "Piękos"),
+    ("G˘ain˘a", "Găină"),
+    ("Do˘gan", "Doğan"),
+    # a combining mark after punctuation is not placed
+    ("O.\u0301scar", "O.\u0301scar"),
+])
+def test_detached_mark_rules(raw, expected):
+    from sinonym.name_punctuation import attach_detached_diacritics  # noqa: PLC0415
+
+    assert unicodedata.normalize("NFC", attach_detached_diacritics(raw)) == unicodedata.normalize("NFC", expected)
+
+
+def test_invisible_markup_is_removed_before_the_repair():
+    from sinonym.name_punctuation import attach_detached_diacritics  # noqa: PLC0415
+
+    decomposed = unicodedata.normalize("NFD", "Ibáñez").replace("n\u0303", "n\u200e\u0303")
+    assert attach_detached_diacritics(decomposed) == unicodedata.normalize("NFD", "Ibáñez")
+
+
+def test_leading_combining_mark_does_not_glue_words(predictor):
+    # ``Mithat ̈unsal`` (NFKC remnant of a spacing diaeresis before the surname) stays two words
+    assert resolve(predictor, "Mithat", None, "\u0308unsal") == ("Mithat", "", "Ünsal")
+
+
 DECOMPOSED_ACCENT_CASES = [
-    # names written in NFD (each accent a combining mark after its letter); adjacent accented letters and stacked
-    # marks used to be moved onto the neighbouring letter (Dvořaḱ, Núnẽz, Nguyêñ)
+    # names written in NFD (each accent a combining mark after its letter) keep their accents where they are, also
+    # when accented letters are adjacent or marks are stacked; 0.6.0 moved them onto the neighbouring letter
     (("Antonín", None, "Dvořák"), ("Antonín", "", "Dvořák")),
     (("José", None, "Núñez"), ("José", "", "Núñez")),
     (("Jiří", None, "Kořínek"), ("Jiří", "", "Kořínek")),

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sinonym"
-version = "0.6.2"
+version = "0.6.3"
 description = "Chinese Name Detection and Normalization Module"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -106,6 +106,7 @@ ignore = ["S101", "T201"]  # Allow assert statements and print statements
 "sinonym/chinese_names_data.py" = ["ERA001"]
 "sinonym/coretypes/config.py" = ["E501", "RUF001", "RUF003"]
 "sinonym/ml_fast_scorer.py" = ["PLR0913", "PLR2004"]
+"sinonym/name_punctuation.py" = ["C901", "PLR0911", "PLR0912", "PLR0915", "RUF003"]
 "sinonym/ml_model_components.py" = ["ARG002", "N803", "PLR2004", "UP038"]
 "sinonym/patterns/regex_builders.py" = ["N806", "PLR2004", "RUF001"]
 "sinonym/resources.py" = ["PLC0415", "TC003"]
