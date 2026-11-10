@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 # Import at module level to avoid repeated imports in hot paths
 from sinonym.chinese_names_data import COMPOUND_VARIANTS, HIGH_CONFIDENCE_ANCHORS, REVIEWED_ATOMIC_GIVEN_FORMS
 from sinonym.name_punctuation import APOSTROPHE_LIKE
-from sinonym.utils.unsplit_given_words import is_unsplit_given_word
+from sinonym.utils.unsplit_given_words import has_korean_only_syllable, is_unsplit_given_word
 
 if TYPE_CHECKING:
     from sinonym.services.normalization import CompoundMetadata
@@ -311,15 +311,20 @@ class StringManipulationUtils:
         return True  # Skip cultural check for short tokens
 
     @staticmethod
-    def split_concatenated_name(
+    def split_concatenated_name(  # noqa: PLR0913 - the list switch is keyword-only
         token: str,
         normalized_cache: dict[str, str] | None,
         data_context,
         normalizer,
         config,
+        *,
+        ignore_unsplit_list: bool = False,
     ) -> list[str] | None:
         """
         Split concatenated Chinese given names using a sophisticated tiered confidence system.
+
+        ``ignore_unsplit_list`` lets a word of ``unsplit_given_words.csv.gz`` split, for callers that only score how
+        Chinese a name looks.
 
         This function uses multiple validation layers to distinguish authentic Chinese name
         combinations from Western names that shouldn't be split.
@@ -409,7 +414,7 @@ class StringManipulationUtils:
             # Preserve the existing transliteration and positional-split path when the
             # author-supplied location is not itself a valid boundary.
 
-        unsplit_word = is_unsplit_given_word(token)
+        unsplit_word = (has_korean_only_syllable(token) if ignore_unsplit_list else is_unsplit_given_word(token))
 
         # Pattern 1: Repeated syllable patterns (e.g., "huihui" → ["hui", "hui"]) — only when no hyphen present
         raw = token.translate(config.hyphens_apostrophes_tr)

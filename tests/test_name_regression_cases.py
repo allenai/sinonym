@@ -19,6 +19,28 @@ EDGE_CASES = [
     (("Sheau-yueh", "J.", "Chao"), ("Sheau-Yueh", "J.", "Chao")),
     ((None, None, "YuLina"), ("Lina", "", "Yu")),
     (("Lina", None, "Wang"), ("Lina", "", "Wang")),
+    # Yuchi as the compound surname: its normalized form yuji is a never-split word
+    (("Zhiguang", None, "Yuchi"), ("Zhi-Guang", "", "Yuchi")),
+    (("Yuchi", None, "Zhiguang"), ("Zhi-Guang", "", "Yuchi")),
+    (("Xuebiao", None, "Yuchi"), ("Xue-Biao", "", "Yuchi")),
+    (("Yinghao", None, "Yuchi"), ("Ying-Hao", "", "Yuchi")),
+    (("Weiran", None, "Yuchi"), ("Wei-Ran", "", "Yuchi")),
+    # Yuchi as a given name after a Chinese surname, both orders
+    (("Zhang", None, "Yuchi"), ("Yu-Chi", "", "Zhang")),
+    (("Yuchi", None, "Zhang"), ("Yu-Chi", "", "Zhang")),
+    (("Wu", None, "Yuchi"), ("Yu-Chi", "", "Wu")),
+    (("\u5434\u7389\u8fdf", "Wu", "Yuchi"), ("Yu-Chi", "", "Wu")),
+    # Yuchi as a Japanese surname, or unclear: kept as written
+    (("Akio", None, "Yuchi"), ("Akio", "", "Yuchi")),
+    (("Yunosuke", None, "Yuchi"), ("Yunosuke", "", "Yuchi")),
+    (("Yuchi", None, "Tanaka"), ("Yuchi", "", "Tanaka")),
+    (("Ming", None, "Yuchi"), ("Ming", "", "Yuchi")),
+    # other compound surnames, both orders
+    (("Xiaoqian", None, "Ouyang"), ("Xiao-Qian", "", "Ouyang")),
+    (("Ouyang", None, "Xiaoqian"), ("Xiao-Qian", "", "Ouyang")),
+    (("Zhuge", None, "Jianguo"), ("Jian-Guo", "", "Zhuge")),
+    (("Xiaoming", None, "Situ"), ("Xiao-Ming", "", "Situ")),
+    (("Shangguan", None, "Xiaoming"), ("Xiao-Ming", "", "Shangguan")),
     # an author-written hyphen or CamelCase boundary still splits a listed word
     (("An-Nie", None, "Chen"), ("An-Nie", "", "Chen")),
     (("AnNie", None, "Chen"), ("An-Nie", "", "Chen")),

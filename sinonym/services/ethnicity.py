@@ -748,12 +748,14 @@ class EthnicityClassificationService:
                 if clean_key_lower in split_result_cache:
                     split_result = split_result_cache[clean_key_lower]
                 else:
+                    # Surname strength only: Yuchi normalizes to the never-split word yuji
                     split_result = StringManipulationUtils.split_concatenated_name(
                         clean_key_lower,
                         normalized_cache,
                         self._data,
                         self._normalizer,
                         self._config,
+                        ignore_unsplit_list=True,
                     )
                     split_result_cache[clean_key_lower] = split_result
 
