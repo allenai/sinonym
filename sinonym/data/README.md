@@ -47,7 +47,7 @@ Attribution: the 120W corpus is from [wainshine/Chinese-Names-Corpus](https://gi
   - The scoring hook reads `spelling` and `target_share` and (via initialization) loads each row's `surname_ppm_as_written` into the runtime surname frequency table, so full-share rows carry the target's mass and penalty CANTONESE keys carry the discounted mass. Corpus-derived estimates (e.g. ORCID with affiliation country) can replace the numbers without a schema change.
 ### Corpus-Derived Name Assets: Coverage, Provenance and Refresh
 
-Four assets are lookup tables built from Semantic Scholar author names:
+Five assets are lookup tables built from Semantic Scholar author names:
 
 | asset | built by | snapshot | fires only when |
 |---|---|---|---|
@@ -55,6 +55,7 @@ Four assets are lookup tables built from Semantic Scholar author names:
 | `two_token_order_prior.csv.gz` | `scripts/build_order_prior_asset.py` | May 2026 | the pair has >= 100 mentions and a >= 80% majority |
 | `token_role_prior.csv.gz` | `scripts/build_token_order_prior.py` | May 2026 | the token has >= 200 mentions and is >= 90% one role |
 | `surname_first_words.csv.gz` | `scripts/build_surname_first_words.py` | October 2026 | the word was seen in that shape and is mostly a surname (>= 3 mentions) |
+| `glued_initial_prefixes.csv.gz` | `scripts/build_glued_initial_prefixes.py` | October 2026 | the word before a glued capital is a first name >= 100 times and at least as often as a surname, and word + that letter is not itself a common first name |
 
 - **Unseen names.** A name a table does not list gets the behavior without that rule, never a guess, so new or rare
   names are not made worse; they just do not get the gain. Shape-based rules (digraph initials, glued initials, the

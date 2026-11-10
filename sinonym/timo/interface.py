@@ -16,6 +16,7 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_vys_abstain_batches as _route_pp_vys_abstain_batches,
 )
 from sinonym.services.batch_analysis import RelatedBatchParseResult as _RelatedBatchParseResult
+from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
 from sinonym.timo._resolution import (
     Instance,
     ResolvedAuthorFields,
@@ -32,6 +33,19 @@ __all__ = [
     "ResolvedAuthorFields",
     "SourceAuthorFields",
 ]
+
+
+def _repaired_source(author: SourceAuthorFields) -> SourceAuthorFields:
+    """The source with a recoverable given-field defect repaired (services/source_repairs.py), else unchanged.
+
+    Resolution then works on the repaired fields, so source-provenance outputs carry the repaired text; the caller
+    keeps the unrepaired source for lineage. VYS pool names are plain strings and are not repaired.
+    """
+    repaired = _repair_source_fields(author.first_name, author.middle_names, author.last_name, author.suffix)
+    if repaired is None:
+        return author
+    _, first, middle = repaired
+    return author.copy(update={"first_name": first, "middle_names": middle or None})
 
 
 class Prediction(_Model):
@@ -168,6 +182,10 @@ class Predictor:
         requests: list[tuple[list[str], list[str] | None]] = []
         plans: list[tuple[int, int]] = []
 
+        instances = [
+            instance.copy(update={"pp_authors": [_repaired_source(author) for author in instance.pp_authors]})
+            for instance in instances
+        ]
         for instance_index, instance in enumerate(instances):
             pp_names = [author.full_name() for author in instance.pp_authors]
             if not pp_names:
