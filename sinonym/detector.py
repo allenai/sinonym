@@ -234,7 +234,7 @@ from sinonym.services.slavic_initials import is_digraph_initials_surname
 from sinonym.services.surname_first_words import load_surname_first_words, surname_first_initials
 from sinonym.services.token_order_prior import load_token_role_prior
 from sinonym.utils.string_manipulation import StringManipulationUtils
-from sinonym.utils.unsplit_given_words import load_unsplit_given_words
+from sinonym.utils.unsplit_given_words import load_unsplit_given_words, standalone_words
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1044,6 +1044,10 @@ class ChineseNameDetector:
         - success=True, result=formatted_name if Chinese name detected
         - success=False, error_message=reason if not Chinese name
         """
+        with standalone_words(raw_name):
+            return self._normalize_chinese_name_in_context(raw_name)
+
+    def _normalize_chinese_name_in_context(self, raw_name: str) -> ParseResult:
         initial_failure = self._initial_input_failure(raw_name)
         if initial_failure is not None:
             return initial_failure

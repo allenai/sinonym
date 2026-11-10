@@ -24,6 +24,7 @@ from sinonym.text_processing import CompoundDetector, TextNormalizer, TextPrepro
 from sinonym.text_processing.text_normalizer import strip_name_variation_selectors
 from sinonym.utils.string_manipulation import StringManipulationUtils
 from sinonym.utils.thread_cache import ThreadLocalCache
+from sinonym.utils.unsplit_given_words import is_listed_bound_part, standalone_words
 
 if TYPE_CHECKING:
     from sinonym.coretypes import ChineseNameConfig
@@ -213,6 +214,10 @@ class NormalizationService:
         Pure function: raw input → normalized structure.
         Side-effect free, suitable for Scala interop.
         """
+        with standalone_words(raw_name):
+            return self._apply(raw_name)
+
+    def _apply(self, raw_name: str) -> NormalizedInput:
         if not raw_name or not raw_name.strip():
             return NormalizedInput.empty(raw_name)
 
@@ -607,6 +612,8 @@ class NormalizationService:
 
         # If not found, check if it can be split into valid syllables
         if StringManipulationUtils.split_concatenated_name(token, normalized_cache, self._data, self, self._config):
+            return True
+        if is_listed_bound_part(token):
             return True
 
         # Handle hyphenated tokens by splitting and validating each part

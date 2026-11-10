@@ -14,6 +14,11 @@ from sinonym.timo.interface import Instance, Predictor, PredictorConfig, SourceA
 CASES = list(csv.DictReader((Path(__file__).parent / "data" / "name_regression_cases.csv").read_text(encoding="utf-8").splitlines()))
 
 EDGE_CASES = [
+    # a listed word inside an author-written hyphen or glued token does not block the Chinese reading
+    (("Li", None, "Ta-Tsien"), ("Ta-Tsien", "", "Li")),
+    (("Sheau-yueh", "J.", "Chao"), ("Sheau-Yueh", "J.", "Chao")),
+    ((None, None, "YuLina"), ("Lina", "", "Yu")),
+    (("Lina", None, "Wang"), ("Lina", "", "Wang")),
     # an author-written hyphen or CamelCase boundary still splits a listed word
     (("An-Nie", None, "Chen"), ("An-Nie", "", "Chen")),
     (("AnNie", None, "Chen"), ("An-Nie", "", "Chen")),

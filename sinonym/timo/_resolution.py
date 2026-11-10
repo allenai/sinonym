@@ -63,7 +63,7 @@ from sinonym.services.person_name_normalization import (
 from sinonym.services.slavic_initials import is_digraph_initials_surname, is_dotted_initial
 from sinonym.services.surname_first_words import surname_first_initials
 from sinonym.services.token_order_prior import surname_first_pair, token_role
-from sinonym.utils.unsplit_given_words import is_listed_unsplit_given_word
+from sinonym.utils.unsplit_given_words import is_listed_unsplit_given_word, standalone_words
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -2489,7 +2489,32 @@ class _Resolver:
             return resolved, None
         return None, selected
 
-    def terminal_resolution(  # noqa: C901, PLR0911, PLR0912, PLR0913
+    def terminal_resolution(  # noqa: PLR0913
+        self,
+        *,
+        source: SourceAuthorFields,
+        paper_authors: list[SourceAuthorFields],
+        raw_name: str,
+        paper_names: list[str],
+        focal_index: int,
+        parsed,
+        batch_reason: ResolutionReason,
+        router_not_person: bool,
+    ) -> ResolvedAuthorFields:
+        """Choose and materialize exactly one operational author result."""
+        with standalone_words(raw_name):
+            return self._terminal_resolution_in_context(
+                source=source,
+                paper_authors=paper_authors,
+                raw_name=raw_name,
+                paper_names=paper_names,
+                focal_index=focal_index,
+                parsed=parsed,
+                batch_reason=batch_reason,
+                router_not_person=router_not_person,
+            )
+
+    def _terminal_resolution_in_context(  # noqa: C901, PLR0911, PLR0912, PLR0913
         self,
         *,
         source: SourceAuthorFields,
