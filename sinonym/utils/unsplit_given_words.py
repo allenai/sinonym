@@ -40,6 +40,9 @@ def load_unsplit_given_words() -> None:
     _words()
 
 
+def is_listed_unsplit_given_word(token: str) -> bool:
+    return _fold(token) in _words()
+
+
 def is_unsplit_given_word(token: str) -> bool:
-    folded = _fold(token)
-    return folded in _words() or _KOREAN_ONLY_SYLLABLE.search(folded) is not None
+    return is_listed_unsplit_given_word(token) or _KOREAN_ONLY_SYLLABLE.search(_fold(token)) is not None

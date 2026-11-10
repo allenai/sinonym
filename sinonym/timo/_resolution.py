@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, StrictStr, root_validator
 
 from sinonym.chinese_names_data import (
     HAN_SURNAME_POSITION_READINGS,
+    NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES,
     REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS,
     VALID_CHINESE_ONSETS,
     VALID_CHINESE_RIMES,
@@ -62,6 +63,7 @@ from sinonym.services.person_name_normalization import (
 from sinonym.services.slavic_initials import is_digraph_initials_surname, is_dotted_initial
 from sinonym.services.surname_first_words import surname_first_initials
 from sinonym.services.token_order_prior import surname_first_pair, token_role
+from sinonym.utils.unsplit_given_words import is_listed_unsplit_given_word
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -136,6 +138,18 @@ def _is_initial_word(word: str) -> bool:
     """``S.`` or ``S``; a lowercase connective (``e``, ``y``) is not an initial."""
     letters = word.rstrip(".")
     return word.endswith(".") or (len(letters) == 1 and letters.isupper())
+
+
+def _chinese_surname_before_listed_given(first: str, last: str) -> bool:
+    """``Wang / - / Lina``: a common Chinese surname, then a never-split word the corpus uses mostly as a given name.
+
+    The never-split list keeps such names off the Chinese path, which used to put them in given-first order.
+    """
+    return (
+        _fold_name_word(first) in NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES - {"lee"}
+        and is_listed_unsplit_given_word(last)
+        and token_role(last) == "given"
+    )
 
 
 def _middle_head_given_name_phrase(
@@ -2186,6 +2200,8 @@ class _Resolver:
         given, surname = selected.given_name.strip(), selected.surname.strip()
         if " " in given or " " in surname or "-" in given or "-" in surname or not given.isalpha() or not surname.isalpha():
             return None
+        if _chinese_surname_before_listed_given(given, surname):
+            return NameComponents(given_name=surname, middle_name="", surname=given, suffix="")
         if len(given) < 3 or len(surname) < 3 or not surname_first_pair(given, surname):  # noqa: PLR2004
             # two-letter tokens are too often glued initials ("VV Robin") for the role prior to be trusted
             return None

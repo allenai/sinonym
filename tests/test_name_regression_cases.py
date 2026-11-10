@@ -17,8 +17,11 @@ EDGE_CASES = [
     # an author-written hyphen or CamelCase boundary still splits a listed word
     (("An-Nie", None, "Chen"), ("An-Nie", "", "Chen")),
     (("AnNie", None, "Chen"), ("An-Nie", "", "Chen")),
-    # surname-first field layout of a non-Chinese word stays as the fields give it
-    (("Chen", None, "Annie"), ("Chen", "", "Annie")),
+    # surname-first field layout: a common Chinese surname before a given-name word is read given-first,
+    # a surname word after Lee keeps the order the fields give
+    (("Chen", None, "Annie"), ("Annie", "", "Chen")),
+    (("Wang", None, "Lina"), ("Lina", "", "Wang")),
+    (("Lee", None, "Baer"), ("Lee", "", "Baer")),
     # all caps
     (("ANNIE", None, "CHEN"), ("Annie", "", "Chen")),
     (("DANA", None, "CHEN"), ("Dana", "", "Chen")),
