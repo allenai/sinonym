@@ -1101,3 +1101,20 @@ def test_particle_in_the_middle_does_not_flip_a_given_name_surname_first(predict
 def test_particle_surname_first_flip_still_applies_to_a_corpus_surname(predictor):
     assert resolve(predictor, "Carvalho", "da Silva Roberto", "José") == ("Roberto", "José", "Carvalho da Silva")
 
+
+KOREAN_SYLLABLE_CASES = [
+    # a romanized Korean syllable pinyin does not have keeps the word whole beside a surname shared with Chinese
+    (("Seungho", None, "Lee"), ("Seungho", "", "Lee")),
+    (("Jieun", None, "Han"), ("Jieun", "", "Han")),
+    (("Hyunwoo", None, "Lim"), ("Hyunwoo", "", "Lim")),
+    (("Dongseung", None, "Song"), ("Dongseung", "", "Song")),
+    (("Seung-Ho", None, "Lee"), ("Seung-Ho", "", "Lee")),
+    # Cantonese spellings with the same letters still split
+    (("Kinkeung", None, "Lai"), ("Kin-Keung", "", "Lai")),
+    (("Tszleung", None, "Yu"), ("Tsz-Leung", "", "Yu")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), KOREAN_SYLLABLE_CASES)
+def test_korean_syllables_keep_the_given_word_whole(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
