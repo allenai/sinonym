@@ -16,13 +16,13 @@ from tests._case_assertions import assert_normalized_name
 # Test cases for mixed scripts, diacritics, and special characters
 CHINESE_NAME_TEST_CASES = [
     ("Chao（冯超） Feng", (True, "Chao Feng")),
-    ("Chü Chen", (True, "Chu Chen")),
-    ("Li Yü", (True, "Yu Li")),
-    ("Lü Buwei", (True, "Bu-Wei Lu")),
+    ("Chü Chen", (True, "Chü Chen")),
+    ("Li Yü", (True, "Yü Li")),
+    ("Lü Buwei", (True, "Bu-Wei Lü")),
     ("Wei-min Zhang 张为民", (True, "Wei-Min Zhang")),
     ("Xiaohong Li 张小红", (True, "Xiao-Hong Li")),
-    ("Yü Li", (True, "Yu Li")),
-    ("Yü Ying-shih", (True, "Ying-Shih Yu")),
+    ("Yü Li", (True, "Yü Li")),
+    ("Yü Ying-shih", (True, "Ying-Shih Yü")),
     ("Zhou（Mary）Li", (True, "Li Zhou")),
     ("刘（Thomas）Wang", (True, "Liu Wang")),
     ("张为民 Wei-min Zhang", (True, "Wei-Min Zhang")),

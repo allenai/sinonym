@@ -42,6 +42,19 @@ def _is_diacritic(character: str) -> bool:
     return "\u0300" <= character <= "\u036f"
 
 
+def _keep_u_diaeresis(decomposed: str) -> str:
+    """Drop every combining mark except the diaeresis of ü."""
+    kept = []
+    base = ""
+    for character in decomposed:
+        if unicodedata.category(character) != "Mn":
+            base = character.casefold()
+            kept.append(character)
+        elif character == _DIAERESIS and base == "u":
+            kept.append(character)
+    return "".join(kept)
+
+
 def _only_pinyin_marks(decomposed: str) -> bool:
     """True when every diacritic in an NFD string is a pinyin tone mark on a vowel, the diaeresis of ü or Wade-Giles ŭ/ê."""
     base = ""
@@ -707,7 +720,7 @@ class StringManipulationUtils:
     def _normalize_and_capitalize_single_part(part: str) -> str:
         """Helper to normalize and capitalize a single part (no hyphens) - cached for performance.
 
-        Pinyin tone marks, ü and Wade-Giles ŭ/ê are folded (``Zhāng`` -> ``Zhang``, ``Lü`` -> ``Lu``). A part carrying
+        Pinyin tone marks and Wade-Giles ŭ/ê are folded and ü is kept (``Zhāng`` -> ``Zhang``, ``Lǚ`` -> ``Lü``). A part carrying
         any other mark is not pinyin and keeps its accents (``Šíma``, ``Kök``, ``Nguyễn``). The decision is per part,
         so an acute-only part beside an accented one is still folded (``Chí`` -> ``Chi``).
         """
@@ -725,7 +738,8 @@ class StringManipulationUtils:
             # category Mn), so stripping them leaves nothing to capitalize. Return the
             # empty result rather than indexing [0] into an empty string (IndexError).
             return without_diacritics
-        return without_diacritics[0].upper() + without_diacritics[1:].lower()
+        folded = unicodedata.normalize("NFC", _keep_u_diaeresis(normalized))
+        return folded[0].upper() + folded[1:].lower()
 
     @staticmethod
     def capitalize_name_part(part: str) -> str:
