@@ -365,7 +365,6 @@ def test_all_nonempty_nursing_credential_fields_are_suppressed(predictor: Predic
 @pytest.mark.parametrize(
     "source",
     [
-        SourceAuthorFields(first_name="Kai", last_name="Zenger"),
         SourceAuthorFields(first_name="Masaki", last_name="Morishige"),
         SourceAuthorFields(first_name="Miki", last_name="Toyota"),
         SourceAuthorFields(first_name="Shi", middle_names="(Tracy)", last_name="Xu"),

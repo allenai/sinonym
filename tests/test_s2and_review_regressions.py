@@ -971,6 +971,19 @@ NON_CHINESE_WORD_CASES = [
     (("Mihye", None, "Lee"), ("Mihye", "", "Lee")),
     (("Yewon", None, "Jang"), ("Yewon", "", "Jang")),
     (("Jihyun", None, "Choi"), ("Jihyun", "", "Choi")),
+    # Hebrew given names with the Israeli surname Chen, including spellings that also occur among Chinese authors
+    (("Lior", None, "Chen"), ("Lior", "", "Chen")),
+    (("Gal", None, "Chen"), ("Gal", "", "Chen")),
+    (("Noa", None, "Chen"), ("Noa", "", "Chen")),
+    (("Tal", None, "Chen"), ("Tal", "", "Chen")),
+    (("Yael", None, "Chen"), ("Yael", "", "Chen")),
+    (("Itai", None, "Chen"), ("Itai", "", "Chen")),
+    (("Liran", None, "Chen"), ("Liran", "", "Chen")),
+    (("Moran", None, "Chen"), ("Moran", "", "Chen")),
+    (("Shiran", None, "Chen"), ("Shiran", "", "Chen")),
+    (("Shani", None, "Chen"), ("Shani", "", "Chen")),
+    (("Dana", None, "Chen"), ("Dana", "", "Chen")),
+    (("Keren", None, "Chen"), ("Keren", "", "Chen")),
     # English, German, French, Japanese
     (("Katie", None, "Wang"), ("Katie", "", "Wang")),
     (("Lance", None, "Liu"), ("Lance", "", "Liu")),
@@ -986,6 +999,11 @@ CHINESE_GIVEN_SPLIT_CASES = [
     (("Jianguo", None, "Li"), ("Jian-Guo", "", "Li")),
     (("Wei", None, "Zhang"), ("Wei", "", "Zhang")),
     (("Bangti", None, "Jin"), ("Bang-Ti", "", "Jin")),
+    (("Jinhu", None, "Lü"), ("Jin-Hu", "", "Lü")),
+    (("Weiran", None, "Chen"), ("Wei-Ran", "", "Chen")),
+    (("Haoran", None, "Chen"), ("Hao-Ran", "", "Chen")),
+    (("Yiran", None, "Chen"), ("Yi-Ran", "", "Chen")),
+    (("Xiaoming", None, "Chen"), ("Xiao-Ming", "", "Chen")),
     # an author's own boundary still splits a listed word
     (("An-Nie", None, "Chen"), ("An-Nie", "", "Chen")),
 ]
