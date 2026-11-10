@@ -33,6 +33,17 @@ Tiers, column `tier`:
   0.15–0.2 band reunites 3 ORCID people per 1 it splits (2,303 fewer split people) and 60 % of the people it touches
   registered the two-word family name with ORCID; the 0.1–0.15 band (1.9:1, 52 %) stays out.
 
+- `registry`: surfaces decided by the ORCID registry's self-declared family names (built after the corpus tiers and
+  before the hyphen tier). For each ORCID person in one half of the registry (last ORCID character not in
+  1 3 5 7 9 X, so the other half can score the result) and each 2–3-word surface that ends the `middle + last` words
+  of one of their source names, the person counts as a join when the registered family name is the surface or ends
+  with it as whole words, and as a tail when it is the surface without its first word. Surfaces with a one-letter
+  word are not considered. A surface not already in the corpus tiers is admitted when joins ≥ 2 and outnumber tails,
+  every non-final word is used as a compound-surname head at least half the time, and it passes the suffix, East
+  Asian, Chinese compound and Vietnamese gates. A surface already in the corpus tiers is vetoed when joins + tails ≥ 3
+  and it fails the join test or a gate. The shipped build vetoed 576 surfaces and admitted 19,422; 19,412 remain after
+  the excluded heads.
+
 - `hyphen`: 2–3-word surfaces the corpus writes hyphenated in `last_name` (`Ferro-Luzzi`, `Cohen-Tanugi`) for
   given names with at least 2 distinct initials (`scripts/build_hyphen_compound_surnames.py`). The hyphen declares
   the words one surname; the initials bar keeps one person, whose sources share an initial, from admitting their own
@@ -45,8 +56,8 @@ Tiers, column `tier`:
   left out (surname-first sources put hyphenated given names such as `Zhong-Hua` in `last_name`). For this tier
   `mentions` counts the hyphenated mentions, `whole_share` includes them as whole, and `given_names` is the distinct
   given-name initials. A hyphen is any of `-`, U+2010, U+2011, U+2012, U+2013 (en dash) and U+2212 (minus sign).
-  2026-10-31 build from the October name counts (`name_counts_20261021_v2`, with the `oct2` partition and token
-  priors): 112,671 surfaces not already in another tier. Rows whose `first_name` is an East Asian surname (two or
+  2026-10-31 build from the October 2026 name counts and partition priors: 112,671 surfaces not already in another
+  tier (112,601 after the excluded heads). Rows whose `first_name` is an East Asian surname (two or
   more letters) are not evidence: a surname-first source puts the hyphenated given name in `last_name`
   (`Wang / Cai-hon`, `Sakamoto / Shin-ichi`).
 
@@ -58,49 +69,34 @@ two-word family name; `ul`, `do`, `ali`, `ahmad`, `maria` (24–68 %) stay out.
 Columns: `surface` (folded: lower-case, accents stripped, single spaces), `tier`, `mentions`, `whole_share`
 (share of mentions that wrote the surface whole in `last`), `given_names` (distinct given names seen with it),
 `people` (distinct recurring-ORCID people carrying it; listed tier only), `people_whole`, `people_split_today`
-(people seen with both shapes, i.e. split across production block keys before this rule). No names of people and
-no identifiers.
+(people seen with both shapes, i.e. split across production block keys before this rule). Registry rows leave
+`mentions`, `whole_share` and `given_names` empty; their `people` is the registrants with a family name,
+`people_whole` the joins and `people_split_today` the tails. No names of people and no identifiers.
 
-## How it was built (2026-10-22, October snapshot) and how to rebuild from a later dump
+## How it was built and how to rebuild it
 
-All steps are read-only and local except the first dump. Scripts live in
-`/Users/atalyaa/Documents/repos/author-names/pp_vys_orcid_conc/scripts/` unless noted; the final step is in this repo.
+The shipped table (sinonym 0.6.0 onward) was built from the October 2026 Semantic Scholar author snapshot in four
+stages,
+each run on the previous stage's output:
 
-1. **Source-name counts.** One Athena pass over a post-backfill `paper_authors` snapshot
-   (`author-names/NAME_COUNTS.md`, `pp_vys_orcid_conc/scripts/v4/athena_name_counts.sh`): one row per distinct
-   source triple, where the source name is **all** `original_*` fields when `original_last IS NOT NULL`, else the
-   stored fields (never a per-field coalesce — it leaks sinonym's own middle into rewritten rows). Counts: mentions,
-   distinct papers, distinct ORCIDs; no production `author_id`. 113.6M triples, 702.9M mentions (Oct 2026).
-2. (The May 2026 build used a pre-sinonym dump, `pre_name_counts.py`; same schema.)
-3. **Partition statistics.** `partition_prior.py "<out_dir>/*.parquet" partition_prior.parquet` → for each 2–4-word
-   surname tail (`middle` words + `last` words), how often the corpus puts k words in `middle`; `share_whole`
-   = k = 0. Also writes `partition_prior_tokens.parquet`: per word, mentions as a given name vs as the surname word.
-4. **Candidate universe.** Mention-count thresholds (in `build_compound_surnames.py`): 2–3 words, ≥ 50 mentions,
-   `share_whole` ≥ 0.25, ≥ 5 distinct given names, head words with a given-name share ≤ 0.3, every word ≥ 2
-   letters, no suffix tail (`junior`, `filho`, …), no East Asian surname head (Vietnamese `Nguyen Van`, Chinese
-   `Liu Yang` are not compounds), no Vietnamese `van X` / `thi X` pair (`Van Le`, `Van Tran`), no Chinese compound
-   head (`Au Yeung`, `Ou Yang` stay with sinonym's curated list).
-   Kill test before anything ships: `sim_compound_canon.py --asset <csv.gz> --no-shrink --half A|B` applies the
-   shipped rule to an existing routed arm and scores people united / split under the production block key on
-   the held-out ORCID half. Without `--no-shrink` the simulation also cuts longer surnames down to the surface
-   and over-counts (2026-10-21: 446 / 17) — the shipped rule's own numbers are in step 7.
-5. **Person-level gate.** `scripts/v4/compound_orcid_gate_v4.py` over dataset v4 (every ORCID mention with its source
-   name), excluding the ORCIDs of the 690k evaluation index: per surface, distinct people with the whole form, the
-   split form, and both. `HALF=A` builds it on one ORCID half (last ORCID character not in 1 3 5 7 9 X) so the other
-   half can score the asset; `HALF=all` for the shipped build.
-6. **Asset.** `uv run python scripts/build_compound_surnames.py --partition partition_prior.parquet --tokens
-   partition_prior_tokens.parquet --orcid-gate compound_orcid_gate.parquet --output sinonym/data/compound_surnames.csv.gz`
-   keeps the `listed` surfaces where both signals agree (≥ 3 people, ≥ 2 of them whole), derives the
-   `vocabulary` head and tail words from the listed 2-word pairs (≥ 5 pairs each) and adds every unlisted 2-word
-   pair of the partition statistics built from them (≥ 5 mentions, same head-word given-name gate), then prints
-   the sha256, and adds the `corpus` tier. 2026-10-23 October build (floor 0.15, construct prefixes): 7,240 listed
-   + 1,719 vocabulary + 167,475 corpus surfaces.
-7. **Acceptance.** Route the 690k index with the new build (`run_690k_*.sh`), score with `conc_arms.py`
-   (FIXED/BROKE ≥ 5:1 on half B, no shared-block growth), run the detector (`weird_bugs.py`) and a blind judge
-   sample (`judge_changes.py`), and the test suite at its baseline. Then the corpus-scale run (every ORCID,
-   `author-names/ORCID_V4.md`): `scripts/v4/broke_v4.py` attributes every united / split person to the rule that
-   moved it, and `scripts/v4/registry_agreement.py` scores each arm's surnames against the ORCID registry's
-   self-declared family names (the name ground truth; the corpus share is a source convention, not a truth).
+1. **Corpus tiers** (`listed`, `vocabulary`, `corpus`) with `scripts/build_compound_surnames.py`, from source-name
+   counts (one row per distinct source triple: all `original_*` fields when `original_last` is set, else the stored
+   fields, never a per-field coalesce; 113.6M triples, 702.9M mentions), the surname-partition statistics derived
+   from them (per 2–4-word surname tail, how often the corpus puts k words in `middle`; per word, mentions as a
+   given name vs a surname word) and the person-level ORCID gate (per surface, distinct ORCID people with the whole
+   form, the split form and both).
+2. **Registry tier**: the ORCID-registry vetoes and admissions described above.
+3. **Hyphen tier** with `scripts/build_hyphen_compound_surnames.py`.
+4. **Excluded heads**: surfaces opened by `EXCLUDED_HEADS` (below) are removed. The shipped build removed 1,186 here;
+   the current stage-1 builder already leaves these heads out, so a rebuild removes only the few that stages 2 and 3
+   admit.
+
+The internal rebuild pipeline, [scholar `scripts/sinonym_assets`](https://github.com/allenai/scholar/tree/main/scripts/sinonym_assets), runs every stage with the recorded
+parameters, documents the inputs, and checks a rebuild against the shipped table (row counts per tier, a row-level
+diff, an order-independent checksum). Before shipping a rebuild, apply the shipped rule to a held-out ORCID half and
+score people united / split under the production block key (target at least 5 united per 1 split, no growth in
+shared-block ORCID pairs), score the resulting surnames against the ORCID registry's self-declared family names,
+and run the test suite.
 
 Known limits: sources that drop a compound's head entirely (`Maza` alone) cannot be joined by any rule; the
 mention counts inherit MAG-style conventions that split particles into `middle`, which is why the whole-share

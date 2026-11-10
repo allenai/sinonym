@@ -43,7 +43,7 @@ Attribution: the 120W corpus is from [wainshine/Chinese-Names-Corpus](https://gi
   - `mandarin_target`: the Mandarin pinyin surname whose frequency mass the spelling reaches through romanization remapping (or through the `CANTONESE_SURNAMES` alias).
   - `surname_ppm_as_written`: estimated surname frequency (ppm) the spelling carries *as written*: the full target mass for attested romanizations, `target mass x target_share` for penalty spellings.
   - `target_share`: share of the remap target's surname mass the spelling keeps when scored as a surname. `1.0` for attested surname romanizations (`CANTONESE_SURNAMES` keys, curated Wade-Giles/Taiwanese surname spellings such as `tsai`, `kuo`, `hsieh`); `~e^-4` (the measured operating point) for spellings that inherit surname mass only via remapping with zero as-written attestation (e.g. `fai` -> `hui`, `kung` -> `gong`).
-  - **Korean-dominant full-share exclusions** (`KOREAN_DOMINANT_FULL_SHARE_EXCLUSIONS` in the generator): five `CANTONESE_SURNAMES` keys whose as-written spelling is overwhelmingly Korean — `jung` (정), `moon` (문), `im` (임), `kyeong` (경), `pak` (박) — are demoted from full share to the penalty share. Granting them their Mandarin target's full mass (zheng/wen/lin/jing/bai) over-credited Korean surname-first names in routing (net -pp_vys on cases like "Jung Im Na"/"Jung Mi Cha"/"Pak Siau Wei"). They stay attested as-written but score at the discounted mass (a rare Chinese surname) rather than the full target. Their real-but-minor Chinese usage keeps the penalty share instead of falling to nothing. Heavily Chinese-used overlap spellings stay full share (`lee` 李, `lim` 林, `chang`/`jang` 张, `choi` 蔡, `ho` 何, `han` 韩, `yu` 于/俞, `koo` 顾/古, plus bicultural `shin`/`son`/`soo`/`suh`); the per-spelling measured rationale lives in the generator. `jang` in particular would otherwise be trimmed but is kept full share because the `{im, jang, jung}` trio flips the borderline eval case "Li Zheng" via a global surname-rank shift, and `koo` because trimming it rejects "Koo Ming"; the parser eval must hold at its 16-name baseline.
+  - **Korean-dominant full-share exclusions** (`KOREAN_DOMINANT_FULL_SHARE_EXCLUSIONS` in the generator): five `CANTONESE_SURNAMES` keys whose as-written spelling is overwhelmingly Korean — `jung` (정), `moon` (문), `im` (임), `kyeong` (경), `pak` (박) — are demoted from full share to the penalty share. Granting them their Mandarin target's full mass (zheng/wen/lin/jing/bai) over-credited Korean surname-first names in routing (a net loss on cases like "Jung Im Na"/"Jung Mi Cha"/"Pak Siau Wei"). They stay attested as-written but score at the discounted mass (a rare Chinese surname) rather than the full target. Their real-but-minor Chinese usage keeps the penalty share instead of falling to nothing. Heavily Chinese-used overlap spellings stay full share (`lee` 李, `lim` 林, `chang`/`jang` 张, `choi` 蔡, `ho` 何, `han` 韩, `yu` 于/俞, `koo` 顾/古, plus bicultural `shin`/`son`/`soo`/`suh`); the per-spelling measured rationale lives in the generator. `jang` in particular would otherwise be trimmed but is kept full share because the `{im, jang, jung}` trio flips the borderline eval case "Li Zheng" via a global surname-rank shift, and `koo` because trimming it rejects "Koo Ming"; the parser eval must hold at its 16-name baseline.
   - The scoring hook reads `spelling` and `target_share` and (via initialization) loads each row's `surname_ppm_as_written` into the runtime surname frequency table, so full-share rows carry the target's mass and penalty CANTONESE keys carry the discounted mass. Corpus-derived estimates (e.g. ORCID with affiliation country) can replace the numbers without a schema change.
 ### Corpus-Derived Name Assets: Coverage, Provenance and Refresh
 
@@ -52,19 +52,21 @@ Four assets are lookup tables built from Semantic Scholar author names:
 | asset | built by | snapshot | fires only when |
 |---|---|---|---|
 | `compound_surnames.csv.gz` | `scripts/build_compound_surnames.py`, `scripts/build_hyphen_compound_surnames.py` ([COMPOUND_SURNAMES.md](COMPOUND_SURNAMES.md)) | October 2026 | the multi-word surname is listed |
-| `two_token_order_prior.csv.gz` | `scripts/build_order_prior_asset.py` | May 2026 | the pair has >= 100 mentions and a >= 80% majority |
-| `token_role_prior.csv.gz` | `scripts/build_token_order_prior.py` | May 2026 | the token has >= 200 mentions and is >= 90% one role |
+| `two_token_order_prior.csv.gz` | `scripts/build_order_prior_asset.py` | October 2026 | the pair has >= 100 mentions and a >= 80% majority |
+| `token_role_prior.csv.gz` | `scripts/build_token_order_prior.py` | October 2026 | the token has >= 200 mentions and is >= 90% one role |
 | `surname_first_words.csv.gz` | `scripts/build_surname_first_words.py` | October 2026 | the word was seen in that shape and is mostly a surname (>= 3 mentions) |
 
 - **Unseen names.** A name a table does not list gets the behavior without that rule, never a guess, so new or rare
   names are not made worse; they just do not get the gain. Shape-based rules (digraph initials, glued initials, the
   Japanese given-first veto) apply to any name.
 - **Provenance.** Build every asset from source names as published, never from sinonym's output: per row, all
-  `original_*` fields when `original_last` is set, else the stored fields, and never coalesce per field (the export is
-  described in author-names `NAME_COUNTS.md`). An asset built from normalized names learns sinonym's own decisions.
+  `original_*` fields when `original_last` is set, else the stored fields, and never coalesce per field. An asset
+  built from normalized names learns sinonym's own decisions.
 - **Refresh.** The tables age as new authors and conventions arrive. Rebuild them from a newer snapshot periodically,
   and in particular after each ORCID backfill (more linked people strengthens the ORCID-gated compound tier), then
   rerun the ORCID ledger, the registry agreement and the S2AND gold-cluster check before shipping.
+- **Rebuilding.** The tables are rebuilt by an internal Ai2 pipeline, [scholar `scripts/sinonym_assets`](https://github.com/allenai/scholar/tree/main/scripts/sinonym_assets), which
+  documents the input data, every step and parameter, and checks a rebuild against the shipped tables.
 - **Measuring the gain on new names.** The held-out ORCID half guards against fitting particular people, but the tables
   were built from a snapshot that contains those names. To measure the gain on unseen names, build the tables from an
   older snapshot and score only names that first appear after it.
