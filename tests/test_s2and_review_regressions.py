@@ -1002,7 +1002,7 @@ def test_chinese_given_names_keep_their_pinyin_split(predictor, source, expected
 
 
 ACCENT_CASES = [
-    # the Chinese path dropped every mark; only pinyin tone marks and ü are folded now
+    # on the Chinese path pinyin tone marks are folded and every other accent is kept
     (("Jan", None, "Šíma"), ("Jan", "", "Šíma")),
     (("René", None, "Kok"), ("René", "", "Kok")),
     (("Şahin", None, "Kök"), ("Şahin", "", "Kök")),
@@ -1046,10 +1046,32 @@ def test_clean_roman_pattern_keeps_vietnamese_precomposed_letters():
 
 PARTICLE_ORDER_CASES = [
     # a strong particle opening the middle field flipped a given-first name surname-first
-    (("Maria", "das Graças Carvalho", "Ferriani"), ("Maria", "", "das Graças Carvalho Ferriani")),
     (("Lucas", "da Fonseca Roberti", "Garcia"), ("Lucas", "", "da Fonseca Roberti Garcia")),
-    (("Francisco", "das Chagas Araújo", "Sousa"), ("Francisco", "", "das Chagas Araújo Sousa")),
+    (("Wellyson", "da Cunha Araújo", "Firmo"), ("Wellyson", "", "da Cunha Araújo Firmo")),
+    (("Sabrina", "da Costa Machado", "Duarte"), ("Sabrina", "", "da Costa Machado Duarte")),
 ]
+
+MIDDLE_GIVEN_PHRASE_CASES = [
+    # a given-name phrase opening a middle field that goes on with surname words stays with the given name
+    (("Maria", "das Graças Carvalho", "Ferriani"), ("Maria das Graças", "", "Carvalho Ferriani")),
+    (("Ana", "de Fátima Souza", "Lima"), ("Ana de Fátima", "", "Souza Lima")),
+    (("Maria", "do Rosário Dias de Oliveira", "Latorre"), ("Maria do Rosário", "", "Dias de Oliveira Latorre")),
+    (("Francisco", "das Chagas Araújo", "Sousa"), ("Francisco das Chagas", "", "Araújo Sousa")),
+    (("María", "de los Ángeles Martínez", "Ortega"), ("María de los Ángeles", "", "Martínez Ortega")),
+    (("Rita", "de Cássia Silva", "Santos"), ("Rita de Cássia", "", "Silva Santos")),
+    # an initial after the phrase is not a surname word
+    (("Ana", "de Fátima S.", "Lima"), ("Ana", "", "de Fátima S. Lima")),
+    # the phrase alone in the middle
+    (("Maria", "das Graças", "Cardoso"), ("Maria das Graças", "", "Cardoso")),
+    # phrases that are mostly family names in this shape are left as written
+    (("Maria", "da Conceição Silva", "Lima"), ("Maria", "", "da Conceição Silva Lima")),
+    (("José", "de Jesus Silva", "Lima"), ("José", "", "de Jesus Silva Lima")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), MIDDLE_GIVEN_PHRASE_CASES)
+def test_middle_given_phrase_before_surname_words(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
 
 
 @pytest.mark.parametrize(("source", "expected"), PARTICLE_ORDER_CASES)

@@ -114,7 +114,57 @@ LAST_FIELD_GIVEN_NAME_PHRASES = tuple(
     tuple(phrase.split())
     for phrase in ("del mar", "de lourdes", "del carmen", "del pilar", "de los angeles", "de las mercedes", "del socorro")
 )
-_GIVEN_NAME_PHRASE_HEADS = frozenset(phrase[0] for phrase in (*GIVEN_NAME_PHRASES, *LAST_FIELD_GIVEN_NAME_PHRASES))
+# Opening a middle field that goes on with surname words (Maria / das Graças Carvalho / Ferriani), only these are mostly
+# a given name: of ORCID people whose corpus mentions have that shape, at least 80% (and at least 10 people) registered
+# the phrase in the given name (das Dores qualifies in this layout, unlike as a whole middle field). de Jesus (67%),
+# da Conceição (77%) and de la Cruz (51%) are left as written.
+MIDDLE_HEAD_GIVEN_NAME_PHRASES = tuple(
+    tuple(phrase.split())
+    for phrase in (
+        "de fatima", "de los angeles", "de cassia", "do socorro", "do carmo", "de lourdes", "das gracas", "del carmen",
+        "de nazare", "de las mercedes", "de la caridad", "de la luz", "del pilar", "das chagas", "do rosario", "de maria",
+        "de la paz", "das dores", "da graca", "da gloria", "de tarso", "de las nieves", "de los milagros", "da penha",
+        "del rosario", "del mar", "de kassia", "do ceu", "de lurdes", "del rocio", "do amparo", "del socorro",
+    )
+)
+_GIVEN_NAME_PHRASE_HEADS = frozenset(
+    phrase[0] for phrase in (*GIVEN_NAME_PHRASES, *LAST_FIELD_GIVEN_NAME_PHRASES, *MIDDLE_HEAD_GIVEN_NAME_PHRASES)
+)
+
+
+def _is_initial_word(word: str) -> bool:
+    """``S.`` or ``S``; a lowercase connective (``e``, ``y``) is not an initial."""
+    letters = word.rstrip(".")
+    return word.endswith(".") or (len(letters) == 1 and letters.isupper())
+
+
+def _middle_head_given_name_phrase(
+    first: list[str], middle: list[str], middle_folded: tuple[str, ...], last: list[str],
+) -> NameComponents | None:
+    """``Maria / das Graças Carvalho / Ferriani`` -> given ``Maria das Graças``, surname ``Carvalho Ferriani``."""
+    for phrase in MIDDLE_HEAD_GIVEN_NAME_PHRASES:
+        width = len(phrase)
+        rest = middle[width:]
+        if rest and middle_folded[:width] == phrase and not any(_is_initial_word(word) for word in rest):
+            return NameComponents(
+                given_name=" ".join(first + middle[:width]), middle_name="", surname=" ".join(rest + last), suffix="",
+            )
+    return None
+
+
+def _last_field_given_name_phrase(
+    first: list[str], middle: list[str], last: list[str], last_folded: tuple[str, ...],
+) -> NameComponents | None:
+    """``Diana / - / del Carmen Torres Corrales`` -> given ``Diana del Carmen``, surname ``Torres Corrales``."""
+    if middle:
+        return None
+    for phrase in LAST_FIELD_GIVEN_NAME_PHRASES:
+        width = len(phrase)
+        if len(last) > width and last_folded[:width] == phrase:
+            return NameComponents(
+                given_name=" ".join(first + last[:width]), middle_name="", surname=" ".join(last[width:]), suffix="",
+            )
+    return None
 
 
 @lru_cache(maxsize=65536)
@@ -2188,14 +2238,9 @@ class _Resolver:
             if f" {' '.join(phrase)} " not in f" {surname} ":
                 return None
             return NameComponents(given_name=" ".join(given), middle_name=" ".join(rest), surname=" ".join(last), suffix="")
-        if not middle:
-            for phrase in LAST_FIELD_GIVEN_NAME_PHRASES:
-                width = len(phrase)
-                if len(last) > width and last_f[:width] == phrase:
-                    return NameComponents(
-                        given_name=" ".join(first + last[:width]), middle_name="", surname=" ".join(last[width:]), suffix="",
-                    )
-        return None
+        return _middle_head_given_name_phrase(first, middle, middle_f, last) or _last_field_given_name_phrase(
+            first, middle, last, last_f,
+        )
 
     def _edge_particle_candidate(self, source: SourceAuthorFields, selected: NameComponents) -> NameComponents | None:
         """A family particle the source left at the end of the given or middle field (``Martín-de / Blas``)."""
