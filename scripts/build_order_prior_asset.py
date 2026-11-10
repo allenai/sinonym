@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Build ``sinonym/data/two_token_order_prior.csv.gz`` from a pair-orientation table (see services/order_prior.py).
 
-Input: pair_order_prior.parquet (author-names/pp_vys_orcid_conc/scripts/order_prior.py): per unordered token pair
+Input: pair_order_prior.parquet (built by the rebuild pipeline in sinonym/data/README.md): per unordered token pair
 ``(a, b)``, mentions and distinct papers written ``first=a last=b`` (``n_ab``, ``papers_ab``) and the reverse, from
 pre-normalization source names. A pair ships when it has >= MIN_MENTIONS mentions, a >= MIN_SHARE majority by
 mentions *and* by distinct papers (so one prolific author cannot set it), and the Chinese parser reads the pair as a

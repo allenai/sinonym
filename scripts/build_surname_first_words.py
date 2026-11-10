@@ -3,7 +3,7 @@
 (``Dmitrieva / - / N.M.``, ``Назарова / - / А.Р.``) and otherwise uses mostly as a surname.
 
 Input: the source-name counts export (one row per distinct source ``first_name / middle_names / last_name`` triple with
-``mention_count``; see author-names ``NAME_COUNTS.md``). A word qualifies when
+``mention_count``; see the rebuild pipeline in sinonym/data/README.md). A word qualifies when
   - it appears as the whole ``first_name`` of a triple whose ``middle_names`` is empty and whose ``last_name`` is 2-3
     initials, each with its own dot (Latin or Cyrillic), and
   - across all single-word fields of the corpus it is a ``last_name`` at least MIN_AS_LAST times and more often than a
