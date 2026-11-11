@@ -47,16 +47,17 @@ def load_unsplit_given_words() -> None:
     _words()
 
 
-# The source words of the name being processed. A listed word is never split, but inside an author-written hyphen or
-# glued token (``Ta-Tsien``, ``YuLina``) it still counts as a Chinese given-name part.
 _VIETNAMESE_SURNAME_FOLDS = frozenset(_fold(name) for name in VIETNAMESE_SURNAMES)
-_STANDALONE_WORDS: ContextVar[frozenset[str] | None] = ContextVar("standalone_words", default=None)
-
-
+# also pinyin syllables (da, de, le), so a Chinese word with one of them as a part (Le-Lina) stays blocked
 _HYPHEN_PARTICLES = frozenset(
     {"da", "das", "de", "del", "della", "der", "den", "di", "do", "dos", "du", "la", "le", "ten", "ter", "van", "von"},
 )
 _WORD_PARTS = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[^\W\d_]+")
+_APOSTROPHES = frozenset("'\u2019\u02bc")
+
+# The source words of the name being processed. A listed word is never split, but inside an author-written hyphen or
+# glued token (``Ta-Tsien``, ``YuLina``) of a name with two or more words it still counts as a Chinese given-name part.
+_STANDALONE_WORDS: ContextVar[frozenset[str] | None] = ContextVar("standalone_words", default=None)
 
 
 def _non_chinese_bound_word(parts: list[str]) -> bool:
@@ -66,24 +67,43 @@ def _non_chinese_bound_word(parts: list[str]) -> bool:
     return (
         any(fold in _HYPHEN_PARTICLES or len(fold) == 1 or fold in _VIETNAMESE_SURNAME_FOLDS for fold in folds)
         or len(set(folds)) < len(folds)
-        or any(len(part) > 1 and part.isupper() for part in parts[1:])
+        or (not "".join(parts).isupper() and any(len(part) > 1 and part.isupper() for part in parts[1:]))
     )
 
 
+def _source_words(raw_name: str) -> list[list[str]]:
+    """Source words as their hyphen pieces; any other non-letter character separates words."""
+    chars = []
+    for ch in unicodedata.normalize("NFC", raw_name or ""):
+        if unicodedata.category(ch)[0] in "LM" or ch in _APOSTROPHES:
+            chars.append(ch)
+        elif unicodedata.category(ch) == "Pd" or ch == "\u2212":
+            chars.append("-")
+        else:
+            chars.append(" ")
+    return [[piece for piece in word.split("-") if piece] for word in "".join(chars).split()]
+
+
 def _standalone_folds(raw_name: str) -> frozenset[str]:
-    """Folded source words; every part of a bound word that reads as a non-Chinese name counts as a word too."""
+    """Folded source words; every part of a bound word that reads as a non-Chinese name, or of the only word, counts
+    as a word too."""
+    words = [pieces for pieces in _source_words(raw_name) if pieces]
     folds = set()
-    for word in (raw_name or "").split():
-        folds.add(_fold(word))
-        pieces = re.split("[-\u2010\u2011]", word)
+    for pieces in words:
+        folds.add(_fold("".join(pieces)))
         parts = [part for piece in pieces for part in _WORD_PARTS.findall(piece)]
-        if len(parts) > 1 and _non_chinese_bound_word(parts):
+        if len(parts) > 1 and (len(words) == 1 or _non_chinese_bound_word(parts)):
             folds.update(_fold(part) for part in [*pieces, *parts])
     return frozenset(folds)
 
 
 @contextmanager
 def standalone_words(raw_name: str) -> Iterator[None]:
+    """Set the source words that ``is_listed_bound_part`` checks while ``raw_name`` is processed.
+
+    The detector, ``NormalizationService.apply``, batch preparation and formatting, and TIMO terminal resolution set
+    it. Outside them it is unset and every listed word is blocked as in 0.6.5.
+    """
     token = _STANDALONE_WORDS.set(_standalone_folds(raw_name))
     try:
         yield

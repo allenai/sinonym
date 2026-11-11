@@ -1,15 +1,17 @@
 """Name regressions from ORCID-verified corpus names (tests/data/name_regression_cases.csv).
 
 Each row is a source name, the expected output and the 0.6.3 output it replaces. ``case_class`` is the bug the row
-guards (``split``, ``accent``, ``particle_flip``, ``given_phrase``) or ``chinese_control``, a Chinese name whose
-normalization must not change. Add rows to extend the suite.
+guards (``split``, ``accent``, ``particle_flip``, ``given_phrase``, ``bound_part``) or a control whose output must not
+change (``chinese_control``, ``bound_part_control``). Add rows to extend the suite.
 """
 import csv
 from pathlib import Path
 
 import pytest
 
+from sinonym import ChineseNameDetector
 from sinonym.timo.interface import Instance, Predictor, PredictorConfig, SourceAuthorFields
+from sinonym.utils import unsplit_given_words
 
 CASES = list(csv.DictReader((Path(__file__).parent / "data" / "name_regression_cases.csv").read_text(encoding="utf-8").splitlines()))
 
@@ -17,8 +19,19 @@ EDGE_CASES = [
     # a listed word inside an author-written hyphen or glued token does not block the Chinese reading
     (("Li", None, "Ta-Tsien"), ("Ta-Tsien", "", "Li")),
     (("Sheau-yueh", "J.", "Chao"), ("Sheau-Yueh", "J.", "Chao")),
-    ((None, None, "YuLina"), ("Lina", "", "Yu")),
     (("Lina", None, "Wang"), ("Lina", "", "Wang")),
+    # ...but not when the bound word is the whole name, or the boundary is punctuation
+    ((None, None, "YuLina"), ("", "", "YuLina")),
+    ((None, None, "Sheau-yueh"), ("", "", "Sheau-yueh")),
+    (("Ju-yeon", None, None), ("", "", "Ju-yeon")),
+    ((None, None, "Mei-lina"), ("", "", "Mei-lina")),
+    (("Wang.Lina", None, None), ("", "", "Wang.Lina")),
+    (("Man\u2013jiSUN", None, "Lee"), ("Man-jiSUN", "", "Lee")),
+    (("Man\u2212jiSUN", None, "Lee"), ("Man-jiSUN", "", "Lee")),
+    # all caps reads the same as mixed case
+    (("TA-TSIEN", None, "LI"), ("Ta-Tsien", "", "Li")),
+    (("Li", None, "TA-TSIEN"), ("Ta-Tsien", "", "Li")),
+    (("MAN-jiSUN", None, "Lee"), ("MAN-jiSUN", "", "Lee")),
     # Yuchi as the compound surname: its normalized form yuji is a never-split word
     (("Zhiguang", None, "Yuchi"), ("Zhi-Guang", "", "Yuchi")),
     (("Yuchi", None, "Zhiguang"), ("Zhi-Guang", "", "Yuchi")),
@@ -35,6 +48,9 @@ EDGE_CASES = [
     (("Yunosuke", None, "Yuchi"), ("Yunosuke", "", "Yuchi")),
     (("Yuchi", None, "Tanaka"), ("Yuchi", "", "Tanaka")),
     (("Ming", None, "Yuchi"), ("Ming", "", "Yuchi")),
+    # surname scoring ignores the never-split list only for a normalized form the source did not write
+    (("SongHo", None, "Moon"), ("SongHo", "", "Moon")),
+    (("Quang", None, "Yuchi"), ("Quang", "", "Yuchi")),
     # other compound surnames, both orders
     (("Xiaoqian", None, "Ouyang"), ("Xiao-Qian", "", "Ouyang")),
     (("Ouyang", None, "Xiaoqian"), ("Xiao-Qian", "", "Ouyang")),
@@ -85,3 +101,41 @@ def test_name_regression_case(predictor, case):
 @pytest.mark.parametrize(("source", "expected"), EDGE_CASES)
 def test_name_regression_edge_case(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+DETECTOR_CASES = [
+    ("Li Ta-Tsien", "Ta-Tsien Li"),
+    ("LI TA-TSIEN", "Ta-Tsien Li"),
+    ("Sheau-yueh", None),
+    ("Ta-tsien", None),
+    ("Chen,Annie", None),
+    ("Lina.Wang", None),
+    ("Wang\uff0cLina", None),
+    ("Man\u2013jiSUN Lee", None),
+]
+
+
+@pytest.fixture(scope="module")
+def detector() -> ChineseNameDetector:
+    return ChineseNameDetector()
+
+
+@pytest.mark.parametrize(("raw", "expected"), DETECTOR_CASES)
+def test_bound_part_detector_and_batch(detector, raw, expected):
+    single = detector.normalize_name(raw)
+    batch = detector.analyze_name_batch([raw, "Wang Xiaoming"]).results[0]
+    for result in (single, batch):
+        assert result.success is (expected is not None)
+        if expected is not None:
+            assert result.result == expected
+    assert not unsplit_given_words.is_listed_bound_part("Lina")
+
+
+def test_standalone_words_reset_after_exception():
+    def fail_inside():
+        with unsplit_given_words.standalone_words("Chen Xiao-Lina"):
+            assert unsplit_given_words.is_listed_bound_part("Lina")
+            raise RuntimeError
+
+    pytest.raises(RuntimeError, fail_inside)
+    assert not unsplit_given_words.is_listed_bound_part("Lina")

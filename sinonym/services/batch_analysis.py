@@ -644,10 +644,6 @@ class BatchAnalysisService:
         entry: BatchCandidateEntry,
     ) -> ParseResult:
         """Materialize one row without applying a peer-derived format."""
-        with standalone_words(entry.name):
-            return self._materialize_individual_result_in_context(entry)
-
-    def _materialize_individual_result_in_context(self, entry: BatchCandidateEntry) -> ParseResult:
         if entry.input_failure is not None:
             return entry.input_failure
         if entry.individual_result is not None:

@@ -354,7 +354,7 @@ class EthnicityClassificationService:
         # =================================================================
 
         # Chinese default: Accept if we have any reasonable Chinese surname evidence
-        if self._has_sufficient_chinese_surname_strength(expanded_keys, normalized_cache):
+        if self._has_sufficient_chinese_surname_strength(expanded_keys, normalized_cache, frozenset(original_keys_raw)):
             return ParseResult.success_with_name("")
 
         # No Chinese evidence found
@@ -696,6 +696,7 @@ class EthnicityClassificationService:
         self,
         expanded_keys: list[str],
         normalized_cache: dict[str, str],
+        raw_keys: frozenset[str] = frozenset(),
     ) -> bool:
         """Return whether nonnegative surname evidence reaches the Chinese threshold."""
         chinese_surname_strength = 0.0
@@ -748,14 +749,14 @@ class EthnicityClassificationService:
                 if clean_key_lower in split_result_cache:
                     split_result = split_result_cache[clean_key_lower]
                 else:
-                    # Surname strength only: Yuchi normalizes to the never-split word yuji
+                    # a never-split word the source did not write (Yuchi normalizes to yuji) still scores as a split
                     split_result = StringManipulationUtils.split_concatenated_name(
                         clean_key_lower,
                         normalized_cache,
                         self._data,
                         self._normalizer,
                         self._config,
-                        ignore_unsplit_list=True,
+                        ignore_unsplit_list=clean_key_lower not in raw_keys,
                     )
                     split_result_cache[clean_key_lower] = split_result
 

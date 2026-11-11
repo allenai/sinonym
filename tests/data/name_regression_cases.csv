@@ -591,62 +591,62 @@ bound_part,Li,,Ta-Tsien,Ta-Tsien,,Li,Ta-Tsien||Li,listed part inside an author-w
 bound_part,Gan,,Woon-Seng,Woon-Seng,,Gan,Woon-Seng||Gan,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part,,,Lee，Woon-yong,Woon-Yong,,Lee,Wo-On-Yong||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part,Kwok,,Kian-Woon,Kian-Woon,,Kwok,Kian-Woon||Kwok,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,XU,,Zhong-minga,Zhong-Minga,,Xu,Zhong-Minga||Xu,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,XU,,Zhong-minga,Zhong-Minga,,Xu,Zhong-Minga||Xu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
 bound_part,Hui,,Wai-Haan,Wai-Haan,,Hui,Wai-Haan||Hui,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part,Ko,,Yeon-mi,Yeon-Mi,,Ko,Yeon-Mi||Ko,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part,Lee，,,Bong-keon,Bong-Keon,,Lee,Bong-Keon||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part,Sheau‐yueh,J.,Chao,Sheau-Yueh,J.,Chao,Sheau-Yueh|J.|Chao,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,LI,,Yue-zhenga,Yue-Zhenga,,Li,Yue-Zhenga||Li,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,LI,,Yue-zhenga,Yue-Zhenga,,Li,Yue-Zhenga||Li,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
 bound_part,Tai,,Hsiou-Hsia,Hsiou-Hsia,,Tai,Hsiou-Hsia||Tai,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part,Song，,,Chae-hong,Chae-Hong,,Song,Chae-Hong||Song,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part,MA,,Chae-Woo,Chae-Woo,,Ma,Chae-Woo||Ma,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part,Tan,,Yean-Chin,Yean-Chin,,Tan,Yean-Chin||Tan,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part,YU,,Xiao-jion,Xiao-Jion,,Yu,Xiao-Jion||Yu,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Wang,,Zhong-shana,Zhong-Shana,,Wang,Zhong-Shana||Wang,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Wang,,Zhong-shana,Zhong-Shana,,Wang,Zhong-Shana||Wang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
 bound_part,Zhang,,Su-jion,Su-Jion,,Zhang,Su-Jion||Zhang,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part,GUO,,Yan-Quen,Yan-Quen,,Guo,Yan-Quen||Guo,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,XU,,Wen-juna,Wen-Juna,,Xu,Wen-Juna||Xu,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Hang,,Ting-tinga,Ting-Tinga,,Hang,Ting-Tinga||Hang,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,XU,,Wen-juna,Wen-Juna,,Xu,Wen-Juna||Xu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Hang,,Ting-tinga,Ting-Tinga,,Hang,Ting-Tinga||Hang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
 bound_part,Cha,,Ju-cheon,Ju-Cheon,,Cha,Ju-Cheon||Cha,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Guan,,Qing-Fenga,Qing-Fenga,,Guan,Qing-Fenga||Guan,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,WU,,Yan-juna,Yan-Juna,,Wu,Yan-Juna||Wu,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Duan,,Qing-minga,Qing-Minga,,Duan,Qing-Minga||Duan,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Ou,,Ze-shena,Ze-Shena,,Ou,Ze-Shena||Ou,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,LI,,Zhan-boa,Zhan-Boa,,Li,Zhan-Boa||Li,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Guan,,Qing-Fenga,Qing-Fenga,,Guan,Qing-Fenga||Guan,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,WU,,Yan-juna,Yan-Juna,,Wu,Yan-Juna||Wu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Duan,,Qing-minga,Qing-Minga,,Duan,Qing-Minga||Duan,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Ou,,Ze-shena,Ze-Shena,,Ou,Ze-Shena||Ou,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,LI,,Zhan-boa,Zhan-Boa,,Li,Zhan-Boa||Li,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
 bound_part,LI,,Tai-jion,Tai-Jion,,Li,Tai-Jion||Li,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Zhang,,Chuan-lina,Chuan-Lina,,Zhang,Chuan-Lina||Zhang,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Wei,,Xi-wena,Xi-Wena,,Wei,Xi-Wena||Wei,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,刘上乾,Liu,Shang-qiana,Shang-Qiana,,Liu,Shang-Qiana||Liu,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Fan,,Jina-xin,Jina-Xin,,Fan,Jina-Xin||Fan,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,PU,,Xiao-fenga,Xiao-Fenga,,Pu,Xiao-Fenga||Pu,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Zhang,,Chuan-lina,Chuan-Lina,,Zhang,Chuan-Lina||Zhang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Wei,,Xi-wena,Xi-Wena,,Wei,Xi-Wena||Wei,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,刘上乾,Liu,Shang-qiana,Shang-Qiana,,Liu,Shang-Qiana||Liu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Fan,,Jina-xin,Jina-Xin,,Fan,Jina-Xin||Fan,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,PU,,Xiao-fenga,Xiao-Fenga,,Pu,Xiao-Fenga||Pu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
 bound_part,LI,,Quen-zhuo,Quen-Zhuo,,Li,Quen-Zhuo||Li,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Chen,,Yu-guanga,Yu-Guanga,,Chen,Yu-Guanga||Chen,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,YE,,Yun-bina,Yun-Bina,,Ye,Yun-Bina||Ye,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Wang,,Shan-yuana,Shan-Yuana,,Wang,Shan-Yuana||Wang,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Yang,,Wei-mina,Wei-Mina,,Yang,Wei-Mina||Yang,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Chen,,Yu-guanga,Yu-Guanga,,Chen,Yu-Guanga||Chen,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,YE,,Yun-bina,Yun-Bina,,Ye,Yun-Bina||Ye,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Wang,,Shan-yuana,Shan-Yuana,,Wang,Shan-Yuana||Wang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Yang,,Wei-mina,Wei-Mina,,Yang,Wei-Mina||Yang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
 bound_part,Jung,,Se-yeon,Se-Yeon,,Jung,Se-Yeon||Jung,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,WU,,Yan-lina,Yan-Lina,,Wu,Yan-Lina||Wu,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Zhou,,Heng-lianga,Heng-Lianga,,Zhou,Heng-Lianga||Zhou,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Bai,,Feng-minga,Feng-Minga,,Bai,Feng-Minga||Bai,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,WU,,Yan-lina,Yan-Lina,,Wu,Yan-Lina||Wu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Zhou,,Heng-lianga,Heng-Lianga,,Zhou,Heng-Lianga||Zhou,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Bai,,Feng-minga,Feng-Minga,,Bai,Feng-Minga||Bai,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
 bound_part,Fang,,Xiao-hone,Xiao-Hone,,Fang,Xiao-Hone||Fang,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Huang,,Li-mina,Li-Mina,,Huang,Li-Mina||Huang,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Cai,,Lin-lina,Lin-Lina,,Cai,Lin-Lina||Cai,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Zhang,,Zhen-wena,Zhen-Wena,,Zhang,Zhen-Wena||Zhang,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Wang,,Meng-juna,Meng-Juna,,Wang,Meng-Juna||Wang,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Zhang,,Bao-guia,Bao-Guia,,Zhang,Bao-Guia||Zhang,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Jia,,Zhi-juna,Zhi-Juna,,Jia,Zhi-Juna||Jia,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Yang,,Jian-minga,Jian-Minga,,Yang,Jian-Minga||Yang,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Huang,,Li-mina,Li-Mina,,Huang,Li-Mina||Huang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Cai,,Lin-lina,Lin-Lina,,Cai,Lin-Lina||Cai,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Zhang,,Zhen-wena,Zhen-Wena,,Zhang,Zhen-Wena||Zhang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Wang,,Meng-juna,Meng-Juna,,Wang,Meng-Juna||Wang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Zhang,,Bao-guia,Bao-Guia,,Zhang,Bao-Guia||Zhang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Jia,,Zhi-juna,Zhi-Juna,,Jia,Zhi-Juna||Jia,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Yang,,Jian-minga,Jian-Minga,,Yang,Jian-Minga||Yang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
 bound_part,Wen,,Wen-jion,Wen-Jion,,Wen,Wen-Jion||Wen,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Guo,,Hui-yonga,Hui-Yonga,,Guo,Hui-Yonga||Guo,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Fang,,Re-juna,Re-Juna,,Fang,Re-Juna||Fang,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Sun,,Han-zhoua,Han-Zhoua,,Sun,Han-Zhoua||Sun,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Guo,,Xue-juna,Xue-Juna,,Guo,Xue-Juna||Guo,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Zeng,,Gana-cheng,Gana-Cheng,,Zeng,Gana-Cheng||Zeng,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Wang,,Zheng-boa,Zheng-Boa,,Wang,Zheng-Boa||Wang,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Zhao,,Wen-juna,Wen-Juna,,Zhao,Wen-Juna||Zhao,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,FU,,Dai-shana,Dai-Shana,,Fu,Dai-Shana||Fu,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Guo,,Hui-yonga,Hui-Yonga,,Guo,Hui-Yonga||Guo,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Fang,,Re-juna,Re-Juna,,Fang,Re-Juna||Fang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Sun,,Han-zhoua,Han-Zhoua,,Sun,Han-Zhoua||Sun,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Guo,,Xue-juna,Xue-Juna,,Guo,Xue-Juna||Guo,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Zeng,,Gana-cheng,Gana-Cheng,,Zeng,Gana-Cheng||Zeng,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Wang,,Zheng-boa,Zheng-Boa,,Wang,Zheng-Boa||Wang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Zhao,,Wen-juna,Wen-Juna,,Zhao,Wen-Juna||Zhao,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,FU,,Dai-shana,Dai-Shana,,Fu,Dai-Shana||Fu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
 bound_part,Tang,,Sheau-shi,Sheau-Shi,,Tang,Sheau-Shi||Tang,listed part inside an author-written hyphen or glued token; blind-labelled
-bound_part,Wang,,Kang-zhoua,Kang-Zhoua,,Wang,Kang-Zhoua||Wang,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Wang,,Kang-zhoua,Kang-Zhoua,,Wang,Kang-Zhoua||Wang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
 bound_part,Sheau-yueh,J.,Chao,Sheau-Yueh,J.,Chao,Sheau-Yueh|J.|Chao,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part,Yean-an,,Liao,Yean-An,,Liao,Yean-An||Liao,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part,Ta-tsien,,Li,Ta-Tsien,,Li,Ta-Tsien||Li,listed part inside an author-written hyphen or glued token; blind-labelled

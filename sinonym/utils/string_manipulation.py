@@ -414,7 +414,7 @@ class StringManipulationUtils:
             # Preserve the existing transliteration and positional-split path when the
             # author-supplied location is not itself a valid boundary.
 
-        unsplit_word = (has_korean_only_syllable(token) if ignore_unsplit_list else is_unsplit_given_word(token))
+        unsplit_word = has_korean_only_syllable(token) if ignore_unsplit_list else is_unsplit_given_word(token)
 
         # Pattern 1: Repeated syllable patterns (e.g., "huihui" → ["hui", "hui"]) — only when no hyphen present
         raw = token.translate(config.hyphens_apostrophes_tr)
