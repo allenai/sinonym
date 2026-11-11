@@ -54,6 +54,7 @@ from sinonym.services.order_prior import corpus_surname_for
 from sinonym.services.person_name_normalization import (
     EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES,
     EAST_ASIAN_GIVEN_SYLLABLES,
+    EAST_ASIAN_SURNAMES,
     EDGE_FAMILY_PARTICLES,
     PersonNameNormalizationService,
     PersonNameOutcome,
@@ -1754,6 +1755,9 @@ def _corpus_compound_extension(selected: NameComponents) -> NameComponents | Non
     )
 
 
+_COMPOUND_HEAD_MIDDLE_WORDS = EAST_ASIAN_SURNAMES | EDGE_FAMILY_PARTICLES | {"san", "santa", "santo", "são"}
+
+
 def _east_asian_syllable(word: str) -> bool:
     word = word.casefold()
     if word in EAST_ASIAN_GIVEN_SYLLABLES:
@@ -2222,6 +2226,18 @@ class _Resolver:
         ):
             # ``Quan / Van / Dau``: after a Vietnamese / Korean / Cantonese given syllable the middle is a given syllable,
             # even when the corpus happens to write ``Van Dau`` whole somewhere
+            return None
+        normalizer = self._detector._normalizer  # noqa: SLF001
+        if (
+            len(middle_words) > 1
+            and selected.surname.casefold() in EAST_ASIAN_SURNAMES
+            and middle_words[0].casefold() not in _COMPOUND_HEAD_MIDDLE_WORDS
+            and middle_words[-1].casefold() != selected.surname.casefold()
+            and not any(word.casefold() in EDGE_FAMILY_PARTICLES for word in middle_words)
+            and all(normalizer.is_valid_given_name_token(word) for word in middle_words)
+        ):
+            # ``Nike / Kwai Cheung / Lau``: Chinese syllables before a Chinese surname are a given name, not the head of a
+            # compound; ones that open with a surname are a Chinese name after a Western one (``Malcolm / Ng Mou / Kehn``)
             return None
         candidate = _corpus_compound_extension(selected)
         if candidate is None or len(candidate.surname.split()) < len((source.last_name or "").split()):

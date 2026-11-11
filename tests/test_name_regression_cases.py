@@ -60,6 +60,20 @@ EDGE_CASES = [
     # an author-written hyphen or CamelCase boundary still splits a listed word
     (("An-Nie", None, "Chen"), ("An-Nie", "", "Chen")),
     (("AnNie", None, "Chen"), ("An-Nie", "", "Chen")),
+    # off the Chinese path, a Korean or Cantonese given syllable stays out of the surname
+    (("Chae", "Bin", "Lee"), ("Chae", "Bin", "Lee")),
+    (("Ben", "Bin", "Xu"), ("Ben", "Bin", "Xu")),
+    (("Ahmad", "Bin", "Ismail"), ("Ahmad", "", "Bin Ismail")),
+    (("Mohd", "bin", "Abdullah"), ("Mohd", "", "bin Abdullah")),
+    (("Awang", "Bin", "Long"), ("Awang", "", "Bin Long")),
+    (("Yusof", "Khamaruzaman Bin", "Wan"), ("Yusof", "Khamaruzaman", "Bin Wan")),
+    (("Nike", "Kwai Cheung", "Lau"), ("Nike", "Kwai Cheung", "Lau")),
+    (("Mary", "Cheung", "Lau"), ("Mary", "", "Cheung Lau")),
+    (("Malcolm", "Ng Mou", "Kehn"), ("Malcolm", "", "Ng Mou Kehn")),
+    (("Mary", "Yeung Lai", "Wah"), ("Mary", "", "Yeung Lai Wah")),
+    (("Gert", "Jan te", "Riele"), ("Gert", "Jan", "Te Riele")),
+    (("Lars", "Jan Bak", "Nielsen"), ("Lars", "Jan", "Bak Nielsen")),
+    (("Sergio", "San Juan", "Dertkigil"), ("Sergio", "", "San Juan Dertkigil")),
     # surname-first field layout: a common Chinese surname before a given-name word is read given-first,
     # a surname word after Lee keeps the order the fields give
     (("Chen", None, "Annie"), ("Annie", "", "Chen")),

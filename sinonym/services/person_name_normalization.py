@@ -15,8 +15,13 @@ from dataclasses import dataclass, replace
 from enum import Enum
 
 from sinonym.chinese_names_data import (
+    CANTONESE_SURNAME_RULES,
+    CANTONESE_SURNAMES,
     NAME_ORDER_ROUTING_CANTONESE_GIVEN_SYLLABLES,
+    NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES,
+    NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES,
     NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES,
+    NAME_ORDER_ROUTING_KOREAN_SURNAMES,
     VIETNAMESE_GIVEN_PATTERNS,
 )
 from sinonym.coretypes import CanonicalName, NameComponents
@@ -295,6 +300,18 @@ EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES = frozenset({"bin", "van", "da", "do", "le"
 EDGE_FAMILY_PARTICLES = (_FAMILY_PARTICLES - {"'t", "al", "ap", "ben", "bin", "el", "ibn", "st", "ud", "ur"}) | {"do"}
 EAST_ASIAN_GIVEN_SYLLABLES = frozenset(
     NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES | NAME_ORDER_ROUTING_CANTONESE_GIVEN_SYLLABLES | VIETNAMESE_GIVEN_PATTERNS,
+)
+EAST_ASIAN_SURNAMES = frozenset(
+    NAME_ORDER_ROUTING_KOREAN_SURNAMES
+    | NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES
+    | NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES
+    | set(CANTONESE_SURNAME_RULES)
+    | set(CANTONESE_SURNAMES)
+    | {"chin", "chua", "goh", "khoo", "koh", "law", "loh", "ooi", "quek", "seah", "soh", "tay", "tee", "teh", "toh"}
+    | {"wee", "yeo"},
+)
+_ARABIC_GIVEN_HEADS = frozenset(
+    {"abdul", "abdullah", "ahmad", "ahmed", "ali", "awang", "md", "mohamad", "mohamed", "mohammad", "mohd", "muhammad", "muhd"},
 )
 _LOWERCASE_RELATIONAL_TOKENS = frozenset({"'t", "b.", "d.", "e", "kizi", "kyzy", "oglu", "o'g'li", "oğlu", "qizi"})
 _STRONG_FAMILY_PARTICLE_SPANS = (
@@ -2020,7 +2037,9 @@ class PersonNameNormalizationService:
         and a mixed-case surname is initials (the October counts write such names with dotted initials 320:7 for AL
         and LA); DE / VAN / VON / DI are excluded because sources that capitalize the surname also capitalize a real
         particle (``Peter VAN OOSTEROM``). ``Young Bin Kim``, ``Quan Van Dau``: after a Korean, Cantonese or
-        Vietnamese given syllable, ``bin`` / ``van`` / ``da`` is the second given syllable, not a particle.
+        Vietnamese given syllable, ``bin`` / ``van`` / ``da`` is the second given syllable, not a particle, and so is
+        ``Bin`` between a given name and a Korean or Chinese surname (``Chae Bin Lee``, ``Ben Bin Xu``; not
+        ``Ahmad Bin Long``).
         """
         key = self._particle_key(tokens[index].text)
         text = tokens[index].text
@@ -2036,7 +2055,13 @@ class PersonNameNormalizationService:
             previous = tokens[index - 1].text.casefold()
             if previous in EAST_ASIAN_GIVEN_SYLLABLES and not text.islower():
                 return False
-        return True
+        return not (
+            key == "bin"
+            and not text.islower()
+            and len(tokens) == _THREE_COMPONENTS
+            and tokens[0].text.casefold() not in _ARABIC_GIVEN_HEADS
+            and tokens[-1].text.casefold() in EAST_ASIAN_SURNAMES
+        )
 
     def _structured_particle_surname_first_roles(
         self,
