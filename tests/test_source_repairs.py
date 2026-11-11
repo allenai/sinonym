@@ -65,3 +65,22 @@ def test_repair_applies_on_the_pp_vys_path(predictor: Predictor) -> None:
     instance = Instance(pp_authors=[source], vys_other_names=["Damian G. Downey", "Michael M. Tunney", "J. Stuart Elborn"])
     author = predictor.predict_batch([instance])[0].authors[0]
     assert (author.first_name, author.middle_names, author.last_name) == ("Damian", "G.", "Downey")
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        # with the word in the prefix table, the guard itself must hold
+        (("CityU", None, "Library", None), None),
+        (("UniKL", None, "Library", None), None),
+        (("PharmD", None, "Estes", None), None),
+        (("MedJ.", None, "Estes", None), None),
+        (("JeongA", None, "Lee", None), None),
+        (("DamianG.", None, "Downey", "Jr."), None),
+        (("ArunaS.", None, "Rao", None), ("Aruna", "S.")),
+    ],
+)
+def test_glued_initial_guards_hold_for_listed_words(args, expected, monkeypatch: pytest.MonkeyPatch) -> None:
+    table = {word: ("", "") for word in ("City", "Uni", "Pharm", "Med", "Jeong", "Aruna", "Damian")}
+    monkeypatch.setattr(source_repairs, "_glued_prefixes", lambda: table)
+    assert source_repairs.unglue_given_initial(*args) == expected
