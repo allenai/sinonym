@@ -53,6 +53,10 @@ EDGE_CASES = [
     (("Yunosuke", None, "Yuchi"), ("Yunosuke", "", "Yuchi")),
     (("Yuchi", None, "Tanaka"), ("Yuchi", "", "Tanaka")),
     (("Ming", None, "Yuchi"), ("Ming", "", "Yuchi")),
+    # the Yuchi evidence comes from the compound surname only, not from any word that normalizes like it
+    (("Taishi", None, "Mochi"), ("Taishi", "", "Mochi")),
+    (("Taishi", None, "Kochi"), ("Taishi", "", "Kochi")),
+    (("Kochi", None, "Taishi"), ("Kochi", "", "Taishi")),
     # surname scoring ignores the never-split list only for a normalized form the source did not write
     (("SongHo", None, "Moon"), ("SongHo", "", "Moon")),
     (("Quang", None, "Yuchi"), ("Quang", "", "Yuchi")),
