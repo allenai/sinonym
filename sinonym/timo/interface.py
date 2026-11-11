@@ -17,6 +17,7 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_vys_abstain_batches as _route_pp_vys_abstain_batches,
 )
 from sinonym.services.batch_analysis import RelatedBatchParseResult as _RelatedBatchParseResult
+from sinonym.services.source_repairs import load_glued_initial_prefixes as _load_glued_initial_prefixes
 from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
 from sinonym.timo._resolution import (
     Instance,
@@ -27,6 +28,7 @@ from sinonym.timo._resolution import (
 )
 from sinonym.utils.korean_given_names import korean_given_form as _korean_given_form
 from sinonym.utils.korean_given_names import load_korean_given_words as _load_korean_given_words
+from sinonym.utils.unsplit_given_words import load_unsplit_given_words as _load_unsplit_given_words
 
 __all__ = [
     "Instance",
@@ -92,6 +94,9 @@ class Predictor:
         self._artifacts_dir = artifacts_dir
         self._detector = _ChineseNameDetector()
         self._resolver = _Resolver(self._detector)
+        # the data tables the TIMO path reads, loaded here so no request pays for the first load
+        _load_glued_initial_prefixes()
+        _load_unsplit_given_words()
         _load_korean_given_words()
 
     def _resolve_pp_vys_batch(

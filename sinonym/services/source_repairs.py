@@ -83,6 +83,10 @@ def _glued_prefixes() -> dict[str, tuple[str, str]]:
     return {row["prefix"]: (row["block_dotted"], row["block_undotted"]) for row in csv.DictReader(io.StringIO(text))}
 
 
+def load_glued_initial_prefixes() -> None:
+    _glued_prefixes()
+
+
 def unglue_given_initial(first: str | None, middle: str | None, last: str | None, suffix: str | None):  # noqa: PLR0911
     """``DamianG.`` / - / ``Downey`` -> ``("Damian", "G.")``: a middle initial glued to the given name.
 

@@ -84,3 +84,16 @@ def test_glued_initial_guards_hold_for_listed_words(args, expected, monkeypatch:
     table = {word: ("", "") for word in ("City", "Uni", "Pharm", "Med", "Jeong", "Aruna", "Damian")}
     monkeypatch.setattr(source_repairs, "_glued_prefixes", lambda: table)
     assert source_repairs.unglue_given_initial(*args) == expected
+
+
+def test_predictor_loads_the_data_tables() -> None:
+    from sinonym.timo.interface import PredictorConfig
+    from sinonym.utils import korean_given_names, unsplit_given_words
+
+    for cached in (source_repairs._glued_prefixes, unsplit_given_words._words, korean_given_names._words):
+        cached.cache_clear()
+    Predictor(PredictorConfig(parallel="never"), ".")
+    assert all(
+        cached.cache_info().currsize == 1
+        for cached in (source_repairs._glued_prefixes, unsplit_given_words._words, korean_given_names._words)
+    )
