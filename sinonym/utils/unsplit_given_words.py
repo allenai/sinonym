@@ -55,9 +55,9 @@ _HYPHEN_PARTICLES = frozenset(
 _WORD_PARTS = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[^\W\d_]+")
 _APOSTROPHES = frozenset("'\u2019\u02bc")
 
-# The source words of the name being processed. A listed word is never split, but inside an author-written hyphen or
-# glued token (``Ta-Tsien``, ``YuLina``) of a name with two or more words it still counts as a Chinese given-name part.
-_STANDALONE_WORDS: ContextVar[frozenset[str] | None] = ContextVar("standalone_words", default=None)
+# The raw name being processed. A listed word is never split, but inside an author-written hyphen or glued token
+# (``Ta-Tsien``, ``YuLina``) of a name with two or more words it still counts as a Chinese given-name part.
+_RAW_NAME: ContextVar[str | None] = ContextVar("standalone_words", default=None)
 
 
 def _non_chinese_bound_word(parts: list[str]) -> bool:
@@ -85,6 +85,7 @@ def _source_words(raw_name: str) -> list[list[str]]:
     return [[piece for piece in word.split("-") if piece] for word in "".join(chars).split()]
 
 
+@lru_cache(maxsize=65536)
 def _standalone_folds(raw_name: str) -> frozenset[str]:
     """Folded source words; every part of a bound word that reads as a non-Chinese name, or of the only word, counts
     as a word too."""
@@ -105,11 +106,11 @@ def standalone_words(raw_name: str) -> Iterator[None]:
     The detector, ``NormalizationService.apply``, batch preparation and formatting, and TIMO terminal resolution set
     it. Outside them it is unset and every listed word is blocked as in 0.6.5.
     """
-    token = _STANDALONE_WORDS.set(_standalone_folds(raw_name))
+    token = _RAW_NAME.set(raw_name or "")
     try:
         yield
     finally:
-        _STANDALONE_WORDS.reset(token)
+        _RAW_NAME.reset(token)
 
 
 def is_listed_unsplit_given_word(token: str) -> bool:
@@ -118,9 +119,11 @@ def is_listed_unsplit_given_word(token: str) -> bool:
 
 def is_listed_bound_part(token: str) -> bool:
     """A listed word that the name being processed has only inside a longer author-written token."""
-    words = _STANDALONE_WORDS.get()
+    raw_name = _RAW_NAME.get()
+    if raw_name is None:
+        return False
     folded = _fold(token)
-    return words is not None and folded in _words() and folded not in words
+    return folded in _words() and folded not in _standalone_folds(raw_name)
 
 
 def has_korean_only_syllable(token: str) -> bool:
