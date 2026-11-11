@@ -33,6 +33,10 @@ EDGE_CASES = [
     (("Wang", None, "Pinto-Neto"), ("Wang", "", "Pinto-Neto")),
     (("Chen", None, "Jensen-Hansen"), ("Chen", "", "Jensen-Hansen")),
     (("Mayer-rene", None, "Li"), ("Mayer-rene", "", "Li")),
+    # an apostrophe inside a word is not a boundary; a Wade-Giles aspiration still reads as one syllable
+    ((None, None, "Yuan Sa'dati"), ("Yuan", "", "Sa'dati")),
+    (("Tu", None, "Sa'diah"), ("Tu", "", "Sa'diah")),
+    (("Ying", None, "Ts'ien-li"), ("Ts'ien-Li", "", "Ying")),
     # all caps reads the same as mixed case
     (("TA-TSIEN", None, "LI"), ("Ta-Tsien", "", "Li")),
     (("Li", None, "TA-TSIEN"), ("Ta-Tsien", "", "Li")),

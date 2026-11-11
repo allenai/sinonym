@@ -88,11 +88,15 @@ def _source_words(raw_name: str) -> list[list[str]]:
 @lru_cache(maxsize=65536)
 def _standalone_folds(raw_name: str) -> frozenset[str]:
     """Folded source words; every part of a bound word that reads as a non-Chinese name, or of the only word, counts
-    as a word too."""
+    as a word too. An apostrophe inside a word is not a boundary (``Sa'dati``), so what it separates counts as written
+    whole; a Wade-Giles aspiration (``Ts'ien``) is one syllable either way."""
     words = [pieces for pieces in _source_words(raw_name) if pieces]
     folds = set()
     for pieces in words:
         folds.add(_fold("".join(pieces)))
+        for piece in pieces:
+            if any(mark in piece for mark in _APOSTROPHES):
+                folds.update(_fold(part) for part in re.split("['\u2019\u02bc]", piece))
         parts = [part for piece in pieces for part in _WORD_PARTS.findall(piece)]
         if len(parts) > 1 and (len(words) == 1 or _non_chinese_bound_word(parts)):
             folds.update(_fold(part) for part in [*pieces, *parts])
