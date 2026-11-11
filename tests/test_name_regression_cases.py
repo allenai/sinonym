@@ -163,3 +163,17 @@ def test_standalone_words_reset_after_exception():
 
     pytest.raises(RuntimeError, fail_inside)
     assert not unsplit_given_words.is_listed_bound_part("Lina")
+
+
+@pytest.mark.parametrize(("part", "expected"), [("ŞAHİN", "Şahin"), ("ÇİFTÇİ", "Çiftçi"), ("Şİmşek", "Şimşek")])
+def test_capital_dotted_i_beside_another_mark_lowercases_to_i(part, expected):
+    from sinonym.utils.string_manipulation import StringManipulationUtils
+
+    assert StringManipulationUtils.capitalize_name_part(part) == expected
+
+
+@pytest.mark.parametrize(("part", "expected"), [("HẾU", "Hếu"), ("TIẾN", "Tiến"), ("Chên", "Chen"), ("Ŭnhye", "Unhye")])
+def test_circumflex_with_a_second_mark_is_vietnamese(part, expected):
+    from sinonym.utils.string_manipulation import StringManipulationUtils
+
+    assert StringManipulationUtils.capitalize_name_part(part) == expected

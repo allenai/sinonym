@@ -57,18 +57,27 @@ def _keep_u_diaeresis(decomposed: str) -> str:
 
 
 def _only_pinyin_marks(decomposed: str) -> bool:
-    """True when every diacritic in an NFD string is a pinyin tone mark on a vowel, the diaeresis of ü or Wade-Giles ŭ/ê."""
+    """True when every diacritic in an NFD string is a pinyin tone mark on a vowel, the diaeresis of ü or Wade-Giles ŭ/ê.
+
+    A Wade-Giles ŭ/ê carries no second mark; ế, ề, ể, ễ and ệ are Vietnamese.
+    """
     base = ""
+    wade_giles = False
     for character in decomposed:
         if not _is_diacritic(character):
             if unicodedata.category(character) != "Mn":
                 base = character.casefold()
+                wade_giles = False
             continue
+        if wade_giles:
+            return False
         if character == _DIAERESIS:
             if base != "u":
                 return False
             base = "ü"
-        elif (base, character) in _WADE_GILES_MARKS or (base, character) == ("i", _DOT_ABOVE):
+        elif (base, character) in _WADE_GILES_MARKS:
+            wade_giles = True
+        elif (base, character) == ("i", _DOT_ABOVE):
             continue
         elif character not in _PINYIN_TONE_MARKS or base not in _PINYIN_VOWELS:
             return False
@@ -738,7 +747,8 @@ class StringManipulationUtils:
             accented = unicodedata.normalize(
                 "NFC", "".join(c for c in normalized if unicodedata.category(c) != "Mn" or _is_diacritic(c)),
             )
-            return accented[0].upper() + accented[1:].lower()
+            # str.lower() turns a capital İ into i + U+0307; Turkish lowercase of İ is i
+            return accented[0].upper() + "".join("i" if c == "\u0130" else c.lower() for c in accented[1:])
         if not without_diacritics:
             # Token was made up entirely of combining marks / variation selectors (all
             # category Mn), so stripping them leaves nothing to capitalize. Return the
