@@ -190,3 +190,22 @@ def test_circumflex_with_a_second_mark_is_vietnamese(part, expected):
     from sinonym.utils.string_manipulation import StringManipulationUtils
 
     assert StringManipulationUtils.capitalize_name_part(part) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        # Malay patronymics: before a surname also used in East Asia, Bin stays out of the surname (0.6.6 behaviour)
+        (("Zainal", "Bin", "Long"), ("Zainal", "Bin", "Long")),
+        (("ZAINAL", "BIN", "LONG"), ("Zainal", "Bin", "Long")),
+        (("Mohammed Bin", None, "Long"), ("Mohammed", "Bin", "Long")),
+        (("Hassan", "Bin", "Teh"), ("Hassan", "Bin", "Teh")),
+        (("Wan", "Bin", "Ahmad"), ("Wan", "Bin", "Ahmad")),
+        # elsewhere Bin opens the surname, as in 0.6.5
+        (("Yusri", "Bin", "Kamin"), ("Yusri", "", "Bin Kamin")),
+        (("Salman", "Bin", "Dayel"), ("Salman", "", "Bin Dayel")),
+        (("Nabilaa", "Binti", "Mohamed"), ("Nabilaa", "Binti", "Mohamed")),
+    ],
+)
+def test_bin_patronymics_are_pinned(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
