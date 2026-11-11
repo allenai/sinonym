@@ -87,6 +87,7 @@ EDGE_CASES = [
     # a surname word after Lee keeps the order the fields give
     (("Chen", None, "Annie"), ("Annie", "", "Chen")),
     (("Wang", None, "Lina"), ("Lina", "", "Wang")),
+    (("Su", None, "Anna"), ("Anna", "", "Su")),
     (("Lee", None, "Baer"), ("Lee", "", "Baer")),
     # all caps
     (("ANNIE", None, "CHEN"), ("Annie", "", "Chen")),

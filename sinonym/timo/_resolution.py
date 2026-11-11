@@ -141,13 +141,18 @@ def _is_initial_word(word: str) -> bool:
     return word.endswith(".") or (len(letters) == 1 and letters.isupper())
 
 
+_COMMON_CHINESE_SURNAMES_NOT_LEE = NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES - {"lee"}
+
+
 def _chinese_surname_before_listed_given(first: str, last: str) -> bool:
     """``Wang / - / Lina``: a common Chinese surname, then a never-split word the corpus uses mostly as a given name.
 
-    The never-split list keeps such names off the Chinese path, which used to put them in given-first order.
+    The never-split list keeps such names off the Chinese path, which used to put them in given-first order. Unlike the
+    role prior below it also takes a two-letter surname (``Su / Anna``): among source-supplied ORCID people with this
+    shape, 14 register the first field as their family name and 1 the last field.
     """
     return (
-        _fold_name_word(first) in NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES - {"lee"}
+        _fold_name_word(first) in _COMMON_CHINESE_SURNAMES_NOT_LEE
         and is_listed_unsplit_given_word(last)
         and token_role(last) == "given"
     )
