@@ -28,6 +28,11 @@ EDGE_CASES = [
     (("Wang.Lina", None, None), ("", "", "Wang.Lina")),
     (("Man\u2013jiSUN", None, "Lee"), ("Man-jiSUN", "", "Lee")),
     (("Man\u2212jiSUN", None, "Lee"), ("Man-jiSUN", "", "Lee")),
+    # a bound word whose parts are all never-split words is not Chinese: the fields keep their order
+    (("Lin", None, "Hansen-Lange"), ("Lin", "", "Hansen-Lange")),
+    (("Wang", None, "Pinto-Neto"), ("Wang", "", "Pinto-Neto")),
+    (("Chen", None, "Jensen-Hansen"), ("Chen", "", "Jensen-Hansen")),
+    (("Mayer-rene", None, "Li"), ("Mayer-rene", "", "Li")),
     # all caps reads the same as mixed case
     (("TA-TSIEN", None, "LI"), ("Ta-Tsien", "", "Li")),
     (("Li", None, "TA-TSIEN"), ("Ta-Tsien", "", "Li")),

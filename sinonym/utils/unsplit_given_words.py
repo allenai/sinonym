@@ -61,11 +61,12 @@ _STANDALONE_WORDS: ContextVar[frozenset[str] | None] = ContextVar("standalone_wo
 
 
 def _non_chinese_bound_word(parts: list[str]) -> bool:
-    """A bound word that reads as a non-Chinese name: a particle, a lone letter, a doubled word, a capitalised tail
-    (``KoJIMA``) or a Vietnamese surname (``Cao-Hoang``)."""
+    """A bound word that reads as a non-Chinese name: every part a listed word (``Hansen-Lange``), a particle, a lone
+    letter, a doubled word, a capitalised tail (``KoJIMA``) or a Vietnamese surname (``Cao-Hoang``)."""
     folds = [_fold(part) for part in parts]
     return (
-        any(fold in _HYPHEN_PARTICLES or len(fold) == 1 or fold in _VIETNAMESE_SURNAME_FOLDS for fold in folds)
+        all(fold in _words() for fold in folds)
+        or any(fold in _HYPHEN_PARTICLES or len(fold) == 1 or fold in _VIETNAMESE_SURNAME_FOLDS for fold in folds)
         or len(set(folds)) < len(folds)
         or (not "".join(parts).isupper() and any(len(part) > 1 and part.isupper() for part in parts[1:]))
     )
