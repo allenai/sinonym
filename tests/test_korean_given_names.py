@@ -58,8 +58,11 @@ UNCHANGED = [
 
 # Known limits, pinned so a change is noticed.
 KNOWN_LIMITS = [
-    # an ng + vowel boundary is ambiguous; the list follows most Korean registry people (one registers "Sun Gil")
-    (("Sungil", None, "Kim"), ("Sung-Il", "", "Kim")),
+    # a word with a second valid cut stays joined unless Korean registry people almost all cut it one way: a wrong cut
+    # (Sung-Il for Sun Gil) would make S2AND veto the person's other mentions
+    (("Sungil", None, "Kim"), ("Sungil", "", "Kim")),
+    (("Sung", "Il", "Kim"), ("Sung", "Il", "Kim")),
+    (("Daeun", None, "Lee"), ("Daeun", "", "Lee")),
     (("Youngil", None, "Jeong"), ("Young-Il", "", "Jeong")),
     # a listed word some non-Korean people also write (most registry people writing it are in South Korea)
     (("Dain", None, "Lee"), ("Da-In", "", "Lee")),

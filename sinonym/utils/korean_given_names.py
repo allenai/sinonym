@@ -38,15 +38,28 @@ KOREAN_ONLY_GIVEN_SURNAMES = frozenset(set(KOREAN_ONLY_SURNAMES) | {"cho", "choi
 MIN_KR_SHARE = 0.5
 # Shared surname (Lee, Lim, Han, Song...): also almost no registry people writing the word are in a Chinese region.
 MIN_KR_VS_CHINESE_SHARE = 0.9
+# A word with a second valid cut (Sungil: Sung-Il or Sun-Gil) is hyphenated only when Korean registry people who write it
+# in two parts almost all cut it in one place: a wrong cut makes S2AND veto the person's other mentions (Sun Gil).
+MIN_AMBIGUOUS_CUT_SHARE = 0.97
 _PARTS = re.compile(r"[A-Z][a-z]+|[a-z]+|[A-Z]+(?![a-z])")
 
 
 @lru_cache(maxsize=1)
 def _words() -> dict[str, tuple[int, int, int, float]]:
     text = gzip.decompress(read_bytes("korean_given_words.csv.gz")).decode("utf-8")
+    rows = list(csv.DictReader(io.StringIO(text)))
+    syllables = {part for row in rows for part in (row["word"][: int(row["cut"])], row["word"][int(row["cut"]) :])}
+
+    def decisive(word: str, cut: int, cut_share: float) -> bool:
+        ambiguous = any(
+            other != cut and word[:other] in syllables and word[other:] in syllables for other in range(1, len(word))
+        )
+        return not ambiguous or cut_share >= MIN_AMBIGUOUS_CUT_SHARE
+
     return {
         row["word"]: (int(row["cut"]), int(row["kr_people"]), int(row["chinese_region_people"]), float(row["kr_share"]))
-        for row in csv.DictReader(io.StringIO(text))
+        for row in rows
+        if decisive(row["word"], int(row["cut"]), float(row["cut_share"]))
     }
 
 
