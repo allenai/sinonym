@@ -313,8 +313,8 @@ def test_reviewed_japanese_surname_vetoes_the_flip_in_a_given_first_byline(predi
 
 def test_korean_surname_as_last_token_is_not_moved_to_the_front(predictor):
     # inspire:953808 / :909467 — Myung and Hyun
-    assert resolve(predictor, "Yun", "Soo", "Myung") == ("Yun", "Soo", "Myung")
-    assert resolve(predictor, "Chang", "Ho", "Hyun") == ("Chang", "Ho", "Hyun")
+    assert resolve(predictor, "Yun", "Soo", "Myung") == ("Yun-Soo", "", "Myung")
+    assert resolve(predictor, "Chang", "Ho", "Hyun") == ("Chang-Ho", "", "Hyun")
 
 
 @pytest.mark.parametrize("source", [("Gong-Bo", None, "Zhao"), ("Da", None, "Xing")])
@@ -650,7 +650,7 @@ PARTICLE_GUARD_CASES = [
     (("Peter", "VAN", "OOSTEROM"), ("Peter", "", "van Oosterom")),
     (("Eduardo", "De", "Loures"), ("Eduardo", "", "De Loures")),
     # B: after a Korean / Cantonese / Vietnamese given syllable, bin / van / da is a given syllable
-    (("Young", "Bin", "Kim"), ("Young", "Bin", "Kim")),
+    (("Young", "Bin", "Kim"), ("Young-Bin", "", "Kim")),
     (("Quan", "Van", "Dau"), ("Quan", "Van", "Dau")),
     (("Maria", "da", "Silva"), ("Maria", "", "da Silva")),
 ]
@@ -704,9 +704,9 @@ CORPUS_SCALE_CASES = [
     # `ul` is not one: half the people split on it registered the tail alone
     (("Ehtesham", "Ul", "Haq"), ("Ehtesham", "Ul", "Haq")),
     # Hyun is a surname only as the last token; leading it is a given syllable
-    (("Hyun", "Ho", "Sung"), ("Hyun", "Ho", "Sung")),
+    (("Hyun", "Ho", "Sung"), ("Hyun-Ho", "", "Sung")),
     (("Hyun", "Sik", "Jun"), ("Hyun", "Sik", "Jun")),
-    (("Chang", "Ho", "Hyun"), ("Chang", "Ho", "Hyun")),
+    (("Chang", "Ho", "Hyun"), ("Chang-Ho", "", "Hyun")),
     # a name written only in Chinese characters is surname-first; the romanized-pair order prior must not flip it,
     # but it still applies when the source also carries a romanized form
     ((None, None, "杨柳"), ("Liu", "", "Yang")),
@@ -956,7 +956,7 @@ NON_CHINESE_WORD_CASES = [
     (("Luke", None, "Lu"), ("Luke", "", "Lu")),
     (("Gene", None, "Ho"), ("Gene", "", "Ho")),
     (("Gene", None, "Cheung"), ("Gene", "", "Cheung")),
-    (("Jihye", None, "Lee"), ("Jihye", "", "Lee")),
+    (("Jihye", None, "Lee"), ("Ji-Hye", "", "Lee")),
     (("Hoang", None, "Le"), ("Hoang", "", "Le")),
     (("Tuan", None, "Hoang"), ("Tuan", "", "Hoang")),
     (("Lee", None, "Baer"), ("Lee", "", "Baer")),
@@ -968,9 +968,9 @@ NON_CHINESE_WORD_CASES = [
     (("Moshe", None, "Lin"), ("Moshe", "", "Lin")),
     (("Moshe", None, "Han"), ("Moshe", "", "Han")),
     # Korean
-    (("Mihye", None, "Lee"), ("Mihye", "", "Lee")),
-    (("Yewon", None, "Jang"), ("Yewon", "", "Jang")),
-    (("Jihyun", None, "Choi"), ("Jihyun", "", "Choi")),
+    (("Mihye", None, "Lee"), ("Mi-Hye", "", "Lee")),
+    (("Yewon", None, "Jang"), ("Ye-Won", "", "Jang")),
+    (("Jihyun", None, "Choi"), ("Ji-Hyun", "", "Choi")),
     # Hebrew given names with the Israeli surname Chen, including spellings that also occur among Chinese authors
     (("Lior", None, "Chen"), ("Lior", "", "Chen")),
     (("Gal", None, "Chen"), ("Gal", "", "Chen")),
@@ -1105,9 +1105,9 @@ def test_particle_surname_first_flip_still_applies_to_a_corpus_surname(predictor
 
 KOREAN_SYLLABLE_CASES = [
     # a romanized Korean syllable pinyin does not have keeps the word whole beside a surname shared with Chinese
-    (("Seungho", None, "Lee"), ("Seungho", "", "Lee")),
-    (("Jieun", None, "Han"), ("Jieun", "", "Han")),
-    (("Hyunwoo", None, "Lim"), ("Hyunwoo", "", "Lim")),
+    (("Seungho", None, "Lee"), ("Seung-Ho", "", "Lee")),
+    (("Jieun", None, "Han"), ("Ji-Eun", "", "Han")),
+    (("Hyunwoo", None, "Lim"), ("Hyun-Woo", "", "Lim")),
     (("Dongseung", None, "Song"), ("Dongseung", "", "Song")),
     (("Seung-Ho", None, "Lee"), ("Seung-Ho", "", "Lee")),
     # Cantonese spellings with the same letters still split
@@ -1117,5 +1117,5 @@ KOREAN_SYLLABLE_CASES = [
 
 
 @pytest.mark.parametrize(("source", "expected"), KOREAN_SYLLABLE_CASES)
-def test_korean_syllables_keep_the_given_word_whole(predictor, source, expected):
+def test_korean_syllables_are_not_split_as_pinyin(predictor, source, expected):
     assert resolve(predictor, *source) == expected

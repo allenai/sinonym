@@ -61,7 +61,7 @@ EDGE_CASES = [
     (("An-Nie", None, "Chen"), ("An-Nie", "", "Chen")),
     (("AnNie", None, "Chen"), ("An-Nie", "", "Chen")),
     # off the Chinese path, a Korean or Cantonese given syllable stays out of the surname
-    (("Chae", "Bin", "Lee"), ("Chae", "Bin", "Lee")),
+    (("Chae", "Bin", "Lee"), ("Chae-Bin", "", "Lee")),
     (("Ben", "Bin", "Xu"), ("Ben", "Bin", "Xu")),
     (("Ahmad", "Bin", "Ismail"), ("Ahmad", "", "Bin Ismail")),
     (("Mohd", "bin", "Abdullah"), ("Mohd", "", "bin Abdullah")),

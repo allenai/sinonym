@@ -4,6 +4,7 @@ from pydantic import BaseSettings as _BaseSettings
 from pydantic import Field as _Field
 
 from sinonym.coretypes import BatchParseResult as _BatchParseResult
+from sinonym.coretypes.routing_resolution import ResolutionAction as _ResolutionAction
 from sinonym.detector import ChineseNameDetector as _ChineseNameDetector
 from sinonym.detector import ParallelMode as _ParallelMode
 from sinonym.pipeline.name_order_routing import (
@@ -24,6 +25,8 @@ from sinonym.timo._resolution import (
     _Model,
     _Resolver,
 )
+from sinonym.utils.korean_given_names import korean_given_form as _korean_given_form
+from sinonym.utils.korean_given_names import load_korean_given_words as _load_korean_given_words
 
 __all__ = [
     "Instance",
@@ -33,6 +36,20 @@ __all__ = [
     "ResolvedAuthorFields",
     "SourceAuthorFields",
 ]
+
+
+def _korean_given(author: ResolvedAuthorFields) -> ResolvedAuthorFields:
+    """An author with a listed two-syllable Korean given name, written ``Jin-Ho`` (utils/korean_given_names.py).
+
+    Applied to every written author, Chinese-detected or not: Korean names often parse as Chinese (``Young Hee``), and
+    the word table keeps Chinese given names out.
+    """
+    if author.resolution_action is _ResolutionAction.SUPPRESS:
+        return author
+    given = _korean_given_form(author.first_name, author.middle_names, author.last_name)
+    if given is None or (given, "") == (author.first_name, author.middle_names):
+        return author
+    return author.copy(update={"first_name": given, "middle_names": ""})
 
 
 def _repaired_source(author: SourceAuthorFields) -> SourceAuthorFields:
@@ -75,6 +92,7 @@ class Predictor:
         self._artifacts_dir = artifacts_dir
         self._detector = _ChineseNameDetector()
         self._resolver = _Resolver(self._detector)
+        _load_korean_given_words()
 
     def _resolve_pp_vys_batch(
         self,
@@ -223,7 +241,7 @@ class Predictor:
                     pp_batch=batch_result.pp_batch,
                     pool=batch_result.vys_batch,
                 )
-            predictions[instance_index] = Prediction(authors=authors)
+            predictions[instance_index] = Prediction(authors=[_korean_given(author) for author in authors])
 
         if any(prediction is None for prediction in predictions):
             message = "prediction plan did not fill every instance slot"

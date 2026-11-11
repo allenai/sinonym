@@ -19,6 +19,7 @@ import argparse
 import csv
 import gzip
 import io
+from pathlib import Path
 
 import duckdb
 
@@ -36,7 +37,7 @@ def build(registry: str, half: str | None) -> list[tuple]:
         regexp_matches(countries, '(^|[^A-Z])KR([^A-Z]|$)') kr,
         regexp_matches(countries, '(^|[^A-Z])(CN|TW|HK|MO|SG)([^A-Z]|$)') cn
       FROM (SELECT orcid, countries,
-              regexp_replace(lower(strip_accents(trim(coalesce(given_names, '')))), '[\\s\\-‐‑–]+', ' ', 'g') g
+              regexp_replace(lower(strip_accents(trim(coalesce(given_names, '')))), '[\\s\\-\u2010\u2011\u2013]+', ' ', 'g') g
             FROM read_parquet('{registry}') WHERE coalesce(countries, '') <> '' {half_filter})
       WHERE (regexp_full_match(g, '[a-z]{{3,10}}') OR regexp_full_match(g, '[a-z]{{1,6}} [a-z]{{1,6}}'))
         AND length(replace(g, ' ', '')) BETWEEN 3 AND 10""")
@@ -45,7 +46,8 @@ def build(registry: str, half: str | None) -> list[tuple]:
                    count(*) FILTER (WHERE kr AND cut IS NOT NULL) kr_split FROM ev GROUP BY word),
            c AS (SELECT word, cut, count(*) n, row_number() OVER (PARTITION BY word ORDER BY count(*) DESC, cut) rk
                  FROM ev WHERE kr AND cut IS NOT NULL GROUP BY word, cut)
-      SELECT w.word, c.cut, w.kr_people, w.cn_people, w.people, round(w.kr_people / w.people, 3), w.kr_split, round(c.n / w.kr_split, 3)
+      SELECT w.word, c.cut, w.kr_people, w.cn_people, w.people, round(w.kr_people / w.people, 3), w.kr_split,
+        round(c.n / w.kr_split, 3)
       FROM w JOIN c ON c.word = w.word AND c.rk = 1
       WHERE w.kr_people >= {MIN_KR_PEOPLE} AND w.kr_people >= {MIN_KR_SHARE} * w.people
         AND w.kr_split >= {MIN_SPLIT_PEOPLE} AND c.n >= {MIN_CUT_SHARE} * w.kr_split
@@ -61,10 +63,11 @@ def main() -> None:
     rows = build(a.registry, a.half)
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
-    writer.writerow(["word", "cut", "kr_people", "chinese_region_people", "registry_people", "kr_share", "kr_split_people", "cut_share"])
+    writer.writerow(
+        ["word", "cut", "kr_people", "chinese_region_people", "registry_people", "kr_share", "kr_split_people", "cut_share"],
+    )
     writer.writerows(rows)
-    with gzip.GzipFile(a.output, "wb", mtime=0) as f:
-        f.write(out.getvalue().encode("utf-8"))
+    Path(a.output).write_bytes(gzip.compress(out.getvalue().encode("utf-8"), mtime=0))
     print(len(rows), "words")
 
 

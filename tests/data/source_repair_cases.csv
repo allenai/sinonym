@@ -12,17 +12,17 @@ glued_initial,bug,JohnS,.,Smith,John,S.,Smith,JohnS,,Smith,stray period in the m
 glued_initial,surname,DavidS.,,David,David,S.,David,David,,DavidS,0.6.4 read the glued word as unknown and swapped the name
 glued_initial,surname,MichaelI.,,Paul,Michael,I.,Paul,Paul,,MichaelI,0.6.4 swapped the name
 glued_initial,surname,MarkS.,,Nestor,Mark,S.,Nestor,Nestor,,MarkS,0.6.4 swapped the name
-glued_initial,control,SungA,,Bae,SungA,,Bae,SungA,,Bae,Korean Sung-A (ORCID registry SungA)
+glued_initial,control,SungA,,Bae,Sung-A,,Bae,SungA,,Bae,Korean Sung-A (ORCID registry SungA); Korean given name in its hyphenated form since 0.6.7
 glued_initial,bug,JoséA.,,Mayoral,José,A.,Mayoral,JoséA,,Mayoral,the same name with a decomposed accent
 glued_initial,control,WorldH,,Organization,WorldH,,Organization,WorldH,,Organization,organization word
 glued_initial,control,DepartmentM,,Medicine,DepartmentM,,Medicine,DepartmentM,,Medicine,organization word
 glued_initial,control,TheB,,Beatles,TheB,,Beatles,TheB,,Beatles,function word
 glued_initial,control,ProfJ.,,Smith,ProfJ,,Smith,ProfJ,,Smith,title
-glued_initial,control,JeongA,,Lee,JeongA,,Lee,JeongA,,Lee,Korean Jeong-A
+glued_initial,control,JeongA,,Lee,Jeong-A,,Lee,JeongA,,Lee,Korean Jeong-A; Korean given name in its hyphenated form since 0.6.7
 glued_initial,control,QingE,,Wu,Qing-E,,Wu,Qing-E,,Wu,Chinese Qing-E (ORCID registry QingE)
-glued_initial,control,SungA.,,Bae,SungA,,Bae,SungA,,Bae,dotted vowel after a word that is not a role-prior given name
+glued_initial,control,SungA.,,Bae,Sung-A,,Bae,SungA,,Bae,dotted vowel after a word that is not a role-prior given name; Korean given name in its hyphenated form since 0.6.7
 glued_initial,control,EunA.,,So,EunA,,So,EunA,,So,Korean Eun-A: a dotted vowel after a Korean syllable
-glued_initial,control,SeungA.,,Kim,SeungA,,Kim,SeungA,,Kim,Korean Seung-A
+glued_initial,control,SeungA.,,Kim,Seung-A,,Kim,SeungA,,Kim,Korean Seung-A; Korean given name in its hyphenated form since 0.6.7
 glued_initial,control,ChulE.,,Chung,Chu-Le,,Chung,Chu-Le,,Chung,Korean Chul-E
 glued_initial,control,ArunaV,,Kumar,ArunaV,,Kumar,ArunaV,,Kumar,ORCID registry Arunav
 glued_initial,control,MartinE.,,Plaut,MartinE,,Plaut,MartinE,,Plaut,may be Martine

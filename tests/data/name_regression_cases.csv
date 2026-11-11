@@ -3,147 +3,147 @@ split,Lina,H. H.,Yao,Lina,H. H.,Yao,Li-Na|H. H.|Yao,lina is not a Chinese given 
 split,Yujin,J.,Choi,Yujin,J.,Choi,Yu-Jin|J.|Choi,yujin is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Annie,S.,Wang,Annie,S.,Wang,An-Nie|S.|Wang,annie is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Jihye,(Ellie),Kang,Jihye,(Ellie),Kang,Jih-Ye||Kang,jihye is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Junho,,Suh,Junho,,Suh,Jun-Ho||Suh,junho is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sujin,,Jang,Sujin,,Jang,Su-Jin||Jang,sujin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Junho,,Suh,Jun-Ho,,Suh,Jun-Ho||Suh,junho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sujin,,Jang,Su-Jin,,Jang,Su-Jin||Jang,sujin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Minji,K,Ko,Minji,K.,Ko,Min-Ji|K.|Ko,minji is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Jihyun,,Song,Jihyun,,Song,Jih-Yun||Song,jihyun is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sangmin,,Lee,Sangmin,,Lee,Sang-Min||Lee,sangmin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Jihyun,,Song,Ji-Hyun,,Song,Jih-Yun||Song,jihyun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sangmin,,Lee,Sang-Min,,Lee,Sang-Min||Lee,sangmin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Sumin,,Xu,Sumin,,Xu,Su-Min||Xu,sumin is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sungmin,,Woo,Sungmin,,Woo,Sung-Min||Woo,sungmin is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Woojin,,Lee,Woojin,,Lee,Woo-Jin||Lee,woojin is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Jinho,,Jang,Jinho,,Jang,Jin-Ho||Jang,jinho is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Jisu,,Jang,Jisu,,Jang,Ji-Su||Jang,jisu is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sungmin,,Woo,Sung-Min,,Woo,Sung-Min||Woo,sungmin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Woojin,,Lee,Woo-Jin,,Lee,Woo-Jin||Lee,woojin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jinho,,Jang,Jin-Ho,,Jang,Jin-Ho||Jang,jinho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jisu,,Jang,Ji-Su,,Jang,Ji-Su||Jang,jisu is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Hoang,V.,Ho,Hoang,V.,Ho,Ho-Ang|V.|Ho,hoang is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Subin,,Lee,Subin,,Lee,Su-Bin||Lee,subin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Subin,,Lee,Su-Bin,,Lee,Su-Bin||Lee,subin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Mina,K.,Lee,Mina,K.,Lee,Mi-Na|K.|Lee,mina is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Yuna,,Zhang,Yuna,,Zhang,Yu-Na||Zhang,yuna is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Katie,C.Y.,Lee,Katie,C. Y.,Lee,Ka-Tie|C. Y.|Lee,katie is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Seungmin,,Lee,Seungmin,,Lee,Seung-Min||Lee,seungmin is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Yeji,,Lee,Yeji,,Lee,Ye-Ji||Lee,yeji is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Jihun,,Yu,Jihun,,Yu,Ji-Hun||Yu,jihun is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Seungwoo,,Han,Seungwoo,,Han,Seung-Woo||Han,seungwoo is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Jiho,,Kang,Jiho,,Kang,Ji-Ho||Kang,jiho is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Seungho,,Yu,Seungho,,Yu,Seung-Ho||Yu,seungho is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Seungmin,,Lee,Seung-Min,,Lee,Seung-Min||Lee,seungmin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Yeji,,Lee,Ye-Ji,,Lee,Ye-Ji||Lee,yeji is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jihun,,Yu,Ji-Hun,,Yu,Ji-Hun||Yu,jihun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Seungwoo,,Han,Seung-Woo,,Han,Seung-Woo||Han,seungwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jiho,,Kang,Ji-Ho,,Kang,Ji-Ho||Kang,jiho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Seungho,,Yu,Seung-Ho,,Yu,Seung-Ho||Yu,seungho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Jinwoo,(Brian),Lee,Jinwoo,(Brian),Lee,Jin-Woo||Lee,jinwoo is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Yejin,,Jung,Yejin,,Jung,Ye-Jin||Jung,yejin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yejin,,Jung,Ye-Jin,,Jung,Ye-Jin||Jung,yejin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Sangwoo,T.,Han,Sangwoo,T.,Han,Sang-Woo|T.|Han,sangwoo is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sungho,,Jin,Sungho,,Jin,Sung-Ho||Jin,sungho is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Jiwoo,,Lee,Jiwoo,,Lee,Ji-Woo||Lee,jiwoo is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sungho,,Jin,Sung-Ho,,Jin,Sung-Ho||Jin,sungho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jiwoo,,Lee,Ji-Woo,,Lee,Ji-Woo||Lee,jiwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Dongjin,S,Lee,Dongjin,S.,Lee,Dong-Jin|S.|Lee,dongjin is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sangho,,Lee,Sangho,,Lee,Sang-Ho||Lee,sangho is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Minho,,Lee,Minho,,Lee,Min-Ho||Lee,minho is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sangho,,Lee,Sang-Ho,,Lee,Sang-Ho||Lee,sangho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Minho,,Lee,Min-Ho,,Lee,Min-Ho||Lee,minho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Luke,L.,Chen,Luke,L.,Chen,Lu-Ke|L.|Chen,luke is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Anni,M.Y.,Zhou,Anni,M. Y.,Zhou,An-Ni|M. Y.|Zhou,anni is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Yana,V.,Shen,Yana,V.,Shen,Ya-Na|V.|Shen,yana is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Minsu,,Lee,Minsu,,Lee,Min-Su||Lee,minsu is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Minsu,,Lee,Min-Su,,Lee,Min-Su||Lee,minsu is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Hojun,,Aan,Hojun,,Aan,Ho-Jun||Aan,hojun is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Junya,,Lu,Junya,,Lu,Jun-Ya||Lu,junya is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Sungwoo,,Ju,Sungwoo,,Ju,Sung-Woo||Ju,sungwoo is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Jisun,,Lee,Jisun,,Lee,Ji-Sun||Lee,jisun is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Hojin,,Shin,Hojin,,Shin,Ho-Jin||Shin,hojin is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Seungjun,,Lee,Seungjun,,Lee,Seung-Jun||Lee,seungjun is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Jisun,,Lee,Ji-Sun,,Lee,Ji-Sun||Lee,jisun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Hojin,,Shin,Ho-Jin,,Shin,Ho-Jin||Shin,hojin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Seungjun,,Lee,Seung-Jun,,Lee,Seung-Jun||Lee,seungjun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Sinan,,Wang,Sinan,,Wang,Si-Nan||Wang,sinan is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Minwoo,,Kang,Minwoo,,Kang,Min-Woo||Kang,minwoo is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Minwoo,,Kang,Min-Woo,,Kang,Min-Woo||Kang,minwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Yuji,,Lin,Yuji,,Lin,Yu-Ji||Lin,yuji is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Dongwoo,,Kang,Dongwoo,,Kang,Dong-Woo||Kang,dongwoo is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sejin,,Han,Sejin,,Han,Se-Jin||Han,sejin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Dongwoo,,Kang,Dong-Woo,,Kang,Dong-Woo||Kang,dongwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sejin,,Han,Se-Jin,,Han,Se-Jin||Han,sejin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Helin,,Zhang,Helin,,Zhang,He-Lin||Zhang,helin is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Minna,K,Su,Minna,K.,Su,Min-Na|K.|Su,minna is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Lilian,L.,Lee,Lilian,L.,Lee,Li-Lian|L.|Lee,lilian is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Seunghun,J,Lee,Seunghun,J.,Lee,Seung-Hun|J.|Lee,seunghun is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Keren,,Zhu,Keren,,Zhu,Ke-Ren||Zhu,keren is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Donghun,,Kang,Donghun,,Kang,Dong-Hun||Kang,donghun is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Chanwoo,,Jung,Chanwoo,,Jung,Chan-Woo||Jung,chanwoo is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Donghun,,Kang,Dong-Hun,,Kang,Dong-Hun||Kang,donghun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Chanwoo,,Jung,Chan-Woo,,Jung,Chan-Woo||Jung,chanwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Jihwan,P.,Choi,Jihwan,P.,Choi,Jih-Wan|P.|Choi,jihwan is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Dongho,,Kang,Dongho,,Kang,Dong-Ho||Kang,dongho is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Dongho,,Kang,Dong-Ho,,Kang,Dong-Ho||Kang,dongho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Juho,,Lee,Juho,,Lee,Ju-Ho||Lee,juho is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sangjin,,Lee,Sangjin,,Lee,Sang-Jin||Lee,sangjin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sangjin,,Lee,Sang-Jin,,Lee,Sang-Jin||Lee,sangjin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Dongjun,,Han,Dongjun,,Han,Dong-Jun||Han,dongjun is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Danna,,Zhang,Danna,,Zhang,Dan-Na||Zhang,danna is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Gene,S.,Tan,Gene,S.,Tan,Ge-Ne|S.|Tan,gene is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Minju,,Kang,Minju,,Kang,Min-Ju||Kang,minju is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Yewon,,Jin,Yewon,,Jin,Yew-On||Jin,yewon is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Minju,,Kang,Min-Ju,,Kang,Min-Ju||Kang,minju is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Yewon,,Jin,Ye-Won,,Jin,Yew-On||Jin,yewon is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Yumi,,Lee,Yumi,,Lee,Yu-Mi||Lee,yumi is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Aidan,L,Ng,Aidan,L.,Ng,Ai-Dan|L.|Ng,aidan is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Changho,,Choi,Changho,,Choi,Chang-Ho||Choi,changho is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Changho,,Choi,Chang-Ho,,Choi,Chang-Ho||Choi,changho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Diya,,Wang,Diya,,Wang,Di-Ya||Wang,diya is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Jiyun,,Choi,Jiyun,,Choi,Ji-Yun||Choi,jiyun is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Jiyun,,Choi,Ji-Yun,,Choi,Ji-Yun||Choi,jiyun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Jinsu,,Ma,Jinsu,,Ma,Jin-Su||Ma,jinsu is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Yongjin,,Sung,Yongjin,,Sung,Yong-Jin||Sung,yongjin is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Seungju,,Yu,Seungju,,Yu,Seung-Ju||Yu,seungju is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Seungju,,Yu,Seung-Ju,,Yu,Seung-Ju||Yu,seungju is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Dana,K.,Liu,Dana,K.,Liu,Da-Na|K.|Liu,dana is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Yunho,,YUN,Yunho,,Yun,Yun-Ho||Yun,yunho is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yunho,,YUN,Yun-Ho,,Yun,Yun-Ho||Yun,yunho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Dan,,Moran,Dan,,Moran,Mo-Ran||Dan,moran is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sangyun,,Lee,Sangyun,,Lee,Sang-Yun||Lee,sangyun is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sangyun,,Lee,Sang-Yun,,Lee,Sang-Yun||Lee,sangyun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Yuli,,Yang,Yuli,,Yang,Yu-Li||Yang,yuli is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Suji,,Shin,Suji,,Shin,Su-Ji||Shin,suji is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Suji,,Shin,Su-Ji,,Shin,Su-Ji||Shin,suji is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Leah,Y.,Fung,Leah,Y.,Fung,Le-Ah|Y.|Fung,leah is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Heli,,Xu,Heli,,Xu,He-Li||Xu,heli is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Daye,,Kang,Daye,,Kang,Da-Ye||Kang,daye is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sungjin,,Lee,Sungjin,,Lee,Sung-Jin||Lee,sungjin is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sunho,,Choi,Sunho,,Choi,Sun-Ho||Choi,sunho is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Daye,,Kang,Da-Ye,,Kang,Da-Ye||Kang,daye is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sungjin,,Lee,Sung-Jin,,Lee,Sung-Jin||Lee,sungjin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sunho,,Choi,Sun-Ho,,Choi,Sun-Ho||Choi,sunho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Dayan,J.,Liu,Dayan,J.,Liu,Da-Yan|J.|Liu,dayan is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Youjin,,Kang,Youjin,,Kang,You-Jin||Kang,youjin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Youjin,,Kang,You-Jin,,Kang,You-Jin||Kang,youjin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Dongmin,,Han,Dongmin,,Han,Dong-Min||Han,dongmin is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sunmin,,An,Sunmin,,An,Sun-Min||An,sunmin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sunmin,,An,Sun-Min,,An,Sun-Min||An,sunmin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Sangmi,T.,Lee,Sangmi,T.,Lee,Sang-Mi|T.|Lee,sangmi is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Sidi,,Zhao,Sidi,,Zhao,Si-Di||Zhao,sidi is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Suna,,Zi,Suna,,Zi,Su-Na||Zi,suna is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Shifa,Chen,Chen,Shifa,Chen,Chen,Shi-Fa-Chen||Chen,shifa is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Misun,,Kang,Misun,,Kang,Mi-Sun||Kang,misun is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Misun,,Kang,Mi-Sun,,Kang,Mi-Sun||Kang,misun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Lida,L.,Sun,Lida,L.,Sun,Li-Da|L.|Sun,lida is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Yunmi,,Lee,Yunmi,,Lee,Yun-Mi||Lee,yunmi is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yunmi,,Lee,Yun-Mi,,Lee,Yun-Mi||Lee,yunmi is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Jennie,E,Choi,Jennie,E.,Choi,Jen-Nie|E.|Choi,jennie is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Woosung,,Choi,Woosung,,Choi,Woo-Sung||Choi,woosung is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Woosung,,Choi,Woo-Sung,,Choi,Woo-Sung||Choi,woosung is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Daren,,Zhao,Daren,,Zhao,Da-Ren||Zhao,daren is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Mingu,,Kang,Mingu,,Kang,Min-Gu||Kang,mingu is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Mingu,,Kang,Min-Gu,,Kang,Min-Gu||Kang,mingu is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Mona,Q.,Tan,Mona,Q.,Tan,Mo-Na|Q.|Tan,mona is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Junsu,,Kang,Junsu,,Kang,Jun-Su||Kang,junsu is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Junsu,,Kang,Jun-Su,,Kang,Jun-Su||Kang,junsu is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Kangmin,,Lee,Kangmin,,Lee,Kang-Min||Lee,kangmin is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Sunwoo,T.,Jang,Sunwoo,T.,Jang,Sun-Woo|T.|Jang,sunwoo is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Junmo,,Lee,Junmo,,Lee,Jun-Mo||Lee,junmo is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Junmo,,Lee,Jun-Mo,,Lee,Jun-Mo||Lee,junmo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Junji,,Wei,Junji,,Wei,Jun-Ji||Wei,junji is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Hosung,,You,Hosung,,You,Ho-Sung||You,hosung is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Yani,,Zhang,Yani,,Zhang,Ya-Ni||Zhang,yani is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Shunji,F.,Xia,Shunji,F.,Xia,Shun-Ji|F.|Xia,shunji is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sanghun,,Im,Sanghun,,Im,Sang-Hun||Im,sanghun is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sanghun,,Im,Sang-Hun,,Im,Sang-Hun||Im,sanghun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Yongju,,Lee,Yongju,,Lee,Yong-Ju||Lee,yongju is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Luna,L.,Zhang,Luna,L.,Zhang,Lu-Na|L.|Zhang,luna is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Bomi,K.,Lee,Bomi,K.,Lee,Bo-Mi|K.|Lee,bomi is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Yongho,,Jang,Yongho,,Jang,Yong-Ho||Jang,yongho is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Juyong,,Lee,Juyong,,Lee,Ju-Yong||Lee,juyong is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Hosun,,Kang,Hosun,,Kang,Ho-Sun||Kang,hosun is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yongho,,Jang,Yong-Ho,,Jang,Yong-Ho||Jang,yongho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Juyong,,Lee,Ju-Yong,,Lee,Ju-Yong||Lee,juyong is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Hosun,,Kang,Ho-Sun,,Kang,Ho-Sun||Kang,hosun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Juli,,Wang,Juli,,Wang,Ju-Li||Wang,juli is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Tanya,A.,Li,Tanya,A.,Li,Tan-Ya|A.|Li,tanya is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Changwoo,J,Han,Changwoo,J.,Han,Chang-Woo|J.|Han,changwoo is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Yena,,Zhang,Yena,,Zhang,Ye-Na||Zhang,yena is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Junwoo,,Choi,Junwoo,,Choi,Jun-Woo||Choi,junwoo is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Junwoo,,Choi,Jun-Woo,,Choi,Jun-Woo||Choi,junwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Seungah,S,Lee,Seungah,S.,Lee,Seung-Ah|S.|Lee,seungah is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Mihyun,,Han,Mihyun,,Han,Mih-Yun||Han,mihyun is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Mihyun,,Han,Mi-Hyun,,Han,Mih-Yun||Han,mihyun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Hansen,,Li,Hansen,,Li,Han-Sen||Li,hansen is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Hamin,,Lee,Hamin,,Lee,Ha-Min||Lee,hamin is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Rena,Y,Mei,Rena,Y.,Mei,Re-Na|Y.|Mei,rena is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Kayla,Y.,Lim,Kayla,Y.,Lim,Kay-La|Y.|Lim,kayla is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Seunghan,,Han,Seunghan,,Han,Seung-Han||Han,seunghan is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Chanho,,Lee,Chanho,,Lee,Chan-Ho||Lee,chanho is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Seunghan,,Han,Seung-Han,,Han,Seung-Han||Han,seunghan is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Chanho,,Lee,Chan-Ho,,Lee,Chan-Ho||Lee,chanho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Dale,F.,Zhou,Dale,F.,Zhou,Da-Le|F.|Zhou,dale is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Changmin,,Lee,Changmin,,Lee,Chang-Min||Lee,changmin is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Geon,,Shin,Geon,,Shin,Ge-On||Shin,geon is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Sungju,,Lee,Sungju,,Lee,Sung-Ju||Lee,sungju is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Danbi,,Im,Danbi,,Im,Dan-Bi||Im,danbi is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sungju,,Lee,Sung-Ju,,Lee,Sung-Ju||Lee,sungju is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Danbi,,Im,Dan-Bi,,Im,Dan-Bi||Im,danbi is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Lize,,Sun,Lize,,Sun,Li-Ze||Sun,lize is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Jinju,,Ma,Jinju,,Ma,Jin-Ju||Ma,jinju is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Shanna,C,Su,Shanna,C.,Su,Shan-Na|C.|Su,shanna is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Miran,,Jin,Miran,,Jin,Mi-Ran||Jin,miran is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Yeon,S.,Chang,Yeon,S.,Chang,Ye-On|S.|Chang,yeon is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Jinsung,,Choi,Jinsung,,Choi,Jin-Sung||Choi,jinsung is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Jinsung,,Choi,Jin-Sung,,Choi,Jin-Sung||Choi,jinsung is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Faye,X.,Yang,Faye,X.,Yang,Fa-Ye|X.|Yang,faye is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Shane,K,Chu,Shane,K.,Chu,Sha-Ne|K.|Chu,shane is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Dadi,,Chen,Dadi,,Chen,Da-Di||Chen,dadi is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Yuni,Y.,Lee,Yuni,Y.,Lee,Yu-Ni|Y.|Lee,yuni is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Jinha,,Lee,Jinha,,Lee,Jin-Ha||Lee,jinha is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Changhun,,Lee,Changhun,,Lee,Chang-Hun||Lee,changhun is not a Chinese given name (registry people mostly outside Chinese countries)
-split,Yongwoo,,Lee,Yongwoo,,Lee,Yong-Woo||Lee,yongwoo is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Jinha,,Lee,Jin-Ha,,Lee,Jin-Ha||Lee,jinha is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Changhun,,Lee,Chang-Hun,,Lee,Chang-Hun||Lee,changhun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Yongwoo,,Lee,Yong-Woo,,Lee,Yong-Woo||Lee,yongwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
 split,Woochan,,Lee,Woochan,,Lee,Woo-Chan||Lee,woochan is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Erli,,Gao,Erli,,Gao,Er-Li||Gao,erli is not a Chinese given name (registry people mostly outside Chinese countries)
 split,Minah,H,Chang,Minah,H.,Chang,Min-Ah|H.|Chang,minah is not a Chinese given name (registry people mostly outside Chinese countries)
@@ -679,7 +679,7 @@ bound_part,Woon-ming,,Chan,Woon-Ming,,Chan,Woon-Ming||Chan,listed part inside an
 bound_part,Yeon-jong,,Lee,Yeon-Jong,,Lee,Yeon-Jong||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
 bound_part_control,Annie,,Chen,Annie,,Chen,An-Nie||Chen,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
 bound_part_control,Niran,,Chen,Niran,,Chen,Ni-Ran||Chen,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
-bound_part_control,Jihye,,Lee,Jihye,,Lee,Jih-Ye||Lee,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Jihye,,Lee,Ji-Hye,,Lee,Jih-Ye||Lee,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4; Korean given name in its hyphenated form since 0.6.7
 bound_part_control,Lee,,Baer,Lee,,Baer,Ba-Er||Lee,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
 bound_part_control,Lina,,Wang,Lina,,Wang,Li-Na||Wang,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
 bound_part_control,Wang,,Lina,Lina,,Wang,Li-Na||Wang,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
@@ -691,7 +691,7 @@ bound_part_control,Lina-Maria,,Chen,Lina-Maria,,Chen,Lina-Maria||Chen,standalone
 bound_part_control,E,I Feijen-de,Jong,E.,I.,Feijen-de Jong,Feijen-De|E. I.|Jong,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
 bound_part_control,Dana,,Chen,Dana,,Chen,Da-Na||Chen,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
 bound_part_control,Liran,,Chen,Liran,,Chen,Li-Ran||Chen,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
-bound_part_control,Seungho,,Lee,Seungho,,Lee,Seung-Ho||Lee,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Seungho,,Lee,Seung-Ho,,Lee,Seung-Ho||Lee,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4; Korean given name in its hyphenated form since 0.6.7
 bound_part_control,Lan,,Cao-Hoang,Lan,,Cao-Hoang,Cao-Hoang||Lan,non-Chinese hyphenated or glued word stays as in 0.6.4
 bound_part_control,Jing,,de Haan-Du,Jing,,de Haan-Du,De-Haan-Du||Jing,non-Chinese hyphenated or glued word stays as in 0.6.4
 bound_part_control,Tung,,Do-Hoang,Tung,,Do-Hoang,Do-Hoang||Tung,non-Chinese hyphenated or glued word stays as in 0.6.4

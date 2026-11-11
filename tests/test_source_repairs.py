@@ -13,6 +13,7 @@ import pytest
 
 from sinonym.services import source_repairs
 from sinonym.timo.interface import Instance, Predictor, SourceAuthorFields
+from sinonym.utils.korean_given_names import korean_given_form
 
 CASES = list(
     csv.DictReader((Path(__file__).parent / "data" / "source_repair_cases.csv").read_text(encoding="utf-8").splitlines()),
@@ -54,7 +55,8 @@ def test_fix_depends_on_its_rule(predictor: Predictor, case: dict, monkeypatch: 
 
 @pytest.mark.parametrize("case", CONTROLS, ids=[_id(c) for c in CONTROLS])
 def test_control_is_not_repaired(case: dict) -> None:
-    assert expected(case) == was_064(case)
+    korean = korean_given_form(*was_064(case))
+    assert expected(case) in {was_064(case), (korean, "", was_064(case)[2])}
     assert source_repairs.repair_source_fields(case["first"] or None, case["middle"] or None, case["last"], None) is None
 
 
