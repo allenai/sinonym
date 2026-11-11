@@ -172,6 +172,19 @@ def test_capital_dotted_i_beside_another_mark_lowercases_to_i(part, expected):
     assert StringManipulationUtils.capitalize_name_part(part) == expected
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("MARIA", "DAS GRAÇAS CARVALHO", "FERRIANI"), ("Maria das Graças", "", "Carvalho Ferriani")),
+        (("JUAN", "DE LA PAZ GARCIA", "LOPEZ"), ("Juan de la Paz", "", "Garcia Lopez")),
+        (("MARIA", "DO SOCORRO PEREIRA DE", "ALMEIDA"), ("Maria do Socorro", "", "Pereira de Almeida")),
+        (("DIANA", None, "DEL CARMEN TORRES CORRALES"), ("Diana del Carmen", "", "Torres Corrales")),
+    ],
+)
+def test_all_caps_given_name_phrase_is_title_cased(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
 @pytest.mark.parametrize(("part", "expected"), [("HẾU", "Hếu"), ("TIẾN", "Tiến"), ("Chên", "Chen"), ("Ŭnhye", "Unhye")])
 def test_circumflex_with_a_second_mark_is_vietnamese(part, expected):
     from sinonym.utils.string_manipulation import StringManipulationUtils

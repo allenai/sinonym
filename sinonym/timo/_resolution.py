@@ -158,6 +158,26 @@ def _chinese_surname_before_listed_given(first: str, last: str) -> bool:
     )
 
 
+def _recase_upper_words(parse: NameComponents, selected: NameComponents) -> NameComponents:
+    """``parse`` with each all-caps source word in the casing the normalized parse gave it (``MARIA`` -> ``Maria``)."""
+    casing = {}
+    for word in f"{selected.given_name} {selected.middle_name} {selected.surname}".split():
+        casing.setdefault(_fold_name_word(word), word)
+
+    def recase_word(word: str) -> str:
+        if not word.isupper() or len(word) < 2:  # noqa: PLR2004
+            return word
+        folded = _fold_name_word(word)
+        return word.lower() if folded in EDGE_FAMILY_PARTICLES else casing.get(folded, word)
+
+    def recase(text: str) -> str:
+        return " ".join(recase_word(word) for word in text.split())
+
+    return NameComponents(
+        given_name=recase(parse.given_name), middle_name=recase(parse.middle_name), surname=recase(parse.surname), suffix="",
+    )
+
+
 def _middle_head_given_name_phrase(
     first: list[str], middle: list[str], middle_folded: tuple[str, ...], last: list[str],
 ) -> NameComponents | None:
@@ -2274,10 +2294,14 @@ class _Resolver:
             surname = " ".join(_fold_name_word(word) for word in selected.surname.split())
             if f" {' '.join(phrase)} " not in f" {surname} ":
                 return None
-            return NameComponents(given_name=" ".join(given), middle_name=" ".join(rest), surname=" ".join(last), suffix="")
-        return _middle_head_given_name_phrase(first, middle, middle_f, last) or _last_field_given_name_phrase(
+            return _recase_upper_words(
+                NameComponents(given_name=" ".join(given), middle_name=" ".join(rest), surname=" ".join(last), suffix=""),
+                selected,
+            )
+        phrase_parse = _middle_head_given_name_phrase(first, middle, middle_f, last) or _last_field_given_name_phrase(
             first, middle, last, last_f,
         )
+        return None if phrase_parse is None else _recase_upper_words(phrase_parse, selected)
 
     def _edge_particle_candidate(self, source: SourceAuthorFields, selected: NameComponents) -> NameComponents | None:
         """A family particle the source left at the end of the given or middle field (``Martín-de / Blas``)."""
