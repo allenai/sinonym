@@ -160,7 +160,6 @@ _TITLE_KEYS = frozenset(
         "univprof",
     },
 )
-TITLE_KEYS = _TITLE_KEYS
 _TITLE_QUALIFIER_KEYS = frozenset({"hc", "habil", "honoraire", "med", "nat", "rer"})
 _CAPS_TITLE_INITIAL_KEYS = frozenset({"dr", "mr"})
 _LEADING_NAME_ABBREVIATION_KEYS = frozenset({"md"})

@@ -97,3 +97,30 @@ def test_predictor_loads_the_data_tables() -> None:
         cached.cache_info().currsize == 1
         for cached in (source_repairs._glued_prefixes, unsplit_given_words._words, korean_given_names._words)
     )
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        # a title still has its initial split off, so title stripping leaves the initial
+        (("FatherJ.", None, "Brown"), ("J.", "", "Brown")),
+        (("CaptainJ.", None, "Brown"), ("J.", "", "Brown")),
+        (("ReverendJ.", None, "Brown"), ("J.", "", "Brown")),
+        (("HonorableJ.", None, "Brown"), ("J.", "", "Brown")),
+        (("MmeC.", None, "Dupont"), ("Mme", "C.", "Dupont")),
+        (("DiplK.", None, "Schmidt"), ("Dipl", "K.", "Schmidt")),
+        (("DraM.", None, "Garcia"), ("Dra", "M.", "Garcia")),
+        # given names that also open organization strings
+        (("AnonK.", None, "Chaiyasit"), ("Anon", "K.", "Chaiyasit")),
+        (("RoyalT.", None, "Smith"), ("Royal", "T.", "Smith")),
+        (("WhoS.", None, "Lee"), ("Who", "S.", "Lee")),
+        # organization words keep the glued capital
+        (("MedJ", None, "Aust"), ("MedJ", "", "Aust")),
+        (("AmericanJ.", None, "Smith"), ("AmericanJ", "", "Smith")),
+    ],
+)
+def test_glued_initial_after_title_or_shared_word(predictor: Predictor, source, expected) -> None:
+    first, middle, last = source
+    fields = SourceAuthorFields(first_name=first, middle_names=middle, last_name=last)
+    author = predictor.predict_batch([Instance(pp_authors=[fields])])[0].authors[0]
+    assert (author.first_name, author.middle_names, author.last_name) == expected

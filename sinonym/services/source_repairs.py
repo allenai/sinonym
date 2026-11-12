@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import KOREAN_GIVEN_PATTERNS, VALID_CHINESE_ONSETS, VALID_CHINESE_RIMES
 from sinonym.resources import read_bytes
-from sinonym.services.person_name_normalization import TITLE_KEYS
 from sinonym.services.slavic_initials import is_dotted_initial
 from sinonym.services.token_order_prior import token_role
 from sinonym.utils.unsplit_given_words import _KOREAN_ONLY_SYLLABLE
@@ -61,9 +60,8 @@ _NOT_GIVEN_WORDS = frozenset(
         *("prof", "professor", "dr", "doctor", "mr", "mrs", "miss", "ms", "sir", "capt", "rev", "lord", "lady"),
         *("van", "von", "der", "den", "del", "della", "de", "da", "di", "du", "la", "le", "mac", "san", "santa"),
         "saint",
-        *("med", "mme", "mlle", "dra", "dipl", "pharm"),
-        *("american", "european", "royal", "clinical", "federal", "central", "who", "collective", "corresponding", "anon"),
-        *TITLE_KEYS,
+        *("med", "pharm"),
+        *("american", "european", "clinical", "federal", "central", "collective", "corresponding"),
     },
 )
 
