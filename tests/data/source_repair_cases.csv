@@ -51,3 +51,36 @@ doubled_period,control,B.,C.. John,Cho,B.,C.. John,Cho,B.,C.. John,Cho,a full wo
 doubled_period,control,John M..,,Telle,John,M..,Telle,John,M..,Telle,a full word among the initials
 doubled_period,control,A..,,Abed El-Rahim,A..,,Abed El-Rahim,A..,,Abed El-Rahim,multi-word surname
 doubled_period,control,D.G.,,Downey,D.,G.,Downey,D.,G.,Downey,nothing to repair
+credential,bug,Leslie PhD,,Burton,Leslie,,Burton,Leslie,Phd,Burton,degree after the given name in the first field
+credential,bug,Leslie PHD,,Burton,Leslie,,Burton,Leslie,Phd,Burton,capitals
+credential,bug,Leslie Ph.D.,,Burton,Leslie,,Burton,Leslie,Ph.D.,Burton,dotted degree
+credential,bug,Leslie A. PhD,,Burton,Leslie,A.,Burton,Leslie,A.,Phd Burton,degree after a middle initial; 0.6.8 put it in the surname
+credential,bug,Leslie,PhD,Burton,Leslie,,Burton,Leslie,Phd,Burton,degree as the whole middle field
+credential,bug,Leslie,Ph.D.,Burton,Leslie,,Burton,Leslie,Ph.D.,Burton,dotted degree as the middle field
+credential,bug,Leslie,A. PhD,Burton,Leslie,A.,Burton,Leslie,A.,Phd Burton,degree after a middle initial
+credential,bug,Anna,MSc,Visser,Anna,,Visser,Anna,MSc,Visser,degree spelling of an initials-like word
+credential,bug,Anna,M.Sc.,Visser,Anna,,Visser,Anna,M.Sc.,Visser,dotted degree spelling
+credential,bug,Anna,LL.M.,Visser,Anna,,Visser,Anna,Ll.m.,Visser,dotted law degree
+credential,bug,Anna,EdD,Visser,Anna,,Visser,Anna,Edd,Visser,mixed-case degree; Title-case Edd is a name
+credential,bug,"Anna FRCS, FACS",,Visser,Anna,,Visser,Visser,,Anna Frcs,two post-nominals
+credential,bug,Anna,Esq.,Visser,Anna,,Visser,Anna,Esq.,Visser,Esq.
+credential,bug,MRCS,Simon C.,Williams,Simon,C.,Williams,Mrcs,Simon C.,Williams,"a post-nominal the parser does not drop, before a given name in the middle field"
+credential,bug,MRCS,Simon C. PhD,Williams,Simon,C.,Williams,Mrcs,Simon C. Phd,Williams,post-nominals at both ends
+credential,control,MRCS,,Anna Visser,Mrcs,,Anna Visser,Mrcs,,Anna Visser,an empty middle field: blanking the first field would let the parser split the surname field
+credential,control,MRCS,,Garcia Lopez,Mrcs,,Garcia Lopez,Mrcs,,Garcia Lopez,two-word surname stays whole
+credential,control,MRCS,,Kim Min Jun,Mrcs,,Kim Min Jun,Mrcs,,Kim Min Jun,Korean name in the surname field stays as 0.6.8 wrote it
+credential,control,Hock,Beng,Lim,Hock,Beng,Lim,Hock,Beng,Lim,Hokkien given name
+credential,control,Wei,Meng,Zhang,Wei-Meng,,Zhang,Wei-Meng,,Zhang,Chinese given name
+credential,control,Samuel,Mba,Onwuka,Samuel,Mba,Onwuka,Samuel,Mba,Onwuka,"Mba is a given name and family name (ORCID registry), not only MBA"
+credential,control,Md Abdul,,Karim,Md,,Abdul Karim,Md,,Abdul Karim,Md is Mohammad
+credential,control,John,MS,Smith,John,MS,Smith,John,MS,Smith,two capitals are initials
+credential,control,Jules,LLM,Peeters,Jules,Llm,Peeters,Jules,Llm,Peeters,Dutch initials L. L. M.; only LL.M. is the degree
+credential,control,Pieter,MPH,Jansen,Pieter,Mph,Jansen,Pieter,Mph,Jansen,MPH in capitals is also Dutch middle initials
+credential,control,Anna,Msc,Visser,Anna,Msc,Visser,Anna,Msc,Visser,Title-case Msc can be initials (Maria Silva Cunha)
+credential,control,Celia M.S.C.,,Oliveira,Celia,M. S. C.,Oliveira,Celia,M. S. C.,Oliveira,dotted single letters are initials
+credential,control,Anna,Fache,Novak,Anna,Fache,Novak,Anna,Fache,Novak,Fache is a family name; not stripped as FACHE
+credential,control,MRCS,,Dlamini,Mrcs,,Dlamini,Mrcs,,Dlamini,credential before a lone surname stays: four capitals there can be initials
+credential,control,Facc,,Silva,Facc,,Silva,Facc,,Silva,four capitals before a lone surname can be initials (F. A. C. C.)
+credential,control,PhD,,Burton,,,Burton,,,Burton,the parser already drops PhD before a surname
+credential,control,Ma,PhD,Burton,Ma,Phd,Burton,Ma,Phd,Burton,the first field is not a given name for sure (Ma / MA)
+credential,control,Leslie,PhD,MD,,,Leslie,,,Leslie,no surname left

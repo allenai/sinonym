@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import KOREAN_GIVEN_PATTERNS, VALID_CHINESE_ONSETS, VALID_CHINESE_RIMES
 from sinonym.resources import read_bytes
+from sinonym.services.person_name_normalization import _CREDENTIAL_KEYS, _TITLE_KEYS, reviewed_source_cleanup_pattern
 from sinonym.services.slavic_initials import is_dotted_initial
 from sinonym.services.token_order_prior import token_role
 from sinonym.utils.unsplit_given_words import _KOREAN_ONLY_SYLLABLE
@@ -143,9 +144,99 @@ def collapse_doubled_initial_periods(first: str | None, middle: str | None, last
     return fixed_first, fixed_middle
 
 
+# Degrees and post-nominals that are never a given name or a run of initials (ORCID registry and corpus evidence).
+CREDENTIAL_WORDS = frozenset(
+    {
+        *("phd", "esq", "pharmd", "psyd", "dphil", "drph", "mphil", "mpharm", "bpharm", "mbbs", "mbchb", "mbbch"),
+        *("aprn", "crna", "ccrn", "lcsw", "fnp-bc", "dacvim"),
+        *("faao", "faap", "facc", "facp", "facr", "facs", "fapa", "fasn", "fccp", "fesc", "fracp", "fracs"),
+        *("franzcp", "frcog", "frcophth", "frcp", "frcpath", "frcpc", "frcpch", "frcpe", "frcpi", "frcpsych", "frcr"),
+        *("frcs", "frcsc", "frcse", "frcsed", "frcsi"),
+        *("mrcgp", "mrcog", "mrcp", "mrcpch", "mrcpi", "mrcpsych", "mrcs", "mrcsed", "mrcvs"),
+    },
+)
+# Degrees whose capitals or Title case are also people's middle initials (MSC, MPH, LLM in Dutch and Brazilian names) or
+# given names (Edd, Beng, Meng); only their degree spelling counts: mixed case (MSc, EdD) or dots inside (M.Sc., LL.M.).
+SPELLED_CREDENTIAL_WORDS = frozenset({"msc", "bsc", "dsc", "scd", "mph", "llm", "llb", "edd", "meng", "beng"})
+_CREDENTIAL_PUNCTUATION_RE = re.compile(r"[.,;:()]")
+_LETTER_INITIALS_RE = re.compile(r"(?:[^\W\d_]\.)+[^\W\d_]?\.?,?")
+_NAME_TOKEN_RE = re.compile(r"[^\W\d_]+(?:[-'\u2019.][^\W\d_]+)*\.?")
+_NOT_NAME_KEYS = CREDENTIAL_WORDS | SPELLED_CREDENTIAL_WORDS | _CREDENTIAL_KEYS | _TITLE_KEYS | _NOT_GIVEN_WORDS | {"med"}
+
+
+def _degree_spelling(token: str) -> bool:
+    """``MSc``, ``EdD`` (mixed case) or ``M.Sc.``, ``LL.M.`` (a dot inside, next to a run of two or more letters)."""
+    core = re.sub(r"[,;:()]", "", token)
+    letters = core.replace(".", "")
+    if letters and not (letters.isupper() or letters.islower() or letters.istitle()):
+        return True
+    chunks = [chunk for chunk in core.split(".") if chunk]
+    return len(chunks) > 1 and any(len(chunk) > 1 for chunk in chunks)
+
+
+def is_credential_token(token: str) -> bool:
+    """A listed degree or post-nominal, in any case, dots and commas ignored. A run of dotted single letters (``M.S.C.``)
+    is never one: people write their initials that way."""
+    if _LETTER_INITIALS_RE.fullmatch(token):
+        return False
+    key = _CREDENTIAL_PUNCTUATION_RE.sub("", token).casefold()
+    return key in CREDENTIAL_WORDS or (key in SPELLED_CREDENTIAL_WORDS and _degree_spelling(token))
+
+
+def _trailing_credential_count(tokens: list[str]) -> int:
+    count = 0
+    while count < len(tokens) and is_credential_token(tokens[-1 - count]):
+        count += 1
+    return count
+
+
+def _name_word(token: str) -> bool:
+    return bool(_NAME_TOKEN_RE.fullmatch(token)) and _CREDENTIAL_PUNCTUATION_RE.sub("", token).casefold() not in _NOT_NAME_KEYS
+
+
+def _has_surname(last: str | None) -> bool:
+    return any(len(word) > 1 and word.casefold() not in _NOT_NAME_KEYS for word in _SURNAME_WORD_RE.findall(last or ""))
+
+
+def strip_credentials(first: str | None, middle: str | None, last: str | None, suffix: str | None):
+    """``Leslie PhD`` / - / ``Burton`` -> ``("Leslie", None)``: degrees and post-nominals in the given or middle field.
+
+    Credentials (``is_credential_token``) are dropped from the end of the first field after a given name, and from the
+    end of the middle field when the first field is a given name (``Leslie`` / ``A. PhD``, ``Leslie`` / ``PhD``).
+
+    A first field made only of credentials is emptied when the middle field holds the given name
+    (``MRCS`` / ``Simon C.`` / ``Williams``), unless the parser already drops it (``_CREDENTIAL_KEYS`` or a reviewed
+    source pattern). With an empty middle field it stays: the parser would then split the surname field
+    (``Garcia Lopez``), and four capitals before a lone surname are sometimes a person's initials (``Facc`` / - /
+    ``Silva`` can be F. A. C. C. Silva).
+
+    The surname field is never rewritten and must keep a word that is not a credential or title. The suffix field
+    is not read.
+    """
+    if not _has_surname(last):
+        return None
+    first_tokens, middle_tokens = (first or "").split(), (middle or "").split()
+    first_cut = len(first_tokens) - _trailing_credential_count(first_tokens)
+    middle_cut = len(middle_tokens) - _trailing_credential_count(middle_tokens)
+    given, kept_middle = first_tokens[:first_cut], middle_tokens[:middle_cut]
+    if first_tokens and not given:
+        parser_drops = reviewed_source_cleanup_pattern(first, middle, last, suffix) is not None or any(
+            _CREDENTIAL_PUNCTUATION_RE.sub("", token).casefold() in _CREDENTIAL_KEYS for token in first_tokens
+        )
+        if parser_drops or not kept_middle or not all(map(_name_word, kept_middle)):
+            return None
+        return None, " ".join(kept_middle)
+    if first_cut == len(first_tokens) and middle_cut == len(middle_tokens):
+        return None
+    if not given or not all(map(_name_word, given)) or not all(map(_name_word, kept_middle)):
+        return None
+    return " ".join(given), " ".join(kept_middle) or None
+
+
 RULES: tuple[tuple[str, Callable], ...] = (
     ("glued_initial", unglue_given_initial),
     ("doubled_period", collapse_doubled_initial_periods),
+    ("credential", strip_credentials),
 )
 
 

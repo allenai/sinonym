@@ -3,6 +3,7 @@
 Each row is a source name, the expected output and the 0.6.4 output. ``kind`` is ``bug`` (0.6.4 kept the defect),
 ``surname`` (0.6.4 also got the surname wrong) or ``control`` (a real name that looks similar and must stay as 0.6.4
 wrote it). Bug rows must fall back to the 0.6.4 output when their rule is switched off, so each row tests its rule.
+For ``credential`` rows (added in 0.6.9, made-up names) the ``was_064`` columns hold the 0.6.8 output.
 Cases come from ORCID-linked people and from corpus names reviewed blind. Add rows to extend the suite.
 """
 
