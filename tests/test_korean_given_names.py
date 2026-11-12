@@ -56,13 +56,34 @@ UNCHANGED = [
     (("Jinh", "Oh", "Park"), ("Jinh", "Oh", "Park")),
 ]
 
+AMBIGUOUS_CUT = [
+    # a compact single-case word with a second valid cut that Korean registry people do not almost all cut one way:
+    # a wrong cut (Sung-Il for Sun Gil) would make S2AND veto the person's other mentions, so it stays as written
+    (("Sungil", None, "Kim"), ("Sungil", "", "Kim")),
+    (("SUNGIL", None, "KIM"), ("Sungil", "", "Kim")),
+    (("sungil", None, "kim"), ("Sungil", "", "Kim")),
+    (("Hyungil", None, "Park"), ("Hyungil", "", "Park")),
+    (("Daeun", None, "Lee"), ("Daeun", "", "Lee")),
+    (("Kim", None, "Sungil"), ("Sungil", "", "Kim")),
+    (("KIM", None, "SUNGIL"), ("Sungil", "", "Kim")),
+    # the source marks the cut: the listed form, as for any other listed word
+    (("Sung", "Il", "Kim"), ("Sung-Il", "", "Kim")),
+    (("SUNG IL", None, "KIM"), ("Sung-Il", "", "Kim")),
+    (("Sung-il", None, "Kim"), ("Sung-Il", "", "Kim")),
+    (("SungIl", None, "Kim"), ("Sung-Il", "", "Kim")),
+    (("DA EUN", None, "LEE"), ("Da-Eun", "", "Lee")),
+    (("Kim", None, "Jung Il"), ("Jung-Il", "", "Kim")),
+    (("SeongEun", None, "Choi"), ("Seong-Eun", "", "Choi")),
+    (("HyungIl", None, "Kim"), ("Hyung-Il", "", "Kim")),
+    (("SungIL", None, "Kim"), ("Sung-Il", "", "Kim")),
+    (("SUNGIl", None, "Kim"), ("Sung-Il", "", "Kim")),
+    # a source cut at the other place is kept
+    (("Sun Gil", None, "Kim"), ("Sun", "Gil", "Kim")),
+    (("SUNGil", None, "Kim"), ("SUNGil", "", "Kim")),
+]
+
 # Known limits, pinned so a change is noticed.
 KNOWN_LIMITS = [
-    # a word with a second valid cut stays joined unless Korean registry people almost all cut it one way: a wrong cut
-    # (Sung-Il for Sun Gil) would make S2AND veto the person's other mentions
-    (("Sungil", None, "Kim"), ("Sungil", "", "Kim")),
-    (("Sung", "Il", "Kim"), ("Sung", "Il", "Kim")),
-    (("Daeun", None, "Lee"), ("Daeun", "", "Lee")),
     (("Youngil", None, "Jeong"), ("Young-Il", "", "Jeong")),
     # a listed word some non-Korean people also write (most registry people writing it are in South Korea)
     (("Dain", None, "Lee"), ("Da-In", "", "Lee")),
@@ -83,7 +104,7 @@ def resolve(predictor: Predictor, first, middle, last):
     return author.first_name, author.middle_names, author.last_name
 
 
-@pytest.mark.parametrize(("source", "expected"), UNITED + UNCHANGED + KNOWN_LIMITS)
+@pytest.mark.parametrize(("source", "expected"), UNITED + UNCHANGED + AMBIGUOUS_CUT + KNOWN_LIMITS)
 def test_korean_given_name(predictor, source, expected):
     assert resolve(predictor, *source) == expected
 
@@ -93,3 +114,11 @@ def test_korean_given_form_needs_a_korean_surname():
     assert korean_given_form("Jinho", "", "Smith") is None
     assert korean_given_form("Jin", "Ho", "Park") == "Jin-Ho"
     assert korean_given_form("Jin", "Ho Min", "Park") is None
+
+
+def test_korean_given_form_ambiguous_word_needs_a_marked_cut():
+    assert korean_given_form("Sungil", "", "Kim") is None
+    assert korean_given_form("Sung", "Il", "Kim") == "Sung-Il"
+    assert korean_given_form("SungIl", "", "Kim") == "Sung-Il"
+    assert korean_given_form("Daeun", "", "Lee") is None
+    assert korean_given_form("Da-eun", "", "Lee") == "Da-Eun"
