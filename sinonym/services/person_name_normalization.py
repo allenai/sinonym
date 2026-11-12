@@ -35,6 +35,7 @@ from sinonym.name_punctuation import (
 )
 from sinonym.services.non_person import reviewed_non_person_text_pattern
 from sinonym.services.token_order_prior import token_role
+from sinonym.utils.allcaps_given_words import is_capitalized_initials
 
 
 class PersonNameOutcome(str, Enum):
@@ -1166,7 +1167,9 @@ class PersonNameNormalizationService:
         name_tokens = [*given, *middle, *surname]
         if len(name_tokens) == 1:
             given, middle, surname = [], [], [replace(name_tokens[0], source_role="surname")]
-        normalized_given = self._canonical_tokens(given, "given")
+        # a name written in capitals throughout says nothing about whether its given name is initials
+        capitals_are_initials = any(character.islower() for token in surname for character in token.text)
+        normalized_given = self._canonical_tokens(given, "given", capitals_are_initials=capitals_are_initials)
         normalized_middle = self._canonical_tokens(middle, "middle")
         normalized_surname = self._canonical_tokens(surname, "surname")
         normalized_suffix = tuple([suffix] if suffix else [])
@@ -2211,10 +2214,16 @@ class PersonNameNormalizationService:
     def _allowed_name_character(character: str) -> bool:
         return character.isalpha() or unicodedata.category(character).startswith("M") or character in "-'."
 
-    def _canonical_tokens(self, tokens: list[_Token], role: str) -> tuple[str, ...]:
-        return tuple(self._canonicalize_token(token.text, role) for token in tokens)
+    def _canonical_tokens(self, tokens: list[_Token], role: str, *, capitals_are_initials: bool = False) -> tuple[str, ...]:
+        return tuple(self._canonicalize_token(token.text, role, capitals_are_initials=capitals_are_initials) for token in tokens)
 
-    def _canonicalize_token(self, token: str, role: str) -> str:  # noqa: C901, PLR0911, PLR0912
+    def _canonicalize_token(  # noqa: C901, PLR0911, PLR0912
+        self,
+        token: str,
+        role: str,
+        *,
+        capitals_are_initials: bool = False,
+    ) -> str:
         cleaned = self._clean_name_token(token)
         if role in {"middle", "surname"} and cleaned in _LOWERCASE_RELATIONAL_TOKENS:
             return cleaned
@@ -2233,6 +2242,8 @@ class PersonNameNormalizationService:
             # A two-letter all-caps given token is initials (e.g. "MS", "MA", "MD") — keep it
             # all-caps rather than title-casing to "Ms"/"Ma", which reads as an honorific. A
             # genuine Title-case honorific never reaches here (it's dropped upstream).
+            return cleaned
+        if capitals_are_initials and is_capitalized_initials(cleaned):
             return cleaned
 
         parts = re.split(r"([-'])", cleaned)

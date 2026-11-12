@@ -88,15 +88,13 @@ def test_glued_initial_guards_hold_for_listed_words(args, expected, monkeypatch:
 
 def test_predictor_loads_the_data_tables() -> None:
     from sinonym.timo.interface import PredictorConfig
-    from sinonym.utils import korean_given_names, unsplit_given_words
+    from sinonym.utils import allcaps_given_words, korean_given_names, unsplit_given_words
 
-    for cached in (source_repairs._glued_prefixes, unsplit_given_words._words, korean_given_names._words):
+    tables = (source_repairs._glued_prefixes, unsplit_given_words._words, korean_given_names._words, allcaps_given_words._words)
+    for cached in tables:
         cached.cache_clear()
     Predictor(PredictorConfig(parallel="never"), ".")
-    assert all(
-        cached.cache_info().currsize == 1
-        for cached in (source_repairs._glued_prefixes, unsplit_given_words._words, korean_given_names._words)
-    )
+    assert all(cached.cache_info().currsize == 1 for cached in tables)
 
 
 @pytest.mark.parametrize(

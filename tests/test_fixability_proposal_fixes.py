@@ -119,7 +119,7 @@ def test_reviewed_source_cleanup_patterns_are_terminal(
         ),
         (
             SourceAuthorFields(first_name="DNB", middle_names="DNB Tejas Patel", last_name="MBBS"),
-            ("Dnb", "Dnb Tejas", "Patel"),
+            ("DNB", "Dnb Tejas", "Patel"),
         ),
         (
             SourceAuthorFields(
