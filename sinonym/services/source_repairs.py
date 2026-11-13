@@ -435,7 +435,11 @@ _MOJIBAKE_RE = re.compile(
 
 
 def _unmojibake(value: str) -> str:
-    """UTF-8 read as Windows-1252 (``ZoltÃ¡n`` -> ``Zoltán``), undone at most twice; only when it decodes to letters."""
+    """UTF-8 read as Windows-1252 (``ZoltÃ¡n`` -> ``Zoltán``), undone at most twice; only when it decodes to letters.
+
+    Cyrillic look-alikes the decode puts into a Latin word get their Latin twin (``KÐ°rmakulova`` -> ``Karmakulova``); a
+    word still mixing the scripts (``AlaÑµa``) or ending in the ordinal º (``Âº``) leaves the field as written.
+    """
     decoded = value
     for _ in range(2):
         if not _MOJIBAKE_RE.search(decoded):
@@ -444,9 +448,12 @@ def _unmojibake(value: str) -> str:
             decoded = decoded.encode("cp1252").decode("utf-8")
         except (UnicodeEncodeError, UnicodeDecodeError):
             return value
-    if _MOJIBAKE_RE.search(decoded) or any(not (ch.isalpha() or ch.isascii()) for ch in decoded):
+    if decoded == value or _MOJIBAKE_RE.search(decoded) or any(not (ch.isalpha() or ch.isascii()) for ch in decoded):
         return value
-    return decoded
+    words = [_latin_word(word) for word in decoded.split(" ")]
+    if any(word.endswith("º") or (_CYRILLIC_LETTER_RE.search(word) and _LATIN_LETTER_RE.search(word)) for word in words):
+        return value
+    return " ".join(words)
 
 
 def fix_mojibake(first: str | None, middle: str | None, last: str | None):

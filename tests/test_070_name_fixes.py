@@ -296,3 +296,13 @@ def test_undotted_title_before_a_lowercase_fragment_is_a_broken_word(predictor, 
 
 def test_palochka_and_komi_de_are_not_read_as_latin(predictor):
     assert resolve(predictor, "Taşpӏnar", None, "Ali")[0] == "Taşpӏnar"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("AlaÑµa", "AlaÑµa"), ("Âº", "Âº"), ("KÐ°rmakulova", "Karmakulova"), ("MÂª", "Mª")],
+)
+def test_mojibake_decoding_stays_latin(value, expected):
+    from sinonym.services.source_repairs import _unmojibake
+
+    assert _unmojibake(value) == expected
