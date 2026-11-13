@@ -2938,7 +2938,7 @@ def test_invisible_markup_does_not_make_a_person_a_non_person(
     """Bidi and zero-width marks are markup, not name content.
 
     They previously reached `_allowed_name_character`, which rejected them, so the whole name
-    resolved as a non-person: 24,933 rows of `paper_authors_full` carry one, and all 11 in the
+    resolved as a non-person: 24,933 rows of the paper-authors table carry one, and all 11 in the
     ORCID-bearing sample with a leading bidi mark were affected.
     """
     result = normalizer.normalize_components(first_name=first, last_name=last)
