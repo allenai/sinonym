@@ -60,7 +60,7 @@ _NOT_GIVEN_WORDS = frozenset(
         *("prof", "professor", "dr", "doctor", "mr", "mrs", "miss", "ms", "sir", "capt", "rev", "lord", "lady"),
         *("van", "von", "der", "den", "del", "della", "de", "da", "di", "du", "la", "le", "mac", "san", "santa"),
         "saint",
-        *("med", "pharm"),
+        "pharm",
         *("american", "european", "clinical", "federal", "central", "collective", "corresponding"),
     },
 )

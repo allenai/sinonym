@@ -74,14 +74,14 @@ def test_repair_applies_on_the_pp_vys_path(predictor: Predictor) -> None:
         (("CityU", None, "Library", None), None),
         (("UniKL", None, "Library", None), None),
         (("PharmD", None, "Estes", None), None),
-        (("MedJ.", None, "Estes", None), None),
+        (("ClinicalJ.", None, "Estes", None), None),
         (("JeongA", None, "Lee", None), None),
         (("DamianG.", None, "Downey", "Jr."), None),
         (("ArunaS.", None, "Rao", None), ("Aruna", "S.")),
     ],
 )
 def test_glued_initial_guards_hold_for_listed_words(args, expected, monkeypatch: pytest.MonkeyPatch) -> None:
-    table = {word: ("", "") for word in ("City", "Uni", "Pharm", "Med", "Jeong", "Aruna", "Damian")}
+    table = {word: ("", "") for word in ("City", "Uni", "Pharm", "Clinical", "Jeong", "Aruna", "Damian")}
     monkeypatch.setattr(source_repairs, "_glued_prefixes", lambda: table)
     assert source_repairs.unglue_given_initial(*args) == expected
 
@@ -114,8 +114,8 @@ def test_predictor_loads_the_data_tables() -> None:
         (("AnonK.", None, "Chaiyasit"), ("Anon", "K.", "Chaiyasit")),
         (("RoyalT.", None, "Smith"), ("Royal", "T.", "Smith")),
         (("WhoS.", None, "Lee"), ("Who", "S.", "Lee")),
+        (("MedH.", None, "Bayon"), ("Med", "H.", "Bayon")),
         # organization words keep the glued capital
-        (("MedJ", None, "Aust"), ("MedJ", "", "Aust")),
         (("AmericanJ.", None, "Smith"), ("AmericanJ", "", "Smith")),
     ],
 )
