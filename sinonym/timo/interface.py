@@ -19,6 +19,7 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_vys_abstain_batches as _route_pp_vys_abstain_batches,
 )
 from sinonym.services.batch_analysis import RelatedBatchParseResult as _RelatedBatchParseResult
+from sinonym.services.source_repairs import clean_source_fields as _clean_source_fields
 from sinonym.services.source_repairs import load_glued_initial_prefixes as _load_glued_initial_prefixes
 from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
 from sinonym.services.source_repairs import strip_last_field_credentials as _strip_last_field_credentials
@@ -67,6 +68,9 @@ def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, So
     surname field rewritten by ``strip_last_field_credentials``; the source before the credential repair only serves as
     the reference for ``_kept_given_words_out_of_surname``. VYS pool names are plain strings and are not repaired.
     """
+    cleaned = _clean_source_fields(author.first_name, author.middle_names, author.last_name)
+    if cleaned is not None:
+        author = author.copy(update={"first_name": cleaned[0], "middle_names": cleaned[1], "last_name": cleaned[2] or ""})
     stripped = _strip_last_field_credentials(author.first_name, author.middle_names, author.last_name)
     if stripped is not None and _reviewed_exact_source_assignment(author) is None:
         author = author.copy(update={"first_name": stripped[0], "middle_names": stripped[1], "last_name": stripped[2]})

@@ -369,6 +369,61 @@ RULES: tuple[tuple[str, Callable], ...] = (
 )
 
 
+# Cyrillic letters drawn like a Latin letter, typed into a Latin word (``Babуch``, ``Аleksii``).
+_LATIN_LOOKALIKES = str.maketrans(
+    "аеорсухіјѕԁӏАВЕКМНОРСТУХІЈЅ",
+    "aeopcyxijsdlABEKMHOPCTYXIJS",
+)
+_CYRILLIC_LETTER_RE = re.compile(r"[\u0400-\u052F]")
+_LATIN_LETTER_RE = re.compile(r"[A-Za-z\u00C0-\u024F]")
+
+
+# after t a Cyrillic с is as often the s of ts (Ц: ``Tсelykh``) as a c
+_TS_RE = re.compile(r"[Tt][сС]")
+_CYRILLIC_RUN_RE = re.compile(r"[\u0400-\u052F]{2}")
+
+
+def _latin_word(word: str) -> str:
+    letters = [ch for ch in word if ch.isalpha()]
+    cyrillic = _CYRILLIC_LETTER_RE.findall(word)
+    if len(letters) < 3 or not cyrillic or not _LATIN_LETTER_RE.search(word) or 2 * len(cyrillic) >= len(letters):  # noqa: PLR2004
+        return word
+    if (word.isupper() and _CYRILLIC_RUN_RE.search(word)) or _TS_RE.search(word):
+        return word
+    fixed = word.translate(_LATIN_LOOKALIKES)
+    return word if _CYRILLIC_LETTER_RE.search(fixed) else fixed
+
+
+def _latin_field(value: str | None) -> str | None:
+    return None if value is None else re.sub(r"[^\s.\-]+", lambda m: _latin_word(m.group()), value)
+
+
+def latin_lookalikes(first: str | None, middle: str | None, last: str | None):
+    """``V.L.`` / - / ``Babуch`` (Cyrillic у) -> ``("V.L.", None, "Babych")``: Cyrillic look-alikes inside a Latin word.
+
+    A word of three or more letters changes only when fewer than half its letters are Cyrillic and each has a Latin
+    twin; on ORCID people the twin matches the registered family name far more often than the Cyrillic reading
+    (``Сhernavina``, ``Babуch``). Cyrillic names, mostly Cyrillic words (``Росa``), words with other Cyrillic letters,
+    capitals with a Cyrillic run (``TKACHЕНКО``), a Cyrillic с after t (as often ts as tc) and the middle field
+    (patronymics and their abbreviations) stay as written.
+    """
+    if not _CYRILLIC_LETTER_RE.search(f"{first or ''}{last or ''}"):
+        return None
+    fixed = (_latin_field(first), middle, _latin_field(last))
+    return None if fixed == (first, middle, last) else fixed
+
+
+FIELD_CLEANUPS: tuple[tuple[str, Callable], ...] = (("latin_lookalike", latin_lookalikes),)
+
+
+def clean_source_fields(first: str | None, middle: str | None, last: str | None):
+    """``(first, middle, last)`` after every field cleanup that applies, or ``None`` when none does."""
+    fields = (first, middle, last)
+    for _, cleanup in FIELD_CLEANUPS:
+        fields = cleanup(*fields) or fields
+    return None if fields == (first, middle, last) else fields
+
+
 def repair_source_fields(first: str | None, middle: str | None, last: str | None, suffix: str | None):
     """``(rule name, first, middle)`` for the first rule that applies, or ``None``."""
     for name, rule in RULES:

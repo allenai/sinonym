@@ -78,3 +78,22 @@ def test_titles_in_the_given_fields_are_dropped(predictor, source, expected):
 )
 def test_honoris_causa_goes_with_its_title(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("V.L.", None, "Babуch"), ("V.", "L.", "Babych")),
+        (("E.V.", None, "Uvarovа"), ("E.", "V.", "Uvarova")),
+        (("Аleksii", None, "Tsapko"), ("Aleksii", "", "Tsapko")),
+        (("I.", "O.", "Tсelykh"), ("I.", "O.", "Tсelykh")),
+        (("Р.", None, "Росa"), ("Р.", "", "Росa")),
+        (("Bерх", None, "Ivanov"), ("Bерх", "", "Ivanov")),
+        # controls: Cyrillic names, a Cyrillic ending in capitals, the middle field
+        (("Иван", None, "Петров"), ("Иван", "", "Петров")),
+        (("I.", "M.", "TKACHЕНКО"), ("I.", "M.", "Tkachенко")),
+        (("Vera", "Аlexandrovna", "Belova"), ("Vera", "Аlexandrovna", "Belova")),
+    ],
+)
+def test_cyrillic_lookalikes_in_a_latin_word(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
