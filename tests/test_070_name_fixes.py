@@ -279,3 +279,16 @@ def test_orcid_inside_a_word_or_a_logo_author_is_not_a_name_to_clean(source):
     from sinonym.services.source_repairs import strip_junk
 
     assert strip_junk(*source) is None
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Vitor", "Engr cia", "Valenti"), ("Vitor", "Engr Cia", "Valenti")),
+        (("Hans", "Dr med", "Weber"), ("Hans", "", "Weber")),
+        (("Publisher", "Dr sachin", "patil"), ("Publisher", "Sachin", "Patil")),
+        (("Assoc", "prof Tony", "Walker"), ("Tony", "", "Walker")),
+    ],
+)
+def test_undotted_title_before_a_lowercase_fragment_is_a_broken_word(predictor, source, expected):
+    assert resolve(predictor, *source) == expected

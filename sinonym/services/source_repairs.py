@@ -13,6 +13,7 @@ import io
 import re
 import unicodedata
 from functools import lru_cache
+from itertools import pairwise
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import KOREAN_GIVEN_PATTERNS, VALID_CHINESE_ONSETS, VALID_CHINESE_RIMES
@@ -294,6 +295,18 @@ def strip_titles(first: str | None, middle: str | None, last: str | None, suffix
         return None
     first_tokens, middle_tokens = (first or "").split(), (middle or "").split()
     if not middle_tokens:
+        return None
+    tokens = first_tokens + middle_tokens
+    if any(
+        _title_token(token)
+        and not token.endswith(".")
+        and following[:1].islower()
+        and following.rstrip(".,").casefold() not in _TITLE_QUALIFIERS
+        and not _title_token(following)
+        and all(word[:1].isupper() for word in [*tokens, *(last or "").split()] if word not in {token, following})
+        for token, following in pairwise(tokens)
+    ):
+        # an undotted title word before a lowercase fragment is a broken word (``Engr cia``: Engrácia)
         return None
 
     def strip(tokens: list[str]) -> list[str]:
