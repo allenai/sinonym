@@ -1226,6 +1226,7 @@ def routed_components_leak_cjk(parsed) -> bool:
     return any(_is_cjk_letter(character) for character in joined)
 
 
+@lru_cache(maxsize=65536)
 def _is_cjk_letter(character: str) -> bool:
     """Return whether one Unicode letter belongs to a routed CJK script."""
     if not unicodedata.category(character).startswith("L"):
@@ -1234,6 +1235,7 @@ def _is_cjk_letter(character: str) -> bool:
     return any(marker in name for marker in _CJK_LETTER_NAME_MARKERS)
 
 
+@lru_cache(maxsize=65536)
 def _is_latin_letter(character: str) -> bool:
     """Return whether one Unicode letter belongs to the Latin script."""
     return unicodedata.category(character).startswith("L") and "LATIN" in unicodedata.name(character, "")
