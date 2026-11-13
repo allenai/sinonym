@@ -232,3 +232,16 @@ def test_hyphenated_generation_word_goes_to_the_suffix(predictor, source, expect
 )
 def test_surname_before_initials_in_the_surname_field(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("M.Pd", "Simson", "Tarigan"), "reviewed_source_pattern_assignment"),
+        ((None, None, "Anthony C. Laborte, Marissa C. Hitalia*"), "reviewed_non_person_pattern"),
+    ],
+)
+def test_reviewed_source_shapes_keep_their_rule(predictor, source, expected):
+    fields = SourceAuthorFields(first_name=source[0], middle_names=source[1], last_name=source[2])
+    author = predictor.predict_batch([Instance(pp_authors=[fields])])[0].authors[0]
+    assert author.resolution_reason.value == expected

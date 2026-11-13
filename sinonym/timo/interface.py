@@ -19,6 +19,9 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_vys_abstain_batches as _route_pp_vys_abstain_batches,
 )
 from sinonym.services.batch_analysis import RelatedBatchParseResult as _RelatedBatchParseResult
+from sinonym.services.non_person import reviewed_non_person_source_pattern as _reviewed_non_person_source_pattern
+from sinonym.services.person_name_normalization import PersonNameNormalizationService as _PersonNameNormalizationService
+from sinonym.services.person_name_normalization import reviewed_source_cleanup_pattern as _reviewed_source_cleanup_pattern
 from sinonym.services.source_repairs import clean_source_fields as _clean_source_fields
 from sinonym.services.source_repairs import load_glued_initial_prefixes as _load_glued_initial_prefixes
 from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
@@ -29,6 +32,7 @@ from sinonym.timo._resolution import (
     SourceAuthorFields,
     _Model,
     _Resolver,
+    _reviewed_leading_title_or_credential_assignment,
 )
 from sinonym.timo._resolution import reviewed_exact_source_assignment as _reviewed_exact_source_assignment
 from sinonym.utils.allcaps_given_words import load_allcaps_given_words as _load_allcaps_given_words
@@ -61,6 +65,23 @@ def _korean_given(author: ResolvedAuthorFields) -> ResolvedAuthorFields:
     return author.copy(update={"first_name": given, "middle_names": ""})
 
 
+_SOURCE_NORMALIZER = _PersonNameNormalizationService()
+
+
+_NEW_REPAIR_RULES = frozenset({"repeated_particle", "title", "contributor_role"})
+
+
+def _reviewed_source(author: SourceAuthorFields) -> bool:
+    """A source one of the reviewed rules reads exactly; the field cleanups and given-field rules leave it to that rule."""
+    fields = (author.first_name, author.middle_names, author.last_name)
+    return (
+        _reviewed_exact_source_assignment(author) is not None
+        or _reviewed_non_person_source_pattern(*fields, author.suffix) is not None
+        or _reviewed_source_cleanup_pattern(*fields, author.suffix) is not None
+        or _reviewed_leading_title_or_credential_assignment(author, _SOURCE_NORMALIZER) is not None
+    )
+
+
 def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, SourceAuthorFields | None]:
     """The source with a recoverable field defect repaired (services/source_repairs.py), else unchanged, and the source
     before the given-field credential repair when that repair applied (``None`` otherwise).
@@ -69,8 +90,9 @@ def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, So
     surname field rewritten by ``strip_last_field_credentials``; the source before the credential repair only serves as
     the reference for ``_kept_given_words_out_of_surname``. VYS pool names are plain strings and are not repaired.
     """
+    source = author
     cleaned = _clean_source_fields(author.first_name, author.middle_names, author.last_name)
-    if cleaned is not None:
+    if cleaned is not None and not _reviewed_source(source):
         author = author.copy(update={"first_name": cleaned[0], "middle_names": cleaned[1], "last_name": cleaned[2] or ""})
     stripped = _strip_last_field_credentials(author.first_name, author.middle_names, author.last_name)
     if stripped is not None and _reviewed_exact_source_assignment(author) is None:
@@ -79,6 +101,8 @@ def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, So
     if repaired is None:
         return author, None
     rule, first, middle = repaired
+    if rule in _NEW_REPAIR_RULES and _reviewed_source(source):
+        return author, None
     return author.copy(update={"first_name": first, "middle_names": middle or None}), author if rule == "credential" else None
 
 

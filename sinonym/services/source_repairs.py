@@ -19,9 +19,9 @@ from sinonym.chinese_names_data import KOREAN_GIVEN_PATTERNS, VALID_CHINESE_ONSE
 from sinonym.resources import read_bytes
 from sinonym.services.person_name_normalization import (
     _CREDENTIAL_KEYS,
+    _TITLE_KEYS,
     EAST_ASIAN_GIVEN_SYLLABLES,
     EAST_ASIAN_SURNAMES,
-    _TITLE_KEYS,
     reviewed_closed_comma_credential_tail_head,
     reviewed_source_cleanup_pattern,
 )
@@ -249,7 +249,7 @@ _REPEATED_PARTICLES = frozenset(
 )
 
 
-def drop_repeated_particle(first: str | None, middle: str | None, last: str | None, suffix: str | None):
+def drop_repeated_particle(first: str | None, middle: str | None, last: str | None, suffix: str | None):  # noqa: ARG001
     """``Ida`` / ``Di`` / ``Di Mola`` -> ``("Ida", None)``: a particle closing the middle field that also opens the surname.
 
     The surname field must go on after the particle, so a one-word surname field (``Kim`` / ``Van`` / ``Van``) is left
@@ -283,14 +283,14 @@ def _title_token(token: str, *, qualifier: bool = False) -> bool:
     return token.endswith(".") or not core.isupper() or len(core) == 1
 
 
-def strip_titles(first: str | None, middle: str | None, last: str | None, suffix: str | None):  # noqa: ARG001
+def strip_titles(first: str | None, middle: str | None, last: str | None, suffix: str | None):  # noqa: C901, PLR0911
     """``Carsten`` / ``Dr.`` / ``Tille`` -> ``("Carsten", None)``: titles left in the middle field, or a first field of
     only titles before the given name in the middle field (``Doç.`` / ``Dr. Taner`` / ``Artan``).
 
     Degree words that follow a title go with it (``Dr. rer. nat.``, ``Dipl.-Ing. Dr.``). Every remaining given and middle
     word must be a name word or an initial, and the surname field must keep a word that is not a credential or title.
     """
-    if not _has_surname(last):
+    if not _has_surname(last) or reviewed_source_cleanup_pattern(first, middle, last, suffix) is not None:
         return None
     first_tokens, middle_tokens = (first or "").split(), (middle or "").split()
     if not middle_tokens:
@@ -416,7 +416,9 @@ def latin_lookalikes(first: str | None, middle: str | None, last: str | None):
     return None if fixed == (first, middle, last) else fixed
 
 
-_MOJIBAKE_RE = re.compile(r"[ÃÂÄÅÐÑ][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013-\u203A\u20AC\u2122]")
+_MOJIBAKE_RE = re.compile(
+    r"[ÃÂÄÅÐÑ][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013-\u203A\u20AC\u2122]",
+)
 
 
 def _unmojibake(value: str) -> str:
@@ -542,7 +544,7 @@ def _degree_run_piece(token: str) -> bool:
     return bool(_INDONESIAN_DEGREE_RE.fullmatch(token) or _DEGREE_RUN_PIECE_RE.fullmatch(token))
 
 
-def strip_indonesian_degrees(first: str | None, middle: str | None, last: str | None):
+def strip_indonesian_degrees(first: str | None, middle: str | None, last: str | None):  # noqa: C901, PLR0911
     """``S.Kom.`` / ``M.Eng.`` / ``Waskitho Wibisono`` -> ``("Waskitho", None, "Wibisono")``: Indonesian degrees in the
     given fields.
 
@@ -585,7 +587,10 @@ def strip_indonesian_degrees(first: str | None, middle: str | None, last: str | 
 _NOT_NAME_BYLINE_WORDS = frozenset({"pembimbing", "psikolog", "nidn", "nip", "dosen"})
 
 
-_HYPHENATED_GENERATION_RE = re.compile(r"(?<=[^\W\d_]{3})[-\u2010\u2011](Neto|Filho|Júnior|Junior|Sobrinho|Netto)$", re.IGNORECASE)
+_HYPHENATED_GENERATION_RE = re.compile(
+    r"(?<=[^\W\d_]{3})[-\u2010\u2011](Neto|Filho|Júnior|Junior|Sobrinho|Netto)$",
+    re.IGNORECASE,
+)
 
 
 def space_hyphenated_generation(first: str | None, middle: str | None, last: str | None):

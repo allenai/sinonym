@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """Build ``sinonym/data/given_name_words.csv.gz``: words that ORCID registry people use almost only as a given name.
 
 Input: the ORCID public data file as Parquet with ``orcid``, ``given_names`` and ``family_name``. Each word (lower-case,
@@ -17,6 +18,7 @@ import argparse
 import csv
 import gzip
 import io
+from pathlib import Path
 
 import duckdb
 
@@ -53,8 +55,7 @@ def main() -> None:
     w = csv.writer(buf, lineterminator="\n")
     w.writerow(["word", "given_people", "family_people", "family_head_people"])
     w.writerows(rows)
-    with open(a.output, "wb") as fh:
-        fh.write(gzip.compress(buf.getvalue().encode("utf-8"), mtime=0))
+    Path(a.output).write_bytes(gzip.compress(buf.getvalue().encode("utf-8"), mtime=0))
     print(len(rows), "words")
 
 

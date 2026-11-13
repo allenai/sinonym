@@ -30,7 +30,7 @@ EDGE_CASES = [
     (("Man\u2212jiSUN", None, "Lee"), ("Man-jiSUN", "", "Lee")),
     # a bound word whose parts are all never-split words is not Chinese: the fields keep their order
     (("Lin", None, "Hansen-Lange"), ("Lin", "", "Hansen-Lange")),
-    (("Wang", None, "Pinto-Neto"), ("Wang", "", "Pinto-Neto")),
+    (("Wang", None, "Pinto-Neto"), ("Wang", "", "Pinto")),
     (("Chen", None, "Jensen-Hansen"), ("Chen", "", "Jensen-Hansen")),
     (("Mayer-rene", None, "Li"), ("Mayer-rene", "", "Li")),
     # an apostrophe inside a word is not a boundary; a Wade-Giles aspiration still reads as one syllable
