@@ -32,6 +32,7 @@ from sinonym.timo._resolution import (
 )
 from sinonym.timo._resolution import reviewed_exact_source_assignment as _reviewed_exact_source_assignment
 from sinonym.utils.allcaps_given_words import load_allcaps_given_words as _load_allcaps_given_words
+from sinonym.utils.given_name_words import load_given_name_words as _load_given_name_words
 from sinonym.utils.korean_given_names import korean_given_form as _korean_given_form
 from sinonym.utils.korean_given_names import load_korean_given_words as _load_korean_given_words
 from sinonym.utils.unsplit_given_words import load_unsplit_given_words as _load_unsplit_given_words
@@ -151,6 +152,7 @@ class Predictor:
         _load_unsplit_given_words()
         _load_korean_given_words()
         _load_allcaps_given_words()
+        _load_given_name_words()
 
     def _resolve_pp_vys_batch(
         self,

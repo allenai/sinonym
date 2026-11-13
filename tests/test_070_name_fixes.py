@@ -175,3 +175,24 @@ def test_romanized_chinese_name_keeps_its_han_form(source):
 )
 def test_indonesian_degrees_in_the_given_fields(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Q.", "M. Jonathan", "Wu"), ("Q.", "M. Jonathan", "Wu")),
+        (("Y", "C Gary", "Lee"), ("Y.", "C. Gary", "Lee")),
+        (("J.", "A. Gareth", "Williams"), ("J.", "A. Gareth", "Williams")),
+        (("M", "G Myriam", "Hunink"), ("M.", "G. Myriam", "Hunink")),
+        (("C.", "Janneke", "van der Woude"), ("C.", "Janneke", "van der Woude")),
+        # controls: a particle phrase, a word that is also a surname, a source surname field of two words
+        (("Luis", "Miguel de Diego", "Pareja"), ("Luis", "Miguel", "de Diego Pareja")),
+        (("C.", "L. Philip", "Chen"), ("C.", "L.", "Philip Chen")),
+        (("Maria", "Teresa", "Garcia Lopez"), ("Maria", "Teresa", "Garcia Lopez")),
+        # given-name words that also open double surnames (Blanca Mena, Andrés Santos)
+        (("M.", "J. Blanca", "Mena"), ("M.", "J.", "Blanca Mena")),
+        (("Francisco", "J. Andrés", "Santos"), ("Francisco", "J.", "Andrés Santos")),
+    ],
+)
+def test_given_name_word_stays_out_of_the_surname(predictor, source, expected):
+    assert resolve(predictor, *source) == expected

@@ -64,6 +64,7 @@ from sinonym.services.person_name_normalization import (
 from sinonym.services.slavic_initials import is_digraph_initials_surname, is_dotted_initial
 from sinonym.services.surname_first_words import surname_first_initials
 from sinonym.services.token_order_prior import surname_first_pair, token_role
+from sinonym.utils.given_name_words import is_given_name_word
 from sinonym.utils.unsplit_given_words import is_listed_unsplit_given_word, standalone_words
 
 if TYPE_CHECKING:
@@ -1851,6 +1852,36 @@ def _edge_particle_extension(selected: NameComponents, source_edge: str) -> Name
     return replace(selected, middle_name=" ".join(kept), surname=" ".join([*particles, surname]))
 
 
+def given_words_kept_out_of_surname(source: SourceAuthorFields, selected: NameComponents) -> NameComponents | None:
+    """``Q.`` / ``M. Jonathan`` / ``Wu``: given-name words the source wrote before its surname field stay in the middle.
+
+    After a run of initials (``J. / Y. Richard / Liew``) or before a particle surname (``C. / Janneke / van der Woude``)
+    the parse can open the surname with the source's last given word. When the parsed surname is the source's surname
+    field with only such words before it, and every one of them is a word ORCID registry people use almost only as a
+    given name (utils/given_name_words.py), they go back to the middle. A particle among them (``de Diego``) keeps the
+    parse: those are surname phrases as often as given ones.
+    """
+    last_words = (source.last_name or "").split()
+    surname_words = selected.surname.split()
+    extra = len(surname_words) - len(last_words)
+    if not last_words or extra <= 0:
+        return None
+    if [fold_word(word) for word in surname_words[extra:]] != [fold_word(word) for word in last_words]:
+        return None
+    moved = surname_words[:extra]
+    source_given = {fold_word(word) for word in f"{source.first_name or ''} {source.middle_names or ''}".split()}
+    if not all(
+        fold_word(word) in source_given and fold_word(word) not in EDGE_FAMILY_PARTICLES and is_given_name_word(word)
+        for word in moved
+    ):
+        return None
+    return replace(
+        selected,
+        middle_name=" ".join([*selected.middle_name.split(), *moved]),
+        surname=" ".join(surname_words[extra:]),
+    )
+
+
 def _ambiguous_credential_surname_assignment(source: SourceAuthorFields) -> NameComponents | None:
     """An all-caps ``DO`` alone in the surname field of a structured source is a surname (``Hue Thi DO``).
 
@@ -2793,6 +2824,7 @@ class _Resolver:
                 source,
                 ResolutionReason.REVIEWED_EXACT_SOURCE_REORDER_VETO_PRESERVE_INPUT,
             )
+        selected = given_words_kept_out_of_surname(source, selected) or selected
         selected = _preserve_reviewed_atomic_korean_source_given(source, selected)
         joined_uppercase_assignment = _reviewed_joined_uppercase_surname_assignment(
             source,
