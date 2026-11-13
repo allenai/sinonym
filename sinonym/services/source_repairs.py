@@ -139,10 +139,10 @@ def collapse_doubled_initial_periods(first: str | None, middle: str | None, last
     ``PARLAR`` included); otherwise the unrecognized ``X..`` token is left to the parser as before. A name with three or
     more periods in a row (an ellipsis) is left as written.
     """
-    if not _empty(suffix) or not _LETTER_SURNAME_RE.fullmatch((last or "").strip()):
-        return None
     personal = f"{first or ''} {middle or ''}"
     if "..." in personal or not _DOUBLE_PERIOD_RE.search(personal):
+        return None
+    if not _empty(suffix) or not _LETTER_SURNAME_RE.fullmatch((last or "").strip()):
         return None
     fixed_first = _DOUBLE_PERIOD_RE.sub(".", first) if first else first
     fixed_middle = _DOUBLE_PERIOD_RE.sub(".", middle) if middle else middle
