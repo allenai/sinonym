@@ -97,3 +97,37 @@ def test_honoris_causa_goes_with_its_title(predictor, source, expected):
 )
 def test_cyrillic_lookalikes_in_a_latin_word(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("*Emmanuel", "Ifeanyi", "Obeagu"), ("Emmanuel", "Ifeanyi", "Obeagu")),
+        (("Jungkil", None, "Kim∗"), ("Jungkil", "", "Kim")),
+        (("ZoltÃ¡n", None, "GÃ¡lik"), ("Zoltán", "", "Gálik")),
+        (("Esen", "GÃ¶kÃ§e", "Ã–zdamar"), ("Esen", "Gökçe", "Özdamar")),
+        (("E.P.", "https://orcid.org/0000-0000-0000-0000", "Buga"), ("E.", "P.", "Buga")),
+        (("K^|^ocirc;z^|^ocirc;", None, "SATO"), ("Kôzô", "", "Sato")),
+        # controls: real letters that look like mojibake, a surname that is only a link
+        (("JOÃO", None, "SILVA"), ("João", "", "Silva")),
+        (("Åsa", None, "Ångström"), ("Åsa", "", "Ångström")),
+        (
+            ("Pedro", "César", "https://orcid.org/0000-0000-0000-0000"),
+            ("Pedro", "César", "https://orcid.org/0000-0000-0000-0000"),
+        ),
+        (("Irène", None, "S***"), ("Irène", "", "S***")),
+        (("Httpa", None, "Smith"), ("Httpa", "", "Smith")),
+    ],
+)
+def test_junk_in_name_fields_is_cleaned(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    "source",
+    [("https://orcid.org/0000-0000-0000-0000", None, "Smith"), ("orcid", "0000-0000-0000-0000", "Smith")],
+)
+def test_junk_cleanup_keeps_a_name_without_a_given_name(source):
+    from sinonym.services.source_repairs import strip_junk
+
+    assert strip_junk(*source) is None

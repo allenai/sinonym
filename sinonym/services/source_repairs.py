@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import gzip
+import html
 import io
 import re
 import unicodedata
@@ -413,7 +414,71 @@ def latin_lookalikes(first: str | None, middle: str | None, last: str | None):
     return None if fixed == (first, middle, last) else fixed
 
 
-FIELD_CLEANUPS: tuple[tuple[str, Callable], ...] = (("latin_lookalike", latin_lookalikes),)
+_MOJIBAKE_RE = re.compile(r"[ÃÂÄÅÐÑ][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013-\u203A\u20AC\u2122]")
+
+
+def _unmojibake(value: str) -> str:
+    """UTF-8 read as Windows-1252 (``ZoltÃ¡n`` -> ``Zoltán``), undone at most twice; only when it decodes to letters."""
+    decoded = value
+    for _ in range(2):
+        if not _MOJIBAKE_RE.search(decoded):
+            break
+        try:
+            decoded = decoded.encode("cp1252").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            return value
+    if _MOJIBAKE_RE.search(decoded) or any(not (ch.isalpha() or ch.isascii()) for ch in decoded):
+        return value
+    return decoded
+
+
+def fix_mojibake(first: str | None, middle: str | None, last: str | None):
+    """``ZoltÃ¡n`` / - / ``GÃ¡lik`` -> ``("Zoltán", None, "Gálik")``: UTF-8 bytes decoded as Windows-1252."""
+    fixed = tuple(None if value is None else _unmojibake(value) for value in (first, middle, last))
+    return None if fixed == (first, middle, last) else fixed
+
+
+_ORCID_JUNK_RE = re.compile(
+    r"(?i)^(?:https?:/+\S*|(?:https?)?(?:www\.)?orcid\.org\S*|(?:id)?orcid|\d{4}-\d{4}-\d{4}-\d{3}[\dX])$",
+)
+# one footnote star at the edge of a word; a run of stars masks letters (``S***``)
+_FOOTNOTE_RE = re.compile(r"^[*\u2217\u204E](?=[^*\u2217\u204E])|(?<=[^*\u2217\u204E])[*\u2217\u204E]$")
+_JUNK_HINT_RE = re.compile(r"[*\u2217\u204E^\d]|orcid|http", re.IGNORECASE)
+_ESCAPED_ENTITY_RE = re.compile(r"\^\|\^([A-Za-z]+);")
+
+
+def _junk_free(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = _ESCAPED_ENTITY_RE.sub(lambda m: html.unescape(f"&{m.group(1)};"), value)
+    words = [_FOOTNOTE_RE.sub("", word) for word in value.split() if not _ORCID_JUNK_RE.match(word)]
+    return " ".join(word for word in words if word)
+
+
+def strip_junk(first: str | None, middle: str | None, last: str | None):
+    """``*Emmanuel``, ``Kim∗``, an ORCID link or iD, or an escaped entity (``K^|^ocirc;z^|^ocirc;``) in a name field.
+
+    Footnote stars at the edges of a word and words that are an ORCID link, ``orcid`` or a bare ORCID iD are dropped.
+    The name is left as written when the cleanup would leave no surname or no given name: they are not recoverable.
+    """
+    fields = (first, middle, last)
+    if not _JUNK_HINT_RE.search(f"{first or ''} {middle or ''} {last or ''}"):
+        return None
+    cleaned = [_junk_free(value) for value in fields]
+    given = f"{cleaned[0] or ''}{cleaned[1] or ''}"
+    if not any(ch.isalpha() for ch in cleaned[2] or "") or not any(ch.isalpha() for ch in given):
+        return None
+    fixed = tuple(None if value is None else value or None for value in cleaned)
+    if fixed == tuple(None if v is None else " ".join(v.split()) or None for v in fields):
+        return None
+    return fixed
+
+
+FIELD_CLEANUPS: tuple[tuple[str, Callable], ...] = (
+    ("latin_lookalike", latin_lookalikes),
+    ("mojibake", fix_mojibake),
+    ("junk", strip_junk),
+)
 
 
 def clean_source_fields(first: str | None, middle: str | None, last: str | None):
