@@ -602,6 +602,28 @@ def space_hyphenated_generation(first: str | None, middle: str | None, last: str
     return first, middle, f"{surname[: match.start()]} {match.group(1)}"
 
 
+_INITIALS_SURNAME_RE = re.compile(r"(?:[A-Z]\.?\s?){1,3}")
+# one-letter Korean and Vietnamese surnames (O, U, E, Y, I) written alone in the surname field
+_ONE_LETTER_SURNAMES = frozenset({"O", "U", "E", "Y", "I"})
+
+
+def swap_initials_surname(first: str | None, middle: str | None, last: str | None):
+    """``Kumar`` / - / ``P`` -> ``("P", None, "Kumar")``: a surname written in the given field and initials in the surname
+    field (South Indian bylines).
+
+    Only when the given field is one word the corpus role prior calls a surname (``Kumar``), the middle field is empty and
+    the surname field is one to three initials. On ORCID people of this shape whose word is a corpus surname, 9 in 10
+    register it as their family name; when the word is a given name (``Natrayan`` / - / ``L``), most register it as the
+    given name, so those stay. A lone undotted O, U, E, Y or I is a Korean or Vietnamese surname and stays.
+    """
+    word, initials = (first or "").strip(), (last or "").strip()
+    if (middle or "").strip() or " " in word or not _INITIALS_SURNAME_RE.fullmatch(initials):
+        return None
+    if initials in _ONE_LETTER_SURNAMES or not re.fullmatch(r"[A-Z][a-z]{2,}", word) or token_role(word) != "surname":
+        return None
+    return initials, None, word
+
+
 FIELD_CLEANUPS: tuple[tuple[str, Callable], ...] = (
     ("latin_lookalike", latin_lookalikes),
     ("mojibake", fix_mojibake),
@@ -609,6 +631,7 @@ FIELD_CLEANUPS: tuple[tuple[str, Callable], ...] = (
     ("han_beside_latin", drop_han_beside_latin),
     ("indonesian_degree", strip_indonesian_degrees),
     ("hyphenated_generation", space_hyphenated_generation),
+    ("initials_surname", swap_initials_surname),
 )
 
 

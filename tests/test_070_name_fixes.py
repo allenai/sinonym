@@ -215,3 +215,20 @@ def test_hyphenated_generation_word_goes_to_the_suffix(predictor, source, expect
     source_fields = SourceAuthorFields(first_name=source[0], middle_names=source[1], last_name=source[2])
     author = predictor.predict_batch([Instance(pp_authors=[source_fields])])[0].authors[0]
     assert (author.first_name, author.middle_names, author.last_name, author.suffix) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Kumar", None, "P"), ("P.", "", "Kumar")),
+        (("Popov", None, "V."), ("V.", "", "Popov")),
+        (("Kumar", None, "RS"), ("RS", "", "Kumar")),
+        (("Kumar", None, "R S"), ("R.", "S.", "Kumar")),
+        (("Kumar", None, "O."), ("O.", "", "Kumar")),
+        # controls: a given-name word before initials, a one-letter Korean surname
+        (("Natrayan", None, "L"), ("Natrayan", "", "L")),
+        (("Kim", None, "O"), ("Kim", "", "O")),
+    ],
+)
+def test_surname_before_initials_in_the_surname_field(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
