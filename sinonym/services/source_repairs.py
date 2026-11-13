@@ -387,8 +387,8 @@ RULES: tuple[tuple[str, Callable], ...] = (
 
 # Cyrillic letters drawn like a Latin letter, typed into a Latin word (``Babуch``, ``Аleksii``).
 _LATIN_LOOKALIKES = str.maketrans(
-    "аеорсухіјѕԁӏАВЕКМНОРСТУХІЈЅ",
-    "aeopcyxijsdlABEKMHOPCTYXIJS",
+    "аеорсухіјѕАВЕКМНОРСТУХІЈЅ",
+    "aeopcyxijsABEKMHOPCTYXIJS",
 )
 _CYRILLIC_LETTER_RE = re.compile(r"[\u0400-\u052F]")
 _LATIN_LETTER_RE = re.compile(r"[A-Za-z\u00C0-\u024F]")

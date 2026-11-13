@@ -292,3 +292,7 @@ def test_orcid_inside_a_word_or_a_logo_author_is_not_a_name_to_clean(source):
 )
 def test_undotted_title_before_a_lowercase_fragment_is_a_broken_word(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+def test_palochka_and_komi_de_are_not_read_as_latin(predictor):
+    assert resolve(predictor, "Taşpӏnar", None, "Ali")[0] == "Taşpӏnar"
