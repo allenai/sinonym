@@ -261,11 +261,111 @@ def drop_repeated_particle(first: str | None, middle: str | None, last: str | No
     return first, " ".join(middle_tokens[:-1]) or None
 
 
+# Academic and courtesy titles that are never a given name in the ORCID registry, and the German and Turkish degree
+# words written after them (``Dr. rer. nat.``, ``Doç. Dr.``). Ms, Miss and Sir are names or initials too and stay.
+_TITLE_WORDS = frozenset({"dr", "prof", "professor", "mr", "mrs", "doç", "yrd", "asst", "assoc", "engr", "univprof", "drs"})
+_TITLE_QUALIFIERS = frozenset({"med", "rer", "nat", "ing", "dipl", "habil", "techn", "phil", "dent", "vet", "jur", "oec", "sc"})
+
+
+# the h. c. of Dr. h. c., only right after a title
+_HONORIS_CAUSA = frozenset({"hc", "h.c"})
+
+
+def _title_token(token: str, *, qualifier: bool = False) -> bool:
+    """A listed title (``Dr.``, ``Prof``, ``dr.``); undotted capitals (``DR``, ``MR``) can be initials and do not count."""
+    core = token.rstrip(".,").replace(".-", "-").split("-")[0]
+    key = core.casefold()
+    if key not in _TITLE_WORDS and not (qualifier and key in _TITLE_QUALIFIERS | _HONORIS_CAUSA):
+        return False
+    return token.endswith(".") or not core.isupper() or len(core) == 1
+
+
+def strip_titles(first: str | None, middle: str | None, last: str | None, suffix: str | None):  # noqa: ARG001
+    """``Carsten`` / ``Dr.`` / ``Tille`` -> ``("Carsten", None)``: titles left in the middle field, or a first field of
+    only titles before the given name in the middle field (``Doç.`` / ``Dr. Taner`` / ``Artan``).
+
+    Degree words that follow a title go with it (``Dr. rer. nat.``, ``Dipl.-Ing. Dr.``). Every remaining given and middle
+    word must be a name word or an initial, and the surname field must keep a word that is not a credential or title.
+    """
+    if not _has_surname(last):
+        return None
+    first_tokens, middle_tokens = (first or "").split(), (middle or "").split()
+    if not middle_tokens:
+        return None
+
+    def strip(tokens: list[str]) -> list[str]:
+        kept, after_title, skip = [], False, 0
+        for index, token in enumerate(tokens):
+            if skip:
+                skip -= 1
+                continue
+            honoris_causa = [t.rstrip(".,").casefold() for t in tokens[index : index + 2]] == ["h", "c"]
+            if after_title and honoris_causa:
+                skip = 1
+                continue
+            if _title_token(token) or (after_title and _title_token(token, qualifier=True)):
+                after_title = True
+                continue
+            after_title = False
+            kept.append(token)
+        return kept
+
+    if first_tokens and all(_title_token(t) or _title_token(t, qualifier=True) for t in first_tokens):
+        parser_strips = all(_CREDENTIAL_PUNCTUATION_RE.sub("", t).casefold() in _TITLE_KEYS for t in first_tokens)
+        if not any(map(_title_token, first_tokens)) or (parser_strips and not _title_token(middle_tokens[0])):
+            return None
+        rest = strip(middle_tokens)
+        if not rest:
+            return None
+        given, kept_middle = rest[:1], rest[1:]
+    else:
+        kept_middle = strip(middle_tokens)
+        if len(kept_middle) == len(middle_tokens) or any(t.isupper() and len(t) <= _SHORT_CAPITALS for t in first_tokens):
+            return None
+        given = first_tokens
+    words = given + kept_middle
+    if not given or not all(map(_name_word, words)) or any(map(_abbreviation_or_qualifier, words)):
+        return None
+    return " ".join(given), " ".join(kept_middle) or None
+
+
+def _abbreviation_or_qualifier(token: str) -> bool:
+    """``Lt.``, ``Col.``, ``Dipl``: a dotted abbreviation of two or more letters, or a degree word left without its title."""
+    core = token.rstrip(".,")
+    return (token.endswith(".") and len(core) > 1) or core.casefold() in _TITLE_QUALIFIERS
+
+
+_CONTRIBUTOR_ROLES = frozenset(
+    {"translated", "translation", "edited", "compiled", "reviewed", "illustrated", "illustrations", "illustration"}
+    | {"interview", "interviewed", "organised", "organized", "presented", "adapted", "prepared", "conducted", "written"}
+    | {"supervised", "foreword", "preface", "introduction", "photo", "photos", "photographs", "commentary", "recorded"},
+)
+
+
+def strip_contributor_role(first: str | None, middle: str | None, last: str | None, suffix: str | None):  # noqa: ARG001
+    """``Translated`` / ``by N.B.`` / ``Zelinska`` -> ``("N.B.", None)``: a credit line split across the given fields."""
+    first_tokens, middle_tokens = (first or "").split(), (middle or "").split()
+    if (
+        len(first_tokens) != 1
+        or first_tokens[0].casefold() not in _CONTRIBUTOR_ROLES
+        or len(middle_tokens) < 2  # noqa: PLR2004
+        or middle_tokens[0].casefold() != "by"
+        or not _has_surname(last)
+    ):
+        return None
+    rest = middle_tokens[1:]
+    if not all(map(_name_word, rest)) or any(t.endswith(".") and len(t.rstrip(".")) > 1 and "." not in t[:-1] for t in rest):
+        return None
+    return rest[0], " ".join(rest[1:]) or None
+
+
 RULES: tuple[tuple[str, Callable], ...] = (
     ("glued_initial", unglue_given_initial),
     ("doubled_period", collapse_doubled_initial_periods),
     ("credential", strip_credentials),
     ("repeated_particle", drop_repeated_particle),
+    ("title", strip_titles),
+    ("contributor_role", strip_contributor_role),
 )
 
 

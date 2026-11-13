@@ -43,3 +43,38 @@ def test_georgian_is_not_title_cased_into_mtavruli(predictor, source, expected):
 )
 def test_particle_written_twice_is_kept_once(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Carsten", "Dr.", "Tille"), ("Carsten", "", "Tille")),
+        (("Michael", "Dr. Med.", "Laule"), ("Michael", "", "Laule")),
+        (("Jennifer", "L. Dr", "Sparr"), ("Jennifer", "L.", "Sparr")),
+        (("Doç.", "Dr. Taner", "ARTAN"), ("Taner", "", "Artan")),
+        (("Assoc.", "Prof. Dr. Faruk", "Gün"), ("Faruk", "", "Gün")),
+        (("Translated", "by N.B.", "Zelinska"), ("N.", "B.", "Zelinska")),
+        (("Reviewed", "by Anna", "Blackwell"), ("Anna", "", "Blackwell")),
+        # controls: capitals that can be initials, names that are also titles, title runs the parser already strips
+        (("Hans", "DR", "Hohmann"), ("Hans", "DR", "Hohmann")),
+        (("Ana", "Ms", "Silva"), ("Ana", "Ms", "Silva")),
+        (("Sheron", "Sir Loon", "Goh"), ("Sheron", "Sir Loon", "Goh")),
+        (("PD", "Dr. Konrad", "Schwarzkopf"), ("Konrad", "", "Schwarzkopf")),
+        (("Dr.", "Cunyi", "Yang"), ("Cunyi", "", "Yang")),
+        (("Juergen", "Dipl Chem Dr", "Pabst"), ("Juergen", "Dipl Chem Dr", "Pabst")),
+    ],
+)
+def test_titles_in_the_given_fields_are_dropped(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Dr.-Ing.", "Dr. h. c. Herwart", "Opitz"), ("Herwart", "", "Opitz")),
+        (("Hans", "C. Dr.", "Weber"), ("Hans", "C.", "Weber")),
+        (("Hans", "Dr. H.", "Weber"), ("Hans", "H.", "Weber")),
+    ],
+)
+def test_honoris_causa_goes_with_its_title(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
