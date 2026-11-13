@@ -36,6 +36,8 @@ UNITED = [
     (("Seungwoo", None, "Kim"), ("Seung-Woo", "", "Kim")),
     (("Eunji", None, "Lee"), ("Eun-Ji", "", "Lee")),
     (("Hyunwoo", None, "Park"), ("Hyun-Woo", "", "Park")),
+    # the 2026 registry: more than half of the people who write Minjun are in South Korea
+    (("Minjun", None, "Kim"), ("Min-Jun", "", "Kim")),
 ]
 
 UNCHANGED = [
@@ -51,8 +53,7 @@ UNCHANGED = [
     # initials and longer given names stay as written
     (("J.", "H.", "Park"), ("J.", "H.", "Park")),
     (("Jin-Ho", "M.", "Park"), ("Jin-Ho", "M.", "Park")),
-    # a word Korean registry people use too rarely, or a source boundary that disagrees with the listed one
-    (("Minjun", None, "Kim"), ("Minjun", "", "Kim")),
+    # a source boundary that disagrees with the listed one
     (("Jinh", "Oh", "Park"), ("Jinh", "Oh", "Park")),
 ]
 
@@ -74,12 +75,13 @@ AMBIGUOUS_CUT = [
     (("DA EUN", None, "LEE"), ("Da-Eun", "", "Lee")),
     (("Kim", None, "Jung Il"), ("Jung-Il", "", "Kim")),
     (("SeongEun", None, "Choi"), ("Seong-Eun", "", "Choi")),
-    (("HyungIl", None, "Kim"), ("Hyung-Il", "", "Kim")),
     (("SungIL", None, "Kim"), ("Sung-Il", "", "Kim")),
     (("SUNGIl", None, "Kim"), ("Sung-Il", "", "Kim")),
     # a source cut at the other place is kept
     (("Sun Gil", None, "Kim"), ("Sun", "Gil", "Kim")),
     (("SUNGil", None, "Kim"), ("SUNGil", "", "Kim")),
+    # an unlisted word keeps the source's form: in the 2026 registry 2 of 10 Korean people cut Hyungil as Hyun Gil
+    (("HyungIl", None, "Kim"), ("HyungIl", "", "Kim")),
 ]
 
 # Known limits, pinned so a change is noticed.
