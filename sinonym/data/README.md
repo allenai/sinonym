@@ -52,8 +52,8 @@ Five assets are lookup tables built from Semantic Scholar author names:
 | asset | built by | snapshot | fires only when |
 |---|---|---|---|
 | `compound_surnames.csv.gz` | `scripts/build_compound_surnames.py`, `scripts/build_hyphen_compound_surnames.py` ([COMPOUND_SURNAMES.md](COMPOUND_SURNAMES.md)) | October 2026 | the multi-word surname is listed |
-| `two_token_order_prior.csv.gz` | `scripts/build_order_prior_asset.py` | November 2026 | the pair has >= 100 mentions and a >= 80% majority |
-| `token_role_prior.csv.gz` | `scripts/build_token_order_prior.py` | November 2026 | the token has >= 200 mentions and is >= 90% one role |
+| `two_token_order_prior.csv.gz` | `scripts/build_order_prior_asset.py`, then `scripts/stabilize_order_priors.py` | November 2026 | the pair has >= 100 mentions and a >= 80% majority |
+| `token_role_prior.csv.gz` | `scripts/build_token_order_prior.py`, then `scripts/stabilize_order_priors.py` | November 2026 | the token has >= 200 mentions and is >= 90% one role |
 | `surname_first_words.csv.gz` | `scripts/build_surname_first_words.py` | November 2026 | the word was seen in that shape and is mostly a surname (>= 3 mentions) |
 | `glued_initial_prefixes.csv.gz` | `scripts/build_glued_initial_prefixes.py` | November 2026 | the word before a glued capital is a first name >= 100 times and at least as often as a surname, and word + that letter is not itself a common first name |
 
@@ -73,7 +73,7 @@ Five assets are lookup tables built from Semantic Scholar author names:
   source-name counts from the Semantic Scholar `paper_authors` export of 2026-11-12, ORCID evidence only from iDs the
   source supplied (iDs attached later by the ORCID profile backfill, which matches by name, are left out so the tables
   do not learn from name matching), and the ORCID public data file of October 2026 (`korean_given_words.csv.gz`,
-  `allcaps_given_words.csv.gz`). Rows: two-token order prior 106,311 -> 106,485; token roles 238,677 -> 242,452;
+  `allcaps_given_words.csv.gz`). Rows: two-token order prior 106,311 -> 107,787; token roles 238,677 -> 243,168 (the two order priors keep every 0.7.0 entry the rebuild dropped and add the rebuild's new ones, `scripts/stabilize_order_priors.py`: a dropped entry had only crossed a gate, and dropping it turned names such as `Petralia / Salvatore` back; entries kept from 0.7.0 keep their 0.7.0 counts, which the runtime does not read);
   surname-first words 40,112 -> 42,178; glued-initial prefixes 112,710 -> 113,345; Korean given words 3,108 -> 3,670;
   three-letter given words 881 -> 824. Three tables keep their 0.7.0 build: `compound_surnames.csv.gz`,
   `unsplit_given_words.csv.gz` and `given_name_words.csv.gz`. Their rebuilds broke almost as many ORCID people's names
