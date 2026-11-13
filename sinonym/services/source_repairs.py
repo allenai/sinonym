@@ -183,6 +183,7 @@ def _degree_spelling(token: str) -> bool:
     return len(chunks) > 1 and any(len(chunk) > 1 for chunk in chunks)
 
 
+@lru_cache(maxsize=65536)
 def is_credential_token(token: str) -> bool:
     """A listed degree or post-nominal, in any case, dots and commas ignored. A run of dotted single letters (``M.S.C.``)
     is never one: people write their initials that way."""
