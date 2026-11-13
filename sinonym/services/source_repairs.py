@@ -105,10 +105,10 @@ def unglue_given_initial(first: str | None, middle: str | None, last: str | None
     than an initial (``SungA``, ``QingE``, ``JeongA``), so it never splits; with a period it splits only after a word
     the token role prior calls a given name that is not a Chinese or Korean syllable (``EunA.`` is Eun-A).
     """
-    if not _empty(suffix) or not _empty(middle) or not _plain_surname(last):
+    if not _empty(suffix) or not _empty(middle):
         return None
     match = _GLUED_RE.fullmatch(unicodedata.normalize("NFC", (first or "").strip()))
-    if match is None:
+    if match is None or not _plain_surname(last):
         return None
     word, letter, period = match.groups()
     if not (word[0].isupper() and word[1:].islower()) or word.lower() in _NOT_GIVEN_WORDS:
