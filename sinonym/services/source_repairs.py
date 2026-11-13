@@ -222,11 +222,11 @@ def strip_credentials(first: str | None, middle: str | None, last: str | None, s
     The surname field is never rewritten and must keep a word that is not a credential or title. The suffix field
     is not read.
     """
-    if not _has_surname(last):
-        return None
     first_tokens, middle_tokens = (first or "").split(), (middle or "").split()
     first_cut = len(first_tokens) - _trailing_credential_count(first_tokens)
     middle_cut = len(middle_tokens) - _trailing_credential_count(middle_tokens)
+    if (first_cut == len(first_tokens) and middle_cut == len(middle_tokens)) or not _has_surname(last):
+        return None
     given, kept_middle = first_tokens[:first_cut], middle_tokens[:middle_cut]
     if first_tokens and not given:
         parser_drops = reviewed_source_cleanup_pattern(first, middle, last, suffix) is not None or any(
@@ -235,8 +235,6 @@ def strip_credentials(first: str | None, middle: str | None, last: str | None, s
         if parser_drops or not kept_middle or not all(map(_name_word, kept_middle)):
             return None
         return None, " ".join(kept_middle)
-    if first_cut == len(first_tokens) and middle_cut == len(middle_tokens):
-        return None
     if not given or not all(map(_name_word, given)) or not all(map(_name_word, kept_middle)):
         return None
     return " ".join(given), " ".join(kept_middle) or None
