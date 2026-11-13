@@ -451,24 +451,56 @@ _JUNK_HINT_RE = re.compile(r"[*\u2217\u204E^\d]|orcid|http", re.IGNORECASE)
 _ESCAPED_ENTITY_RE = re.compile(r"\^\|\^([A-Za-z]+);")
 
 
+# an ORCID iD in any written form, with its label and brackets: (ORCID: 0000-...), ORCID iD https://orcid.org/0000-...
+_ORCID_ID_RE = re.compile(
+    r"(?i)[(\[]?\s*(?:(?:\bid\s*)?orcid®?(?:\s*ids?)?\s*[:#]?\s*)?(?:https?:?/*)?(?:www\.)?(?:orcid\.org/?)?"
+    r"(?<!\d)\d{4}-\d{3,4}-\d{4}-\d{3}[\dXxХх]?(?![\dXxХх])\s*[)\]]?",
+)
+_ORCID_URL_RE = re.compile(r"(?i)(?:https?:?/*)?(?:www\.)?orcid\.org\S*")
+_ORCID_LABEL_RE = re.compile(r"(?i)[(\[]?\s*(?<![\w-])(?:id\s*)?orcid®?(?:\s*ids?)?\b\s*:?\s*[)\]]?")
+_EMPTY_BRACKETS_RE = re.compile(r"[(\[]\s*[)\]]")
+
+
 def _junk_free(value: str | None) -> str | None:
     if value is None:
         return None
     value = _ESCAPED_ENTITY_RE.sub(lambda m: html.unescape(f"&{m.group(1)};"), value)
+    value = _ORCID_URL_RE.sub(" ", _ORCID_ID_RE.sub(" ", value))
+    value = _EMPTY_BRACKETS_RE.sub(" ", _ORCID_LABEL_RE.sub(" ", value))
     words = [_FOOTNOTE_RE.sub("", word) for word in value.split() if not _ORCID_JUNK_RE.match(word)]
     return " ".join(word for word in words if word)
+
+
+def _surname_from_given_fields(first: str | None, middle: str | None) -> list[str | None] | None:
+    """The given fields with their last real word as the surname, as for a surname field of only credentials."""
+    first_tokens, middle_tokens = _field_tokens(first), _field_tokens(middle)
+    if middle_tokens:
+        split = _surname_split(middle_tokens)
+        if split is None:
+            return None
+        return [first, " ".join(split[0]) or None, " ".join(split[1])]
+    split = _surname_split(first_tokens) if len(first_tokens) > 1 else None
+    if split is None or not split[0]:
+        return None
+    return [split[0][0], " ".join(split[0][1:]) or None, " ".join(split[1])]
 
 
 def strip_junk(first: str | None, middle: str | None, last: str | None):
     """``*Emmanuel``, ``Kim∗``, an ORCID link or iD, or an escaped entity (``K^|^ocirc;z^|^ocirc;``) in a name field.
 
-    Footnote stars at the edges of a word and words that are an ORCID link, ``orcid`` or a bare ORCID iD are dropped.
-    The name is left as written when the cleanup would leave no surname or no given name: they are not recoverable.
+    Footnote stars at the edges of a word and ORCID iDs in any form (a link, a bare iD, ``(ORCID: ...)``) are dropped. A
+    surname field that held only an iD takes the last real word of the given fields, as a surname field of only
+    credentials does (``Pedro`` / ``César`` / ``https://orcid.org/...`` -> ``("Pedro", None, "César")``). The name is left
+    as written when no surname or no given name remains.
     """
     fields = (first, middle, last)
     if not _JUNK_HINT_RE.search(f"{first or ''} {middle or ''} {last or ''}"):
         return None
     cleaned = [_junk_free(value) for value in fields]
+    if any(_ORCID_LABEL_RE.search(value or "") for value in fields):
+        cleaned = [None if v is None else " ".join(w for w in v.split() if w not in {"iD", "iDs"}) for v in cleaned]
+    if not any(ch.isalpha() for ch in cleaned[2] or "") and _ORCID_ID_RE.search(last or ""):
+        cleaned = _surname_from_given_fields(cleaned[0], cleaned[1]) or cleaned
     given = f"{cleaned[0] or ''}{cleaned[1] or ''}"
     if not any(ch.isalpha() for ch in cleaned[2] or "") or not any(ch.isalpha() for ch in given):
         return None

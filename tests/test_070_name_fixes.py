@@ -106,15 +106,11 @@ def test_cyrillic_lookalikes_in_a_latin_word(predictor, source, expected):
         (("Jungkil", None, "Kim∗"), ("Jungkil", "", "Kim")),
         (("ZoltÃ¡n", None, "GÃ¡lik"), ("Zoltán", "", "Gálik")),
         (("Esen", "GÃ¶kÃ§e", "Ã–zdamar"), ("Esen", "Gökçe", "Özdamar")),
-        (("E.P.", "https://orcid.org/0000-0000-0000-0000", "Buga"), ("E.", "P.", "Buga")),
+        (("E.P.", "https://orcid.org/0000-0002-1825-0097", "Buga"), ("E.", "P.", "Buga")),
         (("K^|^ocirc;z^|^ocirc;", None, "SATO"), ("Kôzô", "", "Sato")),
-        # controls: real letters that look like mojibake, a surname that is only a link
+        # controls: real letters that look like mojibake, masked letters, a word that only starts like a link
         (("JOÃO", None, "SILVA"), ("João", "", "Silva")),
         (("Åsa", None, "Ångström"), ("Åsa", "", "Ångström")),
-        (
-            ("Pedro", "César", "https://orcid.org/0000-0000-0000-0000"),
-            ("Pedro", "César", "https://orcid.org/0000-0000-0000-0000"),
-        ),
         (("Irène", None, "S***"), ("Irène", "", "S***")),
         (("Httpa", None, "Smith"), ("Httpa", "", "Smith")),
     ],
@@ -125,7 +121,7 @@ def test_junk_in_name_fields_is_cleaned(predictor, source, expected):
 
 @pytest.mark.parametrize(
     "source",
-    [("https://orcid.org/0000-0000-0000-0000", None, "Smith"), ("orcid", "0000-0000-0000-0000", "Smith")],
+    [("https://orcid.org/0000-0002-1825-0097", None, "Smith"), ("orcid", "0000-0002-1825-0097", "Smith")],
 )
 def test_junk_cleanup_keeps_a_name_without_a_given_name(source):
     from sinonym.services.source_repairs import strip_junk
@@ -245,3 +241,41 @@ def test_reviewed_source_shapes_keep_their_rule(predictor, source, expected):
     fields = SourceAuthorFields(first_name=source[0], middle_names=source[1], last_name=source[2])
     author = predictor.predict_batch([Instance(pp_authors=[fields])])[0].authors[0]
     assert author.resolution_reason.value == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Maria", None, "Lopez (ORCID: 0000-0002-1825-0097)"), ("Maria", "", "Lopez")),
+        (("Maria", None, "Lopez [0000-0002-1825-0097]"), ("Maria", "", "Lopez")),
+        (("John", "A.", "Smith ORCID iD https://orcid.org/0000-0002-1825-0097"), ("John", "A.", "Smith")),
+        (("Pedro", "César", "https://orcid.org/0000-0002-1825-0097"), ("Pedro", "", "César")),
+        (("Nemanja", "M. idorcid 0000-0002-1825-0097", "Barać"), ("Nemanja", "M.", "Barać")),
+        (("M.G.", "d https://orcid.org/", "Lapteva"), ("M.", "G. D.", "Lapteva")),
+        (("Joseph", None, "httporcid.org0000-0002-1825-0097 Glauber"), ("Joseph", "", "Glauber")),
+        (("Priscila", None, "Alves Balista0000-0002-1825-0097"), ("Priscila", "", "Alves Balista")),
+        (("Aidos", None, "Aitmaganbet (ORCID: 0000-0002-1825-009)"), ("Aidos", "", "Aitmaganbet")),
+        # nothing real left for the surname: left as written
+        (("Ana", None, "0000-0002-1825-0097"), ("Ana", "", "0000-0002-1825-0097")),
+        (("J.", None, "https://orcid.org/0000-0002-1825-0097"), ("J.", "", "https://orcid.org/0000-0002-1825-0097")),
+    ],
+)
+def test_orcid_ids_are_deleted_from_name_fields(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        ("Fidel", "Torcida", "Fernández-Baldor"),
+        ("ID", None, "ORCID"),
+        (None, None, "ORCID"),
+        ("ORCID", None, "iD"),
+        ("Orcid", None, "https"),
+        ("ORCID®", "iDs", "Parinaz"),
+    ],
+)
+def test_orcid_inside_a_word_or_a_logo_author_is_not_a_name_to_clean(source):
+    from sinonym.services.source_repairs import strip_junk
+
+    assert strip_junk(*source) is None
