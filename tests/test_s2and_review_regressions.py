@@ -9,6 +9,7 @@ import unicodedata
 import pytest
 
 from sinonym.coretypes.routing_resolution import ResolutionProvenance, ResolutionReason
+from sinonym.services.compound_surnames import credential_join
 from sinonym.timo.interface import Instance, Predictor, PredictorConfig, SourceAuthorFields
 
 
@@ -750,6 +751,46 @@ EXCLUDED_COMPOUND_HEAD_CASES = [
 @pytest.mark.parametrize(("source", "expected"), EXCLUDED_COMPOUND_HEAD_CASES)
 def test_excluded_compound_heads(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+CREDENTIAL_SURNAME_CASES = [
+    # a credential or title from the given fields never joins a listed compound surname (made-up names)
+    (("John MD", None, "Smith"), ("John", "MD", "Smith")),
+    (("John", "MD", "Smith"), ("John", "MD", "Smith")),
+    (("Anna", "Lord", "Wood"), ("Anna", "Lord", "Wood")),
+    (("Jane", "Doe Bsn", "Rn"), ("Jane", "Doe Bsn", "Rn")),
+    (("J.Lord", None, "Wood"), ("J.", "Lord", "Wood")),
+    (("John", "MD", "Smith MD"), ("John", "MD", "Smith")),
+    # a listed strip-list credential is dropped
+    (("Mary PhD", None, "Jones"), ("Mary", "", "Jones")),
+    (("Mary", "PhD", "Jones"), ("Mary", "", "Jones")),
+    # credential-like words that are names still join, and the source's own last name is kept
+    (("Aminah", "Md", "Yusof"), ("Aminah", "", "Md Yusof")),
+    (("Aminah", "MD", "Yusof"), ("Aminah", "", "MD Yusof")),
+    (("Ahmad Md", None, "Nor"), ("Ahmad", "", "Md Nor")),
+    (("Awa", "Ba", "Diallo"), ("Awa", "", "Ba Diallo")),
+    (("Rafael", "Pastor", "Moreno"), ("Rafael", "", "Pastor Moreno")),
+    (("Paul", "Ndong", "Mba"), ("Paul", "", "Ndong Mba")),
+    (("Marta", "Lenise do", "Prado"), ("Marta", "Lenise", "do Prado")),
+    (("E.", None, "MD Smith"), ("E.", "", "Md Smith")),
+    (("Wei Meng", None, "Zhang"), ("Wei-Meng", "", "Zhang")),
+    (("Ji Do", None, "Kim"), ("Ji", "Do", "Kim")),
+    (("MD", "PhD", "Anna P. West"), ("Anna", "P.", "West")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), CREDENTIAL_SURNAME_CASES)
+def test_credential_stays_out_of_compound_surname(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+def test_credential_join():
+    assert credential_join(["Lord"], ["Lord", "Wood"])
+    assert credential_join(["BSN"], ["Bsn", "Rn"])
+    assert credential_join(["MD"], ["MD", "Smith"])
+    assert not credential_join(["Md"], ["Md", "Yusof"])
+    assert not credential_join(["Pastor"], ["Pastor", "Moreno"])
+    assert not credential_join(["Lenise", "do"], ["do", "Prado"])
 
 
 SOURCE_DOUBLE_SURNAME_CASES = [

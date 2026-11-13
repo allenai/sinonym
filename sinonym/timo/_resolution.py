@@ -43,7 +43,7 @@ from sinonym.coretypes.routing_resolution import (
 )
 from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
 from sinonym.pipeline.name_order_routing import given_chain_cap_parsed, pp_abstain_parsed
-from sinonym.services.compound_surnames import listed_compound_suffix
+from sinonym.services.compound_surnames import credential_join, fold_word, listed_compound_suffix
 from sinonym.services.east_asian_name_order import JAPANESE_ML_THRESHOLD
 from sinonym.services.non_person import (
     CJK_NON_PERSON_SUFFIX_MARKERS,
@@ -1696,7 +1696,7 @@ def _glued_given_initial_assignment(source: SourceAuthorFields) -> NameComponent
     )
     if word.casefold() == surname.split()[0].casefold():
         return selected
-    return _corpus_compound_extension(selected) or selected
+    return _corpus_compound_extension(selected, source) or selected
 
 
 def _structured_initials_surname_assignment(source: SourceAuthorFields) -> NameComponents | None:
@@ -1756,13 +1756,15 @@ def _structured_leading_initials_assignment(source: SourceAuthorFields) -> NameC
     return NameComponents(given_name=initials[0], middle_name=" ".join([*initials[1:], *middle.split()]), surname=surname)
 
 
-def _corpus_compound_extension(selected: NameComponents) -> NameComponents | None:
+def _corpus_compound_extension(selected: NameComponents, source: SourceAuthorFields) -> NameComponents | None:
     """Extend a parsed surname leftwards over a corpus-backed compound: ``Rivera / Maza`` ends as ``Rivera Maza``.
 
     The surface list (data/COMPOUND_SURNAMES.md) holds multi-word surnames the corpus writes as one surname and
     that ORCID people carry in both shapes; keying both shapes to the same surname is what unites those people.
     Only middle-name words move into the surname: the given name and every surname word the parse already kept
-    stay, so a parse that joined more (``Silva dos Santos``) or reordered the fields is never undone.
+    stay, so a parse that joined more (``Silva dos Santos``) or reordered the fields is never undone. A credential or
+    title from the given fields stays out (``John / MD / Smith``); a word the source wrote only in its last name is never
+    checked.
     """
     middle_words = selected.middle_name.split()
     last_words = selected.surname.split()
@@ -1771,6 +1773,11 @@ def _corpus_compound_extension(selected: NameComponents) -> NameComponents | Non
     words = [*middle_words, *last_words]
     width = listed_compound_suffix(words)
     if width <= len(last_words):
+        return None
+    given_words = {fold_word(word) for word in f"{source.first_name or ''} {source.middle_names or ''}".split()}
+    last_only = {fold_word(word) for word in (source.last_name or "").split()} - given_words
+    moved = [word for word in words[len(words) - width : len(middle_words)] if fold_word(word) not in last_only]
+    if moved and credential_join(moved, words[len(words) - width :]):
         return None
     return NameComponents(
         given_name=selected.given_name,
@@ -2264,7 +2271,7 @@ class _Resolver:
             # ``Nike / Kwai Cheung / Lau``: Chinese syllables before a Chinese surname are a given name, not the head of a
             # compound; ones that open with a surname are a Chinese name after a Western one (``Malcolm / Ng Mou / Kehn``)
             return None
-        candidate = _corpus_compound_extension(selected)
+        candidate = _corpus_compound_extension(selected, source)
         if candidate is None or len(candidate.surname.split()) < len((source.last_name or "").split()):
             # never fewer surname words than the source wrote; that shape belongs to the repartition rules
             return None
@@ -2314,7 +2321,7 @@ class _Resolver:
         candidate = _edge_particle_extension(selected, edge_words[-1])
         if candidate is None:
             return None
-        return _corpus_compound_extension(candidate) or candidate
+        return _corpus_compound_extension(candidate, source) or candidate
 
     def _structured_surname_initial_tail_candidate(
         self,
