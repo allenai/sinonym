@@ -209,7 +209,7 @@ def test_given_name_word_stays_out_of_the_surname(predictor, source, expected):
     ("source", "expected"),
     [
         (("Walter", None, "Faria-Neto"), ("Walter", "", "Faria", "Neto")),
-        (("Edward", None, "Araujo-Júnior"), ("Edward", "", "Araujo", "Jr.")),
+        (("Edward", None, "Araujo-Júnior"), ("Edward", "", "Araujo", "Júnior")),
         (("João", None, "Silva-Filho"), ("João", "", "Silva", "Filho")),
         # controls: a particle before the hyphen, the word as the whole surname
         (("A.", None, "Di-Neto"), ("A.", "", "Di-Neto", None)),
@@ -317,3 +317,61 @@ def test_mojibake_decoding_stays_latin(value, expected):
     from sinonym.services.source_repairs import _unmojibake
 
     assert _unmojibake(value) == expected
+
+
+def resolve_with_suffix(predictor: Predictor, first, middle, last, suffix=None):
+    source = SourceAuthorFields(first_name=first, middle_names=middle, last_name=last, suffix=suffix)
+    author = predictor.predict_batch([Instance(pp_authors=[source])])[0].authors[0]
+    return author.first_name, author.middle_names, author.last_name, author.suffix
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Francisco", None, "Aquino Júnior"), ("Francisco", "", "Aquino", "Júnior")),
+        (("Francisco", None, "Aquino JÚNIOR"), ("Francisco", "", "Aquino", "Júnior")),
+        (("Paulo", None, "Souza Junior"), ("Paulo", "", "Souza", "Junior")),
+        (("John", None, "Smith Jr"), ("John", "", "Smith", "Jr")),
+        (("John A.", None, "Smith, Jr"), ("John", "A.", "Smith", "Jr")),
+        (("John", None, "Smith", "JR."), ("John", "", "Smith", "Jr.")),
+        (("John", None, "Smith", "Junior"), ("John", "", "Smith", "Junior")),
+        (("John", None, "Smith Senior"), ("John", "", "Smith", "Senior")),
+        (("John", None, "Smith iii"), ("John", "", "Smith", "III")),
+        (("John", None, "Smith", "ii"), ("John", "", "Smith", "II")),
+        (("John", None, "Smith-Jr."), ("John", "", "Smith", "Jr.")),
+        # controls: already the written form, a surname that only looks like a suffix
+        (("John", None, "Smith Jr."), ("John", "", "Smith", "Jr.")),
+        (("José", "Ribamar", "Santos Neto"), ("José", "Ribamar", "Santos", "Neto")),
+        (("Roxy", None, "Senior"), ("Roxy", "", "Senior", None)),
+    ],
+)
+def test_generational_suffix_keeps_its_source_spelling(predictor, source, expected):
+    assert resolve_with_suffix(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("John", None, "Smith", "PhD"), ("John", "", "Smith", None)),
+        (("John", None, "Smith", "MD PhD"), ("John", "", "Smith", None)),
+        (("John", None, "Smith", "Dr"), ("John", "", "Smith", None)),
+        (("John", None, "Smith", "Jr., PhD"), ("John", "", "Smith", "Jr.")),
+        (("John", None, "Smith Jr", "PhD"), ("John", "", "Smith", "Jr")),
+        # controls: a suffix field that is not only credentials stays as written
+        (("John", None, "Smith", "(UK)"), ("John", "", "Smith", "(UK)")),
+        (("John", None, "Smith", "Jr Foo"), ("John", "", "Smith", "Jr Foo")),
+        (("John", None, "Smith", "Ma"), ("John", "", "Smith", "Ma")),
+        (("John", None, "Smith", "   "), ("John", "", "Smith", "   ")),
+        (("John", None, "Smith", "Column Editor"), ("John", "", "Smith", "Column Editor")),
+    ],
+)
+def test_credentials_and_titles_leave_the_suffix_field(predictor, source, expected):
+    assert resolve_with_suffix(predictor, *source) == expected
+
+
+def test_source_passthrough_keeps_its_suffix(predictor):
+    source = SourceAuthorFields(first_name="Consortium", middle_names="The ATLAS", last_name="", suffix="PhD")
+    author = predictor.predict_batch([Instance(pp_authors=[source])])[0].authors[0]
+    assert author.resolution_provenance.value == "source"
+    assert author.resolution_action.value != "assign"
+    assert author.suffix == "PhD"

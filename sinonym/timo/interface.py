@@ -7,6 +7,7 @@ from pydantic import Field as _Field
 
 from sinonym.coretypes import BatchParseResult as _BatchParseResult
 from sinonym.coretypes.routing_resolution import ResolutionAction as _ResolutionAction
+from sinonym.coretypes.routing_resolution import ResolutionProvenance as _ResolutionProvenance
 from sinonym.detector import ChineseNameDetector as _ChineseNameDetector
 from sinonym.detector import ParallelMode as _ParallelMode
 from sinonym.pipeline.name_order_routing import (
@@ -26,6 +27,7 @@ from sinonym.services.source_repairs import clean_source_fields as _clean_source
 from sinonym.services.source_repairs import load_glued_initial_prefixes as _load_glued_initial_prefixes
 from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
 from sinonym.services.source_repairs import strip_last_field_credentials as _strip_last_field_credentials
+from sinonym.services.suffix_display import display_suffix as _display_suffix
 from sinonym.timo._resolution import (
     Instance,
     ResolvedAuthorFields,
@@ -104,6 +106,17 @@ def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, So
     if rule in _NEW_REPAIR_RULES and _reviewed_source(source):
         return author, None
     return author.copy(update={"first_name": first, "middle_names": middle or None}), author if rule == "credential" else None
+
+
+def _source_suffix(author: ResolvedAuthorFields, source: SourceAuthorFields) -> ResolvedAuthorFields:
+    """The suffix shown as the source wrote it; a source passthrough or a suppressed author keeps its suffix as is."""
+    if author.resolution_action is _ResolutionAction.SUPPRESS or (
+        author.resolution_provenance is _ResolutionProvenance.SOURCE and author.resolution_action is not _ResolutionAction.ASSIGN
+    ):
+        return author
+    fields = (source.first_name, source.middle_names, source.last_name, source.suffix)
+    suffix = _display_suffix(fields, author.last_name, author.suffix)
+    return author if suffix == author.suffix else author.copy(update={"suffix": suffix})
 
 
 _NAME_WORD_SPLIT_RE = re.compile(r"[\s.,]+")
@@ -280,6 +293,13 @@ class Predictor:
 
     def predict_batch(self, instances: list[Instance]) -> list[Prediction]:
         """Resolve one prediction per paper, preserving paper and author order."""
+        predictions = self._predict_repaired(instances)
+        return [
+            Prediction(authors=[_source_suffix(author, source) for author, source in zip(p.authors, i.pp_authors, strict=True)])
+            for p, i in zip(predictions, instances, strict=True)
+        ]
+
+    def _predict_repaired(self, instances: list[Instance]) -> list[Prediction]:
         repairs = [[_repaired_source(author) for author in instance.pp_authors] for instance in instances]
         predictions = self._resolve_instances(
             [
