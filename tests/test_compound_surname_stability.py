@@ -131,6 +131,9 @@ def resolve(predictor: Predictor, first, middle, last):
         # clear compounds are still joined
         (("Ana", "Maria da", "Silva"), ("Ana", "Maria", "da Silva")),
         (("Juan", "Carlos Gonzalez", "Lopez"), ("Juan", "Carlos", "Gonzalez Lopez")),
+        # a pair most registrants write split is no longer joined, and a whole source stays whole
+        (("Ana", "Maria Silva", "Silva"), ("Ana", "Maria Silva", "Silva")),
+        (("Ana Maria", None, "Silva Silva"), ("Ana Maria", "", "Silva Silva")),
     ],
 )
 def test_compound_surname_follows_table(predictor, source, expected):

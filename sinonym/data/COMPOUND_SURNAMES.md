@@ -113,3 +113,33 @@ surfaces removed from the asset). Across every tier, ORCID people who write such
 word alone more often than both words (`mohamed` 40% / 32%, `mohammad` 42% / 36%, `bin` 58% / 29%): the head is a
 given name or a patronymic (`Ahmed / Mohamed / Ali`, `Ahmad / bin / Ismail`). The other construct prefixes register
 both words (`abdul` 62% / 22%, `mohd` 81% / 9%) and stay.
+
+## Refreshing the table: only clear evidence changes a surface (since 0.7.1)
+
+A rebuild from a newer snapshot decides every surface by that day's evidence. Pairs that ORCID registrants write about
+as often whole as split (`rodrigues gomes`, `rodrigues oliveira`, `silva santana`, `srinivasa rao`: 40-60 % of the
+registrants carrying the pair register both words) then cross the majority threshold in either direction. Rebuilding
+every tier from the 2026-11-12 data with unchanged thresholds fixed the family name of 4,489 ORCID people but broke
+3,108, far below the 5:1 acceptance bar of step 7.
+
+`scripts/stabilize_compound_surnames.py` therefore compares the rebuilt table with the shipped one, surface by surface.
+Its evidence is, per surface, the ORCID people whose source-supplied mentions end their `middle + last` words with the
+surface, split by their registered family name in the ORCID public data file: `join` when it is the surface or ends
+with it, `tail` when it is the surface without its first word (the script's docstring gives the exact folding and the
+input schema).
+
+- `join + tail >= 20` and `join >= 0.67` of them: listed;
+- `join + tail >= 20` and `tail >= 0.67` of them: not listed;
+- anything else (ambiguous, too few registrants, or no registry evidence): the shipped status.
+
+Thresholds were chosen on held-out people: evidence from ORCID half A (last iD character not 1 3 5 7 9 X), scored on
+half B against the 0.7.0 table. Keeping the shipped status for ambiguous pairs at a 0.67 margin and 20 registrants
+changed 3 held-out family names for the better and none for the worse; a 0.6 margin let the churn back in (support 5:
+300 fixed, 254 broken). The alternative of dropping ambiguous pairs, so that sinonym follows each source's own field
+split (`--ambiguous abstain`), lost at every setting tried (0.67 and 20: 2,702 fixed, 3,642 broken), because sources
+split pairs their authors registered whole about as often as the reverse. A surface that stays listed keeps its
+shipped row.
+
+The shipped 0.7.1 table was decided on the half-A evidence as well (unlike the `HALF=all` gate of step 5), so half B
+stays a held-out set for the next refresh. It is the 0.7.0 table without `silva silva` (half A: 10 registrants with
+both words, 25 with `Silva`; half B: 8 and 26).
