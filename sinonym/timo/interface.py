@@ -21,6 +21,7 @@ from sinonym.pipeline.name_order_routing import (
 from sinonym.services.batch_analysis import RelatedBatchParseResult as _RelatedBatchParseResult
 from sinonym.services.source_repairs import load_glued_initial_prefixes as _load_glued_initial_prefixes
 from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
+from sinonym.services.source_repairs import strip_last_field_credentials as _strip_last_field_credentials
 from sinonym.timo._resolution import (
     Instance,
     ResolvedAuthorFields,
@@ -28,6 +29,7 @@ from sinonym.timo._resolution import (
     _Model,
     _Resolver,
 )
+from sinonym.timo._resolution import reviewed_exact_source_assignment as _reviewed_exact_source_assignment
 from sinonym.utils.allcaps_given_words import load_allcaps_given_words as _load_allcaps_given_words
 from sinonym.utils.korean_given_names import korean_given_form as _korean_given_form
 from sinonym.utils.korean_given_names import load_korean_given_words as _load_korean_given_words
@@ -58,12 +60,16 @@ def _korean_given(author: ResolvedAuthorFields) -> ResolvedAuthorFields:
 
 
 def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, SourceAuthorFields | None]:
-    """The source with a recoverable given-field defect repaired (services/source_repairs.py), else unchanged, and the
-    unrepaired source when the credential repair applied (``None`` otherwise).
+    """The source with a recoverable field defect repaired (services/source_repairs.py), else unchanged, and the source
+    before the given-field credential repair when that repair applied (``None`` otherwise).
 
-    Resolution then works on the repaired fields, so source-provenance outputs carry the repaired text; the caller
-    keeps the unrepaired source for lineage. VYS pool names are plain strings and are not repaired.
+    Resolution then works on the repaired fields, so source-provenance outputs carry the repaired text, including a
+    surname field rewritten by ``strip_last_field_credentials``; the source before the credential repair only serves as
+    the reference for ``_kept_given_words_out_of_surname``. VYS pool names are plain strings and are not repaired.
     """
+    stripped = _strip_last_field_credentials(author.first_name, author.middle_names, author.last_name)
+    if stripped is not None and _reviewed_exact_source_assignment(author) is None:
+        author = author.copy(update={"first_name": stripped[0], "middle_names": stripped[1], "last_name": stripped[2]})
     repaired = _repair_source_fields(author.first_name, author.middle_names, author.last_name, author.suffix)
     if repaired is None:
         return author, None

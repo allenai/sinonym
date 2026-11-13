@@ -188,3 +188,71 @@ def test_credential_repair_keeps_the_source_surname(predictor: Predictor, source
     first, middle, last = source
     fields = SourceAuthorFields(first_name=first, middle_names=middle, last_name=last)
     assert predictor.predict_batch([Instance(pp_authors=[fields])])[0].authors[0].last_name == surname
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Sunita", "Rao", "Mbbs"), ("Sunita", None, "Rao")),
+        (("Jessica", "Reyes Bsn", "Rn"), ("Jessica", None, "Reyes")),
+        (("Holly Powell", None, "Cnm"), ("Holly", None, "Powell")),
+        (("Kyle", "M Langston", "Pa-C"), ("Kyle", "M", "Langston")),
+        (("Msn", "Anne McAdam", "Rn"), ("Anne", None, "McAdam")),
+        (("Cde", "Linda Ross", "Rn"), ("Linda", None, "Ross")),
+        (("Jan", "van Dijk", "PhD"), ("Jan", None, "van Dijk")),
+        (("Anna", "Lee", "M.B.B.S."), ("Anna", None, "Lee")),
+        (("Anna", "Lee", "Mb Bs"), ("Anna", None, "Lee")),
+        # surnames and given names that are also on the credential list
+        (("Nadia", "Karam", "Fahs"), None),
+        (("Marie", "Pierre", "Fache"), None),
+        (("Rd.", "Budi Santoso", "Fasa"), None),
+        (("Debra", "Hale", "Ches"), None),
+        (("Faan", "Joan Quinn", "Msn"), ("Faan", "Joan", "Quinn")),
+        (("Ay", "Senur", "Pac"), None),
+        (("Haro", "Lopez", "C. de"), None),
+        # initials: spelled out or RN in capitals in the surname field, dotted in the first field before two words
+        (("Ravi", "Kumar", "C N S"), None),
+        (("Ravi Kumar", None, "C.N.S"), None),
+        (("Prema", "Selvi", "D.N.P"), None),
+        (("Amy", "Stone", "M.S.W."), None),
+        (("Ravi", "Kumar", "RN"), None),
+        (("D.R.", "Anand Kumar", "PhD"), None),
+        (("M.R.S.", "Lakshmi Priya", "Phd"), None),
+        (("CNS", "Ravi Kumar", "Phd"), ("CNS", "Ravi", "Kumar")),
+        (("R.A.S.", "Ahmad", "Mrcp"), ("R.A.S.", None, "Ahmad")),
+        (("MA", "Carol Hart", "Rn"), ("MA", "Carol", "Hart")),
+        (("A.", "B. Wood", "Frcs"), ("A.", "B.", "Wood")),
+        # a new surname that is a particle, a degree or a fragment
+        (("Ali", "Al", "Phd"), None),
+        (("Arun", "Kiran Das", "D.Sc."), ("Arun", "Kiran", "Das")),
+        (("Anna", "Lee et al", "Mbbs"), None),
+        (("Laura", "Wood MEd", "Rrt"), None),
+        (("Garcia", "Torrente Arquitectos", "Slp"), None),
+        (("Anna", "Lee", "Ph D"), ("Anna", None, "Lee")),
+        # surname-first source, particle-only first field, a lone given word, a reviewed comma tail
+        (("Okafor,", "O. Vincent.", "Ph.D"), None),
+        (("De", "Jong", "Rn"), None),
+        (("Lena", None, "MSW"), None),
+        (("Lalit", "Kalra", "PhD, MRCP"), None),
+    ],
+)
+def test_strip_last_field_credentials(source, expected) -> None:
+    assert source_repairs.strip_last_field_credentials(*source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Sunita", "Rao", "Mbbs"), ("Sunita", "", "Rao")),
+        (("Jessica", "Reyes Bsn", "Rn"), ("Jessica", "", "Reyes")),
+        (("Nadia", "Karam", "Fahs"), ("Nadia", "Karam", "Fahs")),
+        (("Hon", "Kit Wong", "PhD"), ("Hon-Kit", "", "Wong")),
+        (("Dr", "Anne McAdam", "Rn"), ("Anne", "", "McAdam")),
+        (("Marie", "Pierre", "Fache"), ("Marie", "Pierre", "Fache")),
+    ],
+)
+def test_last_field_credentials_on_the_predictor(predictor: Predictor, source, expected) -> None:
+    first, middle, last = source
+    fields = SourceAuthorFields(first_name=first, middle_names=middle, last_name=last)
+    author = predictor.predict_batch([Instance(pp_authors=[fields])])[0].authors[0]
+    assert (author.first_name, author.middle_names, author.last_name) == expected

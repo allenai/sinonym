@@ -758,7 +758,8 @@ CREDENTIAL_SURNAME_CASES = [
     (("John MD", None, "Smith"), ("John", "MD", "Smith")),
     (("John", "MD", "Smith"), ("John", "MD", "Smith")),
     (("Anna", "Lord", "Wood"), ("Anna", "Lord", "Wood")),
-    (("Jane", "Doe Bsn", "Rn"), ("Jane", "Doe Bsn", "Rn")),
+    (("Jane", "Doe Bsn", "Rn"), ("Jane", "", "Doe")),
+    (("Jane", "Bsn", "Rn"), ("Jane", "Bsn", "Rn")),
     (("J.Lord", None, "Wood"), ("J.", "Lord", "Wood")),
     (("John", "MD", "Smith MD"), ("John", "MD", "Smith")),
     # a listed strip-list credential is dropped

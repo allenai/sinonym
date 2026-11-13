@@ -16,7 +16,12 @@ from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import KOREAN_GIVEN_PATTERNS, VALID_CHINESE_ONSETS, VALID_CHINESE_RIMES
 from sinonym.resources import read_bytes
-from sinonym.services.person_name_normalization import _CREDENTIAL_KEYS, _TITLE_KEYS, reviewed_source_cleanup_pattern
+from sinonym.services.person_name_normalization import (
+    _CREDENTIAL_KEYS,
+    _TITLE_KEYS,
+    reviewed_closed_comma_credential_tail_head,
+    reviewed_source_cleanup_pattern,
+)
 from sinonym.services.slavic_initials import is_dotted_initial
 from sinonym.services.token_order_prior import token_role
 from sinonym.utils.unsplit_given_words import _KOREAN_ONLY_SYLLABLE
@@ -247,3 +252,147 @@ def repair_source_fields(first: str | None, middle: str | None, last: str | None
         if repaired is not None:
             return name, *repaired
     return None
+
+
+# Degrees and post-nominals that sources write as the whole surname field (``Sunita`` / ``Rao`` / ``Mbbs``).
+LAST_FIELD_CREDENTIAL_WORDS = frozenset(
+    {
+        *("phd", "dphil", "pharmd", "psyd", "drph", "mphil", "mpharm", "bpharm", "mbbs", "mbchb", "mbbch", "msc", "bsc"),
+        *("dsc", "mph", "msn", "bsn", "lcsw", "lmsw", "msw", "licsw", "rn", "lpn", "lvn", "cnm", "otr", "otrl"),
+        *("facs", "facp", "facc", "facog", "faap", "facep", "fccp", "fccm", "fasn", "fesc", "fnla"),
+        *("frcpc", "frcp", "frcs", "frcsc", "frcse", "frcsed", "frcsi", "frcpi", "frcpe", "frcpath", "fracp", "fracs"),
+        *("franzcog", "frcog", "frcr", "frcpsych", "frcophth", "frcpch", "frcpa"),
+        *("mrcp", "mrcs", "mrcpch", "mrcog", "mrcgp", "mrcpi", "mrcpsych"),
+        *("dpt", "dnp", "rrt", "fnp", "fnpbc", "fnpc", "anp", "acnp", "agacnp", "pnp", "cpnp", "whnp", "cccslp"),
+        *("crna", "ccrn", "dvm", "aprn", "cscs", "atc", "cdces", "dds", "dmd", "lpc", "lmft", "ibclc", "cnl", "ocn"),
+        *("aocnp", "rdn", "ladc", "bcba", "pac", "cnp", "npc", "msed", "msph", "mhsa", "mhsc", "mpas", "dmsc", "otd"),
+        *("ptd", "ccc", "cnor", "mpp", "lcpc"),
+    },
+)
+# Never read as credentials in the surname field, and never made the surname: given names and surnames (Ma, Meng, Do,
+# Md, Fahs, Fache, Fasa, Ches, Faan), initials (CNS) and name fragments (``C. de``) in the ORCID registry or the corpus.
+LAST_FIELD_NAME_WORDS = frozenset(
+    {
+        *("ma", "meng", "do", "ba", "md", "mba", "pa", "ms", "bs", "jd", "mpa", "edd", "rd", "mt", "ld", "np", "mhs"),
+        *("ed", "mfa", "fahs", "fache", "fasa", "ches", "faan", "cns", "cde"),
+    },
+)
+# Only a name fragment in the surname field; a first field of it is still a credential.
+_FIRST_FIELD_CREDENTIAL_KEYS = frozenset({"cde"})
+# Titles other than these are left to the parser, which drops them; some are also given names (Hon).
+_FIRST_FIELD_NOT_NAME_KEYS = (
+    CREDENTIAL_WORDS | _CREDENTIAL_KEYS | _FIRST_FIELD_CREDENTIAL_KEYS | {"prof", "professor", "dr", "doctor"}
+) - (LAST_FIELD_NAME_WORDS - _FIRST_FIELD_CREDENTIAL_KEYS)
+_LAST_FIELD_SPLIT_RE = re.compile(r"[\s,;/]+")
+_LAST_FIELD_KEY_RE = re.compile(r"[.:()\-]")
+_LAST_FIELD_PARTICLES = frozenset(
+    {"van", "von", "der", "den", "de", "del", "della", "da", "das", "dal", "di", "dos", "du", "la", "le", "ten", "ter"}
+    | {"al", "el", "bin", "ben", "mac", "st", "dello", "degli", "do", "vander", "vande", "te"},
+)
+# A particle alone is not a surname (``Ali`` / ``Al`` / ``Phd``); Das is also a surname on its own.
+_NOT_SURNAME_PARTICLES = (_LAST_FIELD_PARTICLES - {"das"}) | {"et"}
+_SPELLED_LETTERS_RE = re.compile(r"[^\W\d_](?:[.\s]+[^\W\d_])*\.?")
+# ``C.N.S``, ``R N``, ``D.N.P``: two or three letters spelled out are someone's initials as often as a credential.
+_MAX_SPELLED_INITIALS = 3
+_SHORT_CAPITALS = 3
+_LAST_FIELD_SURNAME_RE = re.compile(r"[^\W\d_]{2,}(?:[-'\u2019][^\W\d_]+)*")
+
+
+def _field_tokens(text: str | None) -> list[str]:
+    return [token for token in _LAST_FIELD_SPLIT_RE.split((text or "").strip()) if token]
+
+
+def _last_field_credential(token: str) -> bool:
+    key = _LAST_FIELD_KEY_RE.sub("", token).casefold()
+    if key in LAST_FIELD_NAME_WORDS or key not in LAST_FIELD_CREDENTIAL_WORDS:
+        return False
+    if key == "pac" and "-" not in token:  # Pac is a Polish, Korean and Turkish surname; PA-C keeps its hyphen
+        return False
+    if key == "rn" and token.isupper():  # an RN family name in the ORCID registry is mostly South Indian initials
+        return False
+    return not _spelled_initials(token)
+
+
+def _spelled_initials(token: str) -> bool:
+    return bool(_LETTER_INITIALS_RE.fullmatch(token)) and len(_LAST_FIELD_KEY_RE.sub("", token)) <= _MAX_SPELLED_INITIALS
+
+
+def _only_credentials(last: str | None) -> bool:
+    """Every word is a listed credential, or the words spell one together (``Mb Bs``) without being spelled initials."""
+    tokens = _field_tokens(last)
+    if not tokens:
+        return False
+    if all(map(_last_field_credential, tokens)):
+        return True
+    compact = re.sub(r"\W", "", last or "").casefold()
+    spelled_initials = len(compact) <= _MAX_SPELLED_INITIALS and _SPELLED_LETTERS_RE.fullmatch((last or "").strip())
+    return len(tokens) > 1 and compact in LAST_FIELD_CREDENTIAL_WORDS and not spelled_initials
+
+
+def _first_field_credential(token: str) -> bool:
+    if _spelled_initials(token):
+        return False
+    return _last_field_credential(token) or _LAST_FIELD_KEY_RE.sub("", token).casefold() in _FIRST_FIELD_NOT_NAME_KEYS
+
+
+def _surname_split(tokens: list[str]) -> tuple[list[str], list[str]] | None:
+    """``(given words, surname words)``: the last word with any lower-case particles before it, if it can be a surname."""
+    surname, rest = tokens[-1:], tokens[:-1]
+    while rest and rest[-1] in _LAST_FIELD_PARTICLES:
+        surname.insert(0, rest.pop())
+    core = surname[-1].rstrip(".")
+    key = core.casefold()
+    if (
+        not _LAST_FIELD_SURNAME_RE.fullmatch(core)
+        or key in LAST_FIELD_NAME_WORDS | _NOT_NAME_KEYS | LAST_FIELD_CREDENTIAL_WORDS | _NOT_SURNAME_PARTICLES
+        or (core.isupper() and len(core) <= _SHORT_CAPITALS)
+    ):
+        return None
+    return rest, surname
+
+
+def strip_last_field_credentials(
+    first: str | None,
+    middle: str | None,
+    last: str | None,
+) -> tuple[str | None, str | None, str] | None:
+    """``Sunita`` / ``Rao`` / ``Mbbs`` -> ``("Sunita", None, "Rao")``; ``None`` when it does not apply.
+
+    The surname field must be only credentials; a trailing run of credentials at the end of the middle field goes with
+    it (``Jessica`` / ``Reyes Bsn`` / ``Rn``). The last remaining word, with any lower-case particles before it, becomes
+    the surname; it must be a word of two or more letters that is not a credential or a title. With an empty middle
+    field the word comes from the first field (``Holly Powell`` / - / ``Cnm``) only when a given word stays there. A
+    first field of only credentials or titles gives way to the middle field's first word (``Msn`` / ``Anne McAdam``).
+
+    Left unchanged: a surname-first source (``Okafor,`` / ``O. Vincent.``), a first field of only particles (``De`` /
+    ``Jong`` / ``Rn``), dotted initials before two or more middle words (``D.R.`` / ``Anand Kumar``: South Indian
+    initials, after which the surname is unclear) and a credential tail the reviewed comma rule already reads (``PhD,
+    MRCP``).
+    """
+    first_tokens = _field_tokens(first)
+    if (
+        not _only_credentials(last)
+        or (first or "").strip().endswith(",")
+        or reviewed_closed_comma_credential_tail_head(last) is not None
+        or (first_tokens and all(token.casefold() in _LAST_FIELD_PARTICLES for token in first_tokens))
+    ):
+        return None
+    middle_tokens = _field_tokens(middle)
+    while middle_tokens and _last_field_credential(middle_tokens[-1]):
+        middle_tokens.pop()
+    if len(middle_tokens) > 1 and any(_spelled_initials(token) and len(token.replace(".", "")) > 1 for token in first_tokens):
+        return None
+    if middle_tokens:
+        split = _surname_split(middle_tokens)
+        keep_first = not (first_tokens and all(map(_first_field_credential, first_tokens)))
+    else:
+        while first_tokens and _last_field_credential(first_tokens[-1]):
+            first_tokens.pop()
+        split = _surname_split(first_tokens) if len(first_tokens) > 1 else None
+        keep_first = False
+    if split is None or not (keep_first or split[0]):
+        return None
+    rest, surname = split
+    if keep_first:
+        return first, " ".join(rest) or None, " ".join(surname)
+    return rest[0], " ".join(rest[1:]) or None, " ".join(surname)
