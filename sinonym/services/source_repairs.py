@@ -456,6 +456,8 @@ def _unmojibake(value: str) -> str:
 
 def fix_mojibake(first: str | None, middle: str | None, last: str | None):
     """``ZoltÃ¡n`` / - / ``GÃ¡lik`` -> ``("Zoltán", None, "Gálik")``: UTF-8 bytes decoded as Windows-1252."""
+    if not _MOJIBAKE_RE.search(f"{first or ''} {middle or ''} {last or ''}"):
+        return None
     fixed = tuple(None if value is None else _unmojibake(value) for value in (first, middle, last))
     return None if fixed == (first, middle, last) else fixed
 
@@ -539,7 +541,9 @@ def drop_han_beside_latin(first: str | None, middle: str | None, last: str | Non
     Cantonese syllables keeps its Han form, which the parser reads to tell the surname apart (``Su`` / ``苏`` /
     ``Zhang 张``, ``简月`` / ``Jian`` / ``Yue``).
     """
-    if not any(_HAN_WORD_RE.fullmatch(word) for value in (first, middle, last) for word in (value or "").split()):
+    if not _HAN_LETTER_RE.search(f"{first or ''} {middle or ''} {last or ''}") or not any(
+        _HAN_WORD_RE.fullmatch(word) for value in (first, middle, last) for word in (value or "").split()
+    ):
         return None
     kept = [[word for word in (value or "").split() if not _HAN_WORD_RE.fullmatch(word)] for value in (first, middle, last)]
     if not kept[0]:
@@ -603,6 +607,8 @@ def strip_indonesian_degrees(first: str | None, middle: str | None, last: str | 
     never starts the cut. Titles opening the last field go too (``Dra. Ni Wayan Suniasih``). When no given word is
     left, the last field must hold the whole name: its first word becomes the given name and its last the surname.
     """
+    if "." not in (first or "") and "." not in (middle or ""):
+        return None
     given = f"{first or ''} {middle or ''}".split()
     if not any(_INDONESIAN_DEGREE_RE.fullmatch(token) for token in given):
         return None
