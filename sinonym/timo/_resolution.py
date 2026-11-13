@@ -134,6 +134,16 @@ _GIVEN_NAME_PHRASE_HEADS = frozenset(
     phrase[0] for phrase in (*GIVEN_NAME_PHRASES, *LAST_FIELD_GIVEN_NAME_PHRASES, *MIDDLE_HEAD_GIVEN_NAME_PHRASES)
 )
 
+# Georgian has no letter case: title-casing a Mkhedruli word turns its first letter into a Mtavruli capital (U+1C90..)
+_MKHEDRULI = {code: ord(chr(code).lower()) for code in range(0x1C90, 0x1CC0) if chr(code).lower() != chr(code)}
+
+
+_MTAVRULI_RE = re.compile("[\u1c90-\u1cbf]")
+
+
+def _mkhedruli(text: str) -> str:
+    return text.translate(_MKHEDRULI) if _MTAVRULI_RE.search(text) else text
+
 
 def _is_initial_word(word: str) -> bool:
     """``S.`` or ``S``; a lowercase connective (``e``, ``y``) is not an initial."""
@@ -2079,9 +2089,9 @@ class ResolvedAuthorFields(_Model):
             message = f"{reason.value} requires exact source materialization"
             raise ValueError(message)
         return cls(
-            first_name=selected.given_name,
-            middle_names=selected.middle_name,
-            last_name=selected.surname,
+            first_name=_mkhedruli(selected.given_name),
+            middle_names=_mkhedruli(selected.middle_name),
+            last_name=_mkhedruli(selected.surname),
             suffix=merge_resolved_suffix(source.suffix, selected.suffix),
             resolution_provenance=decision.provenance,
             resolution_action=decision.action,
