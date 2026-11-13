@@ -291,12 +291,12 @@ def strip_titles(first: str | None, middle: str | None, last: str | None, suffix
     Degree words that follow a title go with it (``Dr. rer. nat.``, ``Dipl.-Ing. Dr.``). Every remaining given and middle
     word must be a name word or an initial, and the surname field must keep a word that is not a credential or title.
     """
+    first_tokens, middle_tokens = (first or "").split(), (middle or "").split()
+    tokens = first_tokens + middle_tokens
+    if not middle_tokens or not any(map(_title_token, tokens)):
+        return None
     if not _has_surname(last) or reviewed_source_cleanup_pattern(first, middle, last, suffix) is not None:
         return None
-    first_tokens, middle_tokens = (first or "").split(), (middle or "").split()
-    if not middle_tokens:
-        return None
-    tokens = first_tokens + middle_tokens
     if any(
         _title_token(token)
         and not token.endswith(".")
