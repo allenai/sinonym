@@ -1,5 +1,7 @@
 """Single TIMO boundary for terminal, source-shaped author resolution."""
 
+import re
+
 from pydantic import BaseSettings as _BaseSettings
 from pydantic import Field as _Field
 
@@ -55,17 +57,56 @@ def _korean_given(author: ResolvedAuthorFields) -> ResolvedAuthorFields:
     return author.copy(update={"first_name": given, "middle_names": ""})
 
 
-def _repaired_source(author: SourceAuthorFields) -> SourceAuthorFields:
-    """The source with a recoverable given-field defect repaired (services/source_repairs.py), else unchanged.
+def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, SourceAuthorFields | None]:
+    """The source with a recoverable given-field defect repaired (services/source_repairs.py), else unchanged, and the
+    unrepaired source when the credential repair applied (``None`` otherwise).
 
     Resolution then works on the repaired fields, so source-provenance outputs carry the repaired text; the caller
     keeps the unrepaired source for lineage. VYS pool names are plain strings and are not repaired.
     """
     repaired = _repair_source_fields(author.first_name, author.middle_names, author.last_name, author.suffix)
     if repaired is None:
+        return author, None
+    rule, first, middle = repaired
+    return author.copy(update={"first_name": first, "middle_names": middle or None}), author if rule == "credential" else None
+
+
+_NAME_WORD_SPLIT_RE = re.compile(r"[\s.,]+")
+
+
+def _words(text: str) -> list[str]:
+    return [word.casefold() for word in _NAME_WORD_SPLIT_RE.split(text) if word]
+
+
+def _kept_given_words_out_of_surname(
+    author: ResolvedAuthorFields,
+    reference: ResolvedAuthorFields,
+    source: SourceAuthorFields,
+) -> ResolvedAuthorFields:
+    """Undo a surname that took more source words once a credential was stripped from the given or middle field.
+
+    ``R`` / ``C M Edward Ph.D.`` / ``Udovic``: without ``Ph.D.`` the parse reads ``Edward Udovic`` as the surname. When
+    the surname is the one the unrepaired source parses to with source words in front, those words go back to the
+    middle (``R. | C. M. Edward | Udovic``). A surname that is the whole source surname field stays (``A.`` / ``K. M.
+    PhD`` / ``Fazlul Haque``).
+    """
+    surname, reference_surname = author.last_name.split(), reference.last_name.split()
+    extra = len(surname) - len(reference_surname)
+    if (
+        not reference_surname
+        or extra <= 0
+        or _words(author.last_name) == _words(source.last_name or "")
+        or _words(" ".join(surname[extra:])) != _words(reference.last_name)
+        or not set(_words(" ".join(surname[:extra])))
+        <= set(_words(f"{source.first_name or ''} {source.middle_names or ''} {source.last_name or ''}"))
+    ):
         return author
-    _, first, middle = repaired
-    return author.copy(update={"first_name": first, "middle_names": middle or None})
+    return author.copy(
+        update={
+            "middle_names": " ".join([*author.middle_names.split(), *surname[:extra]]),
+            "last_name": " ".join(surname[extra:]),
+        },
+    )
 
 
 class Prediction(_Model):
@@ -203,14 +244,44 @@ class Predictor:
 
     def predict_batch(self, instances: list[Instance]) -> list[Prediction]:
         """Resolve one prediction per paper, preserving paper and author order."""
+        repairs = [[_repaired_source(author) for author in instance.pp_authors] for instance in instances]
+        predictions = self._resolve_instances(
+            [
+                instance.copy(update={"pp_authors": [author for author, _ in repaired]})
+                for instance, repaired in zip(instances, repairs, strict=True)
+            ],
+        )
+        checked = [
+            index
+            for index, repaired in enumerate(repairs)
+            if any(
+                unrepaired is not None and len(author.last_name.split()) > 1
+                for author, (_, unrepaired) in zip(predictions[index].authors, repaired, strict=True)
+            )
+        ]
+        if not checked:
+            return predictions
+        references = self._resolve_instances(
+            [
+                instances[index].copy(update={"pp_authors": [reference or author for author, reference in repairs[index]]})
+                for index in checked
+            ],
+        )
+        for index, reference_prediction in zip(checked, references, strict=True):
+            authors = zip(predictions[index].authors, reference_prediction.authors, repairs[index], strict=True)
+            predictions[index] = Prediction(
+                authors=[
+                    author if unrepaired is None else _kept_given_words_out_of_surname(author, reference, source)
+                    for author, reference, (source, unrepaired) in authors
+                ],
+            )
+        return predictions
+
+    def _resolve_instances(self, instances: list[Instance]) -> list[Prediction]:
         predictions: list[Prediction | None] = [None] * len(instances)
         requests: list[tuple[list[str], list[str] | None]] = []
         plans: list[tuple[int, int]] = []
 
-        instances = [
-            instance.copy(update={"pp_authors": [_repaired_source(author) for author in instance.pp_authors]})
-            for instance in instances
-        ]
         for instance_index, instance in enumerate(instances):
             pp_names = [author.full_name() for author in instance.pp_authors]
             if not pp_names:

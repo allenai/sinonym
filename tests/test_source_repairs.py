@@ -123,3 +123,68 @@ def test_glued_initial_after_title_or_shared_word(predictor: Predictor, source, 
     fields = SourceAuthorFields(first_name=first, middle_names=middle, last_name=last)
     author = predictor.predict_batch([Instance(pp_authors=[fields])])[0].authors[0]
     assert (author.first_name, author.middle_names, author.last_name) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("R", "C M Edward Ph.D.", "Udovic"), ("R.", "C. M. Edward", "Udovic")),
+        (("George", "B. Louis Ph.D.", "Arner"), ("George", "B. Louis", "Arner")),
+        (("Jr.", "PharmD", "H. Glenn Anderson"), ("Jr.", "H. Glenn", "Anderson")),
+        # a two-word surname field the repaired parse keeps whole stays whole
+        (("A.", "K. M. PhD", "Fazlul Haque"), ("A.", "K. M.", "Fazlul Haque")),
+        (("K", "S R PhD", "Rama Rao"), ("K.", "S. R.", "Rama Rao")),
+    ],
+)
+def test_credential_repair_keeps_the_given_words(predictor: Predictor, source, expected) -> None:
+    first, middle, last = source
+    fields = SourceAuthorFields(first_name=first, middle_names=middle, last_name=last)
+    author = predictor.predict_batch([Instance(pp_authors=[fields])])[0].authors[0]
+    assert (author.first_name, author.middle_names, author.last_name) == expected
+
+
+def test_credential_repair_on_one_author_of_several(predictor: Predictor) -> None:
+    sources = [
+        SourceAuthorFields(first_name="R", middle_names="C M Edward Ph.D.", last_name="Udovic"),
+        SourceAuthorFields(first_name="John", last_name="Smith"),
+        SourceAuthorFields(first_name="K", middle_names="S R PhD", last_name="Rama Rao"),
+    ]
+    authors = predictor.predict_batch([Instance(pp_authors=sources)])[0].authors
+    assert [(a.first_name, a.middle_names, a.last_name) for a in authors] == [
+        ("R.", "C. M. Edward", "Udovic"),
+        ("John", "", "Smith"),
+        ("K.", "S. R.", "Rama Rao"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source", "surname"),
+    [
+        (("R", "C M Edward Ph.D.", "Udovic"), "Udovic"),
+        (("S", "R N Timothy Ph.D.", "Bredow"), "Bredow"),
+        (("E", "C M John Ph.D.", "Rybolt"), "Rybolt"),
+        (("George", "B. Louis Ph.D.", "Arner"), "Arner"),
+        (("Vito", "J. Counsel Esq.", "Petitti"), "Petitti"),
+        (("Millard", "E. Colonel Ed.D.", "Moon"), "Moon"),
+        (("Robert", "J. Jr PhD", "Belton"), "Belton"),
+        (("Kathryn", "S. McClelland Ph.D", "Humphrey"), "Humphrey"),
+        (("S.", "H. M.Hum. Ll.M.", "Paripurna"), "Paripurna"),
+        (("S.H.M.Hum.", "Ll.M", "Paripurna"), "Paripurna"),
+        (("M.A.Edin.", "B.Sc", "Fothergill"), "Fothergill"),
+        (("Nathalie", "C. Mdcm Frcpc", "Zeitouni"), "Zeitouni"),
+        (("Ebenezer", "A. Face Facp", "Nyenwe"), "Nyenwe"),
+        # the whole name in the surname field
+        (("FRCPA", "FRCPath", "C.  Soon  Lee  MD"), "Lee"),
+        (("Jr.", "PharmD", "H. Glenn Anderson"), "Anderson"),
+        (("S.", "T. M.Eng.", "I Wayan Mustika"), "Mustika"),
+        (("DNSc", "Aprn Ccrn", "A. Elaine Bond"), "Bond"),
+        (("MChir", "FRCS", "D. Innes Williams MD"), "Williams"),
+        (("Msph", "DrPH", "C. Perry Brown"), "Brown"),
+        (("Mphil.", "Ir. H Agoes", "Santoso"), "Santoso"),
+        (("Leslie", "A. PhD", "Burton"), "Burton"),
+    ],
+)
+def test_credential_repair_keeps_the_source_surname(predictor: Predictor, source, surname) -> None:
+    first, middle, last = source
+    fields = SourceAuthorFields(first_name=first, middle_names=middle, last_name=last)
+    assert predictor.predict_batch([Instance(pp_authors=[fields])])[0].authors[0].last_name == surname
