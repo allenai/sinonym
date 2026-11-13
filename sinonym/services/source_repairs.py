@@ -19,6 +19,8 @@ from sinonym.chinese_names_data import KOREAN_GIVEN_PATTERNS, VALID_CHINESE_ONSE
 from sinonym.resources import read_bytes
 from sinonym.services.person_name_normalization import (
     _CREDENTIAL_KEYS,
+    EAST_ASIAN_GIVEN_SYLLABLES,
+    EAST_ASIAN_SURNAMES,
     _TITLE_KEYS,
     reviewed_closed_comma_credential_tail_head,
     reviewed_source_cleanup_pattern,
@@ -474,10 +476,58 @@ def strip_junk(first: str | None, middle: str | None, last: str | None):
     return fixed
 
 
+_HAN_WORD_RE = re.compile(r"[(（]?[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]+[)）]?")
+
+
+def drop_han_beside_latin(first: str | None, middle: str | None, last: str | None):
+    """``Luis`` / ``C. 子山`` / ``Ho 何`` -> ``("Luis", "C.", "Ho")``: the Han form written beside a romanized name.
+
+    Han-only words are dropped when a Latin given name and a Latin surname remain; a first field left empty takes the
+    middle field's first word. A name whose Latin words of three or more letters all split into Chinese, Korean or
+    Cantonese syllables keeps its Han form, which the parser reads to tell the surname apart (``Su`` / ``苏`` /
+    ``Zhang 张``, ``简月`` / ``Jian`` / ``Yue``).
+    """
+    if not any(_HAN_WORD_RE.fullmatch(word) for value in (first, middle, last) for word in (value or "").split()):
+        return None
+    kept = [[word for word in (value or "").split() if not _HAN_WORD_RE.fullmatch(word)] for value in (first, middle, last)]
+    if not kept[0]:
+        kept[0], kept[1] = kept[1][:1], kept[1][1:]
+    if not all(any(_LATIN_LETTER_RE.search(word) for word in field) for field in (kept[0], kept[2])):
+        return None
+    if any(_HAN_LETTER_RE.search(word) for field in kept for word in field):
+        return None
+    latin = [part.casefold() for field in kept for word in field for part in re.split(r"[\s.\-]+", word) if len(part) > 2]  # noqa: PLR2004
+    if all(_romanized_cjk_word(part) for part in latin):
+        return None
+    return tuple(" ".join(field) or None for field in kept)
+
+
+def _cjk_syllable(part: str) -> bool:
+    return (
+        part in EAST_ASIAN_GIVEN_SYLLABLES
+        or part in EAST_ASIAN_SURNAMES
+        or part in VALID_CHINESE_RIMES
+        or any(part[:i] in VALID_CHINESE_ONSETS and part[i:] in VALID_CHINESE_RIMES for i in range(1, len(part)))
+    )
+
+
+@lru_cache(maxsize=4096)
+def _romanized_cjk_word(word: str, syllables: int = 3) -> bool:
+    """A word that splits into at most three romanized Chinese, Korean or Cantonese syllables (``junjie``, ``chow``)."""
+    if not word:
+        return True
+    return syllables > 0 and any(
+        _cjk_syllable(word[:i]) and _romanized_cjk_word(word[i:], syllables - 1) for i in range(1, len(word) + 1)
+    )
+
+
+_HAN_LETTER_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]")
+
 FIELD_CLEANUPS: tuple[tuple[str, Callable], ...] = (
     ("latin_lookalike", latin_lookalikes),
     ("mojibake", fix_mojibake),
     ("junk", strip_junk),
+    ("han_beside_latin", drop_han_beside_latin),
 )
 
 

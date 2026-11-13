@@ -131,3 +131,27 @@ def test_junk_cleanup_keeps_a_name_without_a_given_name(source):
     from sinonym.services.source_repairs import strip_junk
 
     assert strip_junk(*source) is None
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Luis", "C. 子山", "Ho 何"), ("Luis", "C.", "Ho")),
+        (("Kevin", "M.", "Wong 黃浩文"), ("Kevin", "M.", "Wong")),
+        (("Alex", None, "Green (文浩航)"), ("Alex", "", "Green")),
+        # control: a romanized Chinese name keeps the Han form the parser reads for the surname
+        (("Su", "苏", "Zhang 张"), ("Su", "", "Zhang")),
+    ],
+)
+def test_han_form_beside_a_latin_name_is_dropped(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    "source",
+    [("简月", "Jian", "Yue"), ("Junjie", "俊杰", "Qiang 强"), ("Hongan", "红安", "Ma 马"), ("Chak", "On 鄒澤安", "Chow")],
+)
+def test_romanized_chinese_name_keeps_its_han_form(source):
+    from sinonym.services.source_repairs import drop_han_beside_latin
+
+    assert drop_han_beside_latin(*source) is None
