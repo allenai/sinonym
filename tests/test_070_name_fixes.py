@@ -27,3 +27,19 @@ def resolve(predictor: Predictor, first, middle, last, suffix=None):
 )
 def test_georgian_is_not_title_cased_into_mtavruli(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Ida", "Di", "Di Mola"), ("Ida", "", "Di Mola")),
+        (("Miled", "El", "El Hajji"), ("Miled", "", "El Hajji")),
+        (("Pamela", "R von", "von Hurst"), ("Pamela", "R.", "von Hurst")),
+        (("GRAZIELLA", "MARTINS DE", "DE MELLO"), ("Graziella", "Martins", "de Mello")),
+        (("Kim", "Van", "Van"), ("Kim", "", "Van Van")),
+        (("Thi", "Le", "Le"), ("Thi", "Le", "Le")),
+        (("Carlos", "A. Coello", "Coello"), ("Carlos", "A.", "Coello Coello")),
+    ],
+)
+def test_particle_written_twice_is_kept_once(predictor, source, expected):
+    assert resolve(predictor, *source) == expected

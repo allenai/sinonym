@@ -238,10 +238,34 @@ def strip_credentials(first: str | None, middle: str | None, last: str | None, s
     return " ".join(given), " ".join(kept_middle) or None
 
 
+# Family particles a source writes twice, closing the middle field and opening the surname field (``Ida`` / ``Di`` /
+# ``Di Mola``). Le, Lo, Li, Do, San, E and Y are left out: they are also East Asian names or connectives.
+_REPEATED_PARTICLES = frozenset(
+    {"de", "da", "di", "del", "della", "dello", "degli", "dos", "das", "du", "des", "la", "el", "al", "van", "von"}
+    | {"der", "den", "ten", "ter", "vande", "vander", "dal", "abd", "abu", "ben", "bin", "binti", "bint", "ul", "ur", "ap"},
+)
+
+
+def drop_repeated_particle(first: str | None, middle: str | None, last: str | None, suffix: str | None):
+    """``Ida`` / ``Di`` / ``Di Mola`` -> ``("Ida", None)``: a particle closing the middle field that also opens the surname.
+
+    The surname field must go on after the particle, so a one-word surname field (``Kim`` / ``Van`` / ``Van``) is left
+    alone.
+    """
+    middle_tokens, last_tokens = (middle or "").split(), (last or "").split()
+    if not middle_tokens or len(last_tokens) < 2 or not (first or "").strip():  # noqa: PLR2004
+        return None
+    particle = middle_tokens[-1].casefold()
+    if particle not in _REPEATED_PARTICLES or particle != last_tokens[0].casefold():
+        return None
+    return first, " ".join(middle_tokens[:-1]) or None
+
+
 RULES: tuple[tuple[str, Callable], ...] = (
     ("glued_initial", unglue_given_initial),
     ("doubled_period", collapse_doubled_initial_periods),
     ("credential", strip_credentials),
+    ("repeated_particle", drop_repeated_particle),
 )
 
 
