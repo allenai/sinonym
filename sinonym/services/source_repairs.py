@@ -681,6 +681,32 @@ def swap_initials_surname(first: str | None, middle: str | None, last: str | Non
     return initials, None, word
 
 
+# MA is a degree and one of the most common family names: 47k people in the 2026 ORCID registry have the family name Ma,
+# 84% of all two-letter family names folding to it are written that way, not as initials. BA and DO are also common
+# family names, but sources in capitals use BA as the degree, and DO is already kept as the surname.
+_SURNAME_DEGREE_WORDS = frozenset({"MA"})
+_MIN_WORDS_BEFORE_DEGREE = 2
+
+
+def keep_capitals_surname(first: str | None, middle: str | None, last: str | None, suffix: str | None):
+    """``CHAE`` / ``WOO`` / ``MA`` -> ``("CHAE", "WOO", "Ma")``: in a source written all in capitals, a surname field MA
+    stays the surname instead of being dropped as the degree.
+
+    Capitals carry no case signal there (``NYUK`` / ``LING`` / ``MA``, ``MICHAEL KIN GAY`` / - / ``MA``). Only with two or
+    more words before it, all in Latin capitals, and an empty suffix field (``JOHN`` / ``SMITH`` / ``MA``, suffix
+    ``PhD``: MA is the degree). A mixed-case source (``Elizabeth`` / ``Pearce`` / ``MA``) still reads it as the degree,
+    and a single word before it is left to the initials-surname rule (``Baxter`` / - / ``MA``).
+    """
+    surname = (last or "").strip()
+    words = [word for word in f"{first or ''} {middle or ''}".split() if any(ch.isalpha() for ch in word)]
+    if surname not in _SURNAME_DEGREE_WORDS or len(words) < _MIN_WORDS_BEFORE_DEGREE or (suffix or "").strip():
+        return None
+    letters = [ch for word in words for ch in word if ch.isalpha()]
+    if not all(ch.isupper() and unicodedata.name(ch, "").startswith("LATIN") for ch in letters):
+        return None
+    return first, middle, surname.title()
+
+
 FIELD_CLEANUPS: tuple[tuple[str, Callable], ...] = (
     ("latin_lookalike", latin_lookalikes),
     ("mojibake", fix_mojibake),

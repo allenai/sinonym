@@ -24,6 +24,7 @@ from sinonym.services.non_person import reviewed_non_person_source_pattern as _r
 from sinonym.services.person_name_normalization import PersonNameNormalizationService as _PersonNameNormalizationService
 from sinonym.services.person_name_normalization import reviewed_source_cleanup_pattern as _reviewed_source_cleanup_pattern
 from sinonym.services.source_repairs import clean_source_fields as _clean_source_fields
+from sinonym.services.source_repairs import keep_capitals_surname as _keep_capitals_surname
 from sinonym.services.source_repairs import load_glued_initial_prefixes as _load_glued_initial_prefixes
 from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
 from sinonym.services.source_repairs import strip_last_field_credentials as _strip_last_field_credentials
@@ -96,6 +97,9 @@ def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, So
     cleaned = _clean_source_fields(author.first_name, author.middle_names, author.last_name)
     if cleaned is not None and not _reviewed_source(source):
         author = author.copy(update={"first_name": cleaned[0], "middle_names": cleaned[1], "last_name": cleaned[2] or ""})
+    capitals = _keep_capitals_surname(author.first_name, author.middle_names, author.last_name, author.suffix)
+    if capitals is not None and not _reviewed_source(source):
+        author = author.copy(update={"last_name": capitals[2]})
     stripped = _strip_last_field_credentials(author.first_name, author.middle_names, author.last_name)
     if stripped is not None and _reviewed_exact_source_assignment(author) is None:
         author = author.copy(update={"first_name": stripped[0], "middle_names": stripped[1], "last_name": stripped[2]})

@@ -375,3 +375,26 @@ def test_source_passthrough_keeps_its_suffix(predictor):
     assert author.resolution_provenance.value == "source"
     assert author.resolution_action.value != "assign"
     assert author.suffix == "PhD"
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("CHAE", "WOO", "MA"), ("Chae", "Woo", "Ma")),
+        (("MICHAEL KIN GAY", None, "MA"), ("Michael", "Kin Gay", "Ma")),
+        (("NYUK", "LING", "MA"), ("Nyuk", "Ling", "Ma")),
+        # controls: a mixed-case source keeps reading it as the degree; other degrees; one word before it
+        (("Elizabeth", "Pearce", "MA"), ("Elizabeth", "", "Pearce")),
+        (("JOHN", "SMITH", "MD"), ("John", "", "Smith")),
+        (("Baxter", None, "MA"), ("MA", "", "Baxter")),
+        (("BAXTER", "-", "MA"), ("", "", "Baxter-Ma")),
+        (("李", "明", "MA"), ("Li-Ming", "", "Ma")),
+        (("THU", "THI", "DO"), ("THU", "THI", "Do")),
+    ],
+)
+def test_capitals_surname_that_is_also_a_degree(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+def test_capitals_ma_with_a_degree_in_the_suffix_field_stays_the_degree(predictor):
+    assert resolve(predictor, "JOHN", "SMITH", "MA", "PhD") == ("John", "", "Smith")
