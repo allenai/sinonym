@@ -134,5 +134,6 @@ def has_korean_only_syllable(token: str) -> bool:
     return _KOREAN_ONLY_SYLLABLE.search(_fold(token)) is not None
 
 
+@lru_cache(maxsize=65536)
 def is_unsplit_given_word(token: str) -> bool:
     return is_listed_unsplit_given_word(token) or has_korean_only_syllable(token)
