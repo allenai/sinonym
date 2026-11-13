@@ -523,11 +523,74 @@ def _romanized_cjk_word(word: str, syllables: int = 3) -> bool:
 
 _HAN_LETTER_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]")
 
+# Indonesian academic degrees written S.Kom., M.Pd, S.Si, M.Eng.: a letter, a dot and a listed subject abbreviation.
+_INDONESIAN_DEGREE_RE = re.compile(
+    r"(?:S|M|D)\.(?:Kom|Si|Pd|Fis|Eng|Hum|Sos|Psi|Ked|Farm|Kep|Gz|Hut|Pt|Ag|Ds|Sn|Kes|Ak|Ph|Ikom|Stat|Mat|Par|Pi"
+    r"|Hub|Kel|Tr|IP|TP|KM|AP|Ars|Pol|Ling|Th|Fil|Biomed|Kom\.?I)\.?,?",
+)
+# Pieces that sit in a degree run beside such a degree: the S. T. of S.T., bare degree capitals, titles, stray dots.
+_DEGREE_RUN_PIECE_RE = re.compile(
+    r"(?:[A-Z]\.?|ST|SE|SH|MT|MM|MH|MSi|MKom|SKom|SPd|MPd|SSi|St|Ir|Dr|Drs|Dra|Prof|Ph\.?D|Ll\.?M|M\.?Sc|B\.?Sc|MBA|"
+    r"M\.\s?T|S\.\s?T|S\.\s?E|S\.\s?H|M\.\s?M|M\.\s?H|M\.\s?P|M\.\s?E|Hj|Drh|drh|Apt|Mm|Stp|STP|M\.?Des|M\.?Ed"
+    r"|D\.?Eng|Dr\.?-?Ing|Ing|Sp\.?[A-Z][A-Za-z]*(?:-[A-Z])?)\.?,?|\.|,",
+)
+_TITLE_PREFIX_RE = re.compile(r"(?:Dr|Dra|Drs|Ir|Prof)\.?")
+_SINGLE_LETTER_RE = re.compile(r"[A-Z]\.?")
+
+
+def _degree_run_piece(token: str) -> bool:
+    return bool(_INDONESIAN_DEGREE_RE.fullmatch(token) or _DEGREE_RUN_PIECE_RE.fullmatch(token))
+
+
+def strip_indonesian_degrees(first: str | None, middle: str | None, last: str | None):
+    """``S.Kom.`` / ``M.Eng.`` / ``Waskitho Wibisono`` -> ``("Waskitho", None, "Wibisono")``: Indonesian degrees in the
+    given fields.
+
+    A run of degree pieces at the start or the end of the given fields is dropped when it holds a listed Indonesian
+    degree (``S.Kom.``, ``M.Pd``); a lone ``S. T.`` or ``St`` is someone's initials or name as often as a degree and
+    never starts the cut. Titles opening the last field go too (``Dra. Ni Wayan Suniasih``). When no given word is
+    left, the last field must hold the whole name: its first word becomes the given name and its last the surname.
+    """
+    given = f"{first or ''} {middle or ''}".split()
+    if not any(_INDONESIAN_DEGREE_RE.fullmatch(token) for token in given):
+        return None
+    degrees = [i for i, token in enumerate(given) if _INDONESIAN_DEGREE_RE.fullmatch(token)]
+    head = degrees[-1] + 1 if all(_degree_run_piece(t) for t in given[: degrees[-1] + 1]) else 0
+    while head and head < len(given) and _degree_run_piece(given[head]) and not _SINGLE_LETTER_RE.fullmatch(given[head]):
+        head += 1
+    tail = degrees[0] if head == 0 and all(_degree_run_piece(t) for t in given[degrees[0] :]) else len(given)
+    if head == 0 and tail == len(given):
+        return None
+    kept = given[head:tail]
+    last_words = (last or "").split()
+    while last_words and _TITLE_PREFIX_RE.fullmatch(last_words[0]):
+        last_words.pop(0)
+    if any(_degree_run_piece(t) and not _SINGLE_LETTER_RE.fullmatch(t) for t in kept) or not last_words:
+        return None
+    if not kept:
+        ends = (last_words[0], last_words[-1])
+        if len(last_words) < 2 or not all(_LETTER_SURNAME_RE.fullmatch(word) for word in ends):  # noqa: PLR2004
+            return None
+        if not all(map(_name_word, last_words[1:-1])):
+            return None
+        return last_words[0], " ".join(last_words[1:-1]) or None, last_words[-1]
+    if not all(_name_word(t) and not _abbreviation_or_qualifier(t) and "." not in t.rstrip(".") for t in kept):
+        return None
+    if {t.casefold() for t in kept} & _NOT_NAME_BYLINE_WORDS:
+        return None
+    return kept[0], " ".join(kept[1:]) or None, " ".join(last_words)
+
+
+# Indonesian byline words that are not names: supervisor, psychologist, lecturer registration numbers
+_NOT_NAME_BYLINE_WORDS = frozenset({"pembimbing", "psikolog", "nidn", "nip", "dosen"})
+
+
 FIELD_CLEANUPS: tuple[tuple[str, Callable], ...] = (
     ("latin_lookalike", latin_lookalikes),
     ("mojibake", fix_mojibake),
     ("junk", strip_junk),
     ("han_beside_latin", drop_han_beside_latin),
+    ("indonesian_degree", strip_indonesian_degrees),
 )
 
 

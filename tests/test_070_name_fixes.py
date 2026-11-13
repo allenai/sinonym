@@ -155,3 +155,23 @@ def test_romanized_chinese_name_keeps_its_han_form(source):
     from sinonym.services.source_repairs import drop_han_beside_latin
 
     assert drop_han_beside_latin(*source) is None
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("S.Kom.", "M.Eng.", "Waskitho Wibisono"), ("Waskitho", "", "Wibisono")),
+        (("S.Si", "M.Eng", "Ardhi Wicaksono"), ("Ardhi", "", "Wicaksono")),
+        (("S.", "T. M.Eng.", "Diananta Pramitasari"), ("Diananta", "", "Pramitasari")),
+        (("St", "M.Eng.", "Maria Anityasari"), ("Maria", "", "Anityasari")),
+        (("S.Fis.", "S.Pd. M.Ph", "Totok Budi Santoso"), ("Totok", "Budi", "Santoso")),
+        (("S.", "T. M.Eng. Bimo Sunarfri", "Hantono"), ("Bimo", "Sunarfri", "Hantono")),
+        # controls: initials that spell a degree, a lone degree before a one-word name, a byline word left over
+        (("S.", "T.", "Wibowo"), ("S.", "T.", "Wibowo")),
+        (("Simon", "S.M.", "Ng"), ("Simon", "S. M.", "Ng")),
+        (("M.Pd", None, "Sutama"), ("M.Pd", "", "Sutama")),
+        (("M.Sn", "Pembimbing", "Muksin"), ("M.Sn", "Pembimbing", "Muksin")),
+    ],
+)
+def test_indonesian_degrees_in_the_given_fields(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
