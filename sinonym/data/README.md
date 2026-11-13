@@ -61,8 +61,7 @@ Five assets are lookup tables built from Semantic Scholar author names:
   names are not made worse; they just do not get the gain. Shape-based rules (digraph initials, glued initials, the
   Japanese given-first veto) apply to any name.
 - **Provenance.** Build every asset from source names as published, never from sinonym's output: per row, all
-  `original_*` fields when `original_last` is set, else the stored fields, and never coalesce per field (the export is
-  described in author-names `NAME_COUNTS.md`). An asset built from normalized names learns sinonym's own decisions.
+  `original_*` fields when `original_last` is set, else the stored fields, and never coalesce per field. An asset built from normalized names learns sinonym's own decisions.
 - **Refresh.** The tables age as new authors and conventions arrive. Rebuild them from a newer snapshot periodically,
   and in particular after each ORCID backfill (more linked people strengthens the ORCID-gated compound tier), then
   rerun the ORCID ledger, the registry agreement and the S2AND gold-cluster check before shipping.

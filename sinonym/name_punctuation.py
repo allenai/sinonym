@@ -115,7 +115,7 @@ PERSON_HYPHEN_LIKE = frozenset(
 # Invisible markup that carries no name content. These survive `clean_roman_pattern` (they are
 # neither Roman letters nor punctuation), leave the token unmatched by the tokenizer, and the
 # name then resolves as NON_PERSON_SOURCE_PASSTHROUGH -- so a real author is marked a non-person.
-# 24,933 rows of `paper_authors_full` carry one; a LEADING one also becomes the first initial in
+# 24,933 rows of the paper-authors table carry one; a LEADING one also becomes the first initial in
 # scholar's `cluster_block_key`, because that key slices the raw first name.
 #
 # Deliberately EXCLUDED, per the measured split:

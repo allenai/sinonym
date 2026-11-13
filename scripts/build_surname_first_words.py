@@ -3,13 +3,13 @@
 (``Dmitrieva / - / N.M.``, ``Назарова / - / А.Р.``) and otherwise uses mostly as a surname.
 
 Input: the source-name counts export (one row per distinct source ``first_name / middle_names / last_name`` triple with
-``mention_count``; see author-names ``NAME_COUNTS.md``). A word qualifies when
+``mention_count``). A word qualifies when
   - it appears as the whole ``first_name`` of a triple whose ``middle_names`` is empty and whose ``last_name`` is 2-3
     initials, each with its own dot (Latin or Cyrillic), and
   - across all single-word fields of the corpus it is a ``last_name`` at least MIN_AS_LAST times and more often than a
     ``first_name``.
 The second condition keeps out names written ``Sowmya / - / K. R.``, where the word is the given name and the initials
-are the family name. Measured on every ORCID person (dataset v4): 3,072 people reunited / 47 split; against the ORCID
+are the family name. Measured on every ORCID person: 3,072 people reunited / 47 split; against the ORCID
 registry the resulting surname is right 4,863 times and wrong 409.
 
 Usage: build_surname_first_words.py --counts '<name_counts parquet glob>' --output sinonym/data/surname_first_words.csv.gz
