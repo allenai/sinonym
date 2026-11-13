@@ -585,12 +585,30 @@ def strip_indonesian_degrees(first: str | None, middle: str | None, last: str | 
 _NOT_NAME_BYLINE_WORDS = frozenset({"pembimbing", "psikolog", "nidn", "nip", "dosen"})
 
 
+_HYPHENATED_GENERATION_RE = re.compile(r"(?<=[^\W\d_]{3})[-\u2010\u2011](Neto|Filho|Júnior|Junior|Sobrinho|Netto)$", re.IGNORECASE)
+
+
+def space_hyphenated_generation(first: str | None, middle: str | None, last: str | None):
+    """``Walter`` / - / ``Faria-Neto`` -> ``("Walter", None, "Faria Neto")``: a Portuguese generation word hyphenated to the
+    surname is written apart, so it goes to the suffix as it does when the source writes ``Faria Neto``. Not after a
+    particle (``Del-Neto``) or in a surname-only source."""
+    surname = (last or "").strip()
+    match = _HYPHENATED_GENERATION_RE.search(surname)
+    if match is None or (not (first or "").strip() and not (middle or "").strip()):
+        return None
+    head = re.split(r"[\s\-\u2010\u2011]", surname[: match.start()])[-1]
+    if head.casefold() in _LAST_FIELD_PARTICLES:
+        return None
+    return first, middle, f"{surname[: match.start()]} {match.group(1)}"
+
+
 FIELD_CLEANUPS: tuple[tuple[str, Callable], ...] = (
     ("latin_lookalike", latin_lookalikes),
     ("mojibake", fix_mojibake),
     ("junk", strip_junk),
     ("han_beside_latin", drop_han_beside_latin),
     ("indonesian_degree", strip_indonesian_degrees),
+    ("hyphenated_generation", space_hyphenated_generation),
 )
 
 

@@ -196,3 +196,22 @@ def test_indonesian_degrees_in_the_given_fields(predictor, source, expected):
 )
 def test_given_name_word_stays_out_of_the_surname(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Walter", None, "Faria-Neto"), ("Walter", "", "Faria", "Neto")),
+        (("Edward", None, "Araujo-Júnior"), ("Edward", "", "Araujo", "Jr.")),
+        (("João", None, "Silva-Filho"), ("João", "", "Silva", "Filho")),
+        # controls: a particle before the hyphen, the word as the whole surname
+        (("A.", None, "Di-Neto"), ("A.", "", "Di-Neto", None)),
+        (("A.", None, "Del-Neto"), ("A.", "", "Del-Neto", None)),
+        (("Ana", None, "Neto"), ("Ana", "", "Neto", None)),
+        ((None, None, "Campos-Neto"), ("", "", "Campos-Neto", None)),
+    ],
+)
+def test_hyphenated_generation_word_goes_to_the_suffix(predictor, source, expected):
+    source_fields = SourceAuthorFields(first_name=source[0], middle_names=source[1], last_name=source[2])
+    author = predictor.predict_batch([Instance(pp_authors=[source_fields])])[0].authors[0]
+    assert (author.first_name, author.middle_names, author.last_name, author.suffix) == expected
