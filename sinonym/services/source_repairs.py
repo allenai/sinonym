@@ -809,9 +809,11 @@ def _only_credentials(last: str | None) -> bool:
         return False
     if all(map(_last_field_credential, tokens)):
         return True
+    if len(tokens) == 1:
+        return False
     compact = re.sub(r"\W", "", last or "").casefold()
     spelled_initials = len(compact) <= _MAX_SPELLED_INITIALS and _SPELLED_LETTERS_RE.fullmatch((last or "").strip())
-    return len(tokens) > 1 and compact in LAST_FIELD_CREDENTIAL_WORDS and not spelled_initials
+    return compact in LAST_FIELD_CREDENTIAL_WORDS and not spelled_initials
 
 
 def _first_field_credential(token: str) -> bool:
@@ -854,10 +856,11 @@ def strip_last_field_credentials(
     initials, after which the surname is unclear) and a credential tail the reviewed comma rule already reads (``PhD,
     MRCP``).
     """
+    if not _only_credentials(last):
+        return None
     first_tokens = _field_tokens(first)
     if (
-        not _only_credentials(last)
-        or (first or "").strip().endswith(",")
+        (first or "").strip().endswith(",")
         or reviewed_closed_comma_credential_tail_head(last) is not None
         or (first_tokens and all(token.casefold() in _LAST_FIELD_PARTICLES for token in first_tokens))
     ):
