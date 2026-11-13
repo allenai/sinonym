@@ -6,8 +6,9 @@ accents stripped, split on spaces, hyphens, dots and commas, three or more lette
 name and once per person as a family name. A word is listed when at least 200 people use it and at least 95% of them use
 it as a given name (``jonathan``, ``gareth``, ``myriam``; not ``lee`` or ``kumar``, which are also surnames), and fewer
 than 0.5% of those given-name people open a multi-word family name with it (not ``andres``, ``blanca``, ``david``,
-``jose``: Iberian and South Asian double surnames start with them). The output holds only words and counts, no
-identifiers.
+``jose``: Iberian and South Asian double surnames start with them). Words that miss those bars but that at least 80% use as
+a given name and fewer than 1.5% open a multi-word family name with (``philip``, ``james``, ``paul``) are listed too: the
+runtime reads them only before a common Chinese surname. The output holds only words and counts, no identifiers.
 
 Usage: build_given_name_words.py --registry '<registry parquet glob>' --output sinonym/data/given_name_words.csv.gz
 """
@@ -23,9 +24,10 @@ from pathlib import Path
 import duckdb
 
 MIN_PEOPLE = 200
-MIN_GIVEN_SHARE = 0.95
-# share of the word's given-name people who also open a multi-word family name with it (Blanca Mena, Andrés Santos)
-MAX_FAMILY_HEAD_SHARE = 0.005
+# the general bars (95% given, under 0.5% family head) live in sinonym/utils/given_name_words.py
+# looser bars for a word before a common Chinese surname (C. / L. Philip / Chen), where no double surname opens with it
+MIN_GIVEN_SHARE_CHINESE = 0.80
+MAX_FAMILY_HEAD_SHARE_CHINESE = 0.015
 
 
 def build(registry: str) -> list[tuple]:
@@ -40,8 +42,8 @@ def build(registry: str) -> list[tuple]:
         h AS (SELECT w, count(*) n FROM hw GROUP BY 1)
         SELECT g.w, g.n, coalesce(f.n, 0), coalesce(h.n, 0) FROM g LEFT JOIN f USING (w) LEFT JOIN h USING (w)
         WHERE length(g.w) >= 3 AND regexp_full_match(g.w, '[a-z]+')
-          AND g.n + coalesce(f.n, 0) >= {MIN_PEOPLE} AND g.n >= {MIN_GIVEN_SHARE} * (g.n + coalesce(f.n, 0))
-          AND coalesce(h.n, 0) < {MAX_FAMILY_HEAD_SHARE} * g.n
+          AND g.n + coalesce(f.n, 0) >= {MIN_PEOPLE} AND g.n >= {MIN_GIVEN_SHARE_CHINESE} * (g.n + coalesce(f.n, 0))
+          AND coalesce(h.n, 0) < {MAX_FAMILY_HEAD_SHARE_CHINESE} * g.n
         ORDER BY 1""").fetchall()
 
 

@@ -183,11 +183,22 @@ def test_indonesian_degrees_in_the_given_fields(predictor, source, expected):
         (("C.", "Janneke", "van der Woude"), ("C.", "Janneke", "van der Woude")),
         # controls: a particle phrase, a word that is also a surname, a source surname field of two words
         (("Luis", "Miguel de Diego", "Pareja"), ("Luis", "Miguel", "de Diego Pareja")),
-        (("C.", "L. Philip", "Chen"), ("C.", "L.", "Philip Chen")),
         (("Maria", "Teresa", "Garcia Lopez"), ("Maria", "Teresa", "Garcia Lopez")),
         # given-name words that also open double surnames (Blanca Mena, Andrés Santos)
         (("M.", "J. Blanca", "Mena"), ("M.", "J.", "Blanca Mena")),
         (("Francisco", "J. Andrés", "Santos"), ("Francisco", "J.", "Andrés Santos")),
+        # before a common Chinese surname the bars are looser (Philip, James, Paul; David despite the guard)
+        (("C.", "L. Philip", "Chen"), ("C.", "L. Philip", "Chen")),
+        (("C.", "P. James", "Chen"), ("C.", "P. James", "Chen")),
+        (("R. V. Paul", None, "Chan"), ("R.", "V. Paul", "Chan")),
+        (("X.", "J. David", "Lu"), ("X.", "J. David", "Lu")),
+        (("C.", "L. PHILIP", "CHEN"), ("C.", "L. Philip", "Chen")),
+        # accepted trade-off: one ORCID person registers the family name John Low
+        (("C.", "T. John", "Low"), ("C.", "T. John", "Low")),
+        # controls: a non-Chinese surname, a word that is also a surname (Simon), a South Indian name
+        (("A.", "B. Philip", "Gara"), ("A.", "B.", "Philip Gara")),
+        (("M.Y.", "Simon", "Lee"), ("M.", "Y.", "Simon Lee")),
+        (("B.", "V. Srinivasa", "Rao"), ("B.", "V.", "Srinivasa Rao")),
     ],
 )
 def test_given_name_word_stays_out_of_the_surname(predictor, source, expected):

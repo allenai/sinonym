@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, StrictStr, root_validator
 
 from sinonym.chinese_names_data import (
     HAN_SURNAME_POSITION_READINGS,
+    NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES,
     NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES,
     REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS,
     VALID_CHINESE_ONSETS,
@@ -64,7 +65,7 @@ from sinonym.services.person_name_normalization import (
 from sinonym.services.slavic_initials import is_digraph_initials_surname, is_dotted_initial
 from sinonym.services.surname_first_words import surname_first_initials
 from sinonym.services.token_order_prior import surname_first_pair, token_role
-from sinonym.utils.given_name_words import is_given_name_word
+from sinonym.utils.given_name_words import is_given_name_word, is_given_name_word_before_chinese_surname
 from sinonym.utils.unsplit_given_words import is_listed_unsplit_given_word, standalone_words
 
 if TYPE_CHECKING:
@@ -1852,6 +1853,9 @@ def _edge_particle_extension(selected: NameComponents, source_edge: str) -> Name
     return replace(selected, middle_name=" ".join(kept), surname=" ".join([*particles, surname]))
 
 
+_GIVEN_WORD_CHINESE_SURNAMES = NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES | NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES
+
+
 def given_words_kept_out_of_surname(source: SourceAuthorFields, selected: NameComponents) -> NameComponents | None:
     """``Q.`` / ``M. Jonathan`` / ``Wu``: given-name words the source wrote before its surname field stay in the middle.
 
@@ -1859,7 +1863,9 @@ def given_words_kept_out_of_surname(source: SourceAuthorFields, selected: NameCo
     the parse can open the surname with the source's last given word. When the parsed surname is the source's surname
     field with only such words before it, and every one of them is a word ORCID registry people use almost only as a
     given name (utils/given_name_words.py), they go back to the middle. A particle among them (``de Diego``) keeps the
-    parse: those are surname phrases as often as given ones.
+    parse: those are surname phrases as often as given ones. Before a one-word common Chinese surname (``C. / L. Philip
+    / Chen``) the word bars are looser, since no double surname opens with a Western given name there; a word that is
+    itself a Chinese, Korean or Vietnamese syllable stays.
     """
     last_words = (source.last_name or "").split()
     surname_words = selected.surname.split()
@@ -1870,8 +1876,14 @@ def given_words_kept_out_of_surname(source: SourceAuthorFields, selected: NameCo
         return None
     moved = surname_words[:extra]
     source_given = {fold_word(word) for word in f"{source.first_name or ''} {source.middle_names or ''}".split()}
+    chinese_surname = len(last_words) == 1 and fold_word(last_words[0]) in _GIVEN_WORD_CHINESE_SURNAMES
     if not all(
-        fold_word(word) in source_given and fold_word(word) not in EDGE_FAMILY_PARTICLES and is_given_name_word(word)
+        fold_word(word) in source_given
+        and fold_word(word) not in EDGE_FAMILY_PARTICLES
+        and (
+            is_given_name_word(word)
+            or (chinese_surname and not _east_asian_syllable(word) and is_given_name_word_before_chinese_surname(word))
+        )
         for word in moved
     ):
         return None
