@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sinonym"
-version = "0.6.9"
+version = "0.7.0"
 description = "Chinese Name Detection and Normalization Module"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -98,6 +98,9 @@ ignore = ["S101", "T201"]  # Allow assert statements and print statements
 "scripts/generate_chinese_name_corpus_data.py" = ["ARG001", "BLE001", "C901", "ERA001", "N806", "PLC0415", "PLR0912", "PLR2004", "PTH123", "SLF001", "TRY300"]
 "scripts/build_unsplit_given_words.py" = ["S608"]
 "scripts/build_allcaps_given_words.py" = ["S608"]
+"scripts/build_given_name_words.py" = ["S608"]
+"sinonym/services/source_repairs.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/test_070_name_fixes.py" = ["RUF001", "PLC0415"]
 "scripts/build_korean_given_words.py" = ["S608"]
 "scripts/change_class_tally.py" = ["INP001", "PLR2004", "S608"]
 "scripts/check_test_status.py" = ["E501", "RUF001"]

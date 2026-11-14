@@ -13,6 +13,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, replace
 from enum import Enum
+from functools import lru_cache
 
 from sinonym.chinese_names_data import (
     CANTONESE_SURNAME_RULES,
@@ -2295,6 +2296,7 @@ class PersonNameNormalizationService:
         )
 
     @staticmethod
+    @lru_cache(maxsize=65536)
     def _clean_name_token(token: str) -> str:
         # Invisible markup carries no name content, but `_allowed_name_character` rejects it, so
         # `_invalid_token_reason` reports "unsupported character in name token" and the whole

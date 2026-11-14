@@ -89,9 +89,16 @@ def test_glued_initial_guards_hold_for_listed_words(args, expected, monkeypatch:
 
 def test_predictor_loads_the_data_tables() -> None:
     from sinonym.timo.interface import PredictorConfig
-    from sinonym.utils import allcaps_given_words, korean_given_names, unsplit_given_words
+    from sinonym.utils import allcaps_given_words, given_name_words, korean_given_names, unsplit_given_words
 
-    tables = (source_repairs._glued_prefixes, unsplit_given_words._words, korean_given_names._words, allcaps_given_words._words)
+    tables = (
+        source_repairs._glued_prefixes,
+        unsplit_given_words._words,
+        korean_given_names._words,
+        allcaps_given_words._words,
+        given_name_words._words,
+        given_name_words._strict_words,
+    )
     for cached in tables:
         cached.cache_clear()
     Predictor(PredictorConfig(parallel="never"), ".")
@@ -256,3 +263,12 @@ def test_last_field_credentials_on_the_predictor(predictor: Predictor, source, e
     fields = SourceAuthorFields(first_name=first, middle_names=middle, last_name=last)
     author = predictor.predict_batch([Instance(pp_authors=[fields])])[0].authors[0]
     assert (author.first_name, author.middle_names, author.last_name) == expected
+
+
+def test_general_given_name_words_keep_their_bars() -> None:
+    from sinonym.utils import given_name_words
+
+    assert len(given_name_words._strict_words()) == 5245
+    assert given_name_words.is_given_name_word("Jonathan")
+    assert not given_name_words.is_given_name_word("Philip")
+    assert given_name_words.is_given_name_word_before_chinese_surname("Philip")

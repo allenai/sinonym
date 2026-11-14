@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, StrictStr, root_validator
 
 from sinonym.chinese_names_data import (
     HAN_SURNAME_POSITION_READINGS,
+    NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES,
     NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES,
     REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS,
     VALID_CHINESE_ONSETS,
@@ -64,6 +65,7 @@ from sinonym.services.person_name_normalization import (
 from sinonym.services.slavic_initials import is_digraph_initials_surname, is_dotted_initial
 from sinonym.services.surname_first_words import surname_first_initials
 from sinonym.services.token_order_prior import surname_first_pair, token_role
+from sinonym.utils.given_name_words import is_given_name_word, is_given_name_word_before_chinese_surname
 from sinonym.utils.unsplit_given_words import is_listed_unsplit_given_word, standalone_words
 
 if TYPE_CHECKING:
@@ -133,6 +135,16 @@ MIDDLE_HEAD_GIVEN_NAME_PHRASES = tuple(
 _GIVEN_NAME_PHRASE_HEADS = frozenset(
     phrase[0] for phrase in (*GIVEN_NAME_PHRASES, *LAST_FIELD_GIVEN_NAME_PHRASES, *MIDDLE_HEAD_GIVEN_NAME_PHRASES)
 )
+
+# Georgian has no letter case: title-casing a Mkhedruli word turns its first letter into a Mtavruli capital (U+1C90..)
+_MKHEDRULI = {code: ord(chr(code).lower()) for code in range(0x1C90, 0x1CC0) if chr(code).lower() != chr(code)}
+
+
+_MTAVRULI_RE = re.compile("[\u1c90-\u1cbf]")
+
+
+def _mkhedruli(text: str) -> str:
+    return text.translate(_MKHEDRULI) if _MTAVRULI_RE.search(text) else text
 
 
 def _is_initial_word(word: str) -> bool:
@@ -1214,6 +1226,7 @@ def routed_components_leak_cjk(parsed) -> bool:
     return any(_is_cjk_letter(character) for character in joined)
 
 
+@lru_cache(maxsize=65536)
 def _is_cjk_letter(character: str) -> bool:
     """Return whether one Unicode letter belongs to a routed CJK script."""
     if not unicodedata.category(character).startswith("L"):
@@ -1222,6 +1235,7 @@ def _is_cjk_letter(character: str) -> bool:
     return any(marker in name for marker in _CJK_LETTER_NAME_MARKERS)
 
 
+@lru_cache(maxsize=65536)
 def _is_latin_letter(character: str) -> bool:
     """Return whether one Unicode letter belongs to the Latin script."""
     return unicodedata.category(character).startswith("L") and "LATIN" in unicodedata.name(character, "")
@@ -1841,6 +1855,47 @@ def _edge_particle_extension(selected: NameComponents, source_edge: str) -> Name
     return replace(selected, middle_name=" ".join(kept), surname=" ".join([*particles, surname]))
 
 
+_GIVEN_WORD_CHINESE_SURNAMES = NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES | NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES
+
+
+def given_words_kept_out_of_surname(source: SourceAuthorFields, selected: NameComponents) -> NameComponents | None:
+    """``Q.`` / ``M. Jonathan`` / ``Wu``: given-name words the source wrote before its surname field stay in the middle.
+
+    After a run of initials (``J. / Y. Richard / Liew``) or before a particle surname (``C. / Janneke / van der Woude``)
+    the parse can open the surname with the source's last given word. When the parsed surname is the source's surname
+    field with only such words before it, and every one of them is a word ORCID registry people use almost only as a
+    given name (utils/given_name_words.py), they go back to the middle. A particle among them (``de Diego``) keeps the
+    parse: those are surname phrases as often as given ones. Before a one-word common Chinese surname (``C. / L. Philip
+    / Chen``) the word bars are looser, since no double surname opens with a Western given name there; a word that is
+    itself a Chinese, Korean or Vietnamese syllable stays.
+    """
+    last_words = (source.last_name or "").split()
+    surname_words = selected.surname.split()
+    extra = len(surname_words) - len(last_words)
+    if not last_words or extra <= 0:
+        return None
+    if [fold_word(word) for word in surname_words[extra:]] != [fold_word(word) for word in last_words]:
+        return None
+    moved = surname_words[:extra]
+    source_given = {fold_word(word) for word in f"{source.first_name or ''} {source.middle_names or ''}".split()}
+    chinese_surname = len(last_words) == 1 and fold_word(last_words[0]) in _GIVEN_WORD_CHINESE_SURNAMES
+    if not all(
+        fold_word(word) in source_given
+        and fold_word(word) not in EDGE_FAMILY_PARTICLES
+        and (
+            is_given_name_word(word)
+            or (chinese_surname and not _east_asian_syllable(word) and is_given_name_word_before_chinese_surname(word))
+        )
+        for word in moved
+    ):
+        return None
+    return replace(
+        selected,
+        middle_name=" ".join([*selected.middle_name.split(), *moved]),
+        surname=" ".join(surname_words[extra:]),
+    )
+
+
 def _ambiguous_credential_surname_assignment(source: SourceAuthorFields) -> NameComponents | None:
     """An all-caps ``DO`` alone in the surname field of a structured source is a surname (``Hue Thi DO``).
 
@@ -2079,9 +2134,9 @@ class ResolvedAuthorFields(_Model):
             message = f"{reason.value} requires exact source materialization"
             raise ValueError(message)
         return cls(
-            first_name=selected.given_name,
-            middle_names=selected.middle_name,
-            last_name=selected.surname,
+            first_name=_mkhedruli(selected.given_name),
+            middle_names=_mkhedruli(selected.middle_name),
+            last_name=_mkhedruli(selected.surname),
             suffix=merge_resolved_suffix(source.suffix, selected.suffix),
             resolution_provenance=decision.provenance,
             resolution_action=decision.action,
@@ -2783,6 +2838,7 @@ class _Resolver:
                 source,
                 ResolutionReason.REVIEWED_EXACT_SOURCE_REORDER_VETO_PRESERVE_INPUT,
             )
+        selected = given_words_kept_out_of_surname(source, selected) or selected
         selected = _preserve_reviewed_atomic_korean_source_given(source, selected)
         joined_uppercase_assignment = _reviewed_joined_uppercase_surname_assignment(
             source,

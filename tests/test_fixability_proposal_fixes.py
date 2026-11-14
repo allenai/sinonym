@@ -705,23 +705,25 @@ def test_organization_token_rules_do_not_suppress_reviewed_people(
 
 
 @pytest.mark.parametrize(
-    "source",
+    ("source", "tail"),
     [
-        SourceAuthorFields(first_name="S", last_name="TucikeÅ¡iÄ‡"),
-        SourceAuthorFields(first_name="Burak", last_name="KÄ±lanÃ§"),
-        SourceAuthorFields(first_name="Mojibake", last_name="\u0421‡"),
+        # decodable mojibake is decoded; the ‡ of an undecodable one is still never a footnote
+        (SourceAuthorFields(first_name="S", last_name="TucikeÅ¡iÄ‡"), "Tucikešić"),
+        (SourceAuthorFields(first_name="Burak", last_name="KÄ±lanÃ§"), "Kılanç"),  # noqa: RUF001
+        (SourceAuthorFields(first_name="Mojibake", last_name="\u0421‡"), "\u0421‡"),
     ],
 )
 def test_mojibake_tail_is_not_stripped_as_a_footnote(
     predictor: Predictor,
     source: SourceAuthorFields,
+    tail: str,
 ) -> None:
     resolved = _route(predictor, source)
     rendered = " ".join(
         value for value in (resolved.first_name, resolved.middle_names, resolved.last_name, resolved.suffix) if value
     )
 
-    assert rendered.endswith(source.last_name or "")
+    assert rendered.endswith(tail)
 
 
 @pytest.mark.parametrize(

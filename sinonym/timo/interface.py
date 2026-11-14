@@ -7,6 +7,7 @@ from pydantic import Field as _Field
 
 from sinonym.coretypes import BatchParseResult as _BatchParseResult
 from sinonym.coretypes.routing_resolution import ResolutionAction as _ResolutionAction
+from sinonym.coretypes.routing_resolution import ResolutionProvenance as _ResolutionProvenance
 from sinonym.detector import ChineseNameDetector as _ChineseNameDetector
 from sinonym.detector import ParallelMode as _ParallelMode
 from sinonym.pipeline.name_order_routing import (
@@ -19,18 +20,26 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_vys_abstain_batches as _route_pp_vys_abstain_batches,
 )
 from sinonym.services.batch_analysis import RelatedBatchParseResult as _RelatedBatchParseResult
+from sinonym.services.non_person import reviewed_non_person_source_pattern as _reviewed_non_person_source_pattern
+from sinonym.services.person_name_normalization import PersonNameNormalizationService as _PersonNameNormalizationService
+from sinonym.services.person_name_normalization import reviewed_source_cleanup_pattern as _reviewed_source_cleanup_pattern
+from sinonym.services.source_repairs import clean_source_fields as _clean_source_fields
+from sinonym.services.source_repairs import keep_capitals_surname as _keep_capitals_surname
 from sinonym.services.source_repairs import load_glued_initial_prefixes as _load_glued_initial_prefixes
 from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
 from sinonym.services.source_repairs import strip_last_field_credentials as _strip_last_field_credentials
+from sinonym.services.suffix_display import display_suffix as _display_suffix
 from sinonym.timo._resolution import (
     Instance,
     ResolvedAuthorFields,
     SourceAuthorFields,
     _Model,
     _Resolver,
+    _reviewed_leading_title_or_credential_assignment,
 )
 from sinonym.timo._resolution import reviewed_exact_source_assignment as _reviewed_exact_source_assignment
 from sinonym.utils.allcaps_given_words import load_allcaps_given_words as _load_allcaps_given_words
+from sinonym.utils.given_name_words import load_given_name_words as _load_given_name_words
 from sinonym.utils.korean_given_names import korean_given_form as _korean_given_form
 from sinonym.utils.korean_given_names import load_korean_given_words as _load_korean_given_words
 from sinonym.utils.unsplit_given_words import load_unsplit_given_words as _load_unsplit_given_words
@@ -59,6 +68,23 @@ def _korean_given(author: ResolvedAuthorFields) -> ResolvedAuthorFields:
     return author.copy(update={"first_name": given, "middle_names": ""})
 
 
+_SOURCE_NORMALIZER = _PersonNameNormalizationService()
+
+
+_NEW_REPAIR_RULES = frozenset({"repeated_particle", "title", "contributor_role"})
+
+
+def _reviewed_source(author: SourceAuthorFields) -> bool:
+    """A source one of the reviewed rules reads exactly; the field cleanups and given-field rules leave it to that rule."""
+    fields = (author.first_name, author.middle_names, author.last_name)
+    return (
+        _reviewed_exact_source_assignment(author) is not None
+        or _reviewed_non_person_source_pattern(*fields, author.suffix) is not None
+        or _reviewed_source_cleanup_pattern(*fields, author.suffix) is not None
+        or _reviewed_leading_title_or_credential_assignment(author, _SOURCE_NORMALIZER) is not None
+    )
+
+
 def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, SourceAuthorFields | None]:
     """The source with a recoverable field defect repaired (services/source_repairs.py), else unchanged, and the source
     before the given-field credential repair when that repair applied (``None`` otherwise).
@@ -67,6 +93,13 @@ def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, So
     surname field rewritten by ``strip_last_field_credentials``; the source before the credential repair only serves as
     the reference for ``_kept_given_words_out_of_surname``. VYS pool names are plain strings and are not repaired.
     """
+    source = author
+    cleaned = _clean_source_fields(author.first_name, author.middle_names, author.last_name)
+    if cleaned is not None and not _reviewed_source(source):
+        author = author.copy(update={"first_name": cleaned[0], "middle_names": cleaned[1], "last_name": cleaned[2] or ""})
+    capitals = _keep_capitals_surname(author.first_name, author.middle_names, author.last_name, author.suffix)
+    if capitals is not None and not _reviewed_source(source):
+        author = author.copy(update={"last_name": capitals[2]})
     stripped = _strip_last_field_credentials(author.first_name, author.middle_names, author.last_name)
     if stripped is not None and _reviewed_exact_source_assignment(author) is None:
         author = author.copy(update={"first_name": stripped[0], "middle_names": stripped[1], "last_name": stripped[2]})
@@ -74,7 +107,20 @@ def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, So
     if repaired is None:
         return author, None
     rule, first, middle = repaired
+    if rule in _NEW_REPAIR_RULES and _reviewed_source(source):
+        return author, None
     return author.copy(update={"first_name": first, "middle_names": middle or None}), author if rule == "credential" else None
+
+
+def _source_suffix(author: ResolvedAuthorFields, source: SourceAuthorFields) -> ResolvedAuthorFields:
+    """The suffix shown as the source wrote it; a source passthrough or a suppressed author keeps its suffix as is."""
+    if author.resolution_action is _ResolutionAction.SUPPRESS or (
+        author.resolution_provenance is _ResolutionProvenance.SOURCE and author.resolution_action is not _ResolutionAction.ASSIGN
+    ):
+        return author
+    fields = (source.first_name, source.middle_names, source.last_name, source.suffix)
+    suffix = _display_suffix(fields, author.last_name, author.suffix)
+    return author if suffix == author.suffix else author.copy(update={"suffix": suffix})
 
 
 _NAME_WORD_SPLIT_RE = re.compile(r"[\s.,]+")
@@ -147,6 +193,7 @@ class Predictor:
         _load_unsplit_given_words()
         _load_korean_given_words()
         _load_allcaps_given_words()
+        _load_given_name_words()
 
     def _resolve_pp_vys_batch(
         self,
@@ -250,6 +297,13 @@ class Predictor:
 
     def predict_batch(self, instances: list[Instance]) -> list[Prediction]:
         """Resolve one prediction per paper, preserving paper and author order."""
+        predictions = self._predict_repaired(instances)
+        return [
+            Prediction(authors=[_source_suffix(author, source) for author, source in zip(p.authors, i.pp_authors, strict=True)])
+            for p, i in zip(predictions, instances, strict=True)
+        ]
+
+    def _predict_repaired(self, instances: list[Instance]) -> list[Prediction]:
         repairs = [[_repaired_source(author) for author in instance.pp_authors] for instance in instances]
         predictions = self._resolve_instances(
             [

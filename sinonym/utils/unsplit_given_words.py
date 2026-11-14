@@ -14,16 +14,11 @@ import gzip
 import io
 import re
 import unicodedata
-from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
-from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import VIETNAMESE_SURNAMES
 from sinonym.resources import read_bytes
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
 
 # not after h (Cantonese Sheung) and eun only after a vowel or at the start (Cantonese Leung, Keung, Yeung)
 _KOREAN_ONLY_SYLLABLE = re.compile(
@@ -103,18 +98,23 @@ def _standalone_folds(raw_name: str) -> frozenset[str]:
     return frozenset(folds)
 
 
-@contextmanager
-def standalone_words(raw_name: str) -> Iterator[None]:
+class standalone_words:  # noqa: N801
     """Set the source words that ``is_listed_bound_part`` checks while ``raw_name`` is processed.
 
     The detector, ``NormalizationService.apply``, batch preparation and formatting, and TIMO terminal resolution set
     it. Outside them it is unset and every listed word is blocked as in 0.6.5.
     """
-    token = _RAW_NAME.set(raw_name or "")
-    try:
-        yield
-    finally:
-        _RAW_NAME.reset(token)
+
+    __slots__ = ("_raw_name", "_token")
+
+    def __init__(self, raw_name: str) -> None:
+        self._raw_name = raw_name or ""
+
+    def __enter__(self) -> None:
+        self._token = _RAW_NAME.set(self._raw_name)
+
+    def __exit__(self, *_: object) -> None:
+        _RAW_NAME.reset(self._token)
 
 
 def is_listed_unsplit_given_word(token: str) -> bool:
@@ -134,5 +134,6 @@ def has_korean_only_syllable(token: str) -> bool:
     return _KOREAN_ONLY_SYLLABLE.search(_fold(token)) is not None
 
 
+@lru_cache(maxsize=65536)
 def is_unsplit_given_word(token: str) -> bool:
     return is_listed_unsplit_given_word(token) or has_korean_only_syllable(token)
