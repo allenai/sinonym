@@ -51,30 +51,42 @@ Five assets are lookup tables built from Semantic Scholar author names:
 
 | asset | built by | snapshot | fires only when |
 |---|---|---|---|
-| `compound_surnames.csv.gz` | `scripts/build_compound_surnames.py`, `scripts/build_hyphen_compound_surnames.py` ([COMPOUND_SURNAMES.md](COMPOUND_SURNAMES.md)) | October 2026 | the multi-word surname is listed |
-| `two_token_order_prior.csv.gz` | `scripts/build_order_prior_asset.py` | May 2026 | the pair has >= 100 mentions and a >= 80% majority |
-| `token_role_prior.csv.gz` | `scripts/build_token_order_prior.py` | May 2026 | the token has >= 200 mentions and is >= 90% one role |
-| `surname_first_words.csv.gz` | `scripts/build_surname_first_words.py` | October 2026 | the word was seen in that shape and is mostly a surname (>= 3 mentions) |
-| `glued_initial_prefixes.csv.gz` | `scripts/build_glued_initial_prefixes.py` | October 2026 | the word before a glued capital is a first name >= 100 times and at least as often as a surname, and word + that letter is not itself a common first name |
+| `compound_surnames.csv.gz` | `scripts/build_compound_surnames.py`, `scripts/build_hyphen_compound_surnames.py`, then `scripts/stabilize_compound_surnames.py` ([COMPOUND_SURNAMES.md](COMPOUND_SURNAMES.md)) | October 2026 | the multi-word surname is listed |
+| `two_token_order_prior.csv.gz` | `scripts/build_order_prior_asset.py`, then `scripts/stabilize_order_priors.py` | November 2026 | the pair has >= 100 mentions and a >= 80% majority |
+| `token_role_prior.csv.gz` | `scripts/build_token_order_prior.py`, then `scripts/stabilize_order_priors.py` | November 2026 | the token has >= 200 mentions and is >= 90% one role |
+| `surname_first_words.csv.gz` | `scripts/build_surname_first_words.py` | November 2026 | the word was seen in that shape and is mostly a surname (>= 3 mentions) |
+| `glued_initial_prefixes.csv.gz` | `scripts/build_glued_initial_prefixes.py` | November 2026 | the word before a glued capital is a first name >= 100 times and at least as often as a surname, and word + that letter is not itself a common first name |
 
 - **Unseen names.** A name a table does not list gets the behavior without that rule, never a guess, so new or rare
   names are not made worse; they just do not get the gain. Shape-based rules (digraph initials, glued initials, the
   Japanese given-first veto) apply to any name.
 - **Provenance.** Build every asset from source names as published, never from sinonym's output: per row, all
-  `original_*` fields when `original_last` is set, else the stored fields, and never coalesce per field (the export is
-  described in author-names `NAME_COUNTS.md`). An asset built from normalized names learns sinonym's own decisions.
+  `original_*` fields when `original_last` is set, else the stored fields, and never coalesce per field. An asset built from normalized names learns sinonym's own decisions.
 - **Refresh.** The tables age as new authors and conventions arrive. Rebuild them from a newer snapshot periodically,
   and in particular after each ORCID backfill (more linked people strengthens the ORCID-gated compound tier), then
   rerun the ORCID ledger, the registry agreement and the S2AND gold-cluster check before shipping.
 - **Measuring the gain on new names.** The held-out ORCID half guards against fitting particular people, but the tables
   were built from a snapshot that contains those names. To measure the gain on unseen names, build the tables from an
   older snapshot and score only names that first appear after it.
+- **Current build (0.7.1).** Six tables were rebuilt on 2026-11-12 with the 0.7.0 builders and unchanged thresholds:
+  source-name counts from the Semantic Scholar `paper_authors` export of 2026-11-12, ORCID evidence only from iDs the
+  source supplied (iDs attached later by the ORCID profile backfill, which matches by name, are left out so the tables
+  do not learn from name matching), and the ORCID public data file of October 2026 (`korean_given_words.csv.gz`,
+  `allcaps_given_words.csv.gz`). Rows: two-token order prior 106,311 -> 107,787; token roles 238,677 -> 243,168 (the two order priors keep every 0.7.0 entry the rebuild dropped and add the rebuild's new ones, `scripts/stabilize_order_priors.py`: a dropped entry had only crossed a gate, and dropping it turned names such as `Petralia / Salvatore` back; entries kept from 0.7.0 keep their 0.7.0 counts, which the runtime does not read);
+  surname-first words 40,112 -> 42,178; glued-initial prefixes 112,710 -> 113,345; Korean given words 3,108 -> 3,670;
+  three-letter given words 881 -> 824. Two tables keep their 0.7.0 build, `unsplit_given_words.csv.gz` and
+  `given_name_words.csv.gz`; `compound_surnames.csv.gz` is the 0.7.0 table passed through
+  `scripts/stabilize_compound_surnames.py`, which changes a surface only on clear ORCID registry evidence
+  ([COMPOUND_SURNAMES.md](COMPOUND_SURNAMES.md)); this refresh drops one surface. Plain rebuilds of these tables broke
+  almost as many ORCID people's names as they fixed (compound surnames: 4,489 family names fixed, 3,108 broken, far
+  below the 5:1 acceptance bar; unsplit given words 26 / 21; given-name words 20 / 22), mostly pairs that registrants
+  write both ways about equally often, which the new data only moved across the majority threshold.
 
 ### Surname-First Words Before Dotted Initials
-- **`surname_first_words.csv.gz`**: 40,112 words (`word, surname_first_mentions, as_last, as_first`) that sources write as `first_name` before 2-3 dotted initials (`Dmitrieva / - / N.M.`, `Назарова / - / А.Р.`) and that the corpus otherwise uses as a surname (`as_last` >= 3 and > `as_first`). The rule that consumes it (`structured_surname_first_initials_assignment`) moves the word to the surname only when it is in this list, so given names written the same way (`Sowmya / - / K. R.`) stay unchanged. Generated by `scripts/build_surname_first_words.py` from the source-name counts export.
+- **`surname_first_words.csv.gz`**: 42,178 words (`word, surname_first_mentions, as_last, as_first`) that sources write as `first_name` before 2-3 dotted initials (`Dmitrieva / - / N.M.`, `Назарова / - / А.Р.`) and that the corpus otherwise uses as a surname (`as_last` >= 3 and > `as_first`). The rule that consumes it (`structured_surname_first_initials_assignment`) moves the word to the surname only when it is in this list, so given names written the same way (`Sowmya / - / K. R.`) stay unchanged. Generated by `scripts/build_surname_first_words.py` from the source-name counts export.
 
 ### Given Names Written in Capitals
-- **`allcaps_given_words.csv.gz`**: 881 three-letter words (`word, name_people, initials_people, name_share`) that ORCID registry people write as their first given name (not in capitals, >= 10 people) making up at least 80% of those people plus the people whose three given names start with its letters. A given name of three capitals before a surname with lowercase letters stays in capitals as initials (`ESL Pedersen`, which S2AND reads as e + s + l) unless it is listed (`ANA Dias` -> `Ana`). Generated by `scripts/build_allcaps_given_words.py` from the ORCID public data file.
+- **`allcaps_given_words.csv.gz`**: 824 three-letter words (`word, name_people, initials_people, name_share`) that ORCID registry people write as their first given name (not in capitals, >= 10 people) making up at least 80% of those people plus the people whose three given names start with its letters. A given name of three capitals before a surname with lowercase letters stays in capitals as initials (`ESL Pedersen`, which S2AND reads as e + s + l) unless it is listed (`ANA Dias` -> `Ana`). Generated by `scripts/build_allcaps_given_words.py` from the ORCID public data file.
 - **`given_name_words.csv.gz`**: 10,220 words (`word, given_people, family_people, family_head_people`) that at least 200 ORCID registry people use, at least 80% of them as a given name, and that fewer than 1.5% of those people use to open a multi-word family name. The 5,245 of them used by at least 95% as a given name and opened with by fewer than 0.5% (`jonathan`, `gareth`, `myriam`; not `andres`, `blanca`, `david`, which open Iberian double surnames) are not moved into the surname when the source wrote them in the given or middle field (`Q. / M. Jonathan / Wu` keeps surname `Wu`); before a one-word common Chinese surname all listed words are (`C. / L. Philip / Chen` keeps surname `Chen`). Generated by `scripts/build_given_name_words.py` from the ORCID public data file.
 
 ### Chinese vs Japanese Name Classifier 
