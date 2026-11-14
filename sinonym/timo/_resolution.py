@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, StrictStr, root_validator
 
 from sinonym.chinese_names_data import (
     HAN_SURNAME_POSITION_READINGS,
+    NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES,
     REVIEWED_ATOMIC_KOREAN_GIVEN_FORMS,
     VALID_CHINESE_ONSETS,
     VALID_CHINESE_RIMES,
@@ -42,7 +43,7 @@ from sinonym.coretypes.routing_resolution import (
 )
 from sinonym.name_punctuation import ROMAN_HYPHEN_LIKE
 from sinonym.pipeline.name_order_routing import given_chain_cap_parsed, pp_abstain_parsed
-from sinonym.services.compound_surnames import listed_compound_suffix
+from sinonym.services.compound_surnames import credential_join, fold_word, listed_compound_suffix
 from sinonym.services.east_asian_name_order import JAPANESE_ML_THRESHOLD
 from sinonym.services.non_person import (
     CJK_NON_PERSON_SUFFIX_MARKERS,
@@ -53,6 +54,7 @@ from sinonym.services.order_prior import corpus_surname_for
 from sinonym.services.person_name_normalization import (
     EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES,
     EAST_ASIAN_GIVEN_SYLLABLES,
+    EAST_ASIAN_SURNAMES,
     EDGE_FAMILY_PARTICLES,
     PersonNameNormalizationService,
     PersonNameOutcome,
@@ -62,6 +64,7 @@ from sinonym.services.person_name_normalization import (
 from sinonym.services.slavic_initials import is_digraph_initials_surname, is_dotted_initial
 from sinonym.services.surname_first_words import surname_first_initials
 from sinonym.services.token_order_prior import surname_first_pair, token_role
+from sinonym.utils.unsplit_given_words import is_listed_unsplit_given_word, standalone_words
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -114,7 +117,94 @@ LAST_FIELD_GIVEN_NAME_PHRASES = tuple(
     tuple(phrase.split())
     for phrase in ("del mar", "de lourdes", "del carmen", "del pilar", "de los angeles", "de las mercedes", "del socorro")
 )
-_GIVEN_NAME_PHRASE_HEADS = frozenset(phrase[0] for phrase in (*GIVEN_NAME_PHRASES, *LAST_FIELD_GIVEN_NAME_PHRASES))
+# Opening a middle field that goes on with surname words (Maria / das Graças Carvalho / Ferriani), only these are mostly
+# a given name: of ORCID people whose corpus mentions have that shape, at least 80% (and at least 10 people) registered
+# the phrase in the given name (das Dores qualifies in this layout, unlike as a whole middle field). de Jesus (67%),
+# da Conceição (77%) and de la Cruz (51%) are left as written.
+MIDDLE_HEAD_GIVEN_NAME_PHRASES = tuple(
+    tuple(phrase.split())
+    for phrase in (
+        "de fatima", "de los angeles", "de cassia", "do socorro", "do carmo", "de lourdes", "das gracas", "del carmen",
+        "de nazare", "de las mercedes", "de la caridad", "de la luz", "del pilar", "das chagas", "do rosario", "de maria",
+        "de la paz", "das dores", "da graca", "da gloria", "de tarso", "de las nieves", "de los milagros", "da penha",
+        "del rosario", "del mar", "de kassia", "do ceu", "de lurdes", "del rocio", "do amparo", "del socorro",
+    )
+)
+_GIVEN_NAME_PHRASE_HEADS = frozenset(
+    phrase[0] for phrase in (*GIVEN_NAME_PHRASES, *LAST_FIELD_GIVEN_NAME_PHRASES, *MIDDLE_HEAD_GIVEN_NAME_PHRASES)
+)
+
+
+def _is_initial_word(word: str) -> bool:
+    """``S.`` or ``S``; a lowercase connective (``e``, ``y``) is not an initial."""
+    letters = word.rstrip(".")
+    return word.endswith(".") or (len(letters) == 1 and letters.isupper())
+
+
+_COMMON_CHINESE_SURNAMES_NOT_LEE = NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES - {"lee"}
+
+
+def _chinese_surname_before_listed_given(first: str, last: str) -> bool:
+    """``Wang / - / Lina``: a common Chinese surname, then a never-split word the corpus uses mostly as a given name.
+
+    The never-split list keeps such names off the Chinese path, which used to put them in given-first order. Unlike the
+    role prior below it also takes a two-letter surname (``Su / Anna``): among source-supplied ORCID people with this
+    shape, 14 register the first field as their family name and 1 the last field.
+    """
+    return (
+        _fold_name_word(first) in _COMMON_CHINESE_SURNAMES_NOT_LEE
+        and is_listed_unsplit_given_word(last)
+        and token_role(last) == "given"
+    )
+
+
+def _recase_upper_words(parse: NameComponents, selected: NameComponents) -> NameComponents:
+    """``parse`` with each all-caps source word in the casing the normalized parse gave it (``MARIA`` -> ``Maria``)."""
+    casing = {}
+    for word in f"{selected.given_name} {selected.middle_name} {selected.surname}".split():
+        casing.setdefault(_fold_name_word(word), word)
+
+    def recase_word(word: str) -> str:
+        if not word.isupper() or len(word) < 2:  # noqa: PLR2004
+            return word
+        folded = _fold_name_word(word)
+        return word.lower() if folded in EDGE_FAMILY_PARTICLES else casing.get(folded, word)
+
+    def recase(text: str) -> str:
+        return " ".join(recase_word(word) for word in text.split())
+
+    return NameComponents(
+        given_name=recase(parse.given_name), middle_name=recase(parse.middle_name), surname=recase(parse.surname), suffix="",
+    )
+
+
+def _middle_head_given_name_phrase(
+    first: list[str], middle: list[str], middle_folded: tuple[str, ...], last: list[str],
+) -> NameComponents | None:
+    """``Maria / das Graças Carvalho / Ferriani`` -> given ``Maria das Graças``, surname ``Carvalho Ferriani``."""
+    for phrase in MIDDLE_HEAD_GIVEN_NAME_PHRASES:
+        width = len(phrase)
+        rest = middle[width:]
+        if rest and middle_folded[:width] == phrase and not any(_is_initial_word(word) for word in rest):
+            return NameComponents(
+                given_name=" ".join(first + middle[:width]), middle_name="", surname=" ".join(rest + last), suffix="",
+            )
+    return None
+
+
+def _last_field_given_name_phrase(
+    first: list[str], middle: list[str], last: list[str], last_folded: tuple[str, ...],
+) -> NameComponents | None:
+    """``Diana / - / del Carmen Torres Corrales`` -> given ``Diana del Carmen``, surname ``Torres Corrales``."""
+    if middle:
+        return None
+    for phrase in LAST_FIELD_GIVEN_NAME_PHRASES:
+        width = len(phrase)
+        if len(last) > width and last_folded[:width] == phrase:
+            return NameComponents(
+                given_name=" ".join(first + last[:width]), middle_name="", surname=" ".join(last[width:]), suffix="",
+            )
+    return None
 
 
 @lru_cache(maxsize=65536)
@@ -1606,7 +1696,7 @@ def _glued_given_initial_assignment(source: SourceAuthorFields) -> NameComponent
     )
     if word.casefold() == surname.split()[0].casefold():
         return selected
-    return _corpus_compound_extension(selected) or selected
+    return _corpus_compound_extension(selected, source) or selected
 
 
 def _structured_initials_surname_assignment(source: SourceAuthorFields) -> NameComponents | None:
@@ -1666,13 +1756,15 @@ def _structured_leading_initials_assignment(source: SourceAuthorFields) -> NameC
     return NameComponents(given_name=initials[0], middle_name=" ".join([*initials[1:], *middle.split()]), surname=surname)
 
 
-def _corpus_compound_extension(selected: NameComponents) -> NameComponents | None:
+def _corpus_compound_extension(selected: NameComponents, source: SourceAuthorFields) -> NameComponents | None:
     """Extend a parsed surname leftwards over a corpus-backed compound: ``Rivera / Maza`` ends as ``Rivera Maza``.
 
     The surface list (data/COMPOUND_SURNAMES.md) holds multi-word surnames the corpus writes as one surname and
     that ORCID people carry in both shapes; keying both shapes to the same surname is what unites those people.
     Only middle-name words move into the surname: the given name and every surname word the parse already kept
-    stay, so a parse that joined more (``Silva dos Santos``) or reordered the fields is never undone.
+    stay, so a parse that joined more (``Silva dos Santos``) or reordered the fields is never undone. A credential or
+    title from the given fields stays out (``John / MD / Smith``); a word the source wrote only in its last name is never
+    checked.
     """
     middle_words = selected.middle_name.split()
     last_words = selected.surname.split()
@@ -1682,12 +1774,20 @@ def _corpus_compound_extension(selected: NameComponents) -> NameComponents | Non
     width = listed_compound_suffix(words)
     if width <= len(last_words):
         return None
+    given_words = {fold_word(word) for word in f"{source.first_name or ''} {source.middle_names or ''}".split()}
+    last_only = {fold_word(word) for word in (source.last_name or "").split()} - given_words
+    moved = [word for word in words[len(words) - width : len(middle_words)] if fold_word(word) not in last_only]
+    if moved and credential_join(moved, words[len(words) - width :]):
+        return None
     return NameComponents(
         given_name=selected.given_name,
         middle_name=" ".join(words[: len(words) - width]),
         surname=" ".join(words[len(words) - width :]),
         suffix=selected.suffix,
     )
+
+
+_COMPOUND_HEAD_MIDDLE_WORDS = EAST_ASIAN_SURNAMES | EDGE_FAMILY_PARTICLES | {"san", "santa", "santo", "são"}
 
 
 def _east_asian_syllable(word: str) -> bool:
@@ -2136,6 +2236,8 @@ class _Resolver:
         given, surname = selected.given_name.strip(), selected.surname.strip()
         if " " in given or " " in surname or "-" in given or "-" in surname or not given.isalpha() or not surname.isalpha():
             return None
+        if _chinese_surname_before_listed_given(given, surname):
+            return NameComponents(given_name=surname, middle_name="", surname=given, suffix="")
         if len(given) < 3 or len(surname) < 3 or not surname_first_pair(given, surname):  # noqa: PLR2004
             # two-letter tokens are too often glued initials ("VV Robin") for the role prior to be trusted
             return None
@@ -2157,7 +2259,19 @@ class _Resolver:
             # ``Quan / Van / Dau``: after a Vietnamese / Korean / Cantonese given syllable the middle is a given syllable,
             # even when the corpus happens to write ``Van Dau`` whole somewhere
             return None
-        candidate = _corpus_compound_extension(selected)
+        normalizer = self._detector._normalizer  # noqa: SLF001
+        if (
+            len(middle_words) > 1
+            and selected.surname.casefold() in EAST_ASIAN_SURNAMES
+            and middle_words[0].casefold() not in _COMPOUND_HEAD_MIDDLE_WORDS
+            and middle_words[-1].casefold() != selected.surname.casefold()
+            and not any(word.casefold() in EDGE_FAMILY_PARTICLES for word in middle_words)
+            and all(normalizer.is_valid_given_name_token(word) for word in middle_words)
+        ):
+            # ``Nike / Kwai Cheung / Lau``: Chinese syllables before a Chinese surname are a given name, not the head of a
+            # compound; ones that open with a surname are a Chinese name after a Western one (``Malcolm / Ng Mou / Kehn``)
+            return None
+        candidate = _corpus_compound_extension(selected, source)
         if candidate is None or len(candidate.surname.split()) < len((source.last_name or "").split()):
             # never fewer surname words than the source wrote; that shape belongs to the repartition rules
             return None
@@ -2187,15 +2301,14 @@ class _Resolver:
             surname = " ".join(_fold_name_word(word) for word in selected.surname.split())
             if f" {' '.join(phrase)} " not in f" {surname} ":
                 return None
-            return NameComponents(given_name=" ".join(given), middle_name=" ".join(rest), surname=" ".join(last), suffix="")
-        if not middle:
-            for phrase in LAST_FIELD_GIVEN_NAME_PHRASES:
-                width = len(phrase)
-                if len(last) > width and last_f[:width] == phrase:
-                    return NameComponents(
-                        given_name=" ".join(first + last[:width]), middle_name="", surname=" ".join(last[width:]), suffix="",
-                    )
-        return None
+            return _recase_upper_words(
+                NameComponents(given_name=" ".join(given), middle_name=" ".join(rest), surname=" ".join(last), suffix=""),
+                selected,
+            )
+        phrase_parse = _middle_head_given_name_phrase(first, middle, middle_f, last) or _last_field_given_name_phrase(
+            first, middle, last, last_f,
+        )
+        return None if phrase_parse is None else _recase_upper_words(phrase_parse, selected)
 
     def _edge_particle_candidate(self, source: SourceAuthorFields, selected: NameComponents) -> NameComponents | None:
         """A family particle the source left at the end of the given or middle field (``Martín-de / Blas``)."""
@@ -2208,7 +2321,7 @@ class _Resolver:
         candidate = _edge_particle_extension(selected, edge_words[-1])
         if candidate is None:
             return None
-        return _corpus_compound_extension(candidate) or candidate
+        return _corpus_compound_extension(candidate, source) or candidate
 
     def _structured_surname_initial_tail_candidate(
         self,
@@ -2428,7 +2541,32 @@ class _Resolver:
             return resolved, None
         return None, selected
 
-    def terminal_resolution(  # noqa: C901, PLR0911, PLR0912, PLR0913
+    def terminal_resolution(  # noqa: PLR0913
+        self,
+        *,
+        source: SourceAuthorFields,
+        paper_authors: list[SourceAuthorFields],
+        raw_name: str,
+        paper_names: list[str],
+        focal_index: int,
+        parsed,
+        batch_reason: ResolutionReason,
+        router_not_person: bool,
+    ) -> ResolvedAuthorFields:
+        """Choose and materialize exactly one operational author result."""
+        with standalone_words(raw_name):
+            return self._terminal_resolution_in_context(
+                source=source,
+                paper_authors=paper_authors,
+                raw_name=raw_name,
+                paper_names=paper_names,
+                focal_index=focal_index,
+                parsed=parsed,
+                batch_reason=batch_reason,
+                router_not_person=router_not_person,
+            )
+
+    def _terminal_resolution_in_context(  # noqa: C901, PLR0911, PLR0912, PLR0913
         self,
         *,
         source: SourceAuthorFields,

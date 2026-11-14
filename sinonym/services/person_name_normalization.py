@@ -15,8 +15,13 @@ from dataclasses import dataclass, replace
 from enum import Enum
 
 from sinonym.chinese_names_data import (
+    CANTONESE_SURNAME_RULES,
+    CANTONESE_SURNAMES,
     NAME_ORDER_ROUTING_CANTONESE_GIVEN_SYLLABLES,
+    NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES,
+    NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES,
     NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES,
+    NAME_ORDER_ROUTING_KOREAN_SURNAMES,
     VIETNAMESE_GIVEN_PATTERNS,
 )
 from sinonym.coretypes import CanonicalName, NameComponents
@@ -29,6 +34,8 @@ from sinonym.name_punctuation import (
     strip_soft_hyphens,
 )
 from sinonym.services.non_person import reviewed_non_person_text_pattern
+from sinonym.services.token_order_prior import token_role
+from sinonym.utils.allcaps_given_words import is_capitalized_initials
 
 
 class PersonNameOutcome(str, Enum):
@@ -294,6 +301,18 @@ EAST_ASIAN_GIVEN_HOMOGRAPH_PARTICLES = frozenset({"bin", "van", "da", "do", "le"
 EDGE_FAMILY_PARTICLES = (_FAMILY_PARTICLES - {"'t", "al", "ap", "ben", "bin", "el", "ibn", "st", "ud", "ur"}) | {"do"}
 EAST_ASIAN_GIVEN_SYLLABLES = frozenset(
     NAME_ORDER_ROUTING_KOREAN_GIVEN_SYLLABLES | NAME_ORDER_ROUTING_CANTONESE_GIVEN_SYLLABLES | VIETNAMESE_GIVEN_PATTERNS,
+)
+EAST_ASIAN_SURNAMES = frozenset(
+    NAME_ORDER_ROUTING_KOREAN_SURNAMES
+    | NAME_ORDER_ROUTING_COMMON_CHINESE_SURNAMES
+    | NAME_ORDER_ROUTING_CANTONESE_SOUTHEAST_ASIAN_SURNAMES
+    | set(CANTONESE_SURNAME_RULES)
+    | set(CANTONESE_SURNAMES)
+    | {"chin", "chua", "goh", "khoo", "koh", "law", "loh", "ooi", "quek", "seah", "soh", "tay", "tee", "teh", "toh"}
+    | {"wee", "yeo"},
+)
+_ARABIC_GIVEN_HEADS = frozenset(
+    {"abdul", "abdullah", "ahmad", "ahmed", "ali", "awang", "md", "mohamad", "mohamed", "mohammad", "mohd", "muhammad", "muhd"},
 )
 _LOWERCASE_RELATIONAL_TOKENS = frozenset({"'t", "b.", "d.", "e", "kizi", "kyzy", "oglu", "o'g'li", "oğlu", "qizi"})
 _STRONG_FAMILY_PARTICLE_SPANS = (
@@ -1148,7 +1167,9 @@ class PersonNameNormalizationService:
         name_tokens = [*given, *middle, *surname]
         if len(name_tokens) == 1:
             given, middle, surname = [], [], [replace(name_tokens[0], source_role="surname")]
-        normalized_given = self._canonical_tokens(given, "given")
+        # a name written in capitals throughout says nothing about whether its given name is initials
+        capitals_are_initials = any(character.islower() for token in surname for character in token.text)
+        normalized_given = self._canonical_tokens(given, "given", capitals_are_initials=capitals_are_initials)
         normalized_middle = self._canonical_tokens(middle, "middle")
         normalized_surname = self._canonical_tokens(surname, "surname")
         normalized_suffix = tuple([suffix] if suffix else [])
@@ -1911,8 +1932,16 @@ class PersonNameNormalizationService:
         self,
         tokens: list[_Token],
     ) -> tuple[list[_Token], list[_Token], list[_Token]] | None:
-        """Parse ``Carvalho da Silva Roberto José`` behind an exact strong span."""
-        if len(tokens) < _FOUR_COMPONENTS or not self._is_full_name_token(tokens[0].text):
+        """Parse ``Carvalho da Silva Roberto José`` behind an exact strong span.
+
+        Only when the corpus uses the leading word as a surname: ``Maria das Graças Carvalho Ferriani`` and
+        ``Lucas da Fonseca Roberti Garcia`` have the same shape but are written given name first.
+        """
+        if (
+            len(tokens) < _FOUR_COMPONENTS
+            or not self._is_full_name_token(tokens[0].text)
+            or token_role(tokens[0].text) != "surname"
+        ):
             return None
         particle_width = self._strong_particle_width(tokens, 1)
         if not particle_width:
@@ -2011,7 +2040,9 @@ class PersonNameNormalizationService:
         and a mixed-case surname is initials (the October counts write such names with dotted initials 320:7 for AL
         and LA); DE / VAN / VON / DI are excluded because sources that capitalize the surname also capitalize a real
         particle (``Peter VAN OOSTEROM``). ``Young Bin Kim``, ``Quan Van Dau``: after a Korean, Cantonese or
-        Vietnamese given syllable, ``bin`` / ``van`` / ``da`` is the second given syllable, not a particle.
+        Vietnamese given syllable, ``bin`` / ``van`` / ``da`` is the second given syllable, not a particle, and so is
+        ``Bin`` between a given name and a Korean or Chinese surname (``Chae Bin Lee``, ``Ben Bin Xu``; not
+        ``Ahmad Bin Long``).
         """
         key = self._particle_key(tokens[index].text)
         text = tokens[index].text
@@ -2027,7 +2058,13 @@ class PersonNameNormalizationService:
             previous = tokens[index - 1].text.casefold()
             if previous in EAST_ASIAN_GIVEN_SYLLABLES and not text.islower():
                 return False
-        return True
+        return not (
+            key == "bin"
+            and not text.islower()
+            and len(tokens) == _THREE_COMPONENTS
+            and tokens[0].text.casefold() not in _ARABIC_GIVEN_HEADS
+            and tokens[-1].text.casefold() in EAST_ASIAN_SURNAMES
+        )
 
     def _structured_particle_surname_first_roles(
         self,
@@ -2041,6 +2078,7 @@ class PersonNameNormalizationService:
             or len(surname) != 1
             or not self._is_full_name_token(given[0].text)
             or not self._is_full_name_token(surname[0].text)
+            or token_role(given[0].text) != "surname"
         ):
             return None
         particle_width = self._strong_particle_width(middle, 0) if middle else 0
@@ -2176,10 +2214,16 @@ class PersonNameNormalizationService:
     def _allowed_name_character(character: str) -> bool:
         return character.isalpha() or unicodedata.category(character).startswith("M") or character in "-'."
 
-    def _canonical_tokens(self, tokens: list[_Token], role: str) -> tuple[str, ...]:
-        return tuple(self._canonicalize_token(token.text, role) for token in tokens)
+    def _canonical_tokens(self, tokens: list[_Token], role: str, *, capitals_are_initials: bool = False) -> tuple[str, ...]:
+        return tuple(self._canonicalize_token(token.text, role, capitals_are_initials=capitals_are_initials) for token in tokens)
 
-    def _canonicalize_token(self, token: str, role: str) -> str:  # noqa: C901, PLR0911, PLR0912
+    def _canonicalize_token(  # noqa: C901, PLR0911, PLR0912
+        self,
+        token: str,
+        role: str,
+        *,
+        capitals_are_initials: bool = False,
+    ) -> str:
         cleaned = self._clean_name_token(token)
         if role in {"middle", "surname"} and cleaned in _LOWERCASE_RELATIONAL_TOKENS:
             return cleaned
@@ -2198,6 +2242,8 @@ class PersonNameNormalizationService:
             # A two-letter all-caps given token is initials (e.g. "MS", "MA", "MD") — keep it
             # all-caps rather than title-casing to "Ms"/"Ma", which reads as an honorific. A
             # genuine Title-case honorific never reaches here (it's dropped upstream).
+            return cleaned
+        if capitals_are_initials and is_capitalized_initials(cleaned):
             return cleaned
 
         parts = re.split(r"([-'])", cleaned)

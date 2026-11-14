@@ -22,7 +22,7 @@ TERMINAL_FIELD_NAMES = {
     "resolution_action",
     "resolution_reason",
 }
-TERMINAL_OCCURRENCE_SHA256 = "347bd45913039f01edcc107afda5d1d66575eeac5fcaffab099055a7b9c8f733"
+TERMINAL_OCCURRENCE_SHA256 = "30f72a28dc97091aefddf80b77929057ea902060bed815f7c072e1e9cfac6e03"
 
 
 def _records() -> list[dict]:

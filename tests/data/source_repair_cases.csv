@@ -1,0 +1,86 @@
+rule,kind,first,middle,last,exp_first,exp_middle,exp_last,was_064_first,was_064_middle,was_064_last,reason
+glued_initial,bug,DamianG.,,Downey,Damian,G.,Downey,DamianG,,Downey,Damian G. Downey (ORCID); one Crossref deposit glued the initial
+glued_initial,bug,SandraS.,,Padula,Sandra,S.,Padula,SandraS,,Padula,ORCID Sandra S. Padula
+glued_initial,bug,IanC,,Gilchrist,Ian,C.,Gilchrist,IanC,,Gilchrist,ORCID Ian Gilchrist
+glued_initial,bug,KatarzynaI.,,Szelągowska-Rudzka,Katarzyna,I.,Szelągowska-Rudzka,KatarzynaI,,Szelągowska-Rudzka,ORCID Katarzyna Szelągowska-Rudzka
+glued_initial,bug,TadeuszA.,,Grzeszczyk,Tadeusz,A.,Grzeszczyk,TadeuszA,,Grzeszczyk,ORCID Tadeusz A. Grzeszczyk
+glued_initial,bug,CarmenC.,,Bueno,Carmen,C.,Bueno,CarmenC,,Bueno,ORCID Carmen Bueno
+glued_initial,bug,JanW.,,Wiktor,Jan,W.,Wiktor,JanW,,Wiktor,ORCID Jan Władysław Wiktor
+glued_initial,bug,PaulM.,,Rowe,Paul,M.,Rowe,PaulM,,Rowe,"corpus, 86 mentions"
+glued_initial,bug,JoséA.,,Mayoral,José,A.,Mayoral,JoséA,,Mayoral,"corpus, 83 mentions"
+glued_initial,bug,JohnS,.,Smith,John,S.,Smith,JohnS,,Smith,stray period in the middle field
+glued_initial,surname,DavidS.,,David,David,S.,David,David,,DavidS,0.6.4 read the glued word as unknown and swapped the name
+glued_initial,surname,MichaelI.,,Paul,Michael,I.,Paul,Paul,,MichaelI,0.6.4 swapped the name
+glued_initial,surname,MarkS.,,Nestor,Mark,S.,Nestor,Nestor,,MarkS,0.6.4 swapped the name
+glued_initial,control,SungA,,Bae,Sung-A,,Bae,SungA,,Bae,Korean Sung-A (ORCID registry SungA); Korean given name in its hyphenated form since 0.6.7
+glued_initial,bug,JoséA.,,Mayoral,José,A.,Mayoral,JoséA,,Mayoral,the same name with a decomposed accent
+glued_initial,control,WorldH,,Organization,WorldH,,Organization,WorldH,,Organization,organization word
+glued_initial,control,DepartmentM,,Medicine,DepartmentM,,Medicine,DepartmentM,,Medicine,organization word
+glued_initial,control,TheB,,Beatles,TheB,,Beatles,TheB,,Beatles,function word
+glued_initial,control,ProfJ.,,Smith,ProfJ,,Smith,ProfJ,,Smith,title
+glued_initial,control,JeongA,,Lee,Jeong-A,,Lee,JeongA,,Lee,Korean Jeong-A; Korean given name in its hyphenated form since 0.6.7
+glued_initial,control,QingE,,Wu,Qing-E,,Wu,Qing-E,,Wu,Chinese Qing-E (ORCID registry QingE)
+glued_initial,control,SungA.,,Bae,Sung-A,,Bae,SungA,,Bae,dotted vowel after a word that is not a role-prior given name; Korean given name in its hyphenated form since 0.6.7
+glued_initial,control,EunA.,,So,EunA,,So,EunA,,So,Korean Eun-A: a dotted vowel after a Korean syllable
+glued_initial,control,SeungA.,,Kim,Seung-A,,Kim,SeungA,,Kim,Korean Seung-A; Korean given name in its hyphenated form since 0.6.7
+glued_initial,control,ChulE.,,Chung,Chu-Le,,Chung,Chu-Le,,Chung,Korean Chul-E
+glued_initial,control,ArunaV,,Kumar,ArunaV,,Kumar,ArunaV,,Kumar,ORCID registry Arunav
+glued_initial,control,MartinE.,,Plaut,MartinE,,Plaut,MartinE,,Plaut,may be Martine
+glued_initial,control,RobertA,,Anderson,RobertA,,Anderson,RobertA,,Anderson,may be Roberta
+glued_initial,control,AnnA,,LewAndowskA,AnnA,,LewAndowskA,AnnA,,LewAndowskA,"odd capitals, surname not plain"
+glued_initial,control,RobertG,,raham,RobertG,,Raham,RobertG,,Raham,the capital belongs to the surname (Robert Graham)
+glued_initial,control,CityU,,Library,CityU,,Library,CityU,,Library,not a given word
+glued_initial,control,UniKL,,Library,UniKL,,Library,UniKL,,Library,two capitals after a word
+glued_initial,control,PharmD,,Estes,,,Estes,,,Estes,degree
+glued_initial,control,JohnS,Mill,Smith,JohnS,Mill,Smith,JohnS,Mill,Smith,a middle name is present
+doubled_period,bug,D.G..,,Downey,D.,G.,Downey,D.g..,,Downey,MAG D.G.. Downey; 0.6.4 wrote D.g..
+doubled_period,bug,M..,,Parlar,M.,,Parlar,M..,,Parlar,corpus
+doubled_period,bug,M..,,PARLAR,M.,,Parlar,M..,,Parlar,all-caps one-word surname
+doubled_period,control,M..,,C..,M..,,C..,M..,,C..,the surname is not a word
+doubled_period,control,D...G..,,Downey,D...g..,,Downey,D...g..,,Downey,ellipsis in the given name
+doubled_period,control,.M..,,Parlar,.m..,,Parlar,.m..,,Parlar,stray leading period
+doubled_period,bug,S..,L..,Bali,S.,L.,Bali,S..,L..,Bali,corpus
+doubled_period,bug,I.A..,,Helmholtz,I.,A.,Helmholtz,I.a..,,Helmholtz,corpus
+doubled_period,bug,G.I.A..,,Okoroiwu,G.,I. A.,Okoroiwu,G.i.a..,,Okoroiwu,corpus
+doubled_period,bug,E..,,Cazenove,E.,,Cazenove,E..,,Cazenove,corpus
+doubled_period,surname,L.,M. L..,Ong,L.,M. L.,Ong,L.,M.,L.. Ong,0.6.4 moved the doubled initial into the surname
+doubled_period,surname,S.,U. C..,Sankatsing,S.,U. C.,Sankatsing,S.,U.,C.. Sankatsing,0.6.4 moved the doubled initial into the surname
+doubled_period,control,Joseph,A.,Abate...,Joseph,A.,Abate...,Joseph,A.,Abate...,ellipsis
+doubled_period,control,Pat,...,Maier,Pat,...,Maier,Pat,...,Maier,ellipsis
+doubled_period,control,B.,C.. John,Cho,B.,C.. John,Cho,B.,C.. John,Cho,a full word among the initials
+doubled_period,control,John M..,,Telle,John,M..,Telle,John,M..,Telle,a full word among the initials
+doubled_period,control,A..,,Abed El-Rahim,A..,,Abed El-Rahim,A..,,Abed El-Rahim,multi-word surname
+doubled_period,control,D.G.,,Downey,D.,G.,Downey,D.,G.,Downey,nothing to repair
+credential,bug,Leslie PhD,,Burton,Leslie,,Burton,Leslie,Phd,Burton,degree after the given name in the first field
+credential,bug,Leslie PHD,,Burton,Leslie,,Burton,Leslie,Phd,Burton,capitals
+credential,bug,Leslie Ph.D.,,Burton,Leslie,,Burton,Leslie,Ph.D.,Burton,dotted degree
+credential,bug,Leslie A. PhD,,Burton,Leslie,A.,Burton,Leslie,A.,Phd Burton,degree after a middle initial; 0.6.8 put it in the surname
+credential,bug,Leslie,PhD,Burton,Leslie,,Burton,Leslie,Phd,Burton,degree as the whole middle field
+credential,bug,Leslie,Ph.D.,Burton,Leslie,,Burton,Leslie,Ph.D.,Burton,dotted degree as the middle field
+credential,bug,Leslie,A. PhD,Burton,Leslie,A.,Burton,Leslie,A.,Phd Burton,degree after a middle initial
+credential,bug,Anna,MSc,Visser,Anna,,Visser,Anna,MSc,Visser,degree spelling of an initials-like word
+credential,bug,Anna,M.Sc.,Visser,Anna,,Visser,Anna,M.Sc.,Visser,dotted degree spelling
+credential,bug,Anna,LL.M.,Visser,Anna,,Visser,Anna,Ll.m.,Visser,dotted law degree
+credential,bug,Anna,EdD,Visser,Anna,,Visser,Anna,Edd,Visser,mixed-case degree; Title-case Edd is a name
+credential,bug,"Anna FRCS, FACS",,Visser,Anna,,Visser,Visser,,Anna Frcs,two post-nominals
+credential,bug,Anna,Esq.,Visser,Anna,,Visser,Anna,Esq.,Visser,Esq.
+credential,bug,MRCS,Simon C.,Williams,Simon,C.,Williams,Mrcs,Simon C.,Williams,"a post-nominal the parser does not drop, before a given name in the middle field"
+credential,bug,MRCS,Simon C. PhD,Williams,Simon,C.,Williams,Mrcs,Simon C. Phd,Williams,post-nominals at both ends
+credential,control,MRCS,,Anna Visser,Mrcs,,Anna Visser,Mrcs,,Anna Visser,an empty middle field: blanking the first field would let the parser split the surname field
+credential,control,MRCS,,Garcia Lopez,Mrcs,,Garcia Lopez,Mrcs,,Garcia Lopez,two-word surname stays whole
+credential,control,MRCS,,Kim Min Jun,Mrcs,,Kim Min Jun,Mrcs,,Kim Min Jun,Korean name in the surname field stays as 0.6.8 wrote it
+credential,control,Hock,Beng,Lim,Hock,Beng,Lim,Hock,Beng,Lim,Hokkien given name
+credential,control,Wei,Meng,Zhang,Wei-Meng,,Zhang,Wei-Meng,,Zhang,Chinese given name
+credential,control,Samuel,Mba,Onwuka,Samuel,Mba,Onwuka,Samuel,Mba,Onwuka,"Mba is a given name and family name (ORCID registry), not only MBA"
+credential,control,Md Abdul,,Karim,Md,,Abdul Karim,Md,,Abdul Karim,Md is Mohammad
+credential,control,John,MS,Smith,John,MS,Smith,John,MS,Smith,two capitals are initials
+credential,control,Jules,LLM,Peeters,Jules,Llm,Peeters,Jules,Llm,Peeters,Dutch initials L. L. M.; only LL.M. is the degree
+credential,control,Pieter,MPH,Jansen,Pieter,Mph,Jansen,Pieter,Mph,Jansen,MPH in capitals is also Dutch middle initials
+credential,control,Anna,Msc,Visser,Anna,Msc,Visser,Anna,Msc,Visser,Title-case Msc can be initials (Maria Silva Cunha)
+credential,control,Celia M.S.C.,,Oliveira,Celia,M. S. C.,Oliveira,Celia,M. S. C.,Oliveira,dotted single letters are initials
+credential,control,Anna,Fache,Novak,Anna,Fache,Novak,Anna,Fache,Novak,Fache is a family name; not stripped as FACHE
+credential,control,MRCS,,Dlamini,Mrcs,,Dlamini,Mrcs,,Dlamini,credential before a lone surname stays: four capitals there can be initials
+credential,control,Facc,,Silva,Facc,,Silva,Facc,,Silva,four capitals before a lone surname can be initials (F. A. C. C.)
+credential,control,PhD,,Burton,,,Burton,,,Burton,the parser already drops PhD before a surname
+credential,control,Ma,PhD,Burton,Ma,Phd,Burton,Ma,Phd,Burton,the first field is not a given name for sure (Ma / MA)
+credential,control,Leslie,PhD,MD,,,Leslie,,,Leslie,no surname left

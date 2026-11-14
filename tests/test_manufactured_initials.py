@@ -309,7 +309,7 @@ def test_a_lone_letter_against_a_long_rest_is_not_a_split(detector, raw):
         # positional scan still finds the real split.
         ("LIshan Wang", "Li-Shan Wang"),
         ("ZIjiang Chen", "Zi-Jiang Chen"),
-        ("MIndi Li", "Min-Di Li"),
+        ("XIaoming Li", "Xiao-Ming Li"),
         ("CHuanxue Wu", "Chuan-Xue Wu"),
         ("JIanghan Liu", "Jiang-Han Liu"),
     ],

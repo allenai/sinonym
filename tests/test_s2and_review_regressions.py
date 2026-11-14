@@ -9,6 +9,7 @@ import unicodedata
 import pytest
 
 from sinonym.coretypes.routing_resolution import ResolutionProvenance, ResolutionReason
+from sinonym.services.compound_surnames import credential_join
 from sinonym.timo.interface import Instance, Predictor, PredictorConfig, SourceAuthorFields
 
 
@@ -313,8 +314,8 @@ def test_reviewed_japanese_surname_vetoes_the_flip_in_a_given_first_byline(predi
 
 def test_korean_surname_as_last_token_is_not_moved_to_the_front(predictor):
     # inspire:953808 / :909467 — Myung and Hyun
-    assert resolve(predictor, "Yun", "Soo", "Myung") == ("Yun", "Soo", "Myung")
-    assert resolve(predictor, "Chang", "Ho", "Hyun") == ("Chang", "Ho", "Hyun")
+    assert resolve(predictor, "Yun", "Soo", "Myung") == ("Yun-Soo", "", "Myung")
+    assert resolve(predictor, "Chang", "Ho", "Hyun") == ("Chang-Ho", "", "Hyun")
 
 
 @pytest.mark.parametrize("source", [("Gong-Bo", None, "Zhao"), ("Da", None, "Xing")])
@@ -650,7 +651,7 @@ PARTICLE_GUARD_CASES = [
     (("Peter", "VAN", "OOSTEROM"), ("Peter", "", "van Oosterom")),
     (("Eduardo", "De", "Loures"), ("Eduardo", "", "De Loures")),
     # B: after a Korean / Cantonese / Vietnamese given syllable, bin / van / da is a given syllable
-    (("Young", "Bin", "Kim"), ("Young", "Bin", "Kim")),
+    (("Young", "Bin", "Kim"), ("Young-Bin", "", "Kim")),
     (("Quan", "Van", "Dau"), ("Quan", "Van", "Dau")),
     (("Maria", "da", "Silva"), ("Maria", "", "da Silva")),
 ]
@@ -704,9 +705,9 @@ CORPUS_SCALE_CASES = [
     # `ul` is not one: half the people split on it registered the tail alone
     (("Ehtesham", "Ul", "Haq"), ("Ehtesham", "Ul", "Haq")),
     # Hyun is a surname only as the last token; leading it is a given syllable
-    (("Hyun", "Ho", "Sung"), ("Hyun", "Ho", "Sung")),
+    (("Hyun", "Ho", "Sung"), ("Hyun-Ho", "", "Sung")),
     (("Hyun", "Sik", "Jun"), ("Hyun", "Sik", "Jun")),
-    (("Chang", "Ho", "Hyun"), ("Chang", "Ho", "Hyun")),
+    (("Chang", "Ho", "Hyun"), ("Chang-Ho", "", "Hyun")),
     # a name written only in Chinese characters is surname-first; the romanized-pair order prior must not flip it,
     # but it still applies when the source also carries a romanized form
     ((None, None, "杨柳"), ("Liu", "", "Yang")),
@@ -750,6 +751,47 @@ EXCLUDED_COMPOUND_HEAD_CASES = [
 @pytest.mark.parametrize(("source", "expected"), EXCLUDED_COMPOUND_HEAD_CASES)
 def test_excluded_compound_heads(predictor, source, expected):
     assert resolve(predictor, *source) == expected
+
+
+CREDENTIAL_SURNAME_CASES = [
+    # a credential or title from the given fields never joins a listed compound surname (made-up names)
+    (("John MD", None, "Smith"), ("John", "MD", "Smith")),
+    (("John", "MD", "Smith"), ("John", "MD", "Smith")),
+    (("Anna", "Lord", "Wood"), ("Anna", "Lord", "Wood")),
+    (("Jane", "Doe Bsn", "Rn"), ("Jane", "", "Doe")),
+    (("Jane", "Bsn", "Rn"), ("Jane", "Bsn", "Rn")),
+    (("J.Lord", None, "Wood"), ("J.", "Lord", "Wood")),
+    (("John", "MD", "Smith MD"), ("John", "MD", "Smith")),
+    # a listed strip-list credential is dropped
+    (("Mary PhD", None, "Jones"), ("Mary", "", "Jones")),
+    (("Mary", "PhD", "Jones"), ("Mary", "", "Jones")),
+    # credential-like words that are names still join, and the source's own last name is kept
+    (("Aminah", "Md", "Yusof"), ("Aminah", "", "Md Yusof")),
+    (("Aminah", "MD", "Yusof"), ("Aminah", "", "MD Yusof")),
+    (("Ahmad Md", None, "Nor"), ("Ahmad", "", "Md Nor")),
+    (("Awa", "Ba", "Diallo"), ("Awa", "", "Ba Diallo")),
+    (("Rafael", "Pastor", "Moreno"), ("Rafael", "", "Pastor Moreno")),
+    (("Paul", "Ndong", "Mba"), ("Paul", "", "Ndong Mba")),
+    (("Marta", "Lenise do", "Prado"), ("Marta", "Lenise", "do Prado")),
+    (("E.", None, "MD Smith"), ("E.", "", "Md Smith")),
+    (("Wei Meng", None, "Zhang"), ("Wei-Meng", "", "Zhang")),
+    (("Ji Do", None, "Kim"), ("Ji", "Do", "Kim")),
+    (("MD", "PhD", "Anna P. West"), ("Anna", "P.", "West")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), CREDENTIAL_SURNAME_CASES)
+def test_credential_stays_out_of_compound_surname(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+def test_credential_join():
+    assert credential_join(["Lord"], ["Lord", "Wood"])
+    assert credential_join(["BSN"], ["Bsn", "Rn"])
+    assert credential_join(["MD"], ["MD", "Smith"])
+    assert not credential_join(["Md"], ["Md", "Yusof"])
+    assert not credential_join(["Pastor"], ["Pastor", "Moreno"])
+    assert not credential_join(["Lenise", "do"], ["do", "Prado"])
 
 
 SOURCE_DOUBLE_SURNAME_CASES = [
@@ -948,3 +990,174 @@ def test_reviewed_roster_check_is_skipped_for_papers_of_other_sizes(predictor, m
     predictor.predict_batch([Instance(pp_authors=authors)])
     assert len(keys_per_rule_call) == 50
     assert sum(keys_per_rule_call) == 0
+
+
+NON_CHINESE_WORD_CASES = [
+    # the Chinese path cut common non-Chinese words into two pinyin syllables (and swapped surnames given-first)
+    (("Annie", None, "Chen"), ("Annie", "", "Chen")),
+    (("Luke", None, "Lu"), ("Luke", "", "Lu")),
+    (("Gene", None, "Ho"), ("Gene", "", "Ho")),
+    (("Gene", None, "Cheung"), ("Gene", "", "Cheung")),
+    (("Jihye", None, "Lee"), ("Ji-Hye", "", "Lee")),
+    (("Hoang", None, "Le"), ("Hoang", "", "Le")),
+    (("Tuan", None, "Hoang"), ("Tuan", "", "Hoang")),
+    (("Lee", None, "Baer"), ("Lee", "", "Baer")),
+    (("Kai", None, "Zenger"), ("Kai", "", "Zenger")),
+    (("Mai", None, "Hata"), ("Mai", "", "Hata")),
+    # Thai / Hebrew
+    (("Niran", None, "Chen"), ("Niran", "", "Chen")),
+    (("Niran", None, "Li"), ("Niran", "", "Li")),
+    (("Moshe", None, "Lin"), ("Moshe", "", "Lin")),
+    (("Moshe", None, "Han"), ("Moshe", "", "Han")),
+    # Korean
+    (("Mihye", None, "Lee"), ("Mi-Hye", "", "Lee")),
+    (("Yewon", None, "Jang"), ("Ye-Won", "", "Jang")),
+    (("Jihyun", None, "Choi"), ("Ji-Hyun", "", "Choi")),
+    # Hebrew given names with the Israeli surname Chen, including spellings that also occur among Chinese authors
+    (("Lior", None, "Chen"), ("Lior", "", "Chen")),
+    (("Gal", None, "Chen"), ("Gal", "", "Chen")),
+    (("Noa", None, "Chen"), ("Noa", "", "Chen")),
+    (("Tal", None, "Chen"), ("Tal", "", "Chen")),
+    (("Yael", None, "Chen"), ("Yael", "", "Chen")),
+    (("Itai", None, "Chen"), ("Itai", "", "Chen")),
+    (("Liran", None, "Chen"), ("Liran", "", "Chen")),
+    (("Moran", None, "Chen"), ("Moran", "", "Chen")),
+    (("Shiran", None, "Chen"), ("Shiran", "", "Chen")),
+    (("Shani", None, "Chen"), ("Shani", "", "Chen")),
+    (("Dana", None, "Chen"), ("Dana", "", "Chen")),
+    (("Keren", None, "Chen"), ("Keren", "", "Chen")),
+    # English, German, French, Japanese
+    (("Katie", None, "Wang"), ("Katie", "", "Wang")),
+    (("Lance", None, "Liu"), ("Lance", "", "Liu")),
+    (("Fabian", None, "Lu"), ("Fabian", "", "Lu")),
+    (("Rene", None, "Lu"), ("Rene", "", "Lu")),
+    (("Kenji", None, "Wang"), ("Kenji", "", "Wang")),
+]
+
+CHINESE_GIVEN_SPLIT_CASES = [
+    # Chinese given names keep their pinyin split, whether or not the corpus lists them
+    (("Xiaoming", None, "Wang"), ("Xiao-Ming", "", "Wang")),
+    (("Xiao Ming", None, "Wang"), ("Xiao-Ming", "", "Wang")),
+    (("Jianguo", None, "Li"), ("Jian-Guo", "", "Li")),
+    (("Wei", None, "Zhang"), ("Wei", "", "Zhang")),
+    (("Bangti", None, "Jin"), ("Bang-Ti", "", "Jin")),
+    (("Jinhu", None, "Lü"), ("Jin-Hu", "", "Lü")),
+    (("Weiran", None, "Chen"), ("Wei-Ran", "", "Chen")),
+    (("Haoran", None, "Chen"), ("Hao-Ran", "", "Chen")),
+    (("Yiran", None, "Chen"), ("Yi-Ran", "", "Chen")),
+    (("Xiaoming", None, "Chen"), ("Xiao-Ming", "", "Chen")),
+    # an author's own boundary still splits a listed word
+    (("An-Nie", None, "Chen"), ("An-Nie", "", "Chen")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), NON_CHINESE_WORD_CASES)
+def test_non_chinese_words_are_not_split_into_pinyin(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(("source", "expected"), CHINESE_GIVEN_SPLIT_CASES)
+def test_chinese_given_names_keep_their_pinyin_split(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+ACCENT_CASES = [
+    # on the Chinese path pinyin tone marks are folded and every other accent is kept
+    (("Jan", None, "Šíma"), ("Jan", "", "Šíma")),
+    (("René", None, "Kok"), ("René", "", "Kok")),
+    (("Şahin", None, "Kök"), ("Şahin", "", "Kök")),
+    (("Bo", None, "Ahrén"), ("Bo", "", "Ahrén")),
+    (("Chu", "Hoàng", "Mậu"), ("Chu", "Hoàng", "Mậu")),
+    (("Jan", None, "S\u030ci\u0301ma"), ("Jan", "", "Šíma")),
+    (("Wěi", None, "Zhāng"), ("Wei", "", "Zhang")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), ACCENT_CASES)
+def test_chinese_path_keeps_non_pinyin_accents(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(
+    ("part", "expected"),
+    [
+        ("šíma", "Šíma"),
+        ("kök", "Kök"),
+        ("nguyễn", "Nguyễn"),
+        ("đặng", "Đặng"),
+        ("zhāng", "Zhang"),
+        ("lǚ", "Lü"),
+        ("lü", "Lü"),
+        ("hsŭ", "Hsu"),
+        ("ji\u0307ang", "Jiang"),
+        ("chên", "Chen"),
+        ("josé", "Jose"),
+    ],
+)
+def test_capitalize_name_part_folds_only_pinyin_marks(part, expected):
+    from sinonym.utils.string_manipulation import StringManipulationUtils  # noqa: PLC0415
+
+    assert StringManipulationUtils.capitalize_name_part(part) == expected
+
+
+def test_clean_roman_pattern_keeps_vietnamese_precomposed_letters():
+    from sinonym.coretypes.config import ChineseNameConfig  # noqa: PLC0415
+
+    assert ChineseNameConfig.create_default().clean_roman_pattern.sub("", "Mậu-Nguyễn") == "Mậu-Nguyễn"
+
+
+PARTICLE_ORDER_CASES = [
+    # a strong particle opening the middle field flipped a given-first name surname-first
+    (("Lucas", "da Fonseca Roberti", "Garcia"), ("Lucas", "", "da Fonseca Roberti Garcia")),
+    (("Wellyson", "da Cunha Araújo", "Firmo"), ("Wellyson", "", "da Cunha Araújo Firmo")),
+    (("Sabrina", "da Costa Machado", "Duarte"), ("Sabrina", "", "da Costa Machado Duarte")),
+]
+
+MIDDLE_GIVEN_PHRASE_CASES = [
+    # a given-name phrase opening a middle field that goes on with surname words stays with the given name
+    (("Maria", "das Graças Carvalho", "Ferriani"), ("Maria das Graças", "", "Carvalho Ferriani")),
+    (("Ana", "de Fátima Souza", "Lima"), ("Ana de Fátima", "", "Souza Lima")),
+    (("Maria", "do Rosário Dias de Oliveira", "Latorre"), ("Maria do Rosário", "", "Dias de Oliveira Latorre")),
+    (("Francisco", "das Chagas Araújo", "Sousa"), ("Francisco das Chagas", "", "Araújo Sousa")),
+    (("María", "de los Ángeles Martínez", "Ortega"), ("María de los Ángeles", "", "Martínez Ortega")),
+    (("Rita", "de Cássia Silva", "Santos"), ("Rita de Cássia", "", "Silva Santos")),
+    # an initial after the phrase is not a surname word
+    (("Ana", "de Fátima S.", "Lima"), ("Ana", "", "de Fátima S. Lima")),
+    # the phrase alone in the middle
+    (("Maria", "das Graças", "Cardoso"), ("Maria das Graças", "", "Cardoso")),
+    # phrases that are mostly family names in this shape are left as written
+    (("Maria", "da Conceição Silva", "Lima"), ("Maria", "", "da Conceição Silva Lima")),
+    (("José", "de Jesus Silva", "Lima"), ("José", "", "de Jesus Silva Lima")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), MIDDLE_GIVEN_PHRASE_CASES)
+def test_middle_given_phrase_before_surname_words(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+@pytest.mark.parametrize(("source", "expected"), PARTICLE_ORDER_CASES)
+def test_particle_in_the_middle_does_not_flip_a_given_name_surname_first(predictor, source, expected):
+    assert resolve(predictor, *source) == expected
+
+
+def test_particle_surname_first_flip_still_applies_to_a_corpus_surname(predictor):
+    assert resolve(predictor, "Carvalho", "da Silva Roberto", "José") == ("Roberto", "José", "Carvalho da Silva")
+
+
+KOREAN_SYLLABLE_CASES = [
+    # a romanized Korean syllable pinyin does not have keeps the word whole beside a surname shared with Chinese
+    (("Seungho", None, "Lee"), ("Seung-Ho", "", "Lee")),
+    (("Jieun", None, "Han"), ("Ji-Eun", "", "Han")),
+    (("Hyunwoo", None, "Lim"), ("Hyun-Woo", "", "Lim")),
+    (("Dongseung", None, "Song"), ("Dongseung", "", "Song")),
+    (("Seung-Ho", None, "Lee"), ("Seung-Ho", "", "Lee")),
+    # Cantonese spellings with the same letters still split
+    (("Kinkeung", None, "Lai"), ("Kin-Keung", "", "Lai")),
+    (("Tszleung", None, "Yu"), ("Tsz-Leung", "", "Yu")),
+]
+
+
+@pytest.mark.parametrize(("source", "expected"), KOREAN_SYLLABLE_CASES)
+def test_korean_syllables_are_not_split_as_pinyin(predictor, source, expected):
+    assert resolve(predictor, *source) == expected

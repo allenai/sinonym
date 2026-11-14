@@ -1,9 +1,12 @@
 """Single TIMO boundary for terminal, source-shaped author resolution."""
 
+import re
+
 from pydantic import BaseSettings as _BaseSettings
 from pydantic import Field as _Field
 
 from sinonym.coretypes import BatchParseResult as _BatchParseResult
+from sinonym.coretypes.routing_resolution import ResolutionAction as _ResolutionAction
 from sinonym.detector import ChineseNameDetector as _ChineseNameDetector
 from sinonym.detector import ParallelMode as _ParallelMode
 from sinonym.pipeline.name_order_routing import (
@@ -16,6 +19,9 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_vys_abstain_batches as _route_pp_vys_abstain_batches,
 )
 from sinonym.services.batch_analysis import RelatedBatchParseResult as _RelatedBatchParseResult
+from sinonym.services.source_repairs import load_glued_initial_prefixes as _load_glued_initial_prefixes
+from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
+from sinonym.services.source_repairs import strip_last_field_credentials as _strip_last_field_credentials
 from sinonym.timo._resolution import (
     Instance,
     ResolvedAuthorFields,
@@ -23,6 +29,11 @@ from sinonym.timo._resolution import (
     _Model,
     _Resolver,
 )
+from sinonym.timo._resolution import reviewed_exact_source_assignment as _reviewed_exact_source_assignment
+from sinonym.utils.allcaps_given_words import load_allcaps_given_words as _load_allcaps_given_words
+from sinonym.utils.korean_given_names import korean_given_form as _korean_given_form
+from sinonym.utils.korean_given_names import load_korean_given_words as _load_korean_given_words
+from sinonym.utils.unsplit_given_words import load_unsplit_given_words as _load_unsplit_given_words
 
 __all__ = [
     "Instance",
@@ -32,6 +43,76 @@ __all__ = [
     "ResolvedAuthorFields",
     "SourceAuthorFields",
 ]
+
+
+def _korean_given(author: ResolvedAuthorFields) -> ResolvedAuthorFields:
+    """An author with a listed two-syllable Korean given name, written ``Jin-Ho`` (utils/korean_given_names.py).
+
+    Applied to every written author, Chinese-detected or not: Korean names often parse as Chinese (``Young Hee``), and
+    the word table keeps Chinese given names out.
+    """
+    if author.resolution_action is _ResolutionAction.SUPPRESS:
+        return author
+    given = _korean_given_form(author.first_name, author.middle_names, author.last_name)
+    if given is None or (given, "") == (author.first_name, author.middle_names):
+        return author
+    return author.copy(update={"first_name": given, "middle_names": ""})
+
+
+def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, SourceAuthorFields | None]:
+    """The source with a recoverable field defect repaired (services/source_repairs.py), else unchanged, and the source
+    before the given-field credential repair when that repair applied (``None`` otherwise).
+
+    Resolution then works on the repaired fields, so source-provenance outputs carry the repaired text, including a
+    surname field rewritten by ``strip_last_field_credentials``; the source before the credential repair only serves as
+    the reference for ``_kept_given_words_out_of_surname``. VYS pool names are plain strings and are not repaired.
+    """
+    stripped = _strip_last_field_credentials(author.first_name, author.middle_names, author.last_name)
+    if stripped is not None and _reviewed_exact_source_assignment(author) is None:
+        author = author.copy(update={"first_name": stripped[0], "middle_names": stripped[1], "last_name": stripped[2]})
+    repaired = _repair_source_fields(author.first_name, author.middle_names, author.last_name, author.suffix)
+    if repaired is None:
+        return author, None
+    rule, first, middle = repaired
+    return author.copy(update={"first_name": first, "middle_names": middle or None}), author if rule == "credential" else None
+
+
+_NAME_WORD_SPLIT_RE = re.compile(r"[\s.,]+")
+
+
+def _words(text: str) -> list[str]:
+    return [word.casefold() for word in _NAME_WORD_SPLIT_RE.split(text) if word]
+
+
+def _kept_given_words_out_of_surname(
+    author: ResolvedAuthorFields,
+    reference: ResolvedAuthorFields,
+    source: SourceAuthorFields,
+) -> ResolvedAuthorFields:
+    """Undo a surname that took more source words once a credential was stripped from the given or middle field.
+
+    ``R`` / ``C M Edward Ph.D.`` / ``Udovic``: without ``Ph.D.`` the parse reads ``Edward Udovic`` as the surname. When
+    the surname is the one the unrepaired source parses to with source words in front, those words go back to the
+    middle (``R. | C. M. Edward | Udovic``). A surname that is the whole source surname field stays (``A.`` / ``K. M.
+    PhD`` / ``Fazlul Haque``).
+    """
+    surname, reference_surname = author.last_name.split(), reference.last_name.split()
+    extra = len(surname) - len(reference_surname)
+    if (
+        not reference_surname
+        or extra <= 0
+        or _words(author.last_name) == _words(source.last_name or "")
+        or _words(" ".join(surname[extra:])) != _words(reference.last_name)
+        or not set(_words(" ".join(surname[:extra])))
+        <= set(_words(f"{source.first_name or ''} {source.middle_names or ''} {source.last_name or ''}"))
+    ):
+        return author
+    return author.copy(
+        update={
+            "middle_names": " ".join([*author.middle_names.split(), *surname[:extra]]),
+            "last_name": " ".join(surname[extra:]),
+        },
+    )
 
 
 class Prediction(_Model):
@@ -61,6 +142,11 @@ class Predictor:
         self._artifacts_dir = artifacts_dir
         self._detector = _ChineseNameDetector()
         self._resolver = _Resolver(self._detector)
+        # the data tables the TIMO path reads, loaded here so no request pays for the first load
+        _load_glued_initial_prefixes()
+        _load_unsplit_given_words()
+        _load_korean_given_words()
+        _load_allcaps_given_words()
 
     def _resolve_pp_vys_batch(
         self,
@@ -164,6 +250,40 @@ class Predictor:
 
     def predict_batch(self, instances: list[Instance]) -> list[Prediction]:
         """Resolve one prediction per paper, preserving paper and author order."""
+        repairs = [[_repaired_source(author) for author in instance.pp_authors] for instance in instances]
+        predictions = self._resolve_instances(
+            [
+                instance.copy(update={"pp_authors": [author for author, _ in repaired]})
+                for instance, repaired in zip(instances, repairs, strict=True)
+            ],
+        )
+        checked = [
+            index
+            for index, repaired in enumerate(repairs)
+            if any(
+                unrepaired is not None and len(author.last_name.split()) > 1
+                for author, (_, unrepaired) in zip(predictions[index].authors, repaired, strict=True)
+            )
+        ]
+        if not checked:
+            return predictions
+        references = self._resolve_instances(
+            [
+                instances[index].copy(update={"pp_authors": [reference or author for author, reference in repairs[index]]})
+                for index in checked
+            ],
+        )
+        for index, reference_prediction in zip(checked, references, strict=True):
+            authors = zip(predictions[index].authors, reference_prediction.authors, repairs[index], strict=True)
+            predictions[index] = Prediction(
+                authors=[
+                    author if unrepaired is None else _kept_given_words_out_of_surname(author, reference, source)
+                    for author, reference, (source, unrepaired) in authors
+                ],
+            )
+        return predictions
+
+    def _resolve_instances(self, instances: list[Instance]) -> list[Prediction]:
         predictions: list[Prediction | None] = [None] * len(instances)
         requests: list[tuple[list[str], list[str] | None]] = []
         plans: list[tuple[int, int]] = []
@@ -205,7 +325,7 @@ class Predictor:
                     pp_batch=batch_result.pp_batch,
                     pool=batch_result.vys_batch,
                 )
-            predictions[instance_index] = Prediction(authors=authors)
+            predictions[instance_index] = Prediction(authors=[_korean_given(author) for author in authors])
 
         if any(prediction is None for prediction in predictions):
             message = "prediction plan did not fill every instance slot"

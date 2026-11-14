@@ -5,7 +5,7 @@
     "production_replay": 8
   },
   "fixture_file": "requests.jsonl",
-  "fixture_sha256": "cd5e45c089a5c103193ac2492e40828b406cb8ca421daa614155aa84a38c45ea",
+  "fixture_sha256": "d38d33f629bd72da77c8bdab19f6cdd6ab111973130fa152a8f86e5b01be8894",
   "occurrence_count": 37,
   "production_paper_ids": [
     1654190,
@@ -46,5 +46,5 @@
     "The replay manifest recorded the 7,077,451,895-byte authors.parquet size but not its SHA-256; the frozen request file is the committed subset authority.",
     "Synthetic cases specify contract behavior and are not estimates of corpus prevalence."
   ],
-  "terminal_occurrence_sha256": "347bd45913039f01edcc107afda5d1d66575eeac5fcaffab099055a7b9c8f733"
+  "terminal_occurrence_sha256": "30f72a28dc97091aefddf80b77929057ea902060bed815f7c072e1e9cfac6e03"
 }

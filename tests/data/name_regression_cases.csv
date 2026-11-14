@@ -1,0 +1,706 @@
+case_class,first,middle,last,exp_first,exp_middle,exp_last,was_063,reason
+split,Lina,H. H.,Yao,Lina,H. H.,Yao,Li-Na|H. H.|Yao,lina is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yujin,J.,Choi,Yujin,J.,Choi,Yu-Jin|J.|Choi,yujin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Annie,S.,Wang,Annie,S.,Wang,An-Nie|S.|Wang,annie is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Jihye,(Ellie),Kang,Jihye,(Ellie),Kang,Jih-Ye||Kang,jihye is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Junho,,Suh,Jun-Ho,,Suh,Jun-Ho||Suh,junho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sujin,,Jang,Su-Jin,,Jang,Su-Jin||Jang,sujin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Minji,K,Ko,Minji,K.,Ko,Min-Ji|K.|Ko,minji is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Jihyun,,Song,Ji-Hyun,,Song,Jih-Yun||Song,jihyun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sangmin,,Lee,Sang-Min,,Lee,Sang-Min||Lee,sangmin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sumin,,Xu,Sumin,,Xu,Su-Min||Xu,sumin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sungmin,,Woo,Sung-Min,,Woo,Sung-Min||Woo,sungmin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Woojin,,Lee,Woo-Jin,,Lee,Woo-Jin||Lee,woojin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jinho,,Jang,Jin-Ho,,Jang,Jin-Ho||Jang,jinho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jisu,,Jang,Ji-Su,,Jang,Ji-Su||Jang,jisu is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Hoang,V.,Ho,Hoang,V.,Ho,Ho-Ang|V.|Ho,hoang is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Subin,,Lee,Su-Bin,,Lee,Su-Bin||Lee,subin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Mina,K.,Lee,Mina,K.,Lee,Mi-Na|K.|Lee,mina is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yuna,,Zhang,Yuna,,Zhang,Yu-Na||Zhang,yuna is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Katie,C.Y.,Lee,Katie,C. Y.,Lee,Ka-Tie|C. Y.|Lee,katie is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Seungmin,,Lee,Seung-Min,,Lee,Seung-Min||Lee,seungmin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Yeji,,Lee,Ye-Ji,,Lee,Ye-Ji||Lee,yeji is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jihun,,Yu,Ji-Hun,,Yu,Ji-Hun||Yu,jihun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Seungwoo,,Han,Seung-Woo,,Han,Seung-Woo||Han,seungwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jiho,,Kang,Ji-Ho,,Kang,Ji-Ho||Kang,jiho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Seungho,,Yu,Seung-Ho,,Yu,Seung-Ho||Yu,seungho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jinwoo,(Brian),Lee,Jinwoo,(Brian),Lee,Jin-Woo||Lee,jinwoo is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yejin,,Jung,Ye-Jin,,Jung,Ye-Jin||Jung,yejin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sangwoo,T.,Han,Sangwoo,T.,Han,Sang-Woo|T.|Han,sangwoo is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sungho,,Jin,Sung-Ho,,Jin,Sung-Ho||Jin,sungho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jiwoo,,Lee,Ji-Woo,,Lee,Ji-Woo||Lee,jiwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Dongjin,S,Lee,Dongjin,S.,Lee,Dong-Jin|S.|Lee,dongjin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sangho,,Lee,Sang-Ho,,Lee,Sang-Ho||Lee,sangho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Minho,,Lee,Min-Ho,,Lee,Min-Ho||Lee,minho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Luke,L.,Chen,Luke,L.,Chen,Lu-Ke|L.|Chen,luke is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Anni,M.Y.,Zhou,Anni,M. Y.,Zhou,An-Ni|M. Y.|Zhou,anni is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yana,V.,Shen,Yana,V.,Shen,Ya-Na|V.|Shen,yana is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Minsu,,Lee,Min-Su,,Lee,Min-Su||Lee,minsu is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Hojun,,Aan,Hojun,,Aan,Ho-Jun||Aan,hojun is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Junya,,Lu,Junya,,Lu,Jun-Ya||Lu,junya is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sungwoo,,Ju,Sungwoo,,Ju,Sung-Woo||Ju,sungwoo is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Jisun,,Lee,Ji-Sun,,Lee,Ji-Sun||Lee,jisun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Hojin,,Shin,Ho-Jin,,Shin,Ho-Jin||Shin,hojin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Seungjun,,Lee,Seung-Jun,,Lee,Seung-Jun||Lee,seungjun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sinan,,Wang,Sinan,,Wang,Si-Nan||Wang,sinan is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Minwoo,,Kang,Min-Woo,,Kang,Min-Woo||Kang,minwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Yuji,,Lin,Yuji,,Lin,Yu-Ji||Lin,yuji is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Dongwoo,,Kang,Dong-Woo,,Kang,Dong-Woo||Kang,dongwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sejin,,Han,Se-Jin,,Han,Se-Jin||Han,sejin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Helin,,Zhang,Helin,,Zhang,He-Lin||Zhang,helin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Minna,K,Su,Minna,K.,Su,Min-Na|K.|Su,minna is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Lilian,L.,Lee,Lilian,L.,Lee,Li-Lian|L.|Lee,lilian is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Seunghun,J,Lee,Seunghun,J.,Lee,Seung-Hun|J.|Lee,seunghun is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Keren,,Zhu,Keren,,Zhu,Ke-Ren||Zhu,keren is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Donghun,,Kang,Dong-Hun,,Kang,Dong-Hun||Kang,donghun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Chanwoo,,Jung,Chan-Woo,,Jung,Chan-Woo||Jung,chanwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jihwan,P.,Choi,Jihwan,P.,Choi,Jih-Wan|P.|Choi,jihwan is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Dongho,,Kang,Dong-Ho,,Kang,Dong-Ho||Kang,dongho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Juho,,Lee,Juho,,Lee,Ju-Ho||Lee,juho is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sangjin,,Lee,Sang-Jin,,Lee,Sang-Jin||Lee,sangjin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Dongjun,,Han,Dongjun,,Han,Dong-Jun||Han,dongjun is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Danna,,Zhang,Danna,,Zhang,Dan-Na||Zhang,danna is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Gene,S.,Tan,Gene,S.,Tan,Ge-Ne|S.|Tan,gene is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Minju,,Kang,Min-Ju,,Kang,Min-Ju||Kang,minju is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Yewon,,Jin,Ye-Won,,Jin,Yew-On||Jin,yewon is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Yumi,,Lee,Yumi,,Lee,Yu-Mi||Lee,yumi is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Aidan,L,Ng,Aidan,L.,Ng,Ai-Dan|L.|Ng,aidan is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Changho,,Choi,Chang-Ho,,Choi,Chang-Ho||Choi,changho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Diya,,Wang,Diya,,Wang,Di-Ya||Wang,diya is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Jiyun,,Choi,Ji-Yun,,Choi,Ji-Yun||Choi,jiyun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jinsu,,Ma,Jinsu,,Ma,Jin-Su||Ma,jinsu is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yongjin,,Sung,Yongjin,,Sung,Yong-Jin||Sung,yongjin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Seungju,,Yu,Seung-Ju,,Yu,Seung-Ju||Yu,seungju is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Dana,K.,Liu,Dana,K.,Liu,Da-Na|K.|Liu,dana is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yunho,,YUN,Yun-Ho,,Yun,Yun-Ho||Yun,yunho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Dan,,Moran,Dan,,Moran,Mo-Ran||Dan,moran is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sangyun,,Lee,Sang-Yun,,Lee,Sang-Yun||Lee,sangyun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Yuli,,Yang,Yuli,,Yang,Yu-Li||Yang,yuli is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Suji,,Shin,Su-Ji,,Shin,Su-Ji||Shin,suji is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Leah,Y.,Fung,Leah,Y.,Fung,Le-Ah|Y.|Fung,leah is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Heli,,Xu,Heli,,Xu,He-Li||Xu,heli is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Daye,,Kang,Da-Ye,,Kang,Da-Ye||Kang,daye is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sungjin,,Lee,Sung-Jin,,Lee,Sung-Jin||Lee,sungjin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sunho,,Choi,Sun-Ho,,Choi,Sun-Ho||Choi,sunho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Dayan,J.,Liu,Dayan,J.,Liu,Da-Yan|J.|Liu,dayan is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Youjin,,Kang,You-Jin,,Kang,You-Jin||Kang,youjin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Dongmin,,Han,Dongmin,,Han,Dong-Min||Han,dongmin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sunmin,,An,Sun-Min,,An,Sun-Min||An,sunmin is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Sangmi,T.,Lee,Sangmi,T.,Lee,Sang-Mi|T.|Lee,sangmi is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sidi,,Zhao,Sidi,,Zhao,Si-Di||Zhao,sidi is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Suna,,Zi,Suna,,Zi,Su-Na||Zi,suna is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Shifa,Chen,Chen,Shifa,Chen,Chen,Shi-Fa-Chen||Chen,shifa is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Misun,,Kang,Mi-Sun,,Kang,Mi-Sun||Kang,misun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Lida,L.,Sun,Lida,L.,Sun,Li-Da|L.|Sun,lida is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yunmi,,Lee,Yun-Mi,,Lee,Yun-Mi||Lee,yunmi is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Jennie,E,Choi,Jennie,E.,Choi,Jen-Nie|E.|Choi,jennie is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Woosung,,Choi,Woo-Sung,,Choi,Woo-Sung||Choi,woosung is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Daren,,Zhao,Daren,,Zhao,Da-Ren||Zhao,daren is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Mingu,,Kang,Min-Gu,,Kang,Min-Gu||Kang,mingu is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Mona,Q.,Tan,Mona,Q.,Tan,Mo-Na|Q.|Tan,mona is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Junsu,,Kang,Jun-Su,,Kang,Jun-Su||Kang,junsu is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Kangmin,,Lee,Kangmin,,Lee,Kang-Min||Lee,kangmin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sunwoo,T.,Jang,Sunwoo,T.,Jang,Sun-Woo|T.|Jang,sunwoo is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Junmo,,Lee,Jun-Mo,,Lee,Jun-Mo||Lee,junmo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Junji,,Wei,Junji,,Wei,Jun-Ji||Wei,junji is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Hosung,,You,Hosung,,You,Ho-Sung||You,hosung is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yani,,Zhang,Yani,,Zhang,Ya-Ni||Zhang,yani is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Shunji,F.,Xia,Shunji,F.,Xia,Shun-Ji|F.|Xia,shunji is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sanghun,,Im,Sang-Hun,,Im,Sang-Hun||Im,sanghun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Yongju,,Lee,Yongju,,Lee,Yong-Ju||Lee,yongju is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Luna,L.,Zhang,Luna,L.,Zhang,Lu-Na|L.|Zhang,luna is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Bomi,K.,Lee,Bomi,K.,Lee,Bo-Mi|K.|Lee,bomi is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yongho,,Jang,Yong-Ho,,Jang,Yong-Ho||Jang,yongho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Juyong,,Lee,Ju-Yong,,Lee,Ju-Yong||Lee,juyong is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Hosun,,Kang,Ho-Sun,,Kang,Ho-Sun||Kang,hosun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Juli,,Wang,Juli,,Wang,Ju-Li||Wang,juli is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Tanya,A.,Li,Tanya,A.,Li,Tan-Ya|A.|Li,tanya is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Changwoo,J,Han,Changwoo,J.,Han,Chang-Woo|J.|Han,changwoo is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yena,,Zhang,Yena,,Zhang,Ye-Na||Zhang,yena is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Junwoo,,Choi,Jun-Woo,,Choi,Jun-Woo||Choi,junwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Seungah,S,Lee,Seungah,S.,Lee,Seung-Ah|S.|Lee,seungah is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Mihyun,,Han,Mi-Hyun,,Han,Mih-Yun||Han,mihyun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Hansen,,Li,Hansen,,Li,Han-Sen||Li,hansen is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Hamin,,Lee,Hamin,,Lee,Ha-Min||Lee,hamin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Rena,Y,Mei,Rena,Y.,Mei,Re-Na|Y.|Mei,rena is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Kayla,Y.,Lim,Kayla,Y.,Lim,Kay-La|Y.|Lim,kayla is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Seunghan,,Han,Seung-Han,,Han,Seung-Han||Han,seunghan is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Chanho,,Lee,Chan-Ho,,Lee,Chan-Ho||Lee,chanho is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Dale,F.,Zhou,Dale,F.,Zhou,Da-Le|F.|Zhou,dale is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Changmin,,Lee,Changmin,,Lee,Chang-Min||Lee,changmin is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Geon,,Shin,Geon,,Shin,Ge-On||Shin,geon is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Sungju,,Lee,Sung-Ju,,Lee,Sung-Ju||Lee,sungju is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Danbi,,Im,Dan-Bi,,Im,Dan-Bi||Im,danbi is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Lize,,Sun,Lize,,Sun,Li-Ze||Sun,lize is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Jinju,,Ma,Jinju,,Ma,Jin-Ju||Ma,jinju is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Shanna,C,Su,Shanna,C.,Su,Shan-Na|C.|Su,shanna is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Miran,,Jin,Miran,,Jin,Mi-Ran||Jin,miran is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yeon,S.,Chang,Yeon,S.,Chang,Ye-On|S.|Chang,yeon is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Jinsung,,Choi,Jin-Sung,,Choi,Jin-Sung||Choi,jinsung is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Faye,X.,Yang,Faye,X.,Yang,Fa-Ye|X.|Yang,faye is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Shane,K,Chu,Shane,K.,Chu,Sha-Ne|K.|Chu,shane is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Dadi,,Chen,Dadi,,Chen,Da-Di||Chen,dadi is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Yuni,Y.,Lee,Yuni,Y.,Lee,Yu-Ni|Y.|Lee,yuni is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Jinha,,Lee,Jin-Ha,,Lee,Jin-Ha||Lee,jinha is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Changhun,,Lee,Chang-Hun,,Lee,Chang-Hun||Lee,changhun is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Yongwoo,,Lee,Yong-Woo,,Lee,Yong-Woo||Lee,yongwoo is not a Chinese given name (registry people mostly outside Chinese countries); Korean given name in its hyphenated form since 0.6.7
+split,Woochan,,Lee,Woochan,,Lee,Woo-Chan||Lee,woochan is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Erli,,Gao,Erli,,Gao,Er-Li||Gao,erli is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Minah,H,Chang,Minah,H.,Chang,Min-Ah|H.|Chang,minah is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Dongwan,,Chen,Dongwan,,Chen,Dong-Wan||Chen,dongwan is not a Chinese given name (registry people mostly outside Chinese countries)
+split,Hanyong,,Yang,Hanyong,,Yang,Han-Yong||Yang,hanyong is not a Chinese given name (registry people mostly outside Chinese countries)
+accent,Wei,,Lü,Wei,,Lü,Wei||Lu,accent the source and the registry write
+accent,Qingguo,,Lü,Qing-Guo,,Lü,Qing-Guo||Lu,accent the source and the registry write
+accent,Xin,,Lü,Xin,,Lü,Xin||Lu,accent the source and the registry write
+accent,Fan,,Lü,Fan,,Lü,Fan||Lu,accent the source and the registry write
+accent,Changli,,Lü,Chang-Li,,Lü,Chang-Li||Lu,accent the source and the registry write
+accent,Yang,,Lü,Lü,,Yang,Lu||Yang,accent the source and the registry write
+accent,Xingqiang,,Lü,Xing-Qiang,,Lü,Xing-Qiang||Lu,accent the source and the registry write
+accent,Qi-Fang,,Lü,Qi-Fang,,Lü,Qi-Fang||Lu,accent the source and the registry write
+accent,Shuai,,Lü,Shuai,,Lü,Shuai||Lu,accent the source and the registry write
+accent,Nü,,Wang,Nü,,Wang,Nu||Wang,accent the source and the registry write
+accent,Xiaozhou,,Lü,Xiao-Zhou,,Lü,Xiao-Zhou||Lu,accent the source and the registry write
+accent,Peitao,,Lü,Pei-Tao,,Lü,Pei-Tao||Lu,accent the source and the registry write
+accent,Baozhong,,Lü,Bao-Zhong,,Lü,Bao-Zhong||Lu,accent the source and the registry write
+accent,Xiao-Long,,Lü,Xiao-Long,,Lü,Xiao-Long||Lu,accent the source and the registry write
+accent,Hongying,,Lü,Hong-Ying,,Lü,Hong-Ying||Lu,accent the source and the registry write
+accent,Rémi,,Fay,Rémi,,Fay,Re-Mi||Fay,accent the source and the registry write
+accent,Shaoyu,,Lü,Shao-Yu,,Lü,Shao-Yu||Lu,accent the source and the registry write
+accent,Chaofeng,,Lü,Chao-Feng,,Lü,Chao-Feng||Lu,accent the source and the registry write
+accent,Bo,,Ahrén,Bo,,Ahrén,Ah-Ren||Bo,accent the source and the registry write
+accent,Şahin,,Kök,Şahin,,Kök,Sa-Hin||Kok,accent the source and the registry write
+accent,Xiang,,Lü,Xiang,,Lü,Xiang||Lu,accent the source and the registry write
+accent,Yan,,Lü,Yan,,Lü,Yan||Lu,accent the source and the registry write
+accent,Liang,,Lü,Liang,,Lü,Liang||Lu,accent the source and the registry write
+accent,Musa,,Gün,Musa,,Gün,Mu-Sa||Gun,accent the source and the registry write
+accent,Zhaoyue,,Lü,Zhao-Yue,,Lü,Zhao-Yue||Lu,accent the source and the registry write
+accent,Muhan,,Lü,Mu-Han,,Lü,Mu-Han||Lu,accent the source and the registry write
+accent,Qingtian,,Lü,Qing-Tian,,Lü,Qing-Tian||Lu,accent the source and the registry write
+accent,Haibin,,Lü,Hai-Bin,,Lü,Hai-Bin||Lu,accent the source and the registry write
+accent,Yanfei,,Lü,Yan-Fei,,Lü,Yan-Fei||Lu,accent the source and the registry write
+accent,Jan,,Šíma,Jan,,Šíma,Jan||Sima,accent the source and the registry write
+accent,Yuling,,Lü,Yu-Ling,,Lü,Yu-Ling||Lu,accent the source and the registry write
+accent,Ting,,Lü,Ting,,Lü,Ting||Lu,accent the source and the registry write
+accent,Huazhong,,Lü,Hua-Zhong,,Lü,Hua-Zhong||Lu,accent the source and the registry write
+accent,Hui,,Lü,Hui,,Lü,Hui||Lu,accent the source and the registry write
+accent,Jia-Qi,,Lü,Jia-Qi,,Lü,Jia-Qi||Lu,accent the source and the registry write
+accent,Tie-Yu,,Lü,Tie-Yu,,Lü,Tie-Yu||Lu,accent the source and the registry write
+accent,Rui,,Ganhão,Gan-Hão,,Rui,Gan-Hao||Rui,accent the source and the registry write
+accent,Yihe,,Lü,Yi-He,,Lü,Yi-He||Lu,accent the source and the registry write
+accent,Tian-Feng,,Lü,Tian-Feng,,Lü,Tian-Feng||Lu,accent the source and the registry write
+accent,Chengwei,,Lü,Cheng-Wei,,Lü,Cheng-Wei||Lu,accent the source and the registry write
+accent,He-Zuo,,Lü,He-Zuo,,Lü,He-Zuo||Lu,accent the source and the registry write
+accent,Yüfang,,Wu,Yü-Fang,,Wu,Yu-Fang||Wu,accent the source and the registry write
+accent,Qing,,Lü,Qing,,Lü,Qing||Lu,accent the source and the registry write
+accent,Shouqin,,Lü,Shou-Qin,,Lü,Shou-Qin||Lu,accent the source and the registry write
+accent,Xiaoying,,Lü,Xiao-Ying,,Lü,Xiao-Ying||Lu,accent the source and the registry write
+accent,Hai-Feng,,Lü,Hai-Feng,,Lü,Hai-Feng||Lu,accent the source and the registry write
+accent,Cheng,,Lü,Cheng,,Lü,Cheng||Lu,accent the source and the registry write
+accent,Xueqin,,Lü,Xue-Qin,,Lü,Xue-Qin||Lu,accent the source and the registry write
+accent,Wenqi,,Lü,Wen-Qi,,Lü,Wen-Qi||Lu,accent the source and the registry write
+accent,Qiu-Feng,,Lü,Qiu-Feng,,Lü,Qiu-Feng||Lu,accent the source and the registry write
+accent,Shulin,,Lü,Shu-Lin,,Lü,Shu-Lin||Lu,accent the source and the registry write
+accent,Ling,,Lü,Ling,,Lü,Ling||Lu,accent the source and the registry write
+accent,Şahin,,KÖK,Şahin,,Kök,Sa-Hin||Kok,accent the source and the registry write
+accent,Guonian,,Lü,Guo-Nian,,Lü,Guo-Nian||Lu,accent the source and the registry write
+accent,Guiyun,,Lü,Gui-Yun,,Lü,Gui-Yun||Lu,accent the source and the registry write
+accent,Linzhe,,Lü,Lin-Zhe,,Lü,Lin-Zhe||Lu,accent the source and the registry write
+accent,Han,,Lü,Han,,Lü,Han||Lu,accent the source and the registry write
+accent,Fabian,,Sá,Fabian,,Sá,Fa-Bian||Sa,accent the source and the registry write
+given_phrase,Maria,do Carmo Fernandez Lourenço,Haddad,Maria do Carmo,,Fernandez Lourenço Haddad,Maria|Do Carmo Fernandez Lourenço|Haddad,registry family name Fernandez Lourenço Haddad
+given_phrase,Eliane,de Fátima Almeida,Lima,Eliane de Fátima,,Almeida Lima,Eliane||de Fátima Almeida Lima,registry family name Almeida Lima
+given_phrase,Maria,de Fátima Antero Sousa,Machado,Maria de Fátima,,Antero Sousa Machado,Maria||de Fátima Antero Sousa Machado,registry family name Antero Sousa Machado
+particle_flip,Wellyson,da Cunha Araújo,Firmo,Wellyson,,da Cunha Araújo Firmo,Araújo|Firmo|Wellyson da Cunha,registry family name da Cunha Araújo Firmo
+particle_flip,Lucas,da Fonseca Roberti,Garcia,Lucas,,da Fonseca Roberti Garcia,Roberti|Garcia|Lucas da Fonseca,registry family name da Fonseca Roberti Garcia
+given_phrase,Bernadete,de Lourdes André,Gouveia,Bernadete de Lourdes,,André Gouveia,Bernadete||de Lourdes André Gouveia,registry family name André Gouveia
+particle_flip,Sabrina,da Costa Machado,Duarte,Sabrina,,da Costa Machado Duarte,Machado|Duarte|Sabrina da Costa,registry family name da Costa Machado Duarte
+particle_flip,Tatiane,da Silva Dal,Pizzol,Tatiane,,da Silva Dal Pizzol,Dal|Pizzol|Tatiane da Silva,registry family name da Silva Dal Pizzol
+given_phrase,Maria,do Socorro Padilha de,Oliveira,Maria do Socorro,,Padilha de Oliveira,Maria|Do Socorro Padilha|de Oliveira,registry family name Padilha de Oliveira
+given_phrase,Elza,de Fátima Ribeiro,Higa,Elza de Fátima,,Ribeiro Higa,Elza||de Fátima Ribeiro Higa,registry family name Ribeiro Higa
+given_phrase,Rita,de Cássia Pistóia,Mariani,Rita de Cássia,,Pistóia Mariani,Rita||de Cássia Pistóia Mariani,registry family name Pistóia Mariani
+particle_flip,Taciana,da Costa Farias,Almeida,Taciana,,da Costa Farias Almeida,Farias|Almeida|Taciana da Costa,registry family name da Costa Farias Almeida
+given_phrase,Maria,da Graça Corso da,Motta,Maria da Graça,,Corso da Motta,Maria||da Graça Corso da Motta,registry family name Corso da Motta
+given_phrase,Maria,de Fátima Costa,Caminha,Maria de Fátima,,Costa Caminha,Maria||de Fátima Costa Caminha,registry family name COSTA CAMINHA
+particle_flip,Eduardo,da Silva Barbosa,Ferreira,Eduardo,,da Silva Barbosa Ferreira,Barbosa|Ferreira|Eduardo da Silva,registry family name da Silva Barbosa Ferreira
+given_phrase,Maria,de Fátima Morethy,Couto,Maria de Fátima,,Morethy Couto,Maria||de Fátima Morethy Couto,registry family name MORETHY COUTO
+particle_flip,Betânia,da Mata Ribeiro,Gomes,Betânia,,da Mata Ribeiro Gomes,Ribeiro|Gomes|Betânia da Mata,registry family name da Mata Ribeiro Gomes
+given_phrase,Saulo,de Tarso Marques,Bezerra,Saulo de Tarso,,Marques Bezerra,Saulo||de Tarso Marques Bezerra,registry family name Marques Bezerra
+given_phrase,Maria,de Fátima Nóbrega,Barbosa,Maria de Fátima,,Nóbrega Barbosa,Maria||de Fátima Nóbrega Barbosa,registry family name NOBREGA BARBOSA
+given_phrase,Maria,de Fátima Ramos de,Andrade,Maria de Fátima,,Ramos de Andrade,Maria||de Fátima Ramos de Andrade,registry family name RAMOS DE ANDRADE
+given_phrase,Denise,de Fátima Barros,Cavalcante,Denise de Fátima,,Barros Cavalcante,Denise||de Fátima Barros Cavalcante,registry family name Barros Cavalcante
+given_phrase,Maria,do Carmo Meirelles Toledo,Cruz,Maria do Carmo,,Meirelles Toledo Cruz,Maria|Do Carmo Meirelles|Toledo Cruz,registry family name Meirelles Toledo Cruz
+given_phrase,Maria,das Graças Melo,Fernandes,Maria das Graças,,Melo Fernandes,Melo|Fernandes|Maria das Graças,registry family name Melo Fernandes
+given_phrase,Rafaely,de Cassia Nogueira,Sanches,Rafaely de Cassia,,Nogueira Sanches,Rafaely||de Cassia Nogueira Sanches,registry family name Nogueira Sanches
+particle_flip,Tatiana,da Silva Melo,Malaquias,Tatiana,,da Silva Melo Malaquias,Melo|Malaquias|Tatiana da Silva,registry family name DA SILVA MELO MALAQUIAS
+given_phrase,Paulo,de Tarso Roth,Dalcin,Paulo de Tarso,,Roth Dalcin,Paulo||de Tarso Roth Dalcin,registry family name Roth Dalcin
+given_phrase,Maria,de Fátima Vieira,Marques,Maria de Fátima,,Vieira Marques,Maria||de Fátima Vieira Marques,registry family name Vieira Marques
+given_phrase,Rita,de Cássia Melão de,Morais,Rita de Cássia,,Melão de Morais,Rita||de Cássia Melão de Morais,registry family name Melão de Morais
+given_phrase,Maria,de Lourdes de Farias,Pontes,Maria de Lourdes,,de Farias Pontes,Maria||de Lourdes de Farias Pontes,registry family name de Farias Pontes
+particle_flip,Patricia,dos Santos Claro,Fuly,Patricia,,dos Santos Claro Fuly,Claro|Fuly|Patricia dos Santos,registry family name dos Santos Claro Fuly
+given_phrase,Suely,de Fátima Ramos,Silveira,Suely de Fátima,,Ramos Silveira,Suely||de Fátima Ramos Silveira,registry family name Ramos Silveira
+particle_flip,Patrícia,dos Santos Claro,Fuly,Patrícia,,dos Santos Claro Fuly,Claro|Fuly|Patrícia dos Santos,registry family name dos Santos Claro Fuly
+given_phrase,Rita,de Cássia Souza Nascimento,Ferraz,Rita de Cássia,,Souza Nascimento Ferraz,Rita||de Cássia Souza Nascimento Ferraz,registry family name Souza Nascimento Ferraz
+given_phrase,Vania,de Fátima Barros,Estivalete,Vania de Fátima,,Barros Estivalete,Vania||de Fátima Barros Estivalete,registry family name BARROS ESTIVALETE
+given_phrase,Regina,de Fátima Peralta Muniz,Moreira,Regina de Fátima,,Peralta Muniz Moreira,Regina||de Fátima Peralta Muniz Moreira,registry family name Peralta Muniz Moreira
+given_phrase,Maria,das Graças Silva,Matsubara,Maria das Graças,,Silva Matsubara,Silva|Matsubara|Maria das Graças,registry family name Silva Matsubara
+particle_flip,Davi,da Silveira Barroso,Alves,Davi,,da Silveira Barroso Alves,Barroso|Alves|Davi da Silveira,registry family name da Silveira Barroso Alves
+given_phrase,Lucinéia,de Fátima Chasko,Ribeiro,Lucinéia de Fátima,,Chasko Ribeiro,Lucinéia||de Fátima Chasko Ribeiro,registry family name Chasko Ribeiro
+particle_flip,Rachel,da Silva Serejo,Cardoso,Rachel,,da Silva Serejo Cardoso,Serejo|Cardoso|Rachel da Silva,registry family name da Silva Serejo Cardoso
+given_phrase,Rita,de Cássia Prazeres,Frangella,Rita de Cássia,,Prazeres Frangella,Rita||de Cássia Prazeres Frangella,registry family name Prazeres Frangella
+given_phrase,Maria,do Socorro Veloso de,Albuquerque,Maria do Socorro,,Veloso de Albuquerque,Maria|Do Socorro Veloso|de Albuquerque,registry family name VELOSO DE ALBUQUERQUE
+given_phrase,Maria,de Lourdes Souza,Santos,Maria de Lourdes,,Souza Santos,Maria||de Lourdes Souza Santos,registry family name Souza Santos
+given_phrase,Liliane,de Lourdes Teixeira,Silva,Liliane de Lourdes,,Teixeira Silva,Liliane||de Lourdes Teixeira Silva,registry family name Teixeira Silva
+particle_flip,Maria,da Conceição Coelho,Brito,Maria,,da Conceição Coelho Brito,Coelho|Brito|Maria da Conceição,registry family name da Conceição Coelho Brito
+given_phrase,Maria,da Glória Motta,Garcia,Maria da Glória,,Motta Garcia,Motta|Garcia|Maria da Glória,registry family name Motta Garcia
+given_phrase,Maria,de Fátima Cardoso,Gomes,Maria de Fátima,,Cardoso Gomes,Maria||de Fátima Cardoso Gomes,registry family name Cardoso Gomes
+given_phrase,Rafaely,de Cássia Nogueira,Sanches,Rafaely de Cássia,,Nogueira Sanches,Rafaely||de Cássia Nogueira Sanches,registry family name Nogueira Sanches
+particle_flip,Flávia,dos Santos Barbosa,Brito,Flávia,,dos Santos Barbosa Brito,Barbosa|Brito|Flávia dos Santos,registry family name dos Santos Barbosa Brito
+particle_flip,Carolina,dos Santos Batista,Bonini,Carolina,,dos Santos Batista Bonini,Batista|Bonini|Carolina dos Santos,registry family name dos Santos Batista Bonini
+given_phrase,Rita,de Cássia Resquetti Tarifa,Espolador,Rita de Cássia,,Resquetti Tarifa Espolador,Rita||de Cássia Resquetti Tarifa Espolador,registry family name Resquetti Tarifa Espolador
+particle_flip,Milena,dos Santos Barros,Campos,Milena,,dos Santos Barros Campos,Barros|Campos|Milena dos Santos,registry family name dos Santos Barros Campos
+given_phrase,Rita,de Cássia Pereira,Lima,Rita de Cássia,,Pereira Lima,Rita||de Cássia Pereira Lima,registry family name Pereira Lima
+particle_flip,Marisa,dos Reis Azevedo,Botelho,Marisa,,dos Reis Azevedo Botelho,Azevedo|Botelho|Marisa dos Reis,registry family name dos Reis Azevedo Botelho
+given_phrase,Maria,do Rosário Gondim,Peixoto,Maria do Rosário,,Gondim Peixoto,Maria|Do Rosário Gondim|Peixoto,registry family name Gondim Peixoto
+given_phrase,Marília,de Fátima Vieira de,Oliveira,Marília de Fátima,,Vieira de Oliveira,Marília||de Fátima Vieira de Oliveira,registry family name Vieira de Oliveira
+particle_flip,Daniele,da Silva Bastos,Soares,Daniele,,da Silva Bastos Soares,Bastos|Soares|Daniele da Silva,registry family name da Silva Bastos Soares
+particle_flip,Cláudia,da Mota Darós,Parente,Cláudia,,da Mota Darós Parente,Darós|Parente|Cláudia da Mota,registry family name da Mota Darós Parente
+given_phrase,Maria,de Lourdes da,Silva Neta,Maria de Lourdes,,da Silva Neta,Maria|de|Lourdes da Silva Neta,registry family name da Silva Neta
+given_phrase,Maria,das Dores Magalhães,Veloso,Maria das Dores,,Magalhães Veloso,Magalhães|Veloso|Maria das Dores,registry family name Magalhães Veloso
+given_phrase,Rita,de Cássia Lazzarini,Dutra,Rita de Cássia,,Lazzarini Dutra,Rita||de Cássia Lazzarini Dutra,registry family name Lazzarini Dutra
+particle_flip,Jaqueline,da Silva Soares,Souto,Jaqueline,,da Silva Soares Souto,Soares|Souto|Jaqueline da Silva,registry family name da Silva Soares Souto
+given_phrase,Maria,do Carmo Baracho de,Alencar,Maria do Carmo,,Baracho de Alencar,Maria|Do Carmo Baracho|de Alencar,registry family name Baracho de Alencar
+particle_flip,Luísa,da Matta Machado,Fernandes,Luísa,,da Matta Machado Fernandes,Machado|Fernandes|Luísa da Matta,registry family name da Matta Machado Fernandes
+given_phrase,Maria,de Fátima Matos de,Souza,Maria de Fátima,,Matos de Souza,Maria||de Fátima Matos de Souza,registry family name Matos de Souza
+given_phrase,Maria,das Dores Mendes,Segundo,Maria das Dores,,Mendes Segundo,Mendes|Segundo|Maria das Dores,registry family name MENDES SEGUNDO
+given_phrase,Rita,de Cássia Sobreira,Lopes,Rita de Cássia,,Sobreira Lopes,Rita||de Cássia Sobreira Lopes,registry family name Sobreira Lopes
+given_phrase,Maria,da Graça Nicoletti,Mizukami,Maria da Graça,,Nicoletti Mizukami,Nicoletti|Mizukami|Maria da Graça,registry family name Nicoletti Mizukami
+particle_flip,Filipe,da Silva de,Oliveira,Filipe,,da Silva de Oliveira,de|Oliveira|Filipe da Silva,registry family name da Silva de Oliveira
+particle_flip,Ronan,da Silva Parreira,Gaia,Ronan,,da Silva Parreira Gaia,Parreira|Gaia|Ronan da Silva,registry family name da Silva Parreira Gaia
+given_phrase,Maria,das Graças Mota,Melo,Maria das Graças,,Mota Melo,Mota|Melo|Maria das Graças,registry family name Mota Melo
+given_phrase,Rita,de Cássia de,Souza,Rita de Cássia,,de Souza,Rita||de Cássia de Souza,registry family name de Souza
+particle_flip,Henrique,da Costa Mendes,Muniz,Henrique,,da Costa Mendes Muniz,Mendes|Muniz|Henrique da Costa,registry family name da Costa Mendes Muniz
+given_phrase,Rita,de Cássia Rocha,Moreira,Rita de Cássia,,Rocha Moreira,Rita||de Cássia Rocha Moreira,registry family name ROCHA MOREIRA
+particle_flip,Tâmara,da Cruz Piedade,Oliveira,Tâmara,,da Cruz Piedade Oliveira,Piedade|Oliveira|Tâmara da Cruz,registry family name da Cruz Piedade Oliveira
+given_phrase,Maria,de Fátima Rodrigues,Pereira,Maria de Fátima,,Rodrigues Pereira,Maria||de Fátima Rodrigues Pereira,registry family name Rodrigues Pereira
+given_phrase,Maria,de Fátima de Andrade,Ferreira,Maria de Fátima,,de Andrade Ferreira,Maria||de Fátima de Andrade Ferreira,registry family name DE ANDRADE FERREIRA
+given_phrase,Nathalie,de Lourdes Souza,Dewulf,Nathalie de Lourdes,,Souza Dewulf,Nathalie||de Lourdes Souza Dewulf,registry family name Souza Dewulf
+given_phrase,Rita,de Cassia Gengo e Silva,Butcher,Rita de Cassia,,Gengo e Silva Butcher,Rita||de Cassia Gengo e Silva Butcher,registry family name Gengo e Silva Butcher
+given_phrase,Santana,de Maria Alves de,Sousa,Santana de Maria,,Alves de Sousa,Santana||de Maria Alves de Sousa,registry family name Alves de Sousa
+given_phrase,Fabiany,de Cássia Tavares,Silva,Fabiany de Cássia,,Tavares Silva,Fabiany||de Cássia Tavares Silva,registry family name Tavares Silva
+particle_flip,Cinara,da Cunha Siqueira,Carvalho,Cinara,,da Cunha Siqueira Carvalho,Siqueira|Carvalho|Cinara da Cunha,registry family name da Cunha Siqueira Carvalho
+given_phrase,Maria,de Lourdes Rossi,Remenche,Maria de Lourdes,,Rossi Remenche,Maria||de Lourdes Rossi Remenche,registry family name Rossi Remenche
+given_phrase,Maria,da Glória Carvalho,Moura,Maria da Glória,,Carvalho Moura,Carvalho|Moura|Maria da Glória,registry family name Carvalho Moura
+given_phrase,Rita,de Cássia Félix,Alvarez,Rita de Cássia,,Félix Alvarez,Rita||de Cássia Félix Alvarez,registry family name Félix Alvarez
+particle_flip,Gizele,da Conceição Soares,Martins,Gizele,,da Conceição Soares Martins,Soares|Martins|Gizele da Conceição,registry family name da Conceição Soares Martins
+given_phrase,Maria,da Graça dos Santos,Faria,Maria da Graça,,dos Santos Faria,Maria||da Graça dos Santos Faria,registry family name dos Santos Faria
+given_phrase,Maria,do Carmo Pessoa Nogueira,Serrão,Maria do Carmo,,Pessoa Nogueira Serrão,Maria|Do Carmo Pessoa Nogueira|Serrão,registry family name Pessoa Nogueira Serrão
+given_phrase,Maria,de Lourdes de,Souza,Maria de Lourdes,,de Souza,Maria||de Lourdes de Souza,registry family name de Souza
+particle_flip,Angela,da Costa Barcellos,Marques,Angela,,da Costa Barcellos Marques,Barcellos|Marques|Angela da Costa,registry family name DA COSTA BARCELLOS MARQUES
+given_phrase,Lilian,de Fatima Zanoni,Nogueira,Lilian de Fatima,,Zanoni Nogueira,Lilian||de Fatima Zanoni Nogueira,registry family name Zanoni Nogueira
+given_phrase,Janaina,de Fátima Saraiva,Cardoso,Janaina de Fátima,,Saraiva Cardoso,Janaina||de Fátima Saraiva Cardoso,registry family name Saraiva Cardoso
+given_phrase,Maria,das Graças de,Lima,Maria das Graças,,de Lima,de|Lima|Maria das Graças,registry family name de Lima
+particle_flip,Matilde,da Cunha Gonçalves,Nojima,Matilde,,da Cunha Gonçalves Nojima,Gonçalves|Nojima|Matilde da Cunha,registry family name da Cunha Gonçalves Nojima
+given_phrase,Maria,de Fatima Barbosa,Coelho,Maria de Fatima,,Barbosa Coelho,Maria||de Fatima Barbosa Coelho,registry family name Barbosa Coelho
+given_phrase,Maria,do Carmo Menezes Bezerra,Duarte,Maria do Carmo,,Menezes Bezerra Duarte,Maria|Do Carmo Menezes Bezerra|Duarte,registry family name Menezes Bezerra Duarte
+given_phrase,Ryzia,de Cassia Vieira,Cardoso,Ryzia de Cassia,,Vieira Cardoso,Ryzia||de Cassia Vieira Cardoso,registry family name Vieira Cardoso
+particle_flip,Elane,dos Santos Silva,Barroso,Elane,,dos Santos Silva Barroso,Silva|Barroso|Elane dos Santos,registry family name dos Santos Silva Barroso
+particle_flip,Simone,da Nóbrega Tomaz,Moreira,Simone,,da Nóbrega Tomaz Moreira,Tomaz|Moreira|Simone da Nóbrega,registry family name da Nóbrega Tomaz Moreira
+given_phrase,Janaina,de Cássia Orlandi,Sardi,Janaina de Cássia,,Orlandi Sardi,Janaina||de Cássia Orlandi Sardi,registry family name Orlandi Sardi
+particle_flip,Luciana,da Silva Moraes,Sardeiro,Luciana,,da Silva Moraes Sardeiro,Moraes|Sardeiro|Luciana da Silva,registry family name da Silva Moraes Sardeiro
+given_phrase,Kelly,das Graças Fernandes,Dantas,Kelly das Graças,,Fernandes Dantas,Fernandes|Dantas|Kelly das Graças,registry family name Fernandes Dantas
+given_phrase,Maria,do Carmo Vilas Boas,Sousa,Maria do Carmo,,Vilas Boas Sousa,Maria|Do Carmo Vilas Boas|Sousa,registry family name Vilas Boas Sousa
+given_phrase,Rita,de Cássia de Faria,Pereira,Rita de Cássia,,de Faria Pereira,Rita||de Cássia de Faria Pereira,registry family name de Faria Pereira
+particle_flip,Zafira,da Silva de,Almeida,Zafira,,da Silva de Almeida,de|Almeida|Zafira da Silva,registry family name da Silva de Almeida
+given_phrase,Maria,de Fátima Freire de Melo,Ximenes,Maria de Fátima,,Freire de Melo Ximenes,Maria||de Fátima Freire de Melo Ximenes,registry family name FREIRE DE MELO XIMENES
+given_phrase,Maria,da Penha Casado,Alves,Maria da Penha,,Casado Alves,Casado|Alves|Maria da Penha,registry family name casado alves
+given_phrase,Rita,de Cássia Helú Mendonça,Ribeiro,Rita de Cássia,,Helú Mendonça Ribeiro,Rita||de Cássia Helú Mendonça Ribeiro,registry family name Helú Mendonça Ribeiro
+given_phrase,Rita,de Cássia Saraiva,Nunomura,Rita de Cássia,,Saraiva Nunomura,Rita||de Cássia Saraiva Nunomura,registry family name Saraiva Nunomura
+particle_flip,Carla,da Conceição de,Lima,Carla,,da Conceição de Lima,de|Lima|Carla da Conceição,registry family name da Conceição de Lima
+given_phrase,Eleonice,de Fátima Dal,Magro,Eleonice de Fátima,,Dal Magro,Eleonice||de Fátima Dal Magro,registry family name Dal Magro
+particle_flip,Marcela,das Neves Guimarães,Porciúncula,Marcela,,das Neves Guimarães Porciúncula,Guimarães|Porciúncula|Marcela das Neves,registry family name das Neves Guimarães Porciúncula
+given_phrase,Virgínia,de Fátima Bezerra,Nogueira,Virgínia de Fátima,,Bezerra Nogueira,Virgínia||de Fátima Bezerra Nogueira,registry family name Bezerra Nogueira
+particle_flip,Claudete,da Silva Lima,Martins,Claudete,,da Silva Lima Martins,Lima|Martins|Claudete da Silva,registry family name da Silva Lima Martins
+given_phrase,Maria,de Fátima Alves de,Oliveira,Maria de Fátima,,Alves de Oliveira,Maria||de Fátima Alves de Oliveira,registry family name ALVES DE OLIVEIRA
+particle_flip,Sara,da Silva Siqueira,Fonseca,Sara,,da Silva Siqueira Fonseca,Siqueira|Fonseca|Sara da Silva,registry family name da Silva Siqueira Fonseca
+given_phrase,Maria,de Fátima Barbosa,Coelho,Maria de Fátima,,Barbosa Coelho,Maria||de Fátima Barbosa Coelho,registry family name Barbosa Coelho
+particle_flip,Simone,dos Santos Pereira,Barbosa,Simone,,dos Santos Pereira Barbosa,Pereira|Barbosa|Simone dos Santos,registry family name dos Santos Pereira Barbosa
+particle_flip,Vania,dos Santos Nunes,Nogueira,Vania,,dos Santos Nunes Nogueira,Nunes|Nogueira|Vania dos Santos,registry family name dos Santos Nunes Nogueira
+given_phrase,Maria,de los Angeles Perez,Lizama,Maria de los Angeles,,Perez Lizama,Perez|Lizama|Maria de los Angeles,registry family name Perez Lizama
+particle_flip,Lailson,dos Reis Pereira,Lopes,Lailson,,dos Reis Pereira Lopes,Pereira|Lopes|Lailson dos Reis,registry family name DOS REIS PEREIRA LOPES
+given_phrase,Maria,de Fátima Mendes,Marques,Maria de Fátima,,Mendes Marques,Maria||de Fátima Mendes Marques,registry family name Mendes Marques
+given_phrase,Maria,de Los Angeles Perez,Lizama,Maria de Los Angeles,,Perez Lizama,Maria||de Los Angeles Perez Lizama,registry family name Perez Lizama
+given_phrase,Kelly,de Nazaré Maia,Nunes,Kelly de Nazaré,,Maia Nunes,Kelly||de Nazaré Maia Nunes,registry family name Maia Nunes
+particle_flip,Katiuscia,dos Santos de,Souza,Katiuscia,,dos Santos de Souza,de|Souza|Katiuscia dos Santos,registry family name dos Santos de Souza
+particle_flip,Kelly,da Silva Cavalcante,Ribeiro,Kelly,,da Silva Cavalcante Ribeiro,Cavalcante|Ribeiro|Kelly da Silva,registry family name DA SILVA CAVALCANTE RIBEIRO
+given_phrase,Maria,da Glória Corrêa,Di Fanti,Maria da Glória,,Corrêa Di Fanti,Maria||da Glória Corrêa Di Fanti,registry family name Corrêa di Fanti
+given_phrase,Rita,de Cássia de Souza Soares,Ramos,Rita de Cássia,,de Souza Soares Ramos,Rita||de Cássia de Souza Soares Ramos,registry family name de Souza Soares Ramos
+given_phrase,Carolina,de Lourdes Julião,Vieira,Carolina de Lourdes,,Julião Vieira,Carolina||de Lourdes Julião Vieira,registry family name Julião Vieira
+given_phrase,Rita,de Cássia Freire,Carvalho,Rita de Cássia,,Freire Carvalho,Rita||de Cássia Freire Carvalho,registry family name Freire Carvalho
+given_phrase,Maria,das Graças Ferraz,Bezerra,Maria das Graças,,Ferraz Bezerra,Ferraz|Bezerra|Maria das Graças,registry family name Ferraz Bezerra
+given_phrase,Maria,do Socorro Aguiar de Oliveira,Cavalcante,Maria do Socorro,,Aguiar de Oliveira Cavalcante,Maria|Do Socorro Aguiar|de Oliveira Cavalcante,registry family name Aguiar de Oliveira Cavalcante
+given_phrase,Rita,do Carmo Ferreira,Laipelt,Rita do Carmo,,Ferreira Laipelt,Rita|Do Carmo Ferreira|Laipelt,registry family name Ferreira Laipelt
+particle_flip,Pérsida,da Silva Ribeiro,Miki,Pérsida,,da Silva Ribeiro Miki,Ribeiro|Miki|Pérsida da Silva,registry family name da Silva Ribeiro Miki
+given_phrase,Isabel,de Lurdes Pereira do,Cabo,Isabel de Lurdes,,Pereira do Cabo,Isabel||de Lurdes Pereira Do Cabo,registry family name Pereira do Cabo
+given_phrase,Rita,de Cássia Gabrielli Souza,Lima,Rita de Cássia,,Gabrielli Souza Lima,Rita||de Cássia Gabrielli Souza Lima,registry family name Gabrielli Souza Lima
+particle_flip,Wellton,da Silva de,Fatima,Wellton,,da Silva de Fatima,de|Fatima|Wellton da Silva,registry family name da Silva de Fatima
+particle_flip,Elisa,da Conceição Silva,Barros,Elisa,,da Conceição Silva Barros,Silva|Barros|Elisa da Conceição,registry family name da Conceição Silva Barros
+given_phrase,Rita,de Cássia Ribeiro,Silva,Rita de Cássia,,Ribeiro Silva,Rita||de Cássia Ribeiro Silva,registry family name Ribeiro Silva
+particle_flip,Marilene,da Cruz Magalhães,Buffon,Marilene,,da Cruz Magalhães Buffon,Magalhães|Buffon|Marilene da Cruz,registry family name da Cruz Magalhães Buffon
+given_phrase,Maria,de Fátima de Queiroz,Lopes,Maria de Fátima,,de Queiroz Lopes,Maria||de Fátima de Queiroz Lopes,registry family name de Queiroz Lopes
+given_phrase,Maria,de Lourdes Haywanon Santos,Araújo,Maria de Lourdes,,Haywanon Santos Araújo,Maria||de Lourdes Haywanon Santos Araújo,registry family name Haywanon Santos Araujo
+given_phrase,Maria,de Fátima Lires,Paiva,Maria de Fátima,,Lires Paiva,Maria||de Fátima Lires Paiva,registry family name LIRES PAIVA
+particle_flip,Vanise,dos Santos Ferreira,Viero,Vanise,,dos Santos Ferreira Viero,Ferreira|Viero|Vanise dos Santos,registry family name dos Santos Ferreira Viero
+given_phrase,Maria,da Penha Pereira,Lins,Maria da Penha,,Pereira Lins,Pereira|Lins|Maria da Penha,registry family name Pereira Lins
+given_phrase,Ryzia,de Cássia Vieira,Cardoso,Ryzia de Cássia,,Vieira Cardoso,Ryzia||de Cássia Vieira Cardoso,registry family name Vieira Cardoso
+particle_flip,Rafael,da Costa Ilhéu,Fontan,Rafael,,da Costa Ilhéu Fontan,Ilhéu|Fontan|Rafael da Costa,registry family name da Costa Ilhéu Fontan
+given_phrase,Maria,do Socorro Moura,Rufino,Maria do Socorro,,Moura Rufino,Maria|Do Socorro Moura|Rufino,registry family name MOURA RUFINO
+given_phrase,Maria,do Socorro Vasconcelos,Pereira,Maria do Socorro,,Vasconcelos Pereira,Maria|Do Socorro Vasconcelos|Pereira,registry family name Vasconcelos Pereira
+particle_flip,Priscilla,dos Santos da,Silva,Priscilla,,dos Santos da Silva,da|Silva|Priscilla dos Santos,registry family name dos Santos da Silva
+particle_flip,Walquiria,da Silva Pedra,Parreira,Walquiria,,da Silva Pedra Parreira,Pedra|Parreira|Walquiria da Silva,registry family name da Silva Pedra Parreira
+particle_flip,Gabriela,da Silva Oliveira,Vitalino,Gabriela,,da Silva Oliveira Vitalino,Oliveira|Vitalino|Gabriela da Silva,registry family name da Silva Oliveira Vitalino
+particle_flip,Cassiane,da Silva Portela,Pinto,Cassiane,,da Silva Portela Pinto,Portela|Pinto|Cassiane da Silva,registry family name da Silva Portela Pinto
+particle_flip,Mayra,da Silva Cutruneo,Ceschini,Mayra,,da Silva Cutruneo Ceschini,Cutruneo|Ceschini|Mayra da Silva,registry family name da Silva Cutruneo Ceschini
+particle_flip,Carliane,da Conceição Machado,Sousa,Carliane,,da Conceição Machado Sousa,Machado|Sousa|Carliane da Conceição,registry family name da Conceição Machado Sousa
+particle_flip,Rudolph,dos Santos Gomes,Pereira,Rudolph,,dos Santos Gomes Pereira,Gomes|Pereira|Rudolph dos Santos,registry family name dos Santos Gomes Pereira
+particle_flip,Rávida,da Rocha Lima,Silva,Rávida,,da Rocha Lima Silva,Lima|Silva|Rávida da Rocha,registry family name da Rocha Lima Silva
+particle_flip,Raquel,da Rocha Paiva,Maia,Raquel,,da Rocha Paiva Maia,Paiva|Maia|Raquel da Rocha,registry family name da Rocha Paiva Maia
+particle_flip,Janaína,da Silva Gonçalves,Fernandes,Janaína,,da Silva Gonçalves Fernandes,Gonçalves|Fernandes|Janaína da Silva,registry family name da Silva Gonçalves Fernandes
+particle_flip,Jailma,dos Santos Pedreira,MOREIRA,Jailma,,dos Santos Pedreira Moreira,Pedreira|Moreira|Jailma dos Santos,registry family name dos Santos Pedreira Moreira
+particle_flip,Greiciene,dos Santos de,Jesus,Greiciene,,dos Santos de Jesus,de|Jesus|Greiciene dos Santos,registry family name DOS SANTOS DE JESUS
+particle_flip,Tadeu,dos Reis,de Oliveira,Tadeu,,dos Reis de Oliveira,de|Oliveira|Tadeu dos Reis,registry family name dos Reis de Oliveira
+particle_flip,Camila,da Silva Barbosa,Pereira,Camila,,da Silva Barbosa Pereira,Barbosa|Pereira|Camila da Silva,registry family name Da Silva Barbosa Pereira
+particle_flip,Adonai,da Silva de,Medeiros,Adonai,,da Silva de Medeiros,de|Medeiros|Adonai da Silva,registry family name da Silva de Medeiros
+particle_flip,Hilana,dos Santos Sena,Brunel,Hilana,,dos Santos Sena Brunel,Sena|Brunel|Hilana dos Santos,registry family name dos Santos Sena Brunel
+particle_flip,Hevelyn,dos Santos da,Rocha,Hevelyn,,dos Santos da Rocha,da|Rocha|Hevelyn dos Santos,registry family name dos Santos da Rocha
+particle_flip,Daniela,da Costa Leite,Coelho,Daniela,,da Costa Leite Coelho,Leite|Coelho|Daniela da Costa,registry family name da Costa Leite Coelho
+particle_flip,Rayla,dos Santos Oliveira,Dias,Rayla,,dos Santos Oliveira Dias,Oliveira|Dias|Rayla dos Santos,registry family name dos Santos Oliveira Dias
+particle_flip,Maura,da Silva Costa,Furtado,Maura,,da Silva Costa Furtado,Costa|Furtado|Maura da Silva,registry family name da Silva costa Furtado
+particle_flip,Simone,da Silva Ribeiro,Gomes,Simone,,da Silva Ribeiro Gomes,Ribeiro|Gomes|Simone da Silva,registry family name da silva ribeiro gomes
+particle_flip,Carla,da Silva Santana,Castro,Carla,,da Silva Santana Castro,Santana|Castro|Carla da Silva,registry family name da Silva Santana Castro
+particle_flip,Isabela,da Silva Pedro,Rochinha,Isabela,,da Silva Pedro Rochinha,Pedro|Rochinha|Isabela da Silva,registry family name da Silva Pedro Rochinha
+particle_flip,Dayana,da Conceição da,Costa,Dayana,,da Conceição da Costa,da|Costa|Dayana da Conceição,registry family name da Conceição da Costa
+particle_flip,Evelin,da Silva Della,Betta,Evelin,,da Silva Della Betta,Della|Betta|Evelin da Silva,registry family name da Silva Della Betta
+particle_flip,Caleb,da Silva Araujo,Campelo,Caleb,,da Silva Araujo Campelo,Araujo|Campelo|Caleb da Silva,registry family name da Silva Araujo Campelo
+particle_flip,Chiara,das Dores,do Nascimento,Chiara,,das Dores Do Nascimento,Do|Nascimento|Chiara das Dores,registry family name das Dores do Nascimento
+particle_flip,Hendrick,da Costa de,Souza,Hendrick,,da Costa de Souza,de|Souza|Hendrick da Costa,registry family name da Costa de Souza
+particle_flip,Beatriz,da Silva Rosa,Bonadiman,Beatriz,,da Silva Rosa Bonadiman,Rosa|Bonadiman|Beatriz da Silva,registry family name Da Silva Rosa Bonadiman
+particle_flip,Cleide,dos Santos Pereira,Sopelsa,Cleide,,dos Santos Pereira Sopelsa,Pereira|Sopelsa|Cleide dos Santos,registry family name dos Santos Pereira Sopelsa
+particle_flip,Andréia,da Silva Quintanilha,Sousa,Andréia,,da Silva Quintanilha Sousa,Quintanilha|Sousa|Andréia da Silva,registry family name DA SILVA QUINTANILHA SOUSA
+particle_flip,Leticya,dos Santos Almeida,Negri,Leticya,,dos Santos Almeida Negri,Almeida|Negri|Leticya dos Santos,registry family name Dos Santos Almeida Negri
+chinese_control,Tingwen,,Huang,Ting-Wen,,Huang,Ting-Wen||Huang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yuanwei,,Liu,Yuan-Wei,,Liu,Yuan-Wei||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaoyuan,,Chen,Xiao-Yuan,,Chen,Xiao-Yuan||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Keqin,,Li,Ke-Qin,,Li,Ke-Qin||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yonghui,,Li,Yong-Hui,,Li,Yong-Hui||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yuanqing,,Xia,Yuan-Qing,,Xia,Yuan-Qing||Xia,Chinese author; 0.6.3 output matches the registry
+chinese_control,Pengfei,,Li,Peng-Fei,,Li,Peng-Fei||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Pengfei,,Wang,Peng-Fei,,Wang,Peng-Fei||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Huaguang,,Zhang,Hua-Guang,,Zhang,Hua-Guang||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Qingqing,,Wu,Qing-Qing,,Wu,Qing-Qing||Wu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Pengfei,,Zhang,Peng-Fei,,Zhang,Peng-Fei||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Weihua,,Li,Wei-Hua,,Li,Wei-Hua||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaodong,,Wang,Xiao-Dong,,Wang,Xiao-Dong||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xingwang,,Li,Xing-Wang,,Li,Xing-Wang||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Guangjie,,Han,Guang-Jie,,Han,Guang-Jie||Han,Chinese author; 0.6.3 output matches the registry
+chinese_control,Aiguo,,Song,Ai-Guo,,Song,Ai-Guo||Song,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jianhua,,Zhang,Jian-Hua,,Zhang,Jian-Hua||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jingjing,,Wang,Jing-Jing,,Wang,Jing-Jing||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xudong,,Zhao,Xu-Dong,,Zhao,Xu-Dong||Zhao,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yifan,,Wang,Yi-Fan,,Wang,Yi-Fan||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaohu,,You,Xiao-Hu,,You,Xiao-Hu||You,Chinese author; 0.6.3 output matches the registry
+chinese_control,Liqiang,,Mai,Li-Qiang,,Mai,Li-Qiang||Mai,Chinese author; 0.6.3 output matches the registry
+chinese_control,Weihong,,Tan,Wei-Hong,,Tan,Wei-Hong||Tan,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jianping,,Li,Jian-Ping,,Li,Jian-Ping||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Haijun,,Zhang,Hai-Jun,,Zhang,Hai-Jun||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhigang,,Zeng,Zhi-Gang,,Zeng,Zhi-Gang||Zeng,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaofeng,,Li,Xiao-Feng,,Li,Xiao-Feng||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Dawei,,Wang,Da-Wei,,Wang,Da-Wei||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaolei,,Wang,Xiao-Lei,,Wang,Xiao-Lei||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Weidong,,Zhang,Wei-Dong,,Zhang,Wei-Dong||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaolong,,Liu,Xiao-Long,,Liu,Xiao-Long||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yiming,,Li,Yi-Ming,,Li,Yi-Ming||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Deliang,,Chen,De-Liang,,Chen,De-Liang||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yuanjin,,Zhao,Yuan-Jin,,Zhao,Yuan-Jin||Zhao,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhongwei,,Chen,Zhong-Wei,,Chen,Zhong-Wei||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Feiping,,Nie,Fei-Ping,,Nie,Fei-Ping||Nie,Chinese author; 0.6.3 output matches the registry
+chinese_control,Guanghui,,Wen,Guang-Hui,,Wen,Guang-Hui||Wen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhihua,,Wang,Zhi-Hua,,Wang,Zhi-Hua||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhenyu,,Wang,Zhen-Yu,,Wang,Zhen-Yu||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaoyu,,Zhang,Xiao-Yu,,Zhang,Xiao-Yu||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaoming,,Wang,Xiao-Ming,,Wang,Xiao-Ming||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaodong,,Chen,Xiao-Dong,,Chen,Xiao-Dong||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Haoyu,,Wang,Hao-Yu,,Wang,Hao-Yu||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zehui,,Xiong,Ze-Hui,,Xiong,Ze-Hui||Xiong,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaodong,,Li,Xiao-Dong,,Li,Xiao-Dong||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Dacheng,,Tao,Da-Cheng,,Tao,Da-Cheng||Tao,Chinese author; 0.6.3 output matches the registry
+chinese_control,Chunhai,,Fan,Chun-Hai,,Fan,Chun-Hai||Fan,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xinming,,Wang,Xin-Ming,,Wang,Xin-Ming||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Haitao,,Zhao,Hai-Tao,,Zhao,Hai-Tao||Zhao,Chinese author; 0.6.3 output matches the registry
+chinese_control,Guanrong,,Chen,Guan-Rong,,Chen,Guan-Rong||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Weisheng,,Zhao,Wei-Sheng,,Zhao,Wei-Sheng||Zhao,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaohui,,Wang,Xiao-Hui,,Wang,Xiao-Hui||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaodong,,Zhang,Xiao-Dong,,Zhang,Xiao-Dong||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Kaibo,,Shi,Kai-Bo,,Shi,Kai-Bo||Shi,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yiming,,Zhang,Yi-Ming,,Zhang,Yi-Ming||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yiwang,,Chen,Yi-Wang,,Chen,Yi-Wang||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jiangzhou,,Wang,Jiang-Zhou,,Wang,Jiang-Zhou||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yaochu,,Jin,Yao-Chu,,Jin,Yao-Chu||Jin,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yele,,Sun,Ye-Le,,Sun,Ye-Le||Sun,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xinyu,,Wang,Xin-Yu,,Wang,Xin-Yu||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaogang,,Liu,Xiao-Gang,,Liu,Xiao-Gang||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Cunhua,,Pan,Cun-Hua,,Pan,Cun-Hua||Pan,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jinlong,,Yang,Jin-Long,,Yang,Jin-Long||Yang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jiawei,,Wang,Jia-Wei,,Wang,Jia-Wei||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Dingsheng,,Wang,Ding-Sheng,,Wang,Ding-Sheng||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jianmin,,Chen,Jian-Min,,Chen,Jian-Min||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Haitao,,Liu,Hai-Tao,,Liu,Hai-Tao||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Juewen,,Liu,Jue-Wen,,Liu,Jue-Wen||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xinyu,,Zhang,Xin-Yu,,Zhang,Xin-Yu||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Ximeng,,Liu,Xi-Meng,,Liu,Xi-Meng||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jianxin,,Wang,Jian-Xin,,Wang,Jian-Xin||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhiwei,,Wang,Zhi-Wei,,Wang,Zhi-Wei||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Lijun,,Zhang,Li-Jun,,Zhang,Li-Jun||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaoli,,Li,Xiao-Li,,Li,Xiao-Li||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yuanyuan,,Zhang,Yuan-Yuan,,Zhang,Yuan-Yuan||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Qichun,,Zhang,Qi-Chun,,Zhang,Qi-Chun||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Tianyou,,Zhai,Tian-You,,Zhai,Tian-You||Zhai,Chinese author; 0.6.3 output matches the registry
+chinese_control,Liming,,Wang,Li-Ming,,Wang,Li-Ming||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Hongbo,,Zeng,Hong-Bo,,Zeng,Hong-Bo||Zeng,Chinese author; 0.6.3 output matches the registry
+chinese_control,Rongxing,,Lu,Rong-Xing,,Lu,Rong-Xing||Lu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Kenli,,Li,Ken-Li,,Li,Ken-Li||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Hailong,,Wang,Hai-Long,,Wang,Hai-Long||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Dawei,,Zhang,Da-Wei,,Zhang,Da-Wei||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Qing,Huo,Liu,Qing-Huo,,Liu,Qing-Huo||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhigang,,Liu,Zhi-Gang,,Liu,Zhi-Gang||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Junjie,,Wang,Jun-Jie,,Wang,Jun-Jie||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Huangxian,,Ju,Huang-Xian,,Ju,Huang-Xian||Ju,Chinese author; 0.6.3 output matches the registry
+chinese_control,Haitao,,Li,Hai-Tao,,Li,Hai-Tao||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaoming,,Liu,Xiao-Ming,,Liu,Xiao-Ming||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Weiwei,,Zhang,Wei-Wei,,Zhang,Wei-Wei||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Ronghai,,Qu,Rong-Hai,,Qu,Rong-Hai||Qu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Guoqing,,Wang,Guo-Qing,,Wang,Guo-Qing||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Pingqing,,Fu,Ping-Qing,,Fu,Ping-Qing||Fu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaopeng,,Li,Xiao-Peng,,Li,Xiao-Peng||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Huiling,,Chen,Hui-Ling,,Chen,Hui-Ling||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhiwei,,Li,Zhi-Wei,,Li,Zhi-Wei||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jianjun,,Chen,Jian-Jun,,Chen,Jian-Jun||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Junliang,,Zhang,Jun-Liang,,Zhang,Jun-Liang||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Miaowen,,Wen,Miao-Wen,,Wen,Miao-Wen||Wen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Lili,,Wang,Li-Li,,Wang,Li-Li||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhiqiang,,Wang,Zhi-Qiang,,Wang,Zhi-Qiang||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jianping,,Guo,Jian-Ping,,Guo,Jian-Ping||Guo,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zongwei,,Cai,Zong-Wei,,Cai,Zong-Wei||Cai,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yulong,,Li,Yu-Long,,Li,Yu-Long||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Shanshan,,Wang,Shan-Shan,,Wang,Shan-Shan||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jiawei,,Zhang,Jia-Wei,,Zhang,Jia-Wei||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Chunyi,,Zhi,Chun-Yi,,Zhi,Chun-Yi||Zhi,Chinese author; 0.6.3 output matches the registry
+chinese_control,Wenping,,Hu,Wen-Ping,,Hu,Wen-Ping||Hu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xinghuo,,Yu,Xing-Huo,,Yu,Xing-Huo||Yu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jiawen,,Kang,Jia-Wen,,Kang,Jia-Wen||Kang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Haibo,,Wang,Hai-Bo,,Wang,Hai-Bo||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xuefeng,,Wang,Xue-Feng,,Wang,Xue-Feng||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yifan,,Zhang,Yi-Fan,,Zhang,Yi-Fan||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jingyu,,Wang,Jing-Yu,,Wang,Jing-Yu||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhiwei,,Chen,Zhi-Wei,,Chen,Zhi-Wei||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xueliang,,Sun,Xue-Liang,,Sun,Xue-Liang||Sun,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jingjing,,Zhang,Jing-Jing,,Zhang,Jing-Jing||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaofei,,Wang,Xiao-Fei,,Wang,Xiao-Fei||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaowei,,Li,Xiao-Wei,,Li,Xiao-Wei||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Shiqi,,Wang,Shi-Qi,,Wang,Shi-Qi||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaofei,,Yang,Xiao-Fei,,Yang,Xiao-Fei||Yang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Tianrui,,Li,Tian-Rui,,Li,Tian-Rui||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhiqiang,,Liu,Zhi-Qiang,,Liu,Zhi-Qiang||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhigang,,Li,Zhi-Gang,,Li,Zhi-Gang||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Hongwei,,Wang,Hong-Wei,,Wang,Hong-Wei||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiangming,,He,Xiang-Ming,,He,Xiang-Ming||He,Chinese author; 0.6.3 output matches the registry
+chinese_control,Qinghua,,Zhang,Qing-Hua,,Zhang,Qing-Hua||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiangyu,,Zhao,Xiang-Yu,,Zhao,Xiang-Yu||Zhao,Chinese author; 0.6.3 output matches the registry
+chinese_control,Lijun,,Xu,Li-Jun,,Xu,Li-Jun||Xu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jiayi,,Zhang,Jia-Yi,,Zhang,Jia-Yi||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Shaomeng,,Wang,Shao-Meng,,Wang,Shao-Meng||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jianping,,Wang,Jian-Ping,,Wang,Jian-Ping||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jianguo,,Zhang,Jian-Guo,,Zhang,Jian-Guo||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Weimin,,Wang,Wei-Min,,Wang,Wei-Min||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Mugen,,Peng,Mu-Gen,,Peng,Mu-Gen||Peng,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jianhua,,Wang,Jian-Hua,,Wang,Jian-Hua||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jiayi,,Ma,Jia-Yi,,Ma,Jia-Yi||Ma,Chinese author; 0.6.3 output matches the registry
+chinese_control,Guangtao,,Zhai,Guang-Tao,,Zhai,Guang-Tao||Zhai,Chinese author; 0.6.3 output matches the registry
+chinese_control,Quanxin,,Zhu,Quan-Xin,,Zhu,Quan-Xin||Zhu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaolong,,Xu,Xiao-Long,,Xu,Xiao-Long||Xu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Lihua,,Xie,Li-Hua,,Xie,Li-Hua||Xie,Chinese author; 0.6.3 output matches the registry
+chinese_control,Weiwei,,Liu,Wei-Wei,,Liu,Wei-Wei||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaobo,,Ji,Xiao-Bo,,Ji,Xiao-Bo||Ji,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xingyu,,Jiang,Xing-Yu,,Jiang,Xing-Yu||Jiang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yonggang,,Wang,Yong-Gang,,Wang,Yong-Gang||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xuefeng,,Chen,Xue-Feng,,Chen,Xue-Feng||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yanning,,Zhang,Yan-Ning,,Zhang,Yan-Ning||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiangyu,,Li,Xiang-Yu,,Li,Xiang-Yu||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhiqiang,,Li,Zhi-Qiang,,Li,Zhi-Qiang||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Lingling,,Li,Ling-Ling,,Li,Ling-Ling||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaodong,,Xu,Xiao-Dong,,Xu,Xiao-Dong||Xu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiangyang,,Shi,Xiang-Yang,,Shi,Xiang-Yang||Shi,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jiajia,,Liu,Jia-Jia,,Liu,Jia-Jia||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaojun,,Wu,Xiao-Jun,,Wu,Xiao-Jun||Wu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yunfeng,,Lin,Yun-Feng,,Lin,Yun-Feng||Lin,Chinese author; 0.6.3 output matches the registry
+chinese_control,Junfeng,,Zhang,Jun-Feng,,Zhang,Jun-Feng||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhaohui,,Yang,Zhao-Hui,,Yang,Zhao-Hui||Yang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jinhua,,Li,Jin-Hua,,Li,Jin-Hua||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yuping,,Wu,Yu-Ping,,Wu,Yu-Ping||Wu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Liping,,Li,Li-Ping,,Li,Li-Ping||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yongle,,Wu,Yong-Le,,Wu,Yong-Le||Wu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhenyu,,Li,Zhen-Yu,,Li,Zhen-Yu||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhaohui,,Su,Zhao-Hui,,Su,Zhao-Hui||Su,Chinese author; 0.6.3 output matches the registry
+chinese_control,Shaohua,,Wan,Shao-Hua,,Wan,Shao-Hua||Wan,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xinyu,,Liu,Xin-Yu,,Liu,Xin-Yu||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jiacheng,,Wang,Jia-Cheng,,Wang,Jia-Cheng||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Chuanlai,,Xu,Chuan-Lai,,Xu,Chuan-Lai||Xu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Hongbo,,Li,Hong-Bo,,Li,Hong-Bo||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yilong,,Wang,Yi-Long,,Wang,Yi-Long||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaodong,,Liu,Xiao-Dong,,Liu,Xiao-Dong||Liu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Mengdao,,Xing,Meng-Dao,,Xing,Meng-Dao||Xing,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaobo,,Li,Xiao-Bo,,Li,Xiao-Bo||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Zhenhua,,Zhang,Zhen-Hua,,Zhang,Zhen-Hua||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Heng,Tao,Shen,Heng-Tao,,Shen,Heng-Tao||Shen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiliang,,Luo,Xi-Liang,,Luo,Xi-Liang||Luo,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yiming,,Wang,Yi-Ming,,Wang,Yi-Ming||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Jingwen,,Chen,Jing-Wen,,Chen,Jing-Wen||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Bowen,,Li,Bo-Wen,,Li,Bo-Wen||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaoyan,,Li,Xiao-Yan,,Li,Xiao-Yan||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Chunsheng,,Wang,Chun-Sheng,,Wang,Chun-Sheng||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Qinyu,,Zhang,Qin-Yu,,Zhang,Qin-Yu||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Wenjun,,Zhang,Wen-Jun,,Zhang,Wen-Jun||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Chuluo,,Yang,Chu-Luo,,Yang,Chu-Luo||Yang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Hongbo,,Jiang,Hong-Bo,,Jiang,Hong-Bo||Jiang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Shihua,,Li,Shi-Hua,,Li,Shi-Hua||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaoming,,Li,Xiao-Ming,,Li,Xiao-Ming||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Guangwei,,Hu,Guang-Wei,,Hu,Guang-Wei||Hu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Renchao,,Che,Ren-Chao,,Che,Ren-Chao||Che,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yihua,,Hu,Yi-Hua,,Hu,Yi-Hua||Hu,Chinese author; 0.6.3 output matches the registry
+chinese_control,Lixia,,Yang,Li-Xia,,Yang,Li-Xia||Yang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Enhong,,Chen,En-Hong,,Chen,En-Hong||Chen,Chinese author; 0.6.3 output matches the registry
+chinese_control,Wenli,,Zhang,Wen-Li,,Zhang,Wen-Li||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Weisheng,,Li,Wei-Sheng,,Li,Wei-Sheng||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Tianyu,,Wang,Tian-Yu,,Wang,Tian-Yu||Wang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Shilong,,Pan,Shi-Long,,Pan,Shi-Long||Pan,Chinese author; 0.6.3 output matches the registry
+chinese_control,Yongqiang,,Zhang,Yong-Qiang,,Zhang,Yong-Qiang||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Wentao,,Li,Wen-Tao,,Li,Wen-Tao||Li,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiaoguang,,Duan,Xiao-Guang,,Duan,Xiao-Guang||Duan,Chinese author; 0.6.3 output matches the registry
+chinese_control,Haiyang,,Zhang,Hai-Yang,,Zhang,Hai-Yang||Zhang,Chinese author; 0.6.3 output matches the registry
+chinese_control,Xiu,Yin,Zhang,Xiu-Yin,,Zhang,Xiu-Yin||Zhang,Chinese author; 0.6.3 output matches the registry
+bound_part,Li,,Ta-Tsien,Ta-Tsien,,Li,Ta-Tsien||Li,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Gan,,Woon-Seng,Woon-Seng,,Gan,Woon-Seng||Gan,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,,,Lee，Woon-yong,Woon-Yong,,Lee,Wo-On-Yong||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Kwok,,Kian-Woon,Kian-Woon,,Kwok,Kian-Woon||Kwok,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,XU,,Zhong-minga,Zhong-Minga,,Xu,Zhong-Minga||Xu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Hui,,Wai-Haan,Wai-Haan,,Hui,Wai-Haan||Hui,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Ko,,Yeon-mi,Yeon-Mi,,Ko,Yeon-Mi||Ko,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Lee，,,Bong-keon,Bong-Keon,,Lee,Bong-Keon||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Sheau‐yueh,J.,Chao,Sheau-Yueh,J.,Chao,Sheau-Yueh|J.|Chao,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,LI,,Yue-zhenga,Yue-Zhenga,,Li,Yue-Zhenga||Li,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Tai,,Hsiou-Hsia,Hsiou-Hsia,,Tai,Hsiou-Hsia||Tai,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Song，,,Chae-hong,Chae-Hong,,Song,Chae-Hong||Song,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,MA,,Chae-Woo,Chae-Woo,,Ma,Chae-Woo||Ma,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Tan,,Yean-Chin,Yean-Chin,,Tan,Yean-Chin||Tan,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,YU,,Xiao-jion,Xiao-Jion,,Yu,Xiao-Jion||Yu,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Wang,,Zhong-shana,Zhong-Shana,,Wang,Zhong-Shana||Wang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Zhang,,Su-jion,Su-Jion,,Zhang,Su-Jion||Zhang,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,GUO,,Yan-Quen,Yan-Quen,,Guo,Yan-Quen||Guo,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,XU,,Wen-juna,Wen-Juna,,Xu,Wen-Juna||Xu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Hang,,Ting-tinga,Ting-Tinga,,Hang,Ting-Tinga||Hang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Cha,,Ju-cheon,Ju-Cheon,,Cha,Ju-Cheon||Cha,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Guan,,Qing-Fenga,Qing-Fenga,,Guan,Qing-Fenga||Guan,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,WU,,Yan-juna,Yan-Juna,,Wu,Yan-Juna||Wu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Duan,,Qing-minga,Qing-Minga,,Duan,Qing-Minga||Duan,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Ou,,Ze-shena,Ze-Shena,,Ou,Ze-Shena||Ou,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,LI,,Zhan-boa,Zhan-Boa,,Li,Zhan-Boa||Li,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,LI,,Tai-jion,Tai-Jion,,Li,Tai-Jion||Li,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Zhang,,Chuan-lina,Chuan-Lina,,Zhang,Chuan-Lina||Zhang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Wei,,Xi-wena,Xi-Wena,,Wei,Xi-Wena||Wei,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,刘上乾,Liu,Shang-qiana,Shang-Qiana,,Liu,Shang-Qiana||Liu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Fan,,Jina-xin,Jina-Xin,,Fan,Jina-Xin||Fan,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,PU,,Xiao-fenga,Xiao-Fenga,,Pu,Xiao-Fenga||Pu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,LI,,Quen-zhuo,Quen-Zhuo,,Li,Quen-Zhuo||Li,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Chen,,Yu-guanga,Yu-Guanga,,Chen,Yu-Guanga||Chen,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,YE,,Yun-bina,Yun-Bina,,Ye,Yun-Bina||Ye,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Wang,,Shan-yuana,Shan-Yuana,,Wang,Shan-Yuana||Wang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Yang,,Wei-mina,Wei-Mina,,Yang,Wei-Mina||Yang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Jung,,Se-yeon,Se-Yeon,,Jung,Se-Yeon||Jung,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,WU,,Yan-lina,Yan-Lina,,Wu,Yan-Lina||Wu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Zhou,,Heng-lianga,Heng-Lianga,,Zhou,Heng-Lianga||Zhou,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Bai,,Feng-minga,Feng-Minga,,Bai,Feng-Minga||Bai,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Fang,,Xiao-hone,Xiao-Hone,,Fang,Xiao-Hone||Fang,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Huang,,Li-mina,Li-Mina,,Huang,Li-Mina||Huang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Cai,,Lin-lina,Lin-Lina,,Cai,Lin-Lina||Cai,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Zhang,,Zhen-wena,Zhen-Wena,,Zhang,Zhen-Wena||Zhang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Wang,,Meng-juna,Meng-Juna,,Wang,Meng-Juna||Wang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Zhang,,Bao-guia,Bao-Guia,,Zhang,Bao-Guia||Zhang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Jia,,Zhi-juna,Zhi-Juna,,Jia,Zhi-Juna||Jia,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Yang,,Jian-minga,Jian-Minga,,Yang,Jian-Minga||Yang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Wen,,Wen-jion,Wen-Jion,,Wen,Wen-Jion||Wen,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Guo,,Hui-yonga,Hui-Yonga,,Guo,Hui-Yonga||Guo,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Fang,,Re-juna,Re-Juna,,Fang,Re-Juna||Fang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Sun,,Han-zhoua,Han-Zhoua,,Sun,Han-Zhoua||Sun,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Guo,,Xue-juna,Xue-Juna,,Guo,Xue-Juna||Guo,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Zeng,,Gana-cheng,Gana-Cheng,,Zeng,Gana-Cheng||Zeng,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Wang,,Zheng-boa,Zheng-Boa,,Wang,Zheng-Boa||Wang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Zhao,,Wen-juna,Wen-Juna,,Zhao,Wen-Juna||Zhao,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,FU,,Dai-shana,Dai-Shana,,Fu,Dai-Shana||Fu,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Tang,,Sheau-shi,Sheau-Shi,,Tang,Sheau-Shi||Tang,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Wang,,Kang-zhoua,Kang-Zhoua,,Wang,Kang-Zhoua||Wang,listed part inside an author-written hyphen or glued token; the glued trailing letter is a source artifact kept as in 0.6.3; blind-labelled
+bound_part,Sheau-yueh,J.,Chao,Sheau-Yueh,J.,Chao,Sheau-Yueh|J.|Chao,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Yean-an,,Liao,Yean-An,,Liao,Yean-An||Liao,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Ta-tsien,,Li,Ta-Tsien,,Li,Ta-Tsien||Li,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Ju-yeon,,Choi,Ju-Yeon,,Choi,Ju-Yeon||Choi,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Woan-lih,,Liang,Woan-Lih,,Liang,Woan-Lih||Liang,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Mi-yeon,,Yu,Mi-Yeon,,Yu,Mi-Yeon||Yu,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Se-yeon,,Lee,Se-Yeon,,Lee,Se-Yeon||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,So-yean,,Lee,So-Yean,,Lee,So-Yean||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Geon-ah,,Choi,Geon-Ah,,Choi,Geon-Ah||Choi,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Yeon-ju,,Moon,Yeon-Ju,,Moon,Yeon-Ju||Moon,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Heon-jong,,Lee,Heon-Jong,,Lee,Heon-Jong||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Se-woon,,Hong,Se-Woon,,Hong,Se-Woon||Hong,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Ju-yeon,,Lee,Ju-Yeon,,Lee,Ju-Yeon||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Yeon-koo,,Kang,Yeon-Koo,,Kang,Yeon-Koo||Kang,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Ga-yeon,,Lee,Ga-Yeon,,Lee,Ga-Yeon||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Sheau-shi,,Pan,Sheau-Shi,,Pan,Sheau-Shi||Pan,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,So-yeon,,Lee,So-Yeon,,Lee,So-Yeon||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Chiou-nan,,Yeh,Chiou-Nan,,Yeh,Chiou-Nan||Yeh,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Jee-yeon,,Lee,Jee-Yeon,,Lee,Jee-Yeon||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Heon-mok,,Jung,Heon-Mok,,Jung,Heon-Mok||Jung,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Chae-hun,,Yim,Chae-Hun,,Yim,Chae-Hun||Yim,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Tzong-biau,,Lin,Tzong-Biau,,Lin,Tzong-Biau||Lin,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Na-yeon,,Lee,Na-Yeon,,Lee,Na-Yeon||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Shiau-yee,,Chen,Shiau-Yee,,Chen,Shiau-Yee||Chen,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Shui-duen,,Chan,Shui-Duen,,Chan,Shui-Duen||Chan,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Yeon-im,,Gang,Yeon-Im,,Gang,Yeon-Im||Gang,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Jee-yeon,,Han,Jee-Yeon,,Han,Jee-Yeon||Han,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Chae-rin,,Lee,Chae-Rin,,Lee,Chae-Rin||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Woon-ming,,Chan,Woon-Ming,,Chan,Woon-Ming||Chan,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part,Yeon-jong,,Lee,Yeon-Jong,,Lee,Yeon-Jong||Lee,listed part inside an author-written hyphen or glued token; blind-labelled
+bound_part_control,Annie,,Chen,Annie,,Chen,An-Nie||Chen,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Niran,,Chen,Niran,,Chen,Ni-Ran||Chen,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Jihye,,Lee,Ji-Hye,,Lee,Jih-Ye||Lee,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4; Korean given name in its hyphenated form since 0.6.7
+bound_part_control,Lee,,Baer,Lee,,Baer,Ba-Er||Lee,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Lina,,Wang,Lina,,Wang,Li-Na||Wang,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Wang,,Lina,Lina,,Wang,Li-Na||Wang,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Jean-Pierre,,Chen,Jean-Pierre,,Chen,Jean-Pierre||Chen,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Mary-Ann,,Lee,Mary-Ann,,Lee,Mary-Ann||Lee,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Min-Ho,,Lee,Min-Ho,,Lee,Min-Ho||Lee,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Anne-Marie,,Wang,Anne-Marie,,Wang,Anne-Marie||Wang,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Lina-Maria,,Chen,Lina-Maria,,Chen,Lina-Maria||Chen,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,E,I Feijen-de,Jong,E.,I.,Feijen-de Jong,Feijen-De|E. I.|Jong,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Dana,,Chen,Dana,,Chen,Da-Na||Chen,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Liran,,Chen,Liran,,Chen,Li-Ran||Chen,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4
+bound_part_control,Seungho,,Lee,Seung-Ho,,Lee,Seung-Ho||Lee,standalone listed word or author-hyphenated non-Chinese name stays as in 0.6.4; Korean given name in its hyphenated form since 0.6.7
+bound_part_control,Lan,,Cao-Hoang,Lan,,Cao-Hoang,Cao-Hoang||Lan,non-Chinese hyphenated or glued word stays as in 0.6.4
+bound_part_control,Jing,,de Haan-Du,Jing,,de Haan-Du,De-Haan-Du||Jing,non-Chinese hyphenated or glued word stays as in 0.6.4
+bound_part_control,Tung,,Do-Hoang,Tung,,Do-Hoang,Do-Hoang||Tung,non-Chinese hyphenated or glued word stays as in 0.6.4
+bound_part_control,PA,,Tamba-Tamba,PA,,Tamba-Tamba,Tamba-Tamba||Pa,non-Chinese hyphenated or glued word stays as in 0.6.4
+bound_part_control,Geon-U,,Lee,Geon-U,,Lee,Geon-U.||Lee,non-Chinese hyphenated or glued word stays as in 0.6.4
+bound_part_control,Yeon-U,,Yu,Yeon-U,,Yu,Yeon-U.||Yu,non-Chinese hyphenated or glued word stays as in 0.6.4
+bound_part_control,,,KoJIMA,,,Kojima,Ji-Ma||Ko,non-Chinese hyphenated or glued word stays as in 0.6.4
+bound_part_control,U-Chae,,Jun,U-Chae,,Jun,U.-Chae||Jun,non-Chinese hyphenated or glued word stays as in 0.6.4
+bound_part_control,Keon-U,,Lee,Keon-U,,Lee,Keon-U.||Lee,non-Chinese hyphenated or glued word stays as in 0.6.4
+bound_part_control,Hoang-Son,,Lai Le,Hoang-Son,,Lai Le,Hoang-Son-Lai||Le,non-Chinese hyphenated or glued word stays as in 0.6.4
+bound_part_control,,,Man-jiSUN,,,Man-jiSUN,Ji-Sun||Man,non-Chinese hyphenated or glued word stays as in 0.6.4
+bound_part_control,,,KenuYANG等,,,KenuYANG等,Ke-Nu-Yang||Deng,non-Chinese hyphenated or glued word stays as in 0.6.4

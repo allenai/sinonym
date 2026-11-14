@@ -167,6 +167,7 @@ import math
 import platform
 import string
 import threading
+import unicodedata
 from dataclasses import replace
 from typing import Literal
 
@@ -233,6 +234,7 @@ from sinonym.services.slavic_initials import is_digraph_initials_surname
 from sinonym.services.surname_first_words import load_surname_first_words, surname_first_initials
 from sinonym.services.token_order_prior import load_token_role_prior
 from sinonym.utils.string_manipulation import StringManipulationUtils
+from sinonym.utils.unsplit_given_words import load_unsplit_given_words, standalone_words
 
 LOGGER = logging.getLogger(__name__)
 
@@ -341,6 +343,7 @@ class ChineseNameDetector:
         load_token_role_prior()
         load_order_prior()
         load_surname_first_words()
+        load_unsplit_given_words()
         surname_resolver = SurnameResolver(data, self._normalizer)
         ethnicity_service = EthnicityClassificationService(context)
         parsing_service = NameParsingService(context, weights=self._weights)
@@ -827,7 +830,7 @@ class ChineseNameDetector:
 
     def _clean_source_roman_token(self, token: str) -> str:
         """Clean a source Roman token while preserving source capitalization."""
-        folded = token.translate(self._config.roman_punctuation_fold_tr)
+        folded = unicodedata.normalize("NFC", token.translate(self._config.roman_punctuation_fold_tr))
         return self._config.clean_roman_pattern.sub("", folded)
 
     def _roman_tokens_match_han_pinyin(self, roman_tokens: list[str], han_pinyin: tuple[str, ...]) -> bool:
@@ -1041,6 +1044,10 @@ class ChineseNameDetector:
         - success=True, result=formatted_name if Chinese name detected
         - success=False, error_message=reason if not Chinese name
         """
+        with standalone_words(raw_name):
+            return self._normalize_chinese_name_in_context(raw_name)
+
+    def _normalize_chinese_name_in_context(self, raw_name: str) -> ParseResult:
         initial_failure = self._initial_input_failure(raw_name)
         if initial_failure is not None:
             return initial_failure

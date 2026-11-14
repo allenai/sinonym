@@ -14,6 +14,7 @@ from sinonym.timo._resolution import (
     reviewed_exact_source_assignment,
 )
 from sinonym.timo.interface import Instance, Predictor, SourceAuthorFields
+from sinonym.utils.korean_given_names import korean_given_form
 
 
 def _load_reviewed_korean_rows() -> tuple[dict[str, str], ...]:
@@ -118,7 +119,7 @@ def test_reviewed_source_cleanup_patterns_are_terminal(
         ),
         (
             SourceAuthorFields(first_name="DNB", middle_names="DNB Tejas Patel", last_name="MBBS"),
-            ("Dnb", "Dnb Tejas", "Patel"),
+            ("DNB", "Dnb Tejas", "Patel"),
         ),
         (
             SourceAuthorFields(
@@ -522,7 +523,8 @@ def test_reviewed_spaced_korean_given_surface_is_restored_after_vys_selection(
 
     resolved = paper.authors[0]
 
-    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("So Young", "", "Yun")
+    # the spaced Korean surface comes back from the VYS parse, then takes the Korean hyphenated form
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == ("So-Young", "", "Yun")
     assert resolved.resolution_reason is ResolutionReason.VYS_SELECTED
 
 
@@ -563,12 +565,13 @@ def test_reviewed_korean_source_orthography_is_assigned_exactly(
 ) -> None:
     source = _source_from_korean_row(row)
     resolved = _route(predictor, source)
+    expected = (row["expected_given_name"], row["expected_middle_name"], row["expected_surname"])
+    # the reviewed split, with a listed two-syllable given name written in its Korean form
+    korean = korean_given_form(*expected)
+    if korean is not None:
+        expected = (korean, "", expected[2])
 
-    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == (
-        row["expected_given_name"],
-        row["expected_middle_name"],
-        row["expected_surname"],
-    )
+    assert (resolved.first_name, resolved.middle_names, resolved.last_name) == expected
     assert resolved.resolution_action is ResolutionAction.ASSIGN
     assert resolved.resolution_reason is ResolutionReason.REVIEWED_EXACT_SOURCE_ASSIGNMENT
 
@@ -730,15 +733,15 @@ def test_mojibake_tail_is_not_stripped_as_a_footnote(
                 middle_names="PhD 영남대학교 의과대학 안과학교실",
                 last_name="Junhyuk Son",
             ),
-            ("Junhyuk", "", "Son"),
+            ("Jun-Hyuk", "", "Son"),
         ),
         (
             SourceAuthorFields(first_name="MD", middle_names="PhD 인제대학교 의과대학", last_name="Jung Lim Kim"),
-            ("Jung Lim", "", "Kim"),
+            ("Jung-Lim", "", "Kim"),
         ),
         (
             SourceAuthorFields(first_name="MD", middle_names="PhD 한림대학교 의과대학", last_name="Joo Yeon Lee"),
-            ("Joo Yeon", "", "Lee"),
+            ("Joo-Yeon", "", "Lee"),
         ),
         (
             SourceAuthorFields(first_name="M.", middle_names="D", last_name="Services-REGINALD M. ATWATER"),

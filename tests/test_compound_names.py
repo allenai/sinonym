@@ -16,7 +16,7 @@ from tests._case_assertions import assert_normalized_name
 CHINESE_NAME_TEST_CASES = [
     ("Au-Yeung Chun", (True, "Chun Au-Yeung")),
     ("Cai Yun-hui", (True, "Yun-Hui Cai")),
-    ("Chen Niran", (True, "Ni-Ran Chen")),
+    ("Chen Niran", (False, "given name tokens are not plausibly Chinese")),
     ("Jiangzhou Wang", (True, "Jiang-Zhou Wang")),
     ("Jianping Fan", (True, "Jian-Ping Fan")),
     ("Jianwei Zhang", (True, "Jian-Wei Zhang")),
