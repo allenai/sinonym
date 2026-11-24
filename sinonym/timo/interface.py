@@ -26,6 +26,7 @@ from sinonym.services.person_name_normalization import reviewed_source_cleanup_p
 from sinonym.services.source_repairs import clean_source_fields as _clean_source_fields
 from sinonym.services.source_repairs import keep_capitals_surname as _keep_capitals_surname
 from sinonym.services.source_repairs import load_glued_initial_prefixes as _load_glued_initial_prefixes
+from sinonym.services.source_repairs import move_middle_suffix as _move_middle_suffix
 from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
 from sinonym.services.source_repairs import strip_last_field_credentials as _strip_last_field_credentials
 from sinonym.services.suffix_display import display_suffix as _display_suffix
@@ -71,7 +72,7 @@ def _korean_given(author: ResolvedAuthorFields) -> ResolvedAuthorFields:
 _SOURCE_NORMALIZER = _PersonNameNormalizationService()
 
 
-_NEW_REPAIR_RULES = frozenset({"repeated_particle", "title", "contributor_role"})
+_NEW_REPAIR_RULES = frozenset({"repeated_particle", "title", "contributor_role", "joined_initials", "joined_middle_initials"})
 
 
 def _reviewed_source(author: SourceAuthorFields) -> bool:
@@ -103,6 +104,9 @@ def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, So
     stripped = _strip_last_field_credentials(author.first_name, author.middle_names, author.last_name)
     if stripped is not None and _reviewed_exact_source_assignment(author) is None:
         author = author.copy(update={"first_name": stripped[0], "middle_names": stripped[1], "last_name": stripped[2]})
+    moved = _move_middle_suffix(author.first_name, author.middle_names, author.last_name, author.suffix)
+    if moved is not None and not _reviewed_source(source):
+        author = author.copy(update={"middle_names": moved[1], "last_name": moved[2]})
     repaired = _repair_source_fields(author.first_name, author.middle_names, author.last_name, author.suffix)
     if repaired is None:
         return author, None

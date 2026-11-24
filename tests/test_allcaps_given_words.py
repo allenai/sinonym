@@ -9,8 +9,8 @@ INITIALS = [
     (("ESL", None, "Pedersen"), ("ESL", "", "Pedersen")),
     (("NAR", None, "Rao"), ("NAR", "", "Rao")),
     (("TPI", None, "Pembroke"), ("TPI", "", "Pembroke")),
-    (("BRC", None, "Saraiva"), ("BRC", "", "Saraiva")),
-    (("RJM", None, "Lammers"), ("RJM", "", "Lammers")),
+    (("BRC", None, "Saraiva"), ("B.", "R. C.", "Saraiva")),
+    (("RJM", None, "Lammers"), ("R.", "J. M.", "Lammers")),
     # a word that is also a name, but registry people more often have it as initials
     (("ART", None, "Figueiredo"), ("ART", "", "Figueiredo")),
     (("ESL", "J", "Pedersen"), ("ESL", "J.", "Pedersen")),

@@ -84,3 +84,59 @@ credential,control,Facc,,Silva,Facc,,Silva,Facc,,Silva,four capitals before a lo
 credential,control,PhD,,Burton,,,Burton,,,Burton,the parser already drops PhD before a surname
 credential,control,Ma,PhD,Burton,Ma,Phd,Burton,Ma,Phd,Burton,the first field is not a given name for sure (Ma / MA)
 credential,control,Leslie,PhD,MD,,,Leslie,,,Leslie,no surname left
+joined_initials,bug,DG,,Downey,D.,G.,Downey,DG,,Downey,Damian G. Downey in conference abstracts
+joined_initials,bug,DG.,,Downey,D.,G.,Downey,DG.,,Downey,Damian G. Downey
+joined_initials,bug,Dg,,Downey,D.,G.,Downey,Dg,,Downey,MAG title case
+joined_initials,bug,BJD,,Kalyani,B.,J. D.,Kalyani,BJD,,Kalyani,corpus
+joined_initials,bug,GR.,,Portillo,G.,R.,Portillo,GR.,,Portillo,corpus
+joined_initials,bug,RRR,,Fijten,R.,R. R.,Fijten,RRR,,Fijten,corpus
+joined_initials,bug,JS,,Elborn,J.,S.,Elborn,JS,,Elborn,corpus
+joined_initials,bug,JS,,Lim,J.,S.,Lim,JS,,Lim,"Lim is a surname, not a numeral"
+joined_initials,bug,BC,,Dix,B.,C.,Dix,BC,,Dix,"Dix is a surname, not a numeral"
+joined_initials,control,Mc,,Donald,Mc,,Donald,Mc,,Donald,split surname McDonald
+joined_initials,bug,JP.,,Caneiro,J.,P.,Caneiro,JP.,,Caneiro,"dotted, so initials even for a letter name"
+joined_initials,bug,BC,,Lee,B.,C.,Lee,BC,,Lee,was the 0.6.4 policy expectation
+joined_initials,control,LI,,Qing,Qing,,Li,Qing,,Li,"pinyin syllable, surname-first"
+joined_initials,control,YU,,Wang,Yu,,Wang,Yu,,Wang,pinyin syllable
+joined_initials,control,Bo,,Wang,Bo,,Wang,Bo,,Wang,given name
+joined_initials,control,Ng,,Wei,Ng,,Wei,Ng,,Wei,surname
+joined_initials,control,SNG,,Daniela,Daniela,,SNG,Daniela,,SNG,Singaporean surname written first
+joined_initials,control,Png,,Wenxian,Wenxian,,Png,Wenxian,,Png,Singaporean surname written first
+joined_initials,control,MD,,Rahman,MD,,Rahman,MD,,Rahman,Muhammad
+joined_initials,control,DVM,,Gerhard Wess,Gerhard,,Wess,Gerhard,,Wess,degree before the name
+joined_initials,control,BS,,Megha Rajput,Megha,,Rajput,Megha,,Rajput,degree before the name
+joined_initials,control,Xv,,Han,Xv,,Han,Xv,,Han,pinyin v for ü
+joined_initials,control,Nv,,He,Nv,,He,Nv,,He,pinyin v for ü
+joined_initials,control,JP,,Liew,JP,,Liew,JP,,Liew,registered letter name (ORCID JP Liew)
+joined_initials,control,TJ,,Smith,TJ,,Smith,TJ,,Smith,registered letter name
+joined_initials,control,KC,,Lynch,KC,,Lynch,KC,,Lynch,registered letter name
+joined_initials,control,MM,,Tunney,MM,,Tunney,MM,,Tunney,registered letter name
+joined_initials,control,Wg,,Vii,Wg,,Vii,Wg,,Vii,regnal numeral
+joined_initials,control,Pp,,Viii,Pp,,Viii,Pp,,Viii,regnal numeral
+joined_initials,control,WB,,de Lau,WB,,de Lau,WB,,de Lau,multi-word surname
+joined_initials,control,TK,,Au Yong,TK,,Au Yong,TK,,Au Yong,multi-word surname
+joined_initials,control,DP,,Sá,DP,,Sá,DP,,Sá,short accented surname
+joined_initials,control,DG,B.,Downey,DG,B.,Downey,DG,B.,Downey,a middle name is present
+joined_middle_initials,bug,Hendrik,Hg,Hansen,Hendrik,H. G.,Hansen,Hendrik,Hg,Hansen,Medline joins the middle initials
+joined_middle_initials,bug,Alice,Cj,Hart,Alice,C. J.,Hart,Alice,Cj,Hart,Medline joins the middle initials
+joined_middle_initials,bug,Augustinus,AM,Hart,Augustinus,A. M.,Hart,Augustinus,AM,Hart,capitals in a mixed-case name
+joined_middle_initials,bug,Johanna,IP de,Vries,Johanna,I. P.,de Vries,Johanna,IP,de Vries,a surname particle follows the initials
+joined_middle_initials,control,Claire,SR,Holmes,Claire,SR,Holmes,Claire,SR,Holmes,Senior or S. R.
+joined_middle_initials,control,Sophie,MC,Adam,Sophie,MC,Adam,Sophie,MC,Adam,Mc or M. C.
+joined_middle_initials,control,Paul,Bs,Clarke,Paul,Bs,Clarke,Paul,Bs,Clarke,BS is also a degree
+joined_middle_initials,control,Katherine,Me,Turner,Katherine,Me,Turner,Katherine,Me,Turner,a vowel: may be a name
+joined_middle_initials,control,Diego,DE,Pedro,Diego,,de Pedro,Diego,,de Pedro,a particle in capitals
+joined_middle_initials,control,Anil,Kr,Sharma,Anil,Kr,Sharma,Anil,Kr,Sharma,Kr abbreviates Kumar
+joined_middle_initials,control,John,Md,Rahman,John,Md,Rahman,John,Md,Rahman,Md abbreviates Muhammad
+joined_middle_initials,control,ROSA,AM,MOYSES,Rosa,AM,Moyses,Rosa,AM,Moyses,a source in capitals has no case signal
+joined_middle_initials,control,Eva,ESL,Pedersen,Eva,Esl,Pedersen,Eva,Esl,Pedersen,three capitals with a vowel may be a word
+joined_middle_initials,control,Hyeok,JAE,Choi,Hyeok-Jae,,Choi,Hyeok-Jae,,Choi,a Korean given-name syllable
+joined_initials,control,Fl,,Stancu,Fl,,Stancu,Fl,,Stancu,Fl. abbreviates Florin
+joined_initials,control,Tz,,Kokalova,Tz,,Kokalova,Tz,,Kokalova,a Bulgarian digraph for one initial
+joined_middle_initials,control,Peter,Vd,Berg,Peter,,Vd Berg,Peter,,Vd Berg,vd abbreviates van der
+joined_initials,control,Hr,,Horvat,Hr,,Horvat,Hr,,Horvat,Hr. abbreviates Hristo
+joined_initials,control,BMW,,Group,BMW,,Group,BMW,,Group,an organization
+joined_middle_initials,control,Anna,VI,Smith,Anna,VI,Smith,Anna,VI,Smith,a Roman numeral
+joined_middle_initials,control,Byung,IL,Kim,Byung-Il,,Kim,Byung-Il,,Kim,a Korean syllable before a Korean surname
+joined_initials,control,Br,,Tarigan,Br,,Tarigan,Br,,Tarigan,Br is the Batak boru
+joined_middle_initials,control,Ram,Pd,Sharma,Ram,Pd,Sharma,Ram,Pd,Sharma,Pd abbreviates Prasad

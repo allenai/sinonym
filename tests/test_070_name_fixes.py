@@ -229,7 +229,7 @@ def test_hyphenated_generation_word_goes_to_the_suffix(predictor, source, expect
     [
         (("Kumar", None, "P"), ("P.", "", "Kumar")),
         (("Popov", None, "V."), ("V.", "", "Popov")),
-        (("Kumar", None, "RS"), ("RS", "", "Kumar")),
+        (("Kumar", None, "RS"), ("R.", "S.", "Kumar")),
         (("Kumar", None, "R S"), ("R.", "S.", "Kumar")),
         (("Kumar", None, "O."), ("O.", "", "Kumar")),
         # controls: a given-name word before initials, a one-letter Korean surname
