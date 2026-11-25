@@ -935,7 +935,7 @@ def test_japanese_romanized_routes_only_unambiguous_dictionary_direction(
 
 @pytest.mark.parametrize(
     "raw_name",
-    ["Kou Hiroya", "Takaya Miwa"],
+    ["Fuji Ren", "Kou Hiroya", "Takaya Miwa"],
 )
 def test_reviewed_exact_japanese_surface_makes_scalar_route_abstain(
     detector: ChineseNameDetector,

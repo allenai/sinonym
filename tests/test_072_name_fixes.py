@@ -47,3 +47,16 @@ def test_middle_suffix_moves_to_suffix(predictor: Predictor, source: tuple, expe
 def test_ambiguous_middle_is_not_a_suffix(predictor: Predictor, source: tuple) -> None:
     first, middle, last, _ = source
     assert _resolve(predictor, source) == (first, middle, last, None)
+
+
+@pytest.mark.parametrize(("first", "last"), [("Fuji", "Ren"), ("FUJI", "REN")])
+def test_reviewed_given_first_name_keeps_source_order(predictor: Predictor, first: str, last: str) -> None:
+    assert _resolve(predictor, (first, None, last, None)) == ("Fuji", "", "Ren", None)
+
+
+def test_reviewed_given_first_name_keeps_source_order_beside_japanese_names(predictor: Predictor) -> None:
+    sources = [("Kazuyuki", "Matsumoto"), ("Fuji", "Ren"), ("Shingo", "Kuroiwa")]
+    authors = predictor.predict_batch(
+        [Instance(pp_authors=[SourceAuthorFields(first_name=first, last_name=last) for first, last in sources])],
+    )[0].authors
+    assert [(author.first_name, author.last_name) for author in authors] == sources
