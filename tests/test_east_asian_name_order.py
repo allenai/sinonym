@@ -1878,6 +1878,7 @@ def test_exact_vietnamese_given_first_surfaces_keep_endpoint_roles(
             ("Shiu", "Lun", "Au Yeung"),
             ("given", "middle", "surname", "surname"),
         ),
+        ("Ren Fuji", ("Fuji", "", "Ren"), ("surname", "given")),
         ("Thuong Le Thi", ("Thuong", "Thi", "Le"), ("given", "surname", "middle")),
         ("Trinh Nguyen Duy", ("Duy", "Trinh", "Nguyen"), ("middle", "surname", "given")),
     ],

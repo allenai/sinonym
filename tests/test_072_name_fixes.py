@@ -60,3 +60,19 @@ def test_reviewed_given_first_name_keeps_source_order_beside_japanese_names(pred
         [Instance(pp_authors=[SourceAuthorFields(first_name=first, last_name=last) for first, last in sources])],
     )[0].authors
     assert [(author.first_name, author.last_name) for author in authors] == sources
+
+
+@pytest.mark.parametrize(
+    "sources",
+    [
+        [("Ren", "Fuji")],
+        [("Kazuyuki", "Matsumoto"), ("Ren", "Fuji"), ("Shingo", "Kuroiwa")],
+        [("Sun", "Xiao"), ("Ye", "Jiaqi"), ("Ren", "Fuji")],
+    ],
+)
+def test_reviewed_surname_first_name_is_swapped(predictor: Predictor, sources: list) -> None:
+    authors = predictor.predict_batch(
+        [Instance(pp_authors=[SourceAuthorFields(first_name=first, last_name=last) for first, last in sources])],
+    )[0].authors
+    focal = authors[[first for first, _ in sources].index("Ren")]
+    assert (focal.first_name, focal.last_name) == ("Fuji", "Ren")

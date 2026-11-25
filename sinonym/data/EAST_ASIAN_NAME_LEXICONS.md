@@ -59,7 +59,7 @@ suppress an earlier candidate and therefore do not change routing metadata for
 already-correct context-supported parses. All other reviewed surnames use the
 general, candidate-aware possible-surname rule.
 
-`Fuji Ren` is a separate exact entry in `JAPANESE_PRESELECTION_GIVEN_FIRST_EXACT_SURFACES`, not in the reviewed CSV: it is a Chinese given-first name (ORCID family name `Ren`, 827 mentions in the 2026-11-12 name-counts export) whose two words are a Japanese surname and a Japanese given name, so the Japanese family-first inference would otherwise make `Fuji` the surname.
+`Fuji Ren` is a separate exact entry in `JAPANESE_PRESELECTION_GIVEN_FIRST_EXACT_SURFACES`, not in the reviewed CSV: it is a Chinese given-first name (ORCID family name `Ren`, 827 mentions in the 2026-11-12 name-counts export) whose two words are a Japanese surname and a Japanese given name, so the Japanese family-first inference would otherwise make `Fuji` the surname. The same person written surname-first, `Ren Fuji` (56 mentions in `content_ext.paper_authors` on 2026-11-25, all with his known co-authors), is in `IDENTITY_BACKED_EXACT_ROLES` as surname then given.
 
 ## Popular Names by Country Dataset
 

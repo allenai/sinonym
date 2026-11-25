@@ -139,6 +139,7 @@ VIETNAMESE_GIVEN_FIRST_CONFLICT_SURFACES = frozenset(
 IDENTITY_BACKED_EXACT_ROLES = {
     "huong yong ting": ("given", "given", "surname"),
     "ming hsien ou yang": ("given", "middle", "surname", "surname"),
+    "ren fuji": ("surname", "given"),
     "shiu lun au yeung": ("given", "middle", "surname", "surname"),
     "thuong le thi": ("given", "surname", "middle"),
     "trinh nguyen duy": ("middle", "surname", "given"),
