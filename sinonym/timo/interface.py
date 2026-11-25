@@ -26,6 +26,7 @@ from sinonym.services.person_name_normalization import reviewed_source_cleanup_p
 from sinonym.services.source_repairs import clean_source_fields as _clean_source_fields
 from sinonym.services.source_repairs import keep_capitals_surname as _keep_capitals_surname
 from sinonym.services.source_repairs import load_glued_initial_prefixes as _load_glued_initial_prefixes
+from sinonym.services.source_repairs import move_middle_suffix as _move_middle_suffix
 from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
 from sinonym.services.source_repairs import strip_last_field_credentials as _strip_last_field_credentials
 from sinonym.services.suffix_display import display_suffix as _display_suffix
@@ -71,7 +72,7 @@ def _korean_given(author: ResolvedAuthorFields) -> ResolvedAuthorFields:
 _SOURCE_NORMALIZER = _PersonNameNormalizationService()
 
 
-_NEW_REPAIR_RULES = frozenset({"repeated_particle", "title", "contributor_role"})
+_NEW_REPAIR_RULES = frozenset({"repeated_particle", "title", "contributor_role", "joined_initials", "joined_middle_initials"})
 
 
 def _reviewed_source(author: SourceAuthorFields) -> bool:
@@ -85,7 +86,11 @@ def _reviewed_source(author: SourceAuthorFields) -> bool:
     )
 
 
-def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, SourceAuthorFields | None]:
+def _repaired_source(
+    author: SourceAuthorFields,
+    *,
+    move_suffix: bool = True,
+) -> tuple[SourceAuthorFields, SourceAuthorFields | None]:
     """The source with a recoverable field defect repaired (services/source_repairs.py), else unchanged, and the source
     before the given-field credential repair when that repair applied (``None`` otherwise).
 
@@ -103,6 +108,11 @@ def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, So
     stripped = _strip_last_field_credentials(author.first_name, author.middle_names, author.last_name)
     if stripped is not None and _reviewed_exact_source_assignment(author) is None:
         author = author.copy(update={"first_name": stripped[0], "middle_names": stripped[1], "last_name": stripped[2]})
+    moved = None
+    if move_suffix:
+        moved = _move_middle_suffix(author.first_name, author.middle_names, author.last_name, author.suffix)
+    if moved is not None and not _reviewed_source(source):
+        author = author.copy(update={"middle_names": moved[1], "last_name": moved[2]})
     repaired = _repair_source_fields(author.first_name, author.middle_names, author.last_name, author.suffix)
     if repaired is None:
         return author, None
@@ -112,11 +122,25 @@ def _repaired_source(author: SourceAuthorFields) -> tuple[SourceAuthorFields, So
     return author.copy(update={"first_name": first, "middle_names": middle or None}), author if rule == "credential" else None
 
 
+def _is_source_passthrough(author: ResolvedAuthorFields) -> bool:
+    from_source = author.resolution_provenance is _ResolutionProvenance.SOURCE
+    return from_source and author.resolution_action is not _ResolutionAction.ASSIGN
+
+
+def _unmoved_suffix(author: ResolvedAuthorFields, source: SourceAuthorFields) -> ResolvedAuthorFields:
+    """A source passthrough (a non-person, an abstained name) is not parsed, so a suffix ``_move_middle_suffix``
+    wrote after the surname would stay in the surname field (``ARISE`` / ``III`` / ``Consortium``): the move is undone."""
+    if not _is_source_passthrough(author) or not (source.middle_names or "").strip():
+        return author
+    moved, unmoved = _repaired_source(source)[0], _repaired_source(source, move_suffix=False)[0]
+    if moved.last_name == unmoved.last_name or author.last_name != moved.last_name:
+        return author
+    return author.copy(update={"middle_names": unmoved.middle_names or "", "last_name": unmoved.last_name})
+
+
 def _source_suffix(author: ResolvedAuthorFields, source: SourceAuthorFields) -> ResolvedAuthorFields:
     """The suffix shown as the source wrote it; a source passthrough or a suppressed author keeps its suffix as is."""
-    if author.resolution_action is _ResolutionAction.SUPPRESS or (
-        author.resolution_provenance is _ResolutionProvenance.SOURCE and author.resolution_action is not _ResolutionAction.ASSIGN
-    ):
+    if author.resolution_action is _ResolutionAction.SUPPRESS or _is_source_passthrough(author):
         return author
     fields = (source.first_name, source.middle_names, source.last_name, source.suffix)
     suffix = _display_suffix(fields, author.last_name, author.suffix)
@@ -299,7 +323,12 @@ class Predictor:
         """Resolve one prediction per paper, preserving paper and author order."""
         predictions = self._predict_repaired(instances)
         return [
-            Prediction(authors=[_source_suffix(author, source) for author, source in zip(p.authors, i.pp_authors, strict=True)])
+            Prediction(
+                authors=[
+                    _source_suffix(_unmoved_suffix(author, source), source)
+                    for author, source in zip(p.authors, i.pp_authors, strict=True)
+                ],
+            )
             for p, i in zip(predictions, instances, strict=True)
         ]
 

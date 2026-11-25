@@ -197,7 +197,7 @@ def test_structured_hard_identity_evidence_precedes_heuristic_chinese_canonical(
     ("source", "expected"),
     [
         (SourceAuthorFields(first_name="L", last_name="Han"), ("L.", "", "Han")),
-        (SourceAuthorFields(first_name="BC", last_name="Lee"), ("BC", "", "Lee")),
+        (SourceAuthorFields(first_name="BC", last_name="Lee"), ("B.", "C.", "Lee")),
         (SourceAuthorFields(first_name="A. S.", last_name="Lee"), ("A.", "S.", "Lee")),
         (SourceAuthorFields(first_name="A S", last_name="Lee"), ("A.", "S.", "Lee")),
         (SourceAuthorFields(first_name="A. S.", last_name="Wang"), ("A.-S.", "", "Wang")),
