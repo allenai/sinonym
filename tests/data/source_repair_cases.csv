@@ -140,3 +140,7 @@ joined_middle_initials,control,Anna,VI,Smith,Anna,VI,Smith,Anna,VI,Smith,a Roman
 joined_middle_initials,control,Byung,IL,Kim,Byung-Il,,Kim,Byung-Il,,Kim,a Korean syllable before a Korean surname
 joined_initials,control,Br,,Tarigan,Br,,Tarigan,Br,,Tarigan,Br is the Batak boru
 joined_middle_initials,control,Ram,Pd,Sharma,Ram,Pd,Sharma,Ram,Pd,Sharma,Pd abbreviates Prasad
+joined_initials,control,Cl,,Mounier,Cl,,Mounier,Cl,,Mounier,Cl. abbreviates Claire or Claude
+joined_initials,control,NFN,,Riani,NFN,,Riani,NFN,,Riani,no first name
+joined_middle_initials,control,B.,Sc,Friedrich Hecker,B.,Sc Friedrich,Hecker,B.,Sc Friedrich,Hecker,Sc is the degree B.Sc.
+joined_middle_initials,control,"Sun,",MM,Yang,MM,Yang,Sun,MM,Yang,Sun,a comma after the first field: MM is a degree

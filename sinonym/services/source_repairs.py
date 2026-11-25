@@ -393,7 +393,7 @@ _NOT_INITIALS = frozenset(
         *("sz", "th", "ts", "vl", "wm", "zh", "zs", "dj", "dz", "nj", "hj", "hjh", "mst", "smt", "ds", "rr"),
         *("dr", "mr", "mrs", "ms", "mx", "lt", "sgt", "cpt", "phd", "dds", "rn", "mph", "msc", "bsc", "jr", "sr"),
         *("lv", "nv", "xv", "jv", "qv", "yv", "ng", "sng", "png", "hng", "tng", "chng", "tsz"),
-        *("ltd", "llp", "llc", "plc", "fnu", "lnu", "nn", "ks", "km", "mc"),
+        *("ltd", "llp", "llc", "plc", "fnu", "lnu", "nfn", "nmn", "nln", "nn", "ks", "km", "mc"),
         *_CREDENTIAL_KEYS,
         *_TITLE_KEYS,
     },
@@ -409,7 +409,7 @@ _LETTER_NAMES = frozenset(
 # Hristo, the Bulgarian digraph Tz, Pt for Pandit, Mg for Maung, Sd for Syed, Bn for bin.
 _MIXED_CASE_ABBREVIATIONS = frozenset(
     {"Fl", "Tz", "Hr", "Kr", "Sv", "Gr", "Bl", "Jn", "Pt", "Mg", "Sd", "Bn", "Pr", "Dm", "Tr", "Nh"}
-    | {"Br", "Bt", "Bg", "Pd", "Mt", "Hl"},
+    | {"Br", "Bt", "Bg", "Pd", "Mt", "Hl", "Cl"},
 )
 _SUFFIX_TAIL_RE = re.compile(r"\s+(?:Jr\.?|Sr\.?|II|III|IV)$")
 
@@ -420,8 +420,13 @@ _VIETNAMESE_SURNAMES = frozenset(
 )
 
 
+# Korean given-name syllables the syllable check misses; only the guards of the rules below read them.
+_KOREAN_GIVEN_GUARD = frozenset({"chung", "byung", "kwang", "moon"})
+
+
 def _east_asian_word(word: str) -> bool:
-    return _east_asian_syllable(word) or word.lower() in EAST_ASIAN_GIVEN_SYLLABLES
+    key = word.lower()
+    return _east_asian_syllable(word) or key in EAST_ASIAN_GIVEN_SYLLABLES or key in _KOREAN_GIVEN_GUARD
 
 
 def _east_asian_surname(last: str | None) -> bool:
@@ -469,7 +474,7 @@ def split_joined_initials(first: str | None, middle: str | None, last: str | Non
 # Not initials in the middle field either: Kr abbreviates Kumar, Br and Bt are the Batak and Malay boru and binti, and
 # a particle in capitals opens the surname (``Diego`` / ``DE`` / ``Pedro``).
 _NOT_MIDDLE_INITIALS = _NOT_INITIALS | {
-    *("kr", "br", "bt", "bte", "bg", "le", "lo", "do", "san", "mac", "ait", "haj", "ud", "uz", "ed", "vd"),
+    *("kr", "br", "bt", "bte", "bg", "le", "lo", "do", "san", "mac", "ait", "haj", "ud", "uz", "ed", "vd", "sc"),
 }
 
 
@@ -484,12 +489,12 @@ def split_joined_middle_initials(  # noqa: PLR0911
     The middle field is one token (lower-case surname particles may follow it: ``IP de`` / ``Vries``) of two or three
     capitals (optionally with a final period) in a name whose given and surname fields are not in capitals, or a capital
     and one lower-case letter with no vowel and no ``y`` (``Hg``). Three capitals with a vowel stay (``MAS``, ``NAM``). Not a
-    listed non-initial (``Md``, ``Kh``, ``Jr``, ``Mc``, ``Kr``), a Roman numeral (``II``, ``IV``), a surname particle
+    listed non-initial (``Md``, ``Kh``, ``Jr``, ``Mc``, ``Kr``, ``Sc``), a Roman numeral (``II``, ``IV``), a surname particle
     (``DE``, ``EL``) or a romanized East Asian syllable, alone, after one or before an East Asian surname
     (``Hyeok`` / ``JAE`` / ``Choi``, ``Dong`` / ``IL`` / ``Lee``, ``Byung`` / ``IL`` / ``Kim``, ``Thi`` / ``MY`` / ``Nguyen``).
     """
     given, (token, *particles) = (first or "").strip(), (middle or "").split() or [""]
-    if not given or not _plain_surname(_surname_before_suffix(last)) or _ROMAN_NUMERAL_RE.fullmatch(token):
+    if not given or given.endswith(",") or not _plain_surname(_surname_before_suffix(last)) or _ROMAN_NUMERAL_RE.fullmatch(token):
         return None
     if not all(word in _REPEATED_PARTICLES for word in particles):
         return None
@@ -506,7 +511,8 @@ def split_joined_middle_initials(  # noqa: PLR0911
     if key in _NOT_MIDDLE_INITIALS or key in _REPEATED_PARTICLES or key in _LAST_FIELD_PARTICLES:
         return None
     name_word = key in EAST_ASIAN_GIVEN_SYLLABLES or key == "ly"
-    east_asian = _east_asian_syllable(key) or _east_asian_syllable(given) or (name_word and _east_asian_surname(last))
+    east_asian_given = _east_asian_syllable(given) or given.lower() in _KOREAN_GIVEN_GUARD
+    east_asian = _east_asian_syllable(key) or east_asian_given or (name_word and _east_asian_surname(last))
     if _VOWELS.intersection(letters) and (len(letters) > 2 or east_asian):  # noqa: PLR2004
         return None
     return first, " ".join([*(ch + "." for ch in letters), *particles])
@@ -859,14 +865,17 @@ _NOT_LONE_MIDDLE_SUFFIXES = frozenset({"Sr", "Sr.", "Ii", "Iv"})
 _SYLLABLE_NUMERALS = frozenset({"II", "Ii", "III", "Iii"})
 
 
-def move_middle_suffix(first: str | None, middle: str | None, last: str | None, suffix: str | None):
+def move_middle_suffix(first: str | None, middle: str | None, last: str | None, suffix: str | None):  # noqa: PLR0911
     """``Joseph`` / ``Thomas Iii`` / ``Bradley`` -> ``("Joseph", "Thomas", "Bradley III")``: a generational suffix closing
     the middle field is written after the surname, where the parser reads it as the suffix.
 
     Only ``Jr``, ``Sr`` and ``II`` to ``IV`` as a suffix is written; ``JR`` and ``SR`` in capitals are also initials and
     stay. ``Sr``, ``Ii`` and ``Iv`` move only after another middle word, ``Iv`` not after an initial (``P. Iv`` is Ivanov).
     ``II`` and ``III`` stay in a romanized East Asian name, where they are the syllable Il (``Soo`` / ``II`` / ``Shin``,
-    ``Yun`` / ``Hee II`` / ``Go``). Not when the source has a suffix field, a suffix after the surname or no given name.
+    ``Yun`` / ``Hee II`` / ``Go``), and a lone ``Jr`` stays there too: it is the Taiwanese spelling of the syllable zhi
+    (``Yu`` / ``Jr`` / ``Lin`` is Yu-Jr Lin). Not when the source has a suffix field, a suffix after the surname or no
+    given name.
+    A comma left before the moved suffix is dropped (``Emmanuel Jr., III``): with it the parser passes the name through.
     """
     tokens, surname, given = (middle or "").split(), (last or "").strip(), (first or "").strip()
     if not tokens or tokens[-1] not in _MIDDLE_SUFFIXES or not _empty(suffix) or not given:
@@ -879,8 +888,12 @@ def move_middle_suffix(first: str | None, middle: str | None, last: str | None, 
     east_asian = _east_asian_word(given) or (before and _east_asian_word(before[-1])) or _east_asian_surname(surname)
     if word in _SYLLABLE_NUMERALS and east_asian:
         return None
+    if word == "Jr" and not before and _east_asian_word(given) and _east_asian_surname(surname):
+        return None
     if not _plain_surname(surname) or _surname_before_suffix(surname) != surname:
         return None
+    if before:
+        before = [*before[:-1], before[-1].rstrip(",")]
     return first, " ".join(before) or None, f"{surname} {_MIDDLE_SUFFIXES[word]}"
 
 

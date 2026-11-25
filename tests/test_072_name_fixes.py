@@ -11,6 +11,9 @@ CASES = [
     (("Thomas", "E. IV", "Cleveland", None), ("Thomas", "E.", "Cleveland", "IV")),
     (("Ramés", "II", "Salcedo Jiménez", None), ("Ramés", "", "Salcedo Jiménez", "II")),
     (("Hendrik", "Hg III", "Hansen", None), ("Hendrik", "H. G.", "Hansen", "III")),
+    (("Fracisco", "Emmanuel Jr., III", "Munsayac", None), ("Fracisco", "Emmanuel Jr.", "Munsayac", "III")),
+    (("John", "Paul, III", "Jones", None), ("John", "Paul", "Jones", "III")),
+    (("Mervyn", "Jr", "Lim", None), ("Mervyn", "", "Lim", "Jr")),
 ]
 CONTROLS = [
     ("Claire", "SR", "Holmes", None),
@@ -21,6 +24,10 @@ CONTROLS = [
     ("Soo", "II", "Shin", None),
     ("Strahil", "Iv", "Pastuhov", None),
     ("Byung", "II", "Kim", None),
+    ("Yu", "Jr", "Lin", None),
+    ("Chung", "II", "Wi", None),
+    ("ARISE", "III", "Consortium", None),
+    ("Wei", "Jr", "Lin", None),
 ]
 
 
