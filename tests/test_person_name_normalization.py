@@ -2185,12 +2185,10 @@ def test_credential_collision_hard_and_ambiguous_cases_characterization(
     assert r.canonical_name.text == "MS Islam"
     assert r.canonical_name.normalized.surname_tokens == ("Islam",)
 
-    # (2) "Ma. de los Ángeles Martínez Ortega": a Mexican compound. The strong particle
-    #     span "de los" pulls "Ma. de los Ángeles" into the surname role and makes
-    #     "Martínez" the given — mis-parsed, and rendered surname-first.
-    #     Baseline was also wrong (dropped "Ma." -> "de los Ángeles Martínez Ortega").
+    # (2) "Ma. de los Ángeles Martínez Ortega": a Mexican compound. "Ma." is not a corpus
+    #     surname, so the strong particle span "de los" does not read it surname-first.
     r = normalizer.normalize_text("Ma. de los Ángeles Martínez Ortega")
-    assert r.canonical_name.text == "Martínez Ortega Ma. de los Ángeles"
+    assert r.canonical_name.text == "Ma. de los Ángeles Martínez Ortega"
 
     # (3) "Ma. del Mar Delgado": "Ma." kept as given; "del Mar" ends up in the surname
     #     rather than the given "María del Mar". Imperfect but better than dropping María.
@@ -2940,7 +2938,7 @@ def test_invisible_markup_does_not_make_a_person_a_non_person(
     """Bidi and zero-width marks are markup, not name content.
 
     They previously reached `_allowed_name_character`, which rejected them, so the whole name
-    resolved as a non-person: 24,933 rows of `paper_authors_full` carry one, and all 11 in the
+    resolved as a non-person: 24,933 rows of the paper-authors table carry one, and all 11 in the
     ORCID-bearing sample with a leading bidi mark were affected.
     """
     result = normalizer.normalize_components(first_name=first, last_name=last)

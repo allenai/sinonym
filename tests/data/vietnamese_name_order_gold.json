@@ -15,8 +15,8 @@
   "why_pps": "accuracy on this population is mention-weighted by construction: under PPS the unweighted rate of the sample estimates the corpus rate, so no per-name rate is projected onto mentions",
   "population": "23,462 names / 101,119 mentions route family-first under the 26-head relaxation; a further 9,144 names / 53,067 mentions are held back by the trailing-surname guard and are represented here too",
   "rule_measured": "sinonym/services/east_asian_name_order.py::_infer_vietnamese, the ASCII_ROUTABLE_VIETNAMESE_SURNAMES_WITHOUT_SURNAME_PARTNER branch",
-  "known_residue": "non-Vietnamese surnames in trailing position (Doan Perdana, Dam Sunwoo, Doan Nainggolan, Vo Ebuara), rare Vietnamese surnames trailing (Truong Nghiem, Truong Son Hy) and front-rotated records (Thuong Le Thi, Trinh Nguyen Duy). No shipped asset can identify these; see the discussion in the experiment log.",
-  "scripts": "author-names/sinonym_split_experiment/korean_experiment/vn26*.py"
+  "known_residue": "non-Vietnamese surnames in trailing position (Doan Perdana, Dam Sunwoo, Doan Nainggolan, Vo Ebuara), rare Vietnamese surnames trailing (Truong Nghiem, Truong Son Hy) and front-rotated records (Thuong Le Thi, Trinh Nguyen Duy). No shipped asset can identify these.",
+  "scripts": "internal analysis scripts (not published)"
  },
  "items": [
   {

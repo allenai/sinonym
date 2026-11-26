@@ -531,7 +531,7 @@ def test_reorder_veto_does_not_use_vys_tail_as_paper_context(predictor: Predicto
     assert result.resolution_reason is ResolutionReason.SCALAR_BASELINE
 
 
-def test_possible_japanese_surname_repairs_wrong_batch_reversal_without_vys_context(
+def test_possible_japanese_surname_is_not_reversed_without_vys_context(
     predictor: Predictor,
 ) -> None:
     (result,) = _route(
@@ -540,7 +540,7 @@ def test_possible_japanese_surname_repairs_wrong_batch_reversal_without_vys_cont
     )
 
     assert (result.first_name, result.last_name) == ("Mai", "Hata")
-    assert result.resolution_reason is ResolutionReason.JAPANESE_GIVEN_FIRST_REORDER_VETO_PRESERVE_INPUT
+    assert result.resolution_reason is ResolutionReason.SCALAR_BASELINE
 
 
 def test_failed_pp_vys_abstain_cannot_fall_through_to_scalar_reorder(

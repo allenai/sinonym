@@ -25,6 +25,7 @@ from sinonym.coretypes import (
     ParseResult,
 )
 from sinonym.utils.string_manipulation import StringManipulationUtils
+from sinonym.utils.unsplit_given_words import standalone_words
 
 GUARDED_GIVEN_FIRST_BATCH_MIN_SHARE = 0.75
 GIVEN_NAME_SHAPE_MIN_SHARE = 0.5
@@ -342,6 +343,10 @@ class BatchAnalysisService:
 
     def _prepare_name(self, name: str, normalizer, *, need_individual: bool = True) -> _PreparedName:
         """Compute the name-local inputs shared by all batch contexts."""
+        with standalone_words(name):
+            return self._prepare_name_in_context(name, normalizer, need_individual=need_individual)
+
+    def _prepare_name_in_context(self, name: str, normalizer, *, need_individual: bool) -> _PreparedName:
         input_failure = self._input_failure(name)
         if input_failure is not None:
             return _PreparedName(
@@ -942,11 +947,12 @@ class BatchAnalysisService:
             matching_candidates = [c for c in format_entry.candidates if c.format == target_format]
             selected_candidate = matching_candidates[0] if matching_candidates else format_entry.best_candidate
 
-            result = self._candidate_to_parse_result(
-                selected_candidate,
-                formatting_service,
-                format_entry.compound_metadata,
-            )
+            with standalone_words(format_entry.name):
+                result = self._candidate_to_parse_result(
+                    selected_candidate,
+                    formatting_service,
+                    format_entry.compound_metadata,
+                )
             results.append(result)
 
         return results

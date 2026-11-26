@@ -62,10 +62,12 @@ VIETNAMESE_GIVEN_FIRST_EXACT_SURFACES = frozenset({"tuan le"})
 # extends the same decision to singleton/PP-only use without changing that
 # production result.
 CROSS_CULTURAL_GIVEN_FIRST_EXACT_SURFACES = frozenset({"to keku"})
-# These two released exact surfaces also suppress an early Japanese
+# These released exact surfaces also suppress an early Japanese
 # family-first inference. Newly censused surfaces are post-selection vetoes so
 # already-correct context-supported parses keep their existing public metadata.
-JAPANESE_PRESELECTION_GIVEN_FIRST_EXACT_SURFACES = frozenset({"kou hiroya", "takaya miwa"})
+# ``fuji ren`` is a Chinese given-first name (ORCID family name Ren) whose two
+# words are a Japanese surname and a Japanese given name.
+JAPANESE_PRESELECTION_GIVEN_FIRST_EXACT_SURFACES = frozenset({"fuji ren", "kou hiroya", "takaya miwa"})
 # Exact lexical false friends whose reviewed PP/VYS flips are family-first when
 # another complete paper author supplies context. Token-level exclusions would
 # suppress verified Japanese names such as Ma Kai. Yuan Tai is deliberately
@@ -137,6 +139,7 @@ VIETNAMESE_GIVEN_FIRST_CONFLICT_SURFACES = frozenset(
 IDENTITY_BACKED_EXACT_ROLES = {
     "huong yong ting": ("given", "given", "surname"),
     "ming hsien ou yang": ("given", "middle", "surname", "surname"),
+    "ren fuji": ("surname", "given"),
     "shiu lun au yeung": ("given", "middle", "surname", "surname"),
     "thuong le thi": ("given", "surname", "middle"),
     "trinh nguyen duy": ("middle", "surname", "given"),

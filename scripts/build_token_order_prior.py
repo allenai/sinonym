@@ -3,10 +3,10 @@
 almost only as a surname (see services/token_order_prior.py).
 
 Input: partition_prior_tokens.parquet (per folded token, mentions as a given name vs as the surname word, from the
-pre-normalization paper_authors dump; built by author-names/pp_vys_orcid_conc/scripts/partition_prior.py).
+pre-normalization paper_authors dump; built outside this repo).
 A token ships when it has >= MIN_MENTIONS mentions and a given-name share <= SURNAME_MAX_GIVEN (a surname word)
-or >= GIVEN_MIN_SHARE (a given-name word). Kill test before shipping: orderflip_analysis.py (690k index,
-production key, both halves).
+or >= GIVEN_MIN_SHARE (a given-name word). Kill test before shipping: the order-flip analysis on the 690k ORCID
+index (production key, both halves).
 """
 from __future__ import annotations
 

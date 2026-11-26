@@ -1,9 +1,13 @@
 """Single TIMO boundary for terminal, source-shaped author resolution."""
 
+import re
+
 from pydantic import BaseSettings as _BaseSettings
 from pydantic import Field as _Field
 
 from sinonym.coretypes import BatchParseResult as _BatchParseResult
+from sinonym.coretypes.routing_resolution import ResolutionAction as _ResolutionAction
+from sinonym.coretypes.routing_resolution import ResolutionProvenance as _ResolutionProvenance
 from sinonym.detector import ChineseNameDetector as _ChineseNameDetector
 from sinonym.detector import ParallelMode as _ParallelMode
 from sinonym.pipeline.name_order_routing import (
@@ -16,13 +20,31 @@ from sinonym.pipeline.name_order_routing import (
     route_pp_vys_abstain_batches as _route_pp_vys_abstain_batches,
 )
 from sinonym.services.batch_analysis import RelatedBatchParseResult as _RelatedBatchParseResult
+from sinonym.services.non_person import reviewed_non_person_source_pattern as _reviewed_non_person_source_pattern
+from sinonym.services.person_name_normalization import PersonNameNormalizationService as _PersonNameNormalizationService
+from sinonym.services.person_name_normalization import reviewed_source_cleanup_pattern as _reviewed_source_cleanup_pattern
+from sinonym.services.source_repairs import clean_source_fields as _clean_source_fields
+from sinonym.services.source_repairs import keep_capitals_surname as _keep_capitals_surname
+from sinonym.services.source_repairs import load_glued_initial_prefixes as _load_glued_initial_prefixes
+from sinonym.services.source_repairs import move_middle_suffix as _move_middle_suffix
+from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
+from sinonym.services.source_repairs import strip_last_field_credentials as _strip_last_field_credentials
+from sinonym.services.suffix_display import clean_suffix_field as _clean_suffix_field
+from sinonym.services.suffix_display import display_suffix as _display_suffix
 from sinonym.timo._resolution import (
     Instance,
     ResolvedAuthorFields,
     SourceAuthorFields,
     _Model,
     _Resolver,
+    _reviewed_leading_title_or_credential_assignment,
 )
+from sinonym.timo._resolution import reviewed_exact_source_assignment as _reviewed_exact_source_assignment
+from sinonym.utils.allcaps_given_words import load_allcaps_given_words as _load_allcaps_given_words
+from sinonym.utils.given_name_words import load_given_name_words as _load_given_name_words
+from sinonym.utils.korean_given_names import korean_given_form as _korean_given_form
+from sinonym.utils.korean_given_names import load_korean_given_words as _load_korean_given_words
+from sinonym.utils.unsplit_given_words import load_unsplit_given_words as _load_unsplit_given_words
 
 __all__ = [
     "Instance",
@@ -32,6 +54,140 @@ __all__ = [
     "ResolvedAuthorFields",
     "SourceAuthorFields",
 ]
+
+
+def _korean_given(author: ResolvedAuthorFields) -> ResolvedAuthorFields:
+    """An author with a listed two-syllable Korean given name, written ``Jin-Ho`` (utils/korean_given_names.py).
+
+    Applied to every written author, Chinese-detected or not: Korean names often parse as Chinese (``Young Hee``), and
+    the word table keeps Chinese given names out.
+    """
+    if author.resolution_action is _ResolutionAction.SUPPRESS or _is_source_passthrough(author):
+        return author
+    given = _korean_given_form(author.first_name, author.middle_names, author.last_name)
+    if given is None or (given, "") == (author.first_name, author.middle_names):
+        return author
+    return author.copy(update={"first_name": given, "middle_names": ""})
+
+
+_SOURCE_NORMALIZER = _PersonNameNormalizationService()
+
+
+_NEW_REPAIR_RULES = frozenset({"repeated_particle", "title", "contributor_role", "joined_initials", "joined_middle_initials"})
+
+
+def _reviewed_source(author: SourceAuthorFields) -> bool:
+    """A source one of the reviewed rules reads exactly; the field cleanups and given-field rules leave it to that rule."""
+    fields = (author.first_name, author.middle_names, author.last_name)
+    return (
+        _reviewed_exact_source_assignment(author) is not None
+        or _reviewed_non_person_source_pattern(*fields, author.suffix) is not None
+        or _reviewed_source_cleanup_pattern(*fields, author.suffix) is not None
+        or _reviewed_leading_title_or_credential_assignment(author, _SOURCE_NORMALIZER) is not None
+    )
+
+
+def _repaired_source(
+    author: SourceAuthorFields,
+    *,
+    move_suffix: bool = True,
+) -> tuple[SourceAuthorFields, SourceAuthorFields | None]:
+    """The source with a recoverable field defect repaired (services/source_repairs.py), else unchanged, and the source
+    before the given-field credential repair when that repair applied (``None`` otherwise).
+
+    Resolution then works on the repaired fields, so source-provenance outputs carry the repaired text, including a
+    surname field rewritten by ``strip_last_field_credentials``; the source before the credential repair only serves as
+    the reference for ``_kept_given_words_out_of_surname``. VYS pool names are plain strings and are not repaired.
+    """
+    source = author
+    cleaned = _clean_source_fields(author.first_name, author.middle_names, author.last_name)
+    if cleaned is not None and not _reviewed_source(source):
+        author = author.copy(update={"first_name": cleaned[0], "middle_names": cleaned[1], "last_name": cleaned[2] or ""})
+    capitals = _keep_capitals_surname(author.first_name, author.middle_names, author.last_name, author.suffix)
+    if capitals is not None and not _reviewed_source(source):
+        author = author.copy(update={"last_name": capitals[2]})
+    stripped = _strip_last_field_credentials(author.first_name, author.middle_names, author.last_name)
+    if stripped is not None and _reviewed_exact_source_assignment(author) is None:
+        author = author.copy(update={"first_name": stripped[0], "middle_names": stripped[1], "last_name": stripped[2]})
+    moved = None
+    if move_suffix:
+        suffix = author.suffix if author.suffix and _clean_suffix_field(author.suffix) is not None else None
+        moved = _move_middle_suffix(author.first_name, author.middle_names, author.last_name, suffix)
+    if moved is not None and not _reviewed_source(source):
+        author = author.copy(update={"middle_names": moved[1], "last_name": moved[2]})
+    repaired = _repair_source_fields(author.first_name, author.middle_names, author.last_name, author.suffix)
+    if repaired is None:
+        return author, None
+    rule, first, middle = repaired
+    if rule in _NEW_REPAIR_RULES and _reviewed_source(source):
+        return author, None
+    return author.copy(update={"first_name": first, "middle_names": middle or None}), author if rule == "credential" else None
+
+
+def _is_source_passthrough(author: ResolvedAuthorFields) -> bool:
+    from_source = author.resolution_provenance is _ResolutionProvenance.SOURCE
+    return from_source and author.resolution_action is not _ResolutionAction.ASSIGN
+
+
+def _unmoved_suffix(author: ResolvedAuthorFields, source: SourceAuthorFields) -> ResolvedAuthorFields:
+    """A source passthrough (a non-person, an abstained name) is not parsed, so a suffix ``_move_middle_suffix``
+    wrote after the surname would stay in the surname field (``ARISE`` / ``III`` / ``Consortium``): the move is undone."""
+    if not _is_source_passthrough(author) or not (source.middle_names or "").strip():
+        return author
+    moved, unmoved = _repaired_source(source)[0], _repaired_source(source, move_suffix=False)[0]
+    if moved.last_name == unmoved.last_name or author.last_name != moved.last_name:
+        return author
+    given = {"first_name": unmoved.first_name or "", "middle_names": unmoved.middle_names or ""}
+    return author.copy(update={**given, "last_name": unmoved.last_name})
+
+
+def _source_suffix(author: ResolvedAuthorFields, source: SourceAuthorFields) -> ResolvedAuthorFields:
+    """The suffix shown as the source wrote it; a source passthrough or a suppressed author keeps its suffix as is."""
+    if author.resolution_action is _ResolutionAction.SUPPRESS or _is_source_passthrough(author):
+        return author
+    moved = bool(source.suffix) and bool((source.middle_names or "").strip())
+    last = _repaired_source(source)[0].last_name if moved else source.last_name
+    fields = (source.first_name, source.middle_names, last, source.suffix)
+    suffix = _display_suffix(fields, author.last_name, author.suffix)
+    return author if suffix == author.suffix else author.copy(update={"suffix": suffix})
+
+
+_NAME_WORD_SPLIT_RE = re.compile(r"[\s.,]+")
+
+
+def _words(text: str) -> list[str]:
+    return [word.casefold() for word in _NAME_WORD_SPLIT_RE.split(text) if word]
+
+
+def _kept_given_words_out_of_surname(
+    author: ResolvedAuthorFields,
+    reference: ResolvedAuthorFields,
+    source: SourceAuthorFields,
+) -> ResolvedAuthorFields:
+    """Undo a surname that took more source words once a credential was stripped from the given or middle field.
+
+    ``R`` / ``C M Edward Ph.D.`` / ``Udovic``: without ``Ph.D.`` the parse reads ``Edward Udovic`` as the surname. When
+    the surname is the one the unrepaired source parses to with source words in front, those words go back to the
+    middle (``R. | C. M. Edward | Udovic``). A surname that is the whole source surname field stays (``A.`` / ``K. M.
+    PhD`` / ``Fazlul Haque``).
+    """
+    surname, reference_surname = author.last_name.split(), reference.last_name.split()
+    extra = len(surname) - len(reference_surname)
+    if (
+        not reference_surname
+        or extra <= 0
+        or _words(author.last_name) == _words(source.last_name or "")
+        or _words(" ".join(surname[extra:])) != _words(reference.last_name)
+        or not set(_words(" ".join(surname[:extra])))
+        <= set(_words(f"{source.first_name or ''} {source.middle_names or ''} {source.last_name or ''}"))
+    ):
+        return author
+    return author.copy(
+        update={
+            "middle_names": " ".join([*author.middle_names.split(), *surname[:extra]]),
+            "last_name": " ".join(surname[extra:]),
+        },
+    )
 
 
 class Prediction(_Model):
@@ -61,6 +217,12 @@ class Predictor:
         self._artifacts_dir = artifacts_dir
         self._detector = _ChineseNameDetector()
         self._resolver = _Resolver(self._detector)
+        # the data tables the TIMO path reads, loaded here so no request pays for the first load
+        _load_glued_initial_prefixes()
+        _load_unsplit_given_words()
+        _load_korean_given_words()
+        _load_allcaps_given_words()
+        _load_given_name_words()
 
     def _resolve_pp_vys_batch(
         self,
@@ -164,6 +326,52 @@ class Predictor:
 
     def predict_batch(self, instances: list[Instance]) -> list[Prediction]:
         """Resolve one prediction per paper, preserving paper and author order."""
+        predictions = self._predict_repaired(instances)
+        return [
+            Prediction(
+                authors=[
+                    _source_suffix(_unmoved_suffix(author, source), source)
+                    for author, source in zip(p.authors, i.pp_authors, strict=True)
+                ],
+            )
+            for p, i in zip(predictions, instances, strict=True)
+        ]
+
+    def _predict_repaired(self, instances: list[Instance]) -> list[Prediction]:
+        repairs = [[_repaired_source(author) for author in instance.pp_authors] for instance in instances]
+        predictions = self._resolve_instances(
+            [
+                instance.copy(update={"pp_authors": [author for author, _ in repaired]})
+                for instance, repaired in zip(instances, repairs, strict=True)
+            ],
+        )
+        checked = [
+            index
+            for index, repaired in enumerate(repairs)
+            if any(
+                unrepaired is not None and len(author.last_name.split()) > 1
+                for author, (_, unrepaired) in zip(predictions[index].authors, repaired, strict=True)
+            )
+        ]
+        if not checked:
+            return predictions
+        references = self._resolve_instances(
+            [
+                instances[index].copy(update={"pp_authors": [reference or author for author, reference in repairs[index]]})
+                for index in checked
+            ],
+        )
+        for index, reference_prediction in zip(checked, references, strict=True):
+            authors = zip(predictions[index].authors, reference_prediction.authors, repairs[index], strict=True)
+            predictions[index] = Prediction(
+                authors=[
+                    author if unrepaired is None else _kept_given_words_out_of_surname(author, reference, source)
+                    for author, reference, (source, unrepaired) in authors
+                ],
+            )
+        return predictions
+
+    def _resolve_instances(self, instances: list[Instance]) -> list[Prediction]:
         predictions: list[Prediction | None] = [None] * len(instances)
         requests: list[tuple[list[str], list[str] | None]] = []
         plans: list[tuple[int, int]] = []
@@ -205,7 +413,7 @@ class Predictor:
                     pp_batch=batch_result.pp_batch,
                     pool=batch_result.vys_batch,
                 )
-            predictions[instance_index] = Prediction(authors=authors)
+            predictions[instance_index] = Prediction(authors=[_korean_given(author) for author in authors])
 
         if any(prediction is None for prediction in predictions):
             message = "prediction plan did not fill every instance slot"

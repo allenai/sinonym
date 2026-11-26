@@ -935,7 +935,7 @@ def test_japanese_romanized_routes_only_unambiguous_dictionary_direction(
 
 @pytest.mark.parametrize(
     "raw_name",
-    ["Kou Hiroya", "Takaya Miwa"],
+    ["Fuji Ren", "Kou Hiroya", "Takaya Miwa"],
 )
 def test_reviewed_exact_japanese_surface_makes_scalar_route_abstain(
     detector: ChineseNameDetector,
@@ -1878,6 +1878,7 @@ def test_exact_vietnamese_given_first_surfaces_keep_endpoint_roles(
             ("Shiu", "Lun", "Au Yeung"),
             ("given", "middle", "surname", "surname"),
         ),
+        ("Ren Fuji", ("Fuji", "", "Ren"), ("surname", "given")),
         ("Thuong Le Thi", ("Thuong", "Thi", "Le"), ("given", "surname", "middle")),
         ("Trinh Nguyen Duy", ("Duy", "Trinh", "Nguyen"), ("middle", "surname", "given")),
     ],

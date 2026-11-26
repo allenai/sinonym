@@ -46,7 +46,7 @@ The full scan used the current review corpus, not a sample:
 - 106,873,287 distinct `nm` rows and 690,997,259 weighted mentions
 - Parquet size 1,881,981,435 bytes, 533 row groups
 - SHA-256 `36d6e49e31dfc09b3e98144a6d1bc44c4884abe003a0672bb00ec4c9be991ad1`
-- source object: `s3://s2-atalyaa/disambiguation/author-names/sinonym-0-4-x-review/corpus/distinct_author_names.parquet`
+- source object: an internal export of the distinct corpus author names (not published)
 - matching 106,873,287-row Chinese-label map SHA-256 `4992da8513e23855f51662583e015237edea0071bc907222fdfc38462bd09dd4`
 - 9,520,175 rows in that aligned map have `chinese=true`
 - scan revision `b39bdbe35e18104bb77bff21014e1921342e18d2`; DuckDB 1.5.5; elapsed 269.712 seconds

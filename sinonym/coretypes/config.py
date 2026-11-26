@@ -132,8 +132,8 @@ class ChineseNameConfig:
             han_roman_splitter=HAN_ROMAN_SPLITTER,
             ascii_alpha_pattern=re.compile(r"[A-Za-z]"),
             clean_roman_pattern=re.compile(
-                r"[^A-Za-z\u00C0-\u00FF\u0100-\u024F-''']",
-            ),  # PRESERVE ASCII letters, Latin-1 Supplement (À-ÿ), Latin Extended-A (Ā-ſ), Latin Extended-B (ǀ-ɏ), hyphens and apostrophes for romanization systems
+                r"[^A-Za-z\u00C0-\u00FF\u0100-\u024F\u1E00-\u1EFF-''']",
+            ),  # PRESERVE ASCII letters, Latin-1 Supplement (À-ÿ), Latin Extended-A (Ā-ſ), Latin Extended-B (ǀ-ɏ), Latin Extended Additional (Ḁ-ỿ, Vietnamese ậ/ễ/ự), hyphens and apostrophes for romanization systems
             camel_case_finder=re.compile(r"[A-Z][a-z]+"),
             clean_pattern=CLEAN_PATTERN,
             forbidden_patterns_regex=FORBIDDEN_PATTERNS_REGEX,

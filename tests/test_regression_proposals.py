@@ -887,8 +887,8 @@ def test_aligned_bilingual_lu_alias_matches_lv_pinyin(detector, lu_token):
     result = detector.normalize_name(f"{lu_token} \u5415 Wei \u4f1f")
 
     assert result.success
-    assert result.result == "Wei Lu"
-    assert result.parsed.surname == "Lu"
+    assert result.result == f"Wei {lu_token}"
+    assert result.parsed.surname == lu_token
     assert result.parsed.given_name == "Wei"
     assert result.parsed_original_order.order == ["surname", "given"]
 

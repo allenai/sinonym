@@ -11,7 +11,7 @@
   "strata": "A_compound and C_translit oversample the two failure classes; B_nonname and B4_top_mention were drawn top-by-mentions, so they are cost-weighted sweeps rather than uniform samples; baseline is uniform",
   "rule_measured": "sinonym/services/east_asian_name_order.py::_infer_native, the korean_native_three_syllable branch (unchanged since 0.4.0)",
   "population": "231,786 names / 6,258,735 mentions reach this rule; every all-Hangul name fails Chinese detection, so production consumes canonical_name.normalized",
-  "scripts": "author-names/sinonym_split_experiment/hangul_route/scripts/"
+  "scripts": "internal analysis scripts (not published)"
  },
  "class_population": {
   "A_compound": {
