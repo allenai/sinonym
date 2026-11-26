@@ -28,6 +28,7 @@ import argparse
 import csv
 import gzip
 import hashlib
+import io
 from pathlib import Path
 
 import duckdb
@@ -133,11 +134,12 @@ def main() -> None:
                AND coalesce(forms.c, 0) < {MAX_SPLIT_SHARE} * (cand.mentions + coalesce(forms.c, 0)))
         ORDER BY cand.mentions DESC, cand.w""").fetchall()
     out = Path(a.output)
-    with gzip.open(out, "wt", newline="", encoding="utf-8") as fh:
-        wr = csv.writer(fh)
-        wr.writerow(["word", "mentions", "split", "split_mentions", "chinese_context_share", "registry_people",
-                     "registry_chinese_country_share"])
-        wr.writerows(rows)
+    text = io.StringIO()
+    wr = csv.writer(text, lineterminator="\n")
+    wr.writerow(["word", "mentions", "split", "split_mentions", "chinese_context_share", "registry_people",
+                 "registry_chinese_country_share"])
+    wr.writerows(rows)
+    out.write_bytes(gzip.compress(text.getvalue().encode("utf-8"), mtime=0))
     print(f"{len(rows):,} words -> {out} (sha256 {hashlib.sha256(out.read_bytes()).hexdigest()[:16]})")
 
 

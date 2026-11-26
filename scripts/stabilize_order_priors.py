@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import csv
 import gzip
+import io
 from pathlib import Path
 
 MARGIN = 0.0
@@ -51,10 +52,11 @@ def read_table(path: Path) -> tuple[list[str], list[dict[str, str]]]:
 
 
 def write_table(path: Path, fields: list[str], rows: list[dict[str, str]]) -> None:
-    with gzip.open(path, "wt", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fields, lineterminator="\n")
-        writer.writeheader()
-        writer.writerows(rows)
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fields, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    path.write_bytes(gzip.compress(out.getvalue().encode("utf-8"), mtime=0))
 
 
 def clear_token(row: dict[str, str], margin: float) -> bool:

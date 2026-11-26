@@ -116,3 +116,14 @@ def test_shipped_order_entries_still_turn_reversed_names(predictor, source, expe
     fields = SourceAuthorFields(first_name=source[0], middle_names=source[1], last_name=source[2])
     author = predictor.predict_batch([Instance(pp_authors=[fields])])[0].authors[0]
     assert (author.first_name, author.last_name) == expected
+
+
+def test_written_table_is_byte_stable(tmp_path):
+    rows = [token("aldo", "given", 900, 0.902)]
+    stabilize.write_table(tmp_path / "a.csv.gz", list(rows[0]), rows)
+    stabilize.write_table(tmp_path / "b.csv.gz", list(rows[0]), rows)
+    data = (tmp_path / "a.csv.gz").read_bytes()
+    assert data == (tmp_path / "b.csv.gz").read_bytes()
+    assert data[4:8] == bytes(4)
+    assert b"\r" not in gzip.decompress(data)
+    assert stabilize.read_table(tmp_path / "a.csv.gz") == (list(rows[0]), rows)

@@ -29,6 +29,7 @@ from sinonym.services.source_repairs import load_glued_initial_prefixes as _load
 from sinonym.services.source_repairs import move_middle_suffix as _move_middle_suffix
 from sinonym.services.source_repairs import repair_source_fields as _repair_source_fields
 from sinonym.services.source_repairs import strip_last_field_credentials as _strip_last_field_credentials
+from sinonym.services.suffix_display import clean_suffix_field as _clean_suffix_field
 from sinonym.services.suffix_display import display_suffix as _display_suffix
 from sinonym.timo._resolution import (
     Instance,
@@ -61,7 +62,7 @@ def _korean_given(author: ResolvedAuthorFields) -> ResolvedAuthorFields:
     Applied to every written author, Chinese-detected or not: Korean names often parse as Chinese (``Young Hee``), and
     the word table keeps Chinese given names out.
     """
-    if author.resolution_action is _ResolutionAction.SUPPRESS:
+    if author.resolution_action is _ResolutionAction.SUPPRESS or _is_source_passthrough(author):
         return author
     given = _korean_given_form(author.first_name, author.middle_names, author.last_name)
     if given is None or (given, "") == (author.first_name, author.middle_names):
@@ -110,7 +111,8 @@ def _repaired_source(
         author = author.copy(update={"first_name": stripped[0], "middle_names": stripped[1], "last_name": stripped[2]})
     moved = None
     if move_suffix:
-        moved = _move_middle_suffix(author.first_name, author.middle_names, author.last_name, author.suffix)
+        suffix = author.suffix if author.suffix and _clean_suffix_field(author.suffix) is not None else None
+        moved = _move_middle_suffix(author.first_name, author.middle_names, author.last_name, suffix)
     if moved is not None and not _reviewed_source(source):
         author = author.copy(update={"middle_names": moved[1], "last_name": moved[2]})
     repaired = _repair_source_fields(author.first_name, author.middle_names, author.last_name, author.suffix)
@@ -135,14 +137,17 @@ def _unmoved_suffix(author: ResolvedAuthorFields, source: SourceAuthorFields) ->
     moved, unmoved = _repaired_source(source)[0], _repaired_source(source, move_suffix=False)[0]
     if moved.last_name == unmoved.last_name or author.last_name != moved.last_name:
         return author
-    return author.copy(update={"middle_names": unmoved.middle_names or "", "last_name": unmoved.last_name})
+    given = {"first_name": unmoved.first_name or "", "middle_names": unmoved.middle_names or ""}
+    return author.copy(update={**given, "last_name": unmoved.last_name})
 
 
 def _source_suffix(author: ResolvedAuthorFields, source: SourceAuthorFields) -> ResolvedAuthorFields:
     """The suffix shown as the source wrote it; a source passthrough or a suppressed author keeps its suffix as is."""
     if author.resolution_action is _ResolutionAction.SUPPRESS or _is_source_passthrough(author):
         return author
-    fields = (source.first_name, source.middle_names, source.last_name, source.suffix)
+    moved = bool(source.suffix) and bool((source.middle_names or "").strip())
+    last = _repaired_source(source)[0].last_name if moved else source.last_name
+    fields = (source.first_name, source.middle_names, last, source.suffix)
     suffix = _display_suffix(fields, author.last_name, author.suffix)
     return author if suffix == author.suffix else author.copy(update={"suffix": suffix})
 

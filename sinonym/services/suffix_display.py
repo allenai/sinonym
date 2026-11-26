@@ -42,12 +42,14 @@ def _generational_surface(token: str) -> str:
     ``""`` if not a suffix. Only the abbreviations keep a written period."""
     text = token.strip(",;()")
     canonical = _canonical_suffix_surface(text, explicit=True)
+    if text.rstrip(".").casefold() == "1st":
+        return "1st"
     if not canonical:
         return ""
     if canonical in _EXPLICIT_ROMAN_SUFFIXES:
         return canonical
     if text[:1].isdigit():
-        return text.lower()
+        return text.rstrip(".").lower()
     if text.casefold() not in _ABBREVIATED_SUFFIXES:
         text = text.rstrip(".")
     return text[:1].upper() + text[1:].lower()

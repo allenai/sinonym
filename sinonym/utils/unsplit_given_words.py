@@ -47,12 +47,18 @@ _VIETNAMESE_SURNAME_FOLDS = frozenset(_fold(name) for name in VIETNAMESE_SURNAME
 _HYPHEN_PARTICLES = frozenset(
     {"da", "das", "de", "del", "della", "der", "den", "di", "do", "dos", "du", "la", "le", "ten", "ter", "van", "von"},
 )
-_WORD_PARTS = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[^\W\d_]+")
+_WORD_PARTS = re.compile(r"A+(?=Aa)|A?a+|A+|x+")
 _APOSTROPHES = frozenset("'\u2019\u02bc")
 
 # The raw name being processed. A listed word is never split, but inside an author-written hyphen or glued token
 # (``Ta-Tsien``, ``YuLina``) of a name with two or more words it still counts as a Chinese given-name part.
 _RAW_NAME: ContextVar[str | None] = ContextVar("standalone_words", default=None)
+
+
+def _word_parts(piece: str) -> list[str]:
+    """Runs of letters cut at case changes (``YuLina`` -> ``Yu``, ``Lina``), in any script's capitals (``Yü``)."""
+    shape = "".join("A" if ch.isupper() else "a" if ch.islower() else "x" if ch.isalpha() else " " for ch in piece)
+    return [piece[match.start() : match.end()] for match in _WORD_PARTS.finditer(shape)]
 
 
 def _non_chinese_bound_word(parts: list[str]) -> bool:
@@ -92,7 +98,7 @@ def _standalone_folds(raw_name: str) -> frozenset[str]:
         for piece in pieces:
             if any(mark in piece for mark in _APOSTROPHES):
                 folds.update(_fold(part) for part in re.split("['\u2019\u02bc]", piece))
-        parts = [part for piece in pieces for part in _WORD_PARTS.findall(piece)]
+        parts = [part for piece in pieces for part in _word_parts(piece)]
         if len(parts) > 1 and (len(words) == 1 or _non_chinese_bound_word(parts)):
             folds.update(_fold(part) for part in [*pieces, *parts])
     return frozenset(folds)

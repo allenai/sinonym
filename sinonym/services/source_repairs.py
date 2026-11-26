@@ -171,6 +171,8 @@ _CREDENTIAL_PUNCTUATION_RE = re.compile(r"[.,;:()]")
 _LETTER_INITIALS_RE = re.compile(r"(?:[^\W\d_]\.)+[^\W\d_]?\.?,?")
 _NAME_TOKEN_RE = re.compile(r"[^\W\d_]+(?:[-'\u2019.][^\W\d_]+)*\.?")
 _NOT_NAME_KEYS = CREDENTIAL_WORDS | SPELLED_CREDENTIAL_WORDS | _CREDENTIAL_KEYS | _TITLE_KEYS | _NOT_GIVEN_WORDS | {"med"}
+# Family names that are also a degree or a particle; as the surname field in mixed case they are the family name.
+_SHORT_SURNAMES = frozenset({"Le", "Du", "Ma", "Da", "Di", "La", "Do", "Ba"})
 
 
 def _degree_spelling(token: str) -> bool:
@@ -205,7 +207,10 @@ def _name_word(token: str) -> bool:
 
 
 def _has_surname(last: str | None) -> bool:
-    return any(len(word) > 1 and word.casefold() not in _NOT_NAME_KEYS for word in _SURNAME_WORD_RE.findall(last or ""))
+    return any(
+        len(word) > 1 and (word.casefold() not in _NOT_NAME_KEYS or word in _SHORT_SURNAMES)
+        for word in _SURNAME_WORD_RE.findall(last or "")
+    )
 
 
 def strip_credentials(first: str | None, middle: str | None, last: str | None, suffix: str | None):
@@ -274,6 +279,9 @@ _TITLE_QUALIFIERS = frozenset({"med", "rer", "nat", "ing", "dipl", "habil", "tec
 _HONORIS_CAUSA = frozenset({"hc", "h.c"})
 
 
+_JOINED_DOTTED_INITIALS_RE = re.compile(r"[^\W\d_](?:\.-?[^\W\d_]){1,2}\.")  # J.A., J.-P.
+
+
 def _title_token(token: str, *, qualifier: bool = False) -> bool:
     """A listed title (``Dr.``, ``Prof``, ``dr.``); undotted capitals (``DR``, ``MR``) can be initials and do not count."""
     core = token.rstrip(".,").replace(".-", "-").split("-")[0]
@@ -335,10 +343,11 @@ def strip_titles(first: str | None, middle: str | None, last: str | None, suffix
         given, kept_middle = rest[:1], rest[1:]
     else:
         kept_middle = strip(middle_tokens)
-        if len(kept_middle) == len(middle_tokens) or any(t.isupper() and len(t) <= _SHORT_CAPITALS for t in first_tokens):
+        short_capitals = any(t.isalpha() and t.isupper() and len(t) <= _SHORT_CAPITALS for t in first_tokens)
+        if len(kept_middle) == len(middle_tokens) or short_capitals:
             return None
         given = first_tokens
-    words = given + kept_middle
+    words = [word for word in given + kept_middle if not _JOINED_DOTTED_INITIALS_RE.fullmatch(word)]
     if not given or not all(map(_name_word, words)) or any(map(_abbreviation_or_qualifier, words)):
         return None
     return " ".join(given), " ".join(kept_middle) or None
@@ -452,7 +461,7 @@ def split_joined_initials(first: str | None, middle: str | None, last: str | Non
     surname = _surname_before_suffix(last)
     if not _empty(suffix) or not _empty(middle) or not _plain_surname(surname) or len(surname.split()) != 1:
         return None
-    if _ROMAN_NUMERAL_RE.fullmatch(surname) or surname.lower() in _NOT_SURNAMES:
+    if (_ROMAN_NUMERAL_RE.fullmatch(surname) and surname != "Xi") or surname.lower() in _NOT_SURNAMES:
         return None
     if len(surname) <= 3 and not surname.isascii():  # noqa: PLR2004
         return None
@@ -494,7 +503,9 @@ def split_joined_middle_initials(  # noqa: PLR0911
     (``Hyeok`` / ``JAE`` / ``Choi``, ``Dong`` / ``IL`` / ``Lee``, ``Byung`` / ``IL`` / ``Kim``, ``Thi`` / ``MY`` / ``Nguyen``).
     """
     given, (token, *particles) = (first or "").strip(), (middle or "").split() or [""]
-    if not given or given.endswith(",") or not _plain_surname(_surname_before_suffix(last)) or _ROMAN_NUMERAL_RE.fullmatch(token):
+    if not given or given.endswith(",") or not _plain_surname(_surname_before_suffix(last)):
+        return None
+    if _ROMAN_NUMERAL_RE.fullmatch(token.rstrip(".")):
         return None
     if not all(word in _REPEATED_PARTICLES for word in particles):
         return None
@@ -614,6 +625,7 @@ _ORCID_JUNK_RE = re.compile(
 )
 # one footnote star at the edge of a word; a run of stars masks letters (``S***``)
 _FOOTNOTE_RE = re.compile(r"^[*\u2217\u204E](?=[^*\u2217\u204E])|(?<=[^*\u2217\u204E])[*\u2217\u204E]$")
+_FOOTNOTE_STARS = frozenset("*\u2217\u204e")
 _JUNK_HINT_RE = re.compile(r"[*\u2217\u204E^\d]|orcid|http", re.IGNORECASE)
 _ESCAPED_ENTITY_RE = re.compile(r"\^\|\^([A-Za-z]+);")
 
@@ -634,7 +646,8 @@ def _junk_free(value: str | None) -> str | None:
     value = _ESCAPED_ENTITY_RE.sub(lambda m: html.unescape(f"&{m.group(1)};"), value)
     value = _ORCID_URL_RE.sub(" ", _ORCID_ID_RE.sub(" ", value))
     value = _EMPTY_BRACKETS_RE.sub(" ", _ORCID_LABEL_RE.sub(" ", value))
-    words = [_FOOTNOTE_RE.sub("", word) for word in value.split() if not _ORCID_JUNK_RE.match(word)]
+    kept = (word for word in value.split() if not _ORCID_JUNK_RE.match(word) and word not in _FOOTNOTE_STARS)
+    words = [_FOOTNOTE_RE.sub("", word) for word in kept]
     return " ".join(word for word in words if word)
 
 
@@ -764,6 +777,8 @@ def strip_indonesian_degrees(first: str | None, middle: str | None, last: str | 
     while head and head < len(given) and _degree_run_piece(given[head]) and not _SINGLE_LETTER_RE.fullmatch(given[head]):
         head += 1
     tail = degrees[0] if head == 0 and all(_degree_run_piece(t) for t in given[degrees[0] :]) else len(given)
+    while 0 < tail < len(given) and _degree_run_piece(given[tail - 1]) and not _SINGLE_LETTER_RE.fullmatch(given[tail - 1]):
+        tail -= 1
     if head == 0 and tail == len(given):
         return None
     kept = given[head:tail]
@@ -859,6 +874,7 @@ def keep_capitals_surname(first: str | None, middle: str | None, last: str | Non
 
 
 _MIDDLE_SUFFIXES = {word: word for word in ("Jr", "Jr.", "Sr", "Sr.", "II", "III", "IV")} | {"Ii": "II", "Iii": "III", "Iv": "IV"}
+_DOTTED_NUMERALS = {"II.": "II", "III.": "III", "IV.": "IV"}
 # Alone in the middle field these are as often initials or a name: S. R., the Korean Il (``Yun`` / ``Ii`` / ``Go``), the
 # Bulgarian Iv. for Ivanov.
 _NOT_LONE_MIDDLE_SUFFIXES = frozenset({"Sr", "Sr.", "Ii", "Iv"})
@@ -878,9 +894,11 @@ def move_middle_suffix(first: str | None, middle: str | None, last: str | None, 
     A comma left before the moved suffix is dropped (``Emmanuel Jr., III``): with it the parser passes the name through.
     """
     tokens, surname, given = (middle or "").split(), (last or "").strip(), (first or "").strip()
-    if not tokens or tokens[-1] not in _MIDDLE_SUFFIXES or not _empty(suffix) or not given:
+    if not tokens or not given:
         return None
-    word, before = tokens[-1], tokens[:-1]
+    word, before = _DOTTED_NUMERALS.get(tokens[-1], tokens[-1]), tokens[:-1]
+    if word not in _MIDDLE_SUFFIXES or not _empty(suffix):
+        return None
     if not before and word in _NOT_LONE_MIDDLE_SUFFIXES:
         return None
     if word == "Iv" and len(before[-1].rstrip(".")) == 1:
