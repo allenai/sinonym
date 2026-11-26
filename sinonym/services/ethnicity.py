@@ -187,6 +187,9 @@ class EthnicityClassificationService:
             self._normalizer = normalizer
             self._data = data
         self._surname_resolver = SurnameResolver(self._data, self._normalizer)
+        self._overlapping_chinese_surnames = frozenset(
+            self._data.surnames & (OVERLAPPING_KOREAN_SURNAMES | OVERLAPPING_VIETNAMESE_SURNAMES),
+        )
         # Initialize consolidated ML Japanese classifier
         self._ml_classifier = _MLJapaneseClassifier(confidence_threshold=0.8)
 
@@ -249,37 +252,39 @@ class EthnicityClassificationService:
         # Check if this is an all-Chinese character input that could be Japanese. The ML model
         # was trained on unified ideographs, so compatibility variants are folded for its input
         # only (﨑 -> 崎: 田﨑/野﨑/山﨑 are exactly the names it must recognise).
-        folded_text = self._normalizer._text_normalizer.fold_compatibility_ideographs(original_text)
-        compact_chinese_text = self._normalizer._text_preprocessor.compact_all_chinese_input(folded_text)
-        if compact_chinese_text and self._ml_classifier.is_available():
-            # Use ML classifier to check for Japanese names in Chinese characters
-            ml_result = self._ml_classifier.classify_all_chinese_name(compact_chinese_text)
+        if original_text and not original_text.isascii():
+            folded_text = self._normalizer._text_normalizer.fold_compatibility_ideographs(original_text)
+            compact_chinese_text = self._normalizer._text_preprocessor.compact_all_chinese_input(folded_text)
+            if compact_chinese_text and self._ml_classifier.is_available():
+                # Use ML classifier to check for Japanese names in Chinese characters
+                ml_result = self._ml_classifier.classify_all_chinese_name(compact_chinese_text)
 
-            # If ML classifier confidently identifies it as Japanese, reject it
-            if ml_result.success is False:
-                if ml_result.error_message != JAPANESE_CLASSIFIER_REJECTION:
-                    return ml_result
-                if not self._starts_with_chinese_compound_surname(tokens, normalized_cache, folded_text):
-                    return ParseResult.failure("Japanese name detected by ML classifier")
+                # If ML classifier confidently identifies it as Japanese, reject it
+                if ml_result.success is False:
+                    if ml_result.error_message != JAPANESE_CLASSIFIER_REJECTION:
+                        return ml_result
+                    if not self._starts_with_chinese_compound_surname(tokens, normalized_cache, folded_text):
+                        return ParseResult.failure("Japanese name detected by ML classifier")
 
         # Prepare expanded keys for pattern matching
-        expanded_tokens = []
-        for token in tokens:
-            expanded_tokens.append(token)
-            if "-" in token:
-                expanded_tokens.extend(token.split("-"))
+        if any("-" in token for token in tokens):
+            expanded_tokens: list[str] | tuple[str, ...] = []
+            for token in tokens:
+                expanded_tokens.append(token)
+                if "-" in token:
+                    expanded_tokens.extend(token.split("-"))
+        else:
+            expanded_tokens = tokens
 
-        # Use the passed-in normalized_cache, with fallback for missing tokens
-        def get_normalized(token: str) -> str:
-            if token in normalized_cache:
-                return normalized_cache[token]
-            return self._normalizer.norm(token)
+        norm_fn = self._normalizer.norm
 
         # Create comprehensive key sets for pattern matching. Dedup while preserving
         # insertion order (NOT list(set(...)), whose order is PYTHONHASHSEED-dependent and
         # made the first-match ethnicity loop below non-deterministic across processes).
         original_keys_raw = [t.lower() for t in expanded_tokens]
-        original_keys_normalized = [get_normalized(t) for t in expanded_tokens]
+        original_keys_normalized = [
+            normalized_cache[t] if t in normalized_cache else norm_fn(t) for t in expanded_tokens
+        ]
         expanded_keys = list(dict.fromkeys(original_keys_raw + original_keys_normalized))
 
         # Directional Korean structure must be evaluated before every
@@ -308,7 +313,7 @@ class EthnicityClassificationService:
                 return ParseResult.failure("Western name detected")
 
             # Clean key once for multiple checks
-            clean_key = StringManipulationUtils.remove_spaces(key)
+            clean_key = key.replace(" ", "") if " " in key else key
 
             # Check Korean-only surnames (definitive Korean)
             if clean_key in KOREAN_ONLY_SURNAMES:
@@ -331,14 +336,10 @@ class EthnicityClassificationService:
         # TIER 2: CULTURAL CONTEXT (Medium Confidence)
         # =================================================================
 
-        # Optimized validation chain: calculate overlapping surname evidence once with reduced string ops
-        def check_overlapping_surname(token):
-            clean_token_lower = StringManipulationUtils.remove_spaces(token).lower()
-            return clean_token_lower in self._data.surnames and (
-                clean_token_lower in OVERLAPPING_KOREAN_SURNAMES or clean_token_lower in OVERLAPPING_VIETNAMESE_SURNAMES
-            )
-
-        has_overlapping_chinese_surname = any(check_overlapping_surname(token) for token in tokens)
+        overlapping_surnames = self._overlapping_chinese_surnames
+        has_overlapping_chinese_surname = any(
+            (token.replace(" ", "") if " " in token else token).lower() in overlapping_surnames for token in tokens
+        )
 
         korean_score, vietnamese_score = self._calculate_non_chinese_patterns_unified(tokens, expanded_keys, normalized_cache)
         korean_threshold = 2.5 if has_overlapping_chinese_surname else 2.0
@@ -354,9 +355,14 @@ class EthnicityClassificationService:
         # =================================================================
 
         # Chinese default: Accept if we have any reasonable Chinese surname evidence
-        compound_norms = frozenset(
-            get_normalized(token) for token in expanded_tokens if token.lower() in COMPOUND_VARIANTS
-        ) - frozenset(original_keys_raw)
+        if any(raw_key in COMPOUND_VARIANTS for raw_key in original_keys_raw):
+            compound_norms = frozenset(
+                norm_key
+                for raw_key, norm_key in zip(original_keys_raw, original_keys_normalized, strict=True)
+                if raw_key in COMPOUND_VARIANTS
+            ) - frozenset(original_keys_raw)
+        else:
+            compound_norms = frozenset()
         if self._has_sufficient_chinese_surname_strength(expanded_keys, normalized_cache, compound_norms):
             return ParseResult.success_with_name("")
 
@@ -415,8 +421,8 @@ class EthnicityClassificationService:
             return False
         abbreviation = tokens[1]
         return bool(
-            self._surname_resolver.evidence_is_dominant_surname(tokens[0])
-            and self._normalizer.is_vowelless_compact_initial(abbreviation),
+            self._normalizer.is_vowelless_compact_initial(abbreviation)
+            and self._surname_resolver.evidence_is_dominant_surname(tokens[0]),
         )
 
     @staticmethod
@@ -455,11 +461,14 @@ class EthnicityClassificationService:
 
     def contextual_taiwan_given_parts(self, tokens: tuple[str, ...]) -> tuple[str, str] | None:
         """Return an exact contextual Taiwan given-name segmentation."""
-        if len(tokens) != 2 or self._has_directional_korean_structure(tokens):
+        if len(tokens) != 2:
             return None
-        given_key = StringManipulationUtils.remove_spaces(tokens[0]).lower()
+        first = tokens[0]
+        given_key = (first.replace(" ", "") if " " in first else first).lower()
         parts = CONTEXTUAL_TAIWAN_GIVEN_PARTS.get(given_key)
         if parts is None:
+            return None
+        if self._has_directional_korean_structure(tokens):
             return None
         if self._surname_resolver.evidence_frequency(tokens[-1]) < MIN_CONTEXTUAL_TAIWAN_SURNAME_FREQUENCY:
             return None
@@ -532,6 +541,8 @@ class EthnicityClassificationService:
 
     def _korean_given_pairs(self, tokens: tuple[str, ...], surname_type: str) -> list[tuple[str, str]]:
         """Return Korean given-name pairs under plausible surname positions."""
+        if len(tokens) <= 2 and not any("-" in token for token in tokens):
+            return []
         seen_pairs = set()
         pairs: list[tuple[str, str]] = []
         for given_tokens in self._candidate_korean_given_sequences(tokens, surname_type):
@@ -704,21 +715,21 @@ class EthnicityClassificationService:
         """Return whether nonnegative surname evidence reaches the Chinese threshold."""
         chinese_surname_strength = 0.0
 
-        # Local memoization for repeated split/component checks
-        split_result_cache: dict[str, list[str] | None] = {}
-        split_component_validity_cache: dict[tuple[str, ...], bool] = {}
-        component_normalized_cache: dict[str, str] = {}
+        # Local memoization for repeated split/component checks (allocated lazily)
+        split_result_cache: dict[str, list[str] | None] | None = None
+        split_component_validity_cache: dict[tuple[str, ...], bool] | None = None
+        component_normalized_cache: dict[str, str] | None = None
+        surname_resolver = self._surname_resolver
+        given_names_normalized = self._data.given_names_normalized
 
         for key in expanded_keys:
-            clean_key = StringManipulationUtils.remove_spaces(key)
+            clean_key = key.replace(" ", "") if " " in key else key
             clean_key_lower = clean_key.lower()
 
             # Check if this is a Chinese surname
-            is_chinese_surname = self._surname_resolver.evidence_is_surname(clean_key)
-
-            if is_chinese_surname:
+            if surname_resolver.evidence_is_surname(clean_key):
                 # Get frequency
-                surname_freq = self._surname_resolver.evidence_frequency(clean_key)
+                surname_freq = surname_resolver.evidence_frequency(clean_key)
 
                 if surname_freq > 0:
                     if surname_freq >= 10000:
@@ -749,6 +760,8 @@ class EthnicityClassificationService:
                         return True
             else:
                 # NEW: Check if this could be a compound Chinese given name
+                if split_result_cache is None:
+                    split_result_cache = {}
                 if clean_key_lower in split_result_cache:
                     split_result = split_result_cache[clean_key_lower]
                 else:
@@ -765,10 +778,14 @@ class EthnicityClassificationService:
                     split_result_cache[clean_key_lower] = split_result
 
                 if split_result and len(split_result) >= 2:
+                    if split_component_validity_cache is None:
+                        split_component_validity_cache = {}
                     split_result_key = tuple(split_result)
                     if split_result_key in split_component_validity_cache:
                         all_chinese_components = split_component_validity_cache[split_result_key]
                     else:
+                        if component_normalized_cache is None:
+                            component_normalized_cache = {}
                         # Check if all components are valid Chinese given name components
                         all_chinese_components = True
                         for component in split_result:
@@ -778,7 +795,7 @@ class EthnicityClassificationService:
                                 comp_normalized = self._normalizer.norm(component)
                                 component_normalized_cache[component] = comp_normalized
 
-                            if comp_normalized not in self._data.given_names_normalized:
+                            if comp_normalized not in given_names_normalized:
                                 all_chinese_components = False
                                 break
 

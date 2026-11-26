@@ -95,7 +95,7 @@ def load_glued_initial_prefixes() -> None:
     _glued_prefixes()
 
 
-def unglue_given_initial(first: str | None, middle: str | None, last: str | None, suffix: str | None):  # noqa: PLR0911
+def unglue_given_initial(first: str | None, middle: str | None, last: str | None, suffix: str | None):  # noqa: C901, PLR0911
     """``DamianG.`` / - / ``Downey`` -> ``("Damian", "G.")``: a middle initial glued to the given name.
 
     The surname must be plain (``_plain_surname``). The word must be a common given name
@@ -107,7 +107,18 @@ def unglue_given_initial(first: str | None, middle: str | None, last: str | None
     """
     if not _empty(suffix) or not _empty(middle):
         return None
-    match = _GLUED_RE.fullmatch(unicodedata.normalize("NFC", (first or "").strip()))
+    stripped_first = (first or "").strip()
+    if len(stripped_first) < 4:  # noqa: PLR2004
+        return None
+    if stripped_first.isascii():
+        # Match requires 3+ letters followed by an uppercase ASCII letter (and optional trailing '.').
+        last_letter = stripped_first[-2] if stripped_first[-1] == "." else stripped_first[-1]
+        if not last_letter.isupper():
+            return None
+        normalized_first = stripped_first
+    else:
+        normalized_first = unicodedata.normalize("NFC", stripped_first)
+    match = _GLUED_RE.fullmatch(normalized_first)
     if match is None or not _plain_surname(last):
         return None
     word, letter, period = match.groups()
@@ -139,6 +150,8 @@ def collapse_doubled_initial_periods(first: str | None, middle: str | None, last
     ``PARLAR`` included); otherwise the unrecognized ``X..`` token is left to the parser as before. A name with three or
     more periods in a row (an ellipsis) is left as written.
     """
+    if ".." not in (first or "") and ".." not in (middle or ""):
+        return None
     personal = f"{first or ''} {middle or ''}"
     if "..." in personal or not _DOUBLE_PERIOD_RE.search(personal):
         return None
@@ -260,7 +273,9 @@ def drop_repeated_particle(first: str | None, middle: str | None, last: str | No
     The surname field must go on after the particle, so a one-word surname field (``Kim`` / ``Van`` / ``Van``) is left
     alone.
     """
-    middle_tokens, last_tokens = (middle or "").split(), (last or "").split()
+    if not middle or not last:
+        return None
+    middle_tokens, last_tokens = middle.split(), last.split()
     if not middle_tokens or len(last_tokens) < 2 or not (first or "").strip():  # noqa: PLR2004
         return None
     particle = middle_tokens[-1].casefold()
@@ -298,7 +313,9 @@ def strip_titles(first: str | None, middle: str | None, last: str | None, suffix
     Degree words that follow a title go with it (``Dr. rer. nat.``, ``Dipl.-Ing. Dr.``). Every remaining given and middle
     word must be a name word or an initial, and the surname field must keep a word that is not a credential or title.
     """
-    first_tokens, middle_tokens = (first or "").split(), (middle or "").split()
+    if not middle:
+        return None
+    first_tokens, middle_tokens = (first or "").split(), middle.split()
     tokens = first_tokens + middle_tokens
     if not middle_tokens or not any(map(_title_token, tokens)):
         return None
@@ -368,7 +385,9 @@ _CONTRIBUTOR_ROLES = frozenset(
 
 def strip_contributor_role(first: str | None, middle: str | None, last: str | None, suffix: str | None):  # noqa: ARG001
     """``Translated`` / ``by N.B.`` / ``Zelinska`` -> ``("N.B.", None)``: a credit line split across the given fields."""
-    first_tokens, middle_tokens = (first or "").split(), (middle or "").split()
+    if not middle or not first:
+        return None
+    first_tokens, middle_tokens = first.split(), middle.split()
     if (
         len(first_tokens) != 1
         or first_tokens[0].casefold() not in _CONTRIBUTOR_ROLES
@@ -458,14 +477,11 @@ def split_joined_initials(first: str | None, middle: str | None, last: str | Non
     (``DP / Sá`` is read as Chinese and loses its accent). A multi-word surname is not repaired: the parser would
     re-split it (``WB / de Lau``).
     """
-    surname = _surname_before_suffix(last)
-    if not _empty(suffix) or not _empty(middle) or not _plain_surname(surname) or len(surname.split()) != 1:
-        return None
-    if (_ROMAN_NUMERAL_RE.fullmatch(surname) and surname != "Xi") or surname.lower() in _NOT_SURNAMES:
-        return None
-    if len(surname) <= 3 and not surname.isascii():  # noqa: PLR2004
+    if not _empty(suffix) or not _empty(middle):
         return None
     token = (first or "").strip()
+    if not (2 <= len(token) <= 4):  # noqa: PLR2004
+        return None
     caps = _JOINED_CAPS_RE.fullmatch(token)
     if caps is not None:
         letters = caps.group(1)
@@ -477,6 +493,13 @@ def split_joined_initials(first: str | None, middle: str | None, last: str | Non
         return None
     if "." not in token and letters in _LETTER_NAMES:
         return None
+    surname = _surname_before_suffix(last)
+    if not _plain_surname(surname) or len(surname.split()) != 1:
+        return None
+    if (_ROMAN_NUMERAL_RE.fullmatch(surname) and surname != "Xi") or surname.lower() in _NOT_SURNAMES:
+        return None
+    if len(surname) <= 3 and not surname.isascii():  # noqa: PLR2004
+        return None
     return letters[0] + ".", " ".join(ch + "." for ch in letters[1:])
 
 
@@ -487,7 +510,7 @@ _NOT_MIDDLE_INITIALS = _NOT_INITIALS | {
 }
 
 
-def split_joined_middle_initials(  # noqa: PLR0911
+def split_joined_middle_initials(  # noqa: C901, PLR0911
     first: str | None,
     middle: str | None,
     last: str | None,
@@ -502,8 +525,16 @@ def split_joined_middle_initials(  # noqa: PLR0911
     (``DE``, ``EL``) or a romanized East Asian syllable, alone, after one or before an East Asian surname
     (``Hyeok`` / ``JAE`` / ``Choi``, ``Dong`` / ``IL`` / ``Lee``, ``Byung`` / ``IL`` / ``Kim``, ``Thi`` / ``MY`` / ``Nguyen``).
     """
-    given, (token, *particles) = (first or "").strip(), (middle or "").split() or [""]
-    if not given or given.endswith(",") or not _plain_surname(_surname_before_suffix(last)):
+    if not middle or not first:
+        return None
+    given = first.strip()
+    middle_parts = middle.split()
+    if not given or not middle_parts or given.endswith(","):
+        return None
+    token, *particles = middle_parts
+    if not (2 <= len(token) <= 4):  # noqa: PLR2004
+        return None
+    if not _plain_surname(_surname_before_suffix(last)):
         return None
     if _ROMAN_NUMERAL_RE.fullmatch(token.rstrip(".")):
         return None
@@ -579,6 +610,8 @@ def latin_lookalikes(first: str | None, middle: str | None, last: str | None):
     capitals with a Cyrillic run (``TKACHЕНКО``), a Cyrillic с after t (as often ts as tc) and the middle field
     (patronymics and their abbreviations) stay as written.
     """
+    if (first is None or first.isascii()) and (last is None or last.isascii()):
+        return None
     if not _CYRILLIC_LETTER_RE.search(f"{first or ''}{last or ''}"):
         return None
     fixed = (_latin_field(first), middle, _latin_field(last))
@@ -614,6 +647,8 @@ def _unmojibake(value: str) -> str:
 
 def fix_mojibake(first: str | None, middle: str | None, last: str | None):
     """``ZoltÃ¡n`` / - / ``GÃ¡lik`` -> ``("Zoltán", None, "Gálik")``: UTF-8 bytes decoded as Windows-1252."""
+    if (first is None or first.isascii()) and (middle is None or middle.isascii()) and (last is None or last.isascii()):
+        return None
     if not _MOJIBAKE_RE.search(f"{first or ''} {middle or ''} {last or ''}"):
         return None
     fixed = tuple(None if value is None else _unmojibake(value) for value in (first, middle, last))
@@ -723,6 +758,8 @@ def drop_han_beside_latin(first: str | None, middle: str | None, last: str | Non
     Cantonese syllables keeps its Han form, which the parser reads to tell the surname apart (``Su`` / ``苏`` /
     ``Zhang 张``, ``简月`` / ``Jian`` / ``Yue``).
     """
+    if (first is None or first.isascii()) and (middle is None or middle.isascii()) and (last is None or last.isascii()):
+        return None
     if not _HAN_LETTER_RE.search(f"{first or ''} {middle or ''} {last or ''}") or not any(
         _HAN_WORD_RE.fullmatch(word) for value in (first, middle, last) for word in (value or "").split()
     ):
@@ -837,7 +874,9 @@ def space_hyphenated_generation(first: str | None, middle: str | None, last: str
     """``Walter`` / - / ``Faria-Neto`` -> ``("Walter", None, "Faria Neto")``: a Portuguese generation word hyphenated to the
     surname is written apart, so it goes to the suffix as it does when the source writes ``Faria Neto``. Not after a
     particle (``Del-Neto``) or in a surname-only source."""
-    surname = (last or "").strip()
+    if not last or ("-" not in last and "\u2010" not in last and "\u2011" not in last):
+        return None
+    surname = last.strip()
     match = _HYPHENATED_GENERATION_RE.search(surname)
     if match is None or (not (first or "").strip() and not (middle or "").strip()):
         return None
@@ -861,8 +900,17 @@ def swap_initials_surname(first: str | None, middle: str | None, last: str | Non
     register it as their family name; when the word is a given name (``Natrayan`` / - / ``L``), most register it as the
     given name, so those stay. A lone undotted O, U, E, Y or I is a Korean or Vietnamese surname and stays.
     """
+    if middle and middle.strip():
+        return None
     word, initials = (first or "").strip(), (last or "").strip()
-    if (middle or "").strip() or " " in word or not _INITIALS_SURNAME_RE.fullmatch(initials):
+    if (
+        not initials
+        or len(initials) > 9  # noqa: PLR2004
+        or not initials[0].isupper()
+        or (len(initials) > 3 and "." not in initials and " " not in initials)  # noqa: PLR2004
+    ):
+        return None
+    if " " in word or not _INITIALS_SURNAME_RE.fullmatch(initials):
         return None
     if initials in _ONE_LETTER_SURNAMES or not re.fullmatch(r"[A-Z][a-z]{2,}", word) or token_role(word) != "surname":
         return None
@@ -886,8 +934,10 @@ def keep_capitals_surname(first: str | None, middle: str | None, last: str | Non
     and a single word before it is left to the initials-surname rule (``Baxter`` / - / ``MA``).
     """
     surname = (last or "").strip()
+    if surname not in _SURNAME_DEGREE_WORDS or (suffix or "").strip():
+        return None
     words = [word for word in f"{first or ''} {middle or ''}".split() if any(ch.isalpha() for ch in word)]
-    if surname not in _SURNAME_DEGREE_WORDS or len(words) < _MIN_WORDS_BEFORE_DEGREE or (suffix or "").strip():
+    if len(words) < _MIN_WORDS_BEFORE_DEGREE:
         return None
     letters = [ch for word in words for ch in word if ch.isalpha()]
     if not all(ch.isupper() and unicodedata.name(ch, "").startswith("LATIN") for ch in letters):
@@ -915,7 +965,9 @@ def move_middle_suffix(first: str | None, middle: str | None, last: str | None, 
     given name.
     A comma left before the moved suffix is dropped (``Emmanuel Jr., III``): with it the parser passes the name through.
     """
-    tokens, surname, given = (middle or "").split(), (last or "").strip(), (first or "").strip()
+    if not middle or not first:
+        return None
+    tokens, surname, given = middle.split(), (last or "").strip(), first.strip()
     if not tokens or not given:
         return None
     word, before = _DOTTED_NUMERALS.get(tokens[-1], tokens[-1]), tokens[:-1]
@@ -1028,6 +1080,7 @@ def _spelled_initials(token: str) -> bool:
     return bool(_LETTER_INITIALS_RE.fullmatch(token)) and len(_LAST_FIELD_KEY_RE.sub("", token)) <= _MAX_SPELLED_INITIALS
 
 
+@lru_cache(maxsize=65536)
 def _only_credentials(last: str | None) -> bool:
     """Every word is a listed credential, or the words spell one together (``Mb Bs``) without being spelled initials."""
     tokens = _field_tokens(last)

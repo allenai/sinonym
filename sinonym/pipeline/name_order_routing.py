@@ -187,9 +187,16 @@ def build_pp_abstain_rows(batch_result: BatchParseResult, detector_context: Any)
     fields.
     """
     rows: list[MutableRow] = []
+    normalizer = getattr(detector_context, "_normalizer", None)
+    has_normalizer = normalizer is not None and hasattr(normalizer, "apply")
     for result, evidence in _iter_result_evidence(batch_result):
-        normalized_input = _normalize_for_routing(detector_context, evidence.raw_name)
-        script_representation = _script_representation_for_routing(detector_context, normalized_input, evidence)
+        if has_normalizer and evidence.script_representation == "latin_only" and evidence.raw_name.isascii():
+            script_representation = "latin_only"
+            cjk_has_space = False
+        else:
+            normalized_input = _normalize_for_routing(detector_context, evidence.raw_name)
+            script_representation = _script_representation_for_routing(detector_context, normalized_input, evidence)
+            cjk_has_space = script_representation == "han_only" and len(normalized_input.tokens) > 1
         rows.append(
             {
                 "pp_success": result.success,
@@ -201,7 +208,7 @@ def build_pp_abstain_rows(batch_result: BatchParseResult, detector_context: Any)
                 "selected_surname_frequency": _float_or_zero(evidence.selected_surname_frequency),
                 "has_cjk": _has_cjk(script_representation),
                 "has_latin": _has_latin(script_representation),
-                "cjk_has_space": script_representation == "han_only" and len(normalized_input.tokens) > 1,
+                "cjk_has_space": cjk_has_space,
                 "raw_tokens": evidence.raw_token_count,
                 "selected_surname_frequency_ratio": evidence.selected_over_alternate_surname_frequency_ratio,
             },

@@ -39,6 +39,8 @@ def strip_name_variation_selectors(text: str) -> str:
 
 def exact_name_surface_key(value: str) -> str:
     """Return an exact-match key while preserving accents and punctuation."""
+    if value.isascii():
+        return " ".join(value.split()).lower()
     normalized = unicodedata.normalize("NFKC", value)
     return " ".join(normalized.split()).casefold()
 
@@ -48,6 +50,7 @@ class TextNormalizer:
 
     def __init__(self, config):
         self._config = config
+        self._hyphens_apostrophes_tr = dict(config.hyphens_apostrophes_tr)
 
     @lru_cache(maxsize=32_768)
     def normalize_token(self, token: str) -> str:
@@ -67,9 +70,12 @@ class TextNormalizer:
             Fully normalized token
         """
         # Step 1: Normalize Unicode and remove diacritical marks, then lowercase
-        normalized = unicodedata.normalize("NFD", token)
-        without_diacritics = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
-        low = without_diacritics.lower()
+        if token.isascii():
+            low = token.lower()
+        else:
+            normalized = unicodedata.normalize("NFD", token)
+            without_diacritics = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+            low = without_diacritics.lower()
 
         # Step 2: Apply non-Wade-Giles romanization precedence system
         mapped = ROMANIZATION_EXCEPTIONS.get(low)
@@ -92,7 +98,14 @@ class TextNormalizer:
             wade_giles_result = "chen"
 
         # Step 5: Remove apostrophes and hyphens from the final result
-        return wade_giles_result.translate(self._config.hyphens_apostrophes_tr)
+        if (
+            wade_giles_result.isascii()
+            and "-" not in wade_giles_result
+            and "'" not in wade_giles_result
+            and "`" not in wade_giles_result
+        ):
+            return wade_giles_result
+        return wade_giles_result.translate(self._hyphens_apostrophes_tr)
 
     @lru_cache(maxsize=32_768)
     def normalize_token_light(self, token: str) -> str:
@@ -103,9 +116,14 @@ class TextNormalizer:
         Wade-Giles/Cantonese aliases, while still applying Unicode cleanup and
         punctuation stripping.
         """
+        if token.isascii():
+            low = token.lower()
+            if "-" not in low and "'" not in low and "`" not in low:
+                return low
+            return low.translate(self._hyphens_apostrophes_tr)
         normalized = unicodedata.normalize("NFD", token)
         without_diacritics = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
-        return without_diacritics.lower().translate(self._config.hyphens_apostrophes_tr)
+        return without_diacritics.lower().translate(self._hyphens_apostrophes_tr)
 
     def _apply_unified_wade_giles(self, token: str) -> str:
         """

@@ -33,6 +33,8 @@ class TextPreprocessor:
     def __init__(self, config: ChineseNameConfig, normalizer_service):
         self._config = config
         self._normalizer_service = normalizer_service
+        self._hyphens_apostrophes_tr = dict(config.hyphens_apostrophes_tr)
+        self._roman_punctuation_fold_tr = dict(config.roman_punctuation_fold_tr)
 
     def preprocess_input(self, raw: str, data_context=None) -> tuple[str, bool, bool]:
         """
@@ -147,7 +149,7 @@ class TextPreprocessor:
 
         cleaned = self._config.sep_pattern.sub("", text.strip())
         cleaned = self._config.whitespace_pattern.sub("", cleaned)
-        cleaned = cleaned.translate(self._config.hyphens_apostrophes_tr)
+        cleaned = cleaned.translate(self._hyphens_apostrophes_tr)
 
         if not cleaned:
             return ""
@@ -188,7 +190,7 @@ class TextPreprocessor:
         # Remove separator punctuation for analysis. Whitespace remains significant
         # because spaced Han names use separate parsing logic downstream.
         cleaned = self._config.sep_pattern.sub("", text.strip())
-        cleaned = cleaned.translate(self._config.hyphens_apostrophes_tr)
+        cleaned = cleaned.translate(self._hyphens_apostrophes_tr)
         if not cleaned:
             return False
         return self._contains_only_cjk_chars(cleaned)
@@ -204,9 +206,9 @@ class TextPreprocessor:
 
         Returns True if non-Chinese scripts are detected.
         """
-        if not text:
+        if not text or text.isascii():
             return False
-        text = text.translate(self._config.roman_punctuation_fold_tr)
+        text = text.translate(self._roman_punctuation_fold_tr)
         if text.isascii():
             return False
 

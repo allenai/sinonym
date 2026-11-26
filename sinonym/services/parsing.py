@@ -476,7 +476,7 @@ class NameParsingService:
         if (
             len(surname_tokens) == 1
             and surname_logp > self._config.default_surname_logp
-            and not self._config.cjk_pattern.search(surname_tokens[0])
+            and (surname_tokens[0].isascii() or not self._config.cjk_pattern.search(surname_tokens[0]))
         ):
             share_logp = self._surname_spelling_share_logp(surname_tokens[0])
             if share_logp < 0.0:
@@ -827,18 +827,18 @@ class NameParsingService:
     def _given_name_key(self, given_token: str, normalized_cache: dict[str, str]) -> str:
         """Convert given name token to lookup key, preferring Chinese characters when available."""
         # If token contains Chinese characters, try Chinese character lookup first
-        if self._config.cjk_pattern.search(given_token):
+        if not given_token.isascii() and self._config.cjk_pattern.search(given_token):
             if given_token in self._data.given_log_probabilities:
                 return given_token
 
         light_key = self._normalizer.norm_light(given_token)
-        remapped_key = self._normalizer.norm(given_token)
+        remapped_key = normalized_cache[given_token] if given_token in normalized_cache else self._normalizer.norm(given_token)
         light_logp = self._data.get_given_logp(light_key, float("-inf"))
         remapped_logp = self._data.get_given_logp(remapped_key, float("-inf"))
         if light_logp > float("-inf") or remapped_logp > float("-inf"):
             return light_key if light_logp >= remapped_logp else remapped_key
         # Fall back to normalized form
-        return self._normalizer.norm(self._normalizer.get_normalized(given_token, normalized_cache))
+        return self._normalizer.norm(remapped_key)
 
     def _calculate_format_alignment_bonus(
         self,

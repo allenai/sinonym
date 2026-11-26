@@ -87,7 +87,7 @@ def _reviewed_literal_pattern(raw_name: str) -> str | None:
         return "placeholder_literal"
     if raw_name in REVIEWED_NON_PERSON_LITERALS:
         return "non_person_literal"
-    if REVIEWED_MONTH_RANGE_RE.fullmatch(raw_name):
+    if "-" in raw_name and REVIEWED_MONTH_RANGE_RE.fullmatch(raw_name):
         return "month_range"
     return None
 
@@ -104,18 +104,28 @@ def reviewed_non_person_text_pattern(raw_name: str) -> str | None:
     literal_pattern = _reviewed_literal_pattern(surface)
     if literal_pattern is not None:
         return literal_pattern
-    if _is_reviewed_hangul_organization_surface(surface):
+    is_ascii = surface.isascii()
+    if not is_ascii and _is_reviewed_hangul_organization_surface(surface):
         return "hangul_organization_marker"
-    words = set(ASCII_ALNUM_WORD_RE.findall(surface.casefold()))
-    if words & REVIEWED_ORGANIZATION_TOKENS:
+    folded = surface.lower() if is_ascii else surface.casefold()
+    if ("kabupaten" in folded or "libraries" in folded) and (
+        set(ASCII_ALNUM_WORD_RE.findall(folded)) & REVIEWED_ORGANIZATION_TOKENS
+    ):
         return "organization_token"
-    if REVIEWED_HYPHENATED_SERVICES_RE.search(surface) and not REVIEWED_SERVICES_PERSON_TAIL_RE.search(surface):
+    if (
+        "-" in surface
+        and "services" in folded
+        and REVIEWED_HYPHENATED_SERVICES_RE.search(surface)
+        and not REVIEWED_SERVICES_PERSON_TAIL_RE.search(surface)
+    ):
         return "hyphenated_services"
     return None
 
 
 def _is_reviewed_hangul_organization_surface(raw_name: str) -> bool:
     """Match a surface made entirely of reviewed Hangul organization tokens."""
+    if raw_name.isascii():
+        return False
     hangul_tokens = unicodedata.normalize("NFKC", raw_name).split()
     all_tokens_are_organizational = all(
         any(token.endswith(marker) for marker in REVIEWED_HANGUL_ORGANIZATION_SUFFIXES) for token in hangul_tokens
@@ -125,7 +135,13 @@ def _is_reviewed_hangul_organization_surface(raw_name: str) -> bool:
 
 def _is_reviewed_hangul_organization(fields: tuple[str, str, str]) -> bool:
     """Match an organization-only Hangul source shape with no person token."""
-    return bool(not fields[0] and not fields[1] and _is_reviewed_hangul_organization_surface(fields[2]))
+    return bool(
+        not fields[0]
+        and not fields[1]
+        and fields[2]
+        and not fields[2].isascii()
+        and _is_reviewed_hangul_organization_surface(fields[2]),
+    )
 
 
 STRONG_CJK_NON_PERSON_MARKERS = (
@@ -156,7 +172,7 @@ CJK_NON_PERSON_SUFFIX_MARKERS = STRONG_CJK_NON_PERSON_MARKERS
 
 def _is_reviewed_last_field_han_institution(fields: tuple[str, str, str]) -> bool:
     """Match a last-only structured source field containing a strong Han institution marker."""
-    if fields[0] or fields[1] or not fields[2]:
+    if fields[0] or fields[1] or not fields[2] or fields[2].isascii():
         return False
     last_name = unicodedata.normalize("NFKC", fields[2])
     # Exact U+00B7 marks an already-reviewed packed source surface, which may

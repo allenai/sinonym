@@ -209,6 +209,21 @@ class PredictorConfig(_BaseSettings):
         env_prefix = "SINONYM_"
 
 
+def _with_chinese_detected(author: ResolvedAuthorFields, *, detected: bool) -> ResolvedAuthorFields:
+    if not detected or author.chinese_detected:
+        return author
+    return ResolvedAuthorFields.construct(
+        first_name=author.first_name,
+        middle_names=author.middle_names,
+        last_name=author.last_name,
+        suffix=author.suffix,
+        chinese_detected=True,
+        resolution_provenance=author.resolution_provenance,
+        resolution_action=author.resolution_action,
+        resolution_reason=author.resolution_reason,
+    )
+
+
 class Predictor:
     """Resolve each paper to one authoritative set of author fields."""
 
@@ -216,6 +231,7 @@ class Predictor:
         self._config = config
         self._artifacts_dir = artifacts_dir
         self._detector = _ChineseNameDetector()
+        self._detector._skip_vys_if_no_focal_success = True  # noqa: SLF001
         self._resolver = _Resolver(self._detector)
         # the data tables the TIMO path reads, loaded here so no request pays for the first load
         _load_glued_initial_prefixes()
@@ -237,16 +253,19 @@ class Predictor:
             raise RuntimeError(message)
 
         return [
-            self._resolver.resolve_pp_vys_author(
-                source=source,
-                paper_authors=sources,
-                raw_name=pp_batch.names[index],
-                paper_names=pp_batch.names,
-                focal_index=index,
-                row=row,
-                pp_result=pp_batch.results[index],
-                vys_result=pool.results[index],
-            ).copy(update={"chinese_detected": pp_batch.results[index].success})
+            _with_chinese_detected(
+                self._resolver.resolve_pp_vys_author(
+                    source=source,
+                    paper_authors=sources,
+                    raw_name=pp_batch.names[index],
+                    paper_names=pp_batch.names,
+                    focal_index=index,
+                    row=row,
+                    pp_result=pp_batch.results[index],
+                    vys_result=pool.results[index],
+                ),
+                detected=pp_batch.results[index].success,
+            )
             for index, (source, row) in enumerate(zip(sources, rows, strict=True))
         ]
 
@@ -262,15 +281,18 @@ class Predictor:
             raise RuntimeError(message)
 
         return [
-            self._resolver.resolve_pp_author(
-                source=source,
-                paper_authors=sources,
-                raw_name=pp_batch.names[index],
-                paper_names=pp_batch.names,
-                focal_index=index,
-                row=row,
-                result=pp_batch.results[index],
-            ).copy(update={"chinese_detected": pp_batch.results[index].success})
+            _with_chinese_detected(
+                self._resolver.resolve_pp_author(
+                    source=source,
+                    paper_authors=sources,
+                    raw_name=pp_batch.names[index],
+                    paper_names=pp_batch.names,
+                    focal_index=index,
+                    row=row,
+                    result=pp_batch.results[index],
+                ),
+                detected=pp_batch.results[index].success,
+            )
             for index, (source, row) in enumerate(zip(sources, rows, strict=True))
         ]
 
@@ -328,7 +350,7 @@ class Predictor:
         """Resolve one prediction per paper, preserving paper and author order."""
         predictions = self._predict_repaired(instances)
         return [
-            Prediction(
+            Prediction.construct(
                 authors=[
                     _source_suffix(_unmoved_suffix(author, source), source)
                     for author, source in zip(p.authors, i.pp_authors, strict=True)
@@ -339,12 +361,16 @@ class Predictor:
 
     def _predict_repaired(self, instances: list[Instance]) -> list[Prediction]:
         repairs = [[_repaired_source(author) for author in instance.pp_authors] for instance in instances]
-        predictions = self._resolve_instances(
-            [
-                instance.copy(update={"pp_authors": [author for author, _ in repaired]})
-                for instance, repaired in zip(instances, repairs, strict=True)
-            ],
-        )
+        repaired_instances = [
+            instance
+            if all(author is orig for (author, _), orig in zip(repaired, instance.pp_authors, strict=True))
+            else Instance.construct(
+                pp_authors=[author for author, _ in repaired],
+                vys_other_names=instance.vys_other_names,
+            )
+            for instance, repaired in zip(instances, repairs, strict=True)
+        ]
+        predictions = self._resolve_instances(repaired_instances)
         checked = [
             index
             for index, repaired in enumerate(repairs)
@@ -357,13 +383,16 @@ class Predictor:
             return predictions
         references = self._resolve_instances(
             [
-                instances[index].copy(update={"pp_authors": [reference or author for author, reference in repairs[index]]})
+                Instance.construct(
+                    pp_authors=[reference or author for author, reference in repairs[index]],
+                    vys_other_names=instances[index].vys_other_names,
+                )
                 for index in checked
             ],
         )
         for index, reference_prediction in zip(checked, references, strict=True):
             authors = zip(predictions[index].authors, reference_prediction.authors, repairs[index], strict=True)
-            predictions[index] = Prediction(
+            predictions[index] = Prediction.construct(
                 authors=[
                     author if unrepaired is None else _kept_given_words_out_of_surname(author, reference, source)
                     for author, reference, (source, unrepaired) in authors
@@ -379,7 +408,7 @@ class Predictor:
         for instance_index, instance in enumerate(instances):
             pp_names = [author.full_name() for author in instance.pp_authors]
             if not pp_names:
-                predictions[instance_index] = Prediction(authors=[])
+                predictions[instance_index] = Prediction.construct(authors=[])
                 continue
 
             vys_pool_names = [*pp_names, *instance.vys_other_names] if instance.vys_other_names else None
@@ -413,7 +442,7 @@ class Predictor:
                     pp_batch=batch_result.pp_batch,
                     pool=batch_result.vys_batch,
                 )
-            predictions[instance_index] = Prediction(authors=[_korean_given(author) for author in authors])
+            predictions[instance_index] = Prediction.construct(authors=[_korean_given(author) for author in authors])
 
         if any(prediction is None for prediction in predictions):
             message = "prediction plan did not fill every instance slot"
