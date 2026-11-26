@@ -44,6 +44,9 @@ class SurnameResolver:
         self._data = data
         self._normalizer = normalizer
         self._cached_parser_key = lru_cache(maxsize=_PARSER_KEY_CACHE_SIZE)(self._derive_parser_key)
+        self._cached_evidence_key = lru_cache(maxsize=65536)(self._derive_evidence_key)
+        self._cached_evidence_frequency = lru_cache(maxsize=65536)(self._derive_evidence_frequency)
+        self._cached_evidence_is_surname = lru_cache(maxsize=65536)(self._derive_evidence_is_surname)
 
     def parser_frequency(self, surname_tokens: Sequence[str]) -> float:
         """Return surname frequency under the parser-strict lookup policy."""
@@ -64,6 +67,9 @@ class SurnameResolver:
 
     def evidence_frequency(self, token: str) -> float:
         """Return surname frequency under the as-written evidence lookup policy."""
+        return self._cached_evidence_frequency(token)
+
+    def _derive_evidence_frequency(self, token: str) -> float:
         return self._data.get_surname_freq_as_written(self._evidence_key(token))
 
     def evidence_frequency_for_key(self, key: str) -> float:
@@ -72,6 +78,9 @@ class SurnameResolver:
 
     def evidence_is_surname(self, token: str) -> bool:
         """Return whether ``token`` is recognized under the evidence lookup policy."""
+        return self._cached_evidence_is_surname(token)
+
+    def _derive_evidence_is_surname(self, token: str) -> bool:
         return self._data.is_surname(token, self._evidence_key(token))
 
     def evidence_is_dominant_surname(self, token: str) -> bool:
@@ -80,6 +89,8 @@ class SurnameResolver:
 
     def evidence_is_wade_giles_apostrophe_surname(self, token: str) -> bool:
         """Return exact-token Wade-Giles spelling backed by existing surname data."""
+        if token.isascii() and "'" not in token and "`" not in token:
+            return False
         normalized_apostrophe = token.translate(_APOSTROPHE_TRANSLATION)
         return bool(
             _WADE_GILES_APOSTROPHE_SURNAME_RE.fullmatch(normalized_apostrophe) and self.evidence_is_surname(token),
@@ -110,8 +121,9 @@ class SurnameResolver:
 
     def _parser_key(self, surname_tokens: Sequence[str]) -> str:
         """Derive the parser-strict surname key used by parse scoring."""
-        self._require_tokens(surname_tokens)
-        return self._cached_parser_key(tuple(surname_tokens))
+        if not surname_tokens:
+            self._require_tokens(surname_tokens)
+        return self._cached_parser_key(surname_tokens if type(surname_tokens) is tuple else tuple(surname_tokens))
 
     def _derive_parser_key(self, cache_key: tuple[str, ...]) -> str:
         """Derive an uncached parser key from an immutable token sequence."""
@@ -121,7 +133,7 @@ class SurnameResolver:
         return StringManipulationUtils.join_with_spaces(normalized_tokens)
 
     def _single_parser_key(self, token: str) -> str:
-        if self._contains_cjk(token) and token in self._data.surname_frequencies:
+        if not token.isascii() and self._contains_cjk(token) and token in self._data.surname_frequencies:
             return token
 
         light_key = self._normalizer.norm_light(token)
@@ -142,6 +154,9 @@ class SurnameResolver:
 
     def _evidence_key(self, token: str) -> str:
         """Derive the as-written surname evidence key."""
+        return self._cached_evidence_key(token)
+
+    def _derive_evidence_key(self, token: str) -> str:
         return self._data.surname_lookup_key(
             self._normalizer.norm_light(token),
             self._normalizer.norm(token),

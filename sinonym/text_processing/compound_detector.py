@@ -22,6 +22,22 @@ from sinonym.utils.string_manipulation import StringManipulationUtils
 if TYPE_CHECKING:
     from sinonym.services.normalization import CompoundMetadata, SpacedCompoundSpan
 
+_COMPOUND_VARIANT_VALUES = frozenset(COMPOUND_VARIANTS.values())
+_COMPOUND_METADATA_CLS: type[CompoundMetadata] | None = None
+_SPACED_COMPOUND_SPAN_CLS: type[SpacedCompoundSpan] | None = None
+_NOT_COMPOUND_METADATA: CompoundMetadata | None = None
+
+
+def _ensure_compound_types() -> tuple[type[CompoundMetadata], type[SpacedCompoundSpan], CompoundMetadata]:
+    global _COMPOUND_METADATA_CLS, _SPACED_COMPOUND_SPAN_CLS, _NOT_COMPOUND_METADATA  # noqa: PLW0603
+    if _COMPOUND_METADATA_CLS is None or _SPACED_COMPOUND_SPAN_CLS is None or _NOT_COMPOUND_METADATA is None:
+        from sinonym.services.normalization import CompoundMetadata, SpacedCompoundSpan
+
+        _COMPOUND_METADATA_CLS = CompoundMetadata
+        _SPACED_COMPOUND_SPAN_CLS = SpacedCompoundSpan
+        _NOT_COMPOUND_METADATA = CompoundMetadata(is_compound=False)
+    return _COMPOUND_METADATA_CLS, _SPACED_COMPOUND_SPAN_CLS, _NOT_COMPOUND_METADATA
+
 
 class CompoundDetector:
     """
@@ -55,8 +71,6 @@ class CompoundDetector:
         Returns:
             Token-keyed display metadata and exact spaced-compound occurrences.
         """
-        # Import here to avoid circular imports
-
         compound_metadata = {}
 
         # First, detect single-token compounds
@@ -83,8 +97,7 @@ class CompoundDetector:
         Returns:
             CompoundMetadata with detection results
         """
-        # Import here to avoid circular imports
-        from sinonym.services.normalization import CompoundMetadata
+        compound_meta_cls, _, not_compound = _ensure_compound_types()
 
         token_lower = token.strip().lower()
 
@@ -92,7 +105,7 @@ class CompoundDetector:
         if token_lower in COMPOUND_VARIANTS:
             target_compound = COMPOUND_VARIANTS[token_lower]
             format_type = self._detect_format_type(token)
-            return CompoundMetadata(
+            return compound_meta_cls(
                 is_compound=True,
                 format_type=format_type,
                 compound_target=target_compound,
@@ -102,7 +115,7 @@ class CompoundDetector:
         if "-" in token and data_context:
             if hasattr(data_context, "compound_hyphen_map") and token_lower in data_context.compound_hyphen_map:
                 target_compound = data_context.compound_hyphen_map[token_lower]
-                return CompoundMetadata(
+                return compound_meta_cls(
                     is_compound=True,
                     format_type="hyphenated",
                     compound_target=target_compound,
@@ -114,14 +127,14 @@ class CompoundDetector:
             and hasattr(data_context, "compound_surnames_normalized")
             and token_lower in data_context.compound_surnames_normalized
         ):
-            return CompoundMetadata(
+            return compound_meta_cls(
                 is_compound=True,
                 format_type="spaced",
                 compound_target=token_lower,
             )
 
         # 4. Not a compound surname
-        return CompoundMetadata(is_compound=False)
+        return not_compound
 
     def _detect_format_type(self, token: str) -> str:
         """
@@ -161,12 +174,15 @@ class CompoundDetector:
                 compact or hyphenated compounds.
             data_context: Optional data context for validation
         """
-        # Import here to avoid circular imports
-        from sinonym.services.normalization import SpacedCompoundSpan
+        _, spaced_span_cls, _ = _ensure_compound_types()
 
+        compound_surnames_normalized = (
+            getattr(data_context, "compound_surnames_normalized", None) if data_context is not None else None
+        )
         spans: list[SpacedCompoundSpan] = []
         i = 0
-        while i < len(roman_tokens) - 1:
+        limit = len(roman_tokens) - 1
+        while i < limit:
             token1 = roman_tokens[i]
             token2 = roman_tokens[i + 1]
 
@@ -185,16 +201,14 @@ class CompoundDetector:
                 target_compound = COMPOUND_VARIANTS[pair_lower]
             # Check in compound_surnames_normalized
             elif (
-                data_context
-                and hasattr(data_context, "compound_surnames_normalized")
-                and pair_lower in data_context.compound_surnames_normalized
-            ) or pair_lower in COMPOUND_VARIANTS.values():
+                compound_surnames_normalized is not None and pair_lower in compound_surnames_normalized
+            ) or pair_lower in _COMPOUND_VARIANT_VALUES:
                 is_compound_pair = True
                 target_compound = pair_lower
 
             if is_compound_pair:
                 spans.append(
-                    SpacedCompoundSpan(
+                    spaced_span_cls(
                         start=i,
                         end=i + 2,
                         compound_target=target_compound,

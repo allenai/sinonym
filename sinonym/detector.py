@@ -830,7 +830,10 @@ class ChineseNameDetector:
 
     def _clean_source_roman_token(self, token: str) -> str:
         """Clean a source Roman token while preserving source capitalization."""
-        folded = unicodedata.normalize("NFC", token.translate(self._config.roman_punctuation_fold_tr))
+        if token.isascii() and "`" not in token:
+            folded = token
+        else:
+            folded = unicodedata.normalize("NFC", token.translate(self._normalizer._roman_punctuation_fold_tr))
         return self._config.clean_roman_pattern.sub("", folded)
 
     def _roman_tokens_match_han_pinyin(self, roman_tokens: list[str], han_pinyin: tuple[str, ...]) -> bool:
@@ -2244,6 +2247,8 @@ class ChineseNameDetector:
         format_threshold: float = 0.55,
         minimum_batch_size: int = 2,
         prepared_cache=None,
+        *,
+        skip_vys_if_no_focal_success: bool = False,
     ) -> RelatedBatchParseResult:
         """Analyze one lean PP/VYS work item without duplicating focal preparation."""
         _validate_batch_policy(format_threshold, minimum_batch_size)
@@ -2261,6 +2266,7 @@ class ChineseNameDetector:
                 format_threshold=format_threshold,
             ),
             prepared_cache,
+            skip_vys_if_no_focal_success=skip_vys_if_no_focal_success,
         )
 
     def detect_batch_format(
@@ -2433,6 +2439,7 @@ class ChineseNameDetector:
         max_workers: int | None = None,
         chunk_size: int = 64,
         mp_start_method: str = "auto",
+        skip_vys_if_no_focal_success: bool = False,
     ) -> list[RelatedBatchParseResult]:
         """Analyze PP/VYS pairs as related worker units while preserving request order."""
         _validate_batch_policy(format_threshold, minimum_batch_size)
@@ -2456,6 +2463,7 @@ class ChineseNameDetector:
                     minimum_batch_size=minimum_batch_size,
                 )
         prepared_cache = {}
+        effective_skip_vys = skip_vys_if_no_focal_success or getattr(self, "_skip_vys_if_no_focal_success", False)
         return [
             self._analyze_related_name_batches(
                 pp_names,
@@ -2463,6 +2471,7 @@ class ChineseNameDetector:
                 format_threshold=format_threshold,
                 minimum_batch_size=minimum_batch_size,
                 prepared_cache=prepared_cache,
+                skip_vys_if_no_focal_success=effective_skip_vys,
             )
             for pp_names, vys_pool_names in requests
         ]

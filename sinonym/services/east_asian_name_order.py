@@ -213,6 +213,17 @@ WHITESPACE_RE = re.compile(r"\s+")
 
 def _normalized_surface(value: str) -> str:
     """Collapse whitespace and apply NFKC for exact-surface comparison."""
+    if value.isascii():
+        if (
+            value
+            and value == value.strip()
+            and "  " not in value
+            and "\t" not in value
+            and "\n" not in value
+            and "\r" not in value
+        ):
+            return value
+        return " ".join(value.split())
     return WHITESPACE_RE.sub(" ", unicodedata.normalize("NFKC", value)).strip()
 
 
@@ -267,19 +278,19 @@ class EastAsianNameOrderPreservation:
 
 @dataclass(frozen=True)
 class _RomanLexicons:
-    japanese_surnames: tuple[str, ...]
-    japanese_possible_surnames: tuple[str, ...]
-    japanese_given_first_exact_surfaces: tuple[str, ...]
-    japanese_given_names: tuple[str, ...]
-    korean_surnames: tuple[str, ...]
-    vietnamese_surnames: tuple[str, ...]
-    vietnamese_top4_surnames: tuple[str, ...]
+    japanese_surnames: frozenset[str]
+    japanese_possible_surnames: frozenset[str]
+    japanese_given_first_exact_surfaces: frozenset[str]
+    japanese_given_names: frozenset[str]
+    korean_surnames: frozenset[str]
+    vietnamese_surnames: frozenset[str]
+    vietnamese_top4_surnames: frozenset[str]
 
 
 @dataclass(frozen=True)
 class _NativeLexicons:
-    japanese_surnames: tuple[str, ...]
-    japanese_given_names: tuple[str, ...]
+    japanese_surnames: frozenset[str]
+    japanese_given_names: frozenset[str]
 
 
 def _load_payload(name: str) -> dict[str, Any]:
@@ -327,17 +338,19 @@ def _roman_lexicons() -> _RomanLexicons:
         raise ValueError(message)
     vietnamese = sorted(set(external_vietnamese) | {_fold(value) for value in VIETNAMESE_ONLY_SURNAMES})
     return _RomanLexicons(
-        japanese_surnames=japanese_surnames,
-        japanese_possible_surnames=japanese_possible_surnames,
-        japanese_given_first_exact_surfaces=_validated_values(
-            payload,
-            "japanese_given_first_exact_surfaces",
-            ROMAN_ASSET,
+        japanese_surnames=frozenset(japanese_surnames),
+        japanese_possible_surnames=frozenset(japanese_possible_surnames),
+        japanese_given_first_exact_surfaces=frozenset(
+            _validated_values(
+                payload,
+                "japanese_given_first_exact_surfaces",
+                ROMAN_ASSET,
+            ),
         ),
-        japanese_given_names=_validated_values(payload, "japanese_given_names", ROMAN_ASSET),
-        korean_surnames=tuple(korean),
-        vietnamese_surnames=tuple(vietnamese),
-        vietnamese_top4_surnames=vietnamese_top4,
+        japanese_given_names=frozenset(_validated_values(payload, "japanese_given_names", ROMAN_ASSET)),
+        korean_surnames=frozenset(korean),
+        vietnamese_surnames=frozenset(vietnamese),
+        vietnamese_top4_surnames=frozenset(vietnamese_top4),
     )
 
 
@@ -345,12 +358,14 @@ def _roman_lexicons() -> _RomanLexicons:
 def _native_lexicons() -> _NativeLexicons:
     payload = _load_payload(NATIVE_ASSET)
     return _NativeLexicons(
-        japanese_surnames=_validated_values(payload, "japanese_surnames", NATIVE_ASSET),
-        japanese_given_names=_validated_values(payload, "japanese_given_names", NATIVE_ASSET),
+        japanese_surnames=frozenset(_validated_values(payload, "japanese_surnames", NATIVE_ASSET)),
+        japanese_given_names=frozenset(_validated_values(payload, "japanese_given_names", NATIVE_ASSET)),
     )
 
 
-def _contains(values: tuple[str, ...], key: str) -> bool:
+def _contains(values: frozenset[str] | tuple[str, ...], key: str) -> bool:
+    if isinstance(values, frozenset):
+        return key in values
     index = bisect_left(values, key)
     return index < len(values) and values[index] == key
 
@@ -473,6 +488,10 @@ def _fold(value: str) -> str:
 
 def _endpoint_key(value: str) -> str:
     """Fold case, accents, and punctuation for exact endpoint comparison."""
+    if value.isascii():
+        if value.isalnum():
+            return value.lower()
+        return "".join(character for character in value.lower() if character.isalnum())
     return "".join(character for character in _fold(unicodedata.normalize("NFKC", value)) if character.isalnum())
 
 
@@ -517,6 +536,8 @@ def _is_european_exclusive_diacritic(character: str) -> bool:
     (ā/ō/ū/ŏ/ŭ), and non-European noise (Turkish İ, Cyrillic homoglyphs, mojibake like ƣ)
     are all left routable, so a genuine East-Asian name is never blocked by a stray glyph.
     """
+    if character.isascii():
+        return False
     if character in _EUROPEAN_EXCLUSIVE_LETTERS:
         return True
     decomposed = unicodedata.normalize("NFD", character)
@@ -868,15 +889,16 @@ class EastAsianNameOrderService:
         if not surface or "," in surface:
             return None
 
-        iteration_mark = self._infer_japanese_iteration_mark(
-            surface,
-            japanese_probability,
-        )
-        if iteration_mark is not None:
-            return iteration_mark
-        native = self._infer_native(surface, japanese_probability)
-        if native is not None:
-            return native
+        if not surface.isascii():
+            iteration_mark = self._infer_japanese_iteration_mark(
+                surface,
+                japanese_probability,
+            )
+            if iteration_mark is not None:
+                return iteration_mark
+            native = self._infer_native(surface, japanese_probability)
+            if native is not None:
+                return native
         return self._infer_romanized_resolution(surface)
 
     def _infer_romanized_resolution(
@@ -884,6 +906,12 @@ class EastAsianNameOrderService:
         surface: str,
     ) -> EastAsianNameOrderDecision | EastAsianNameOrderPreservation | None:
         """Resolve Roman evidence without erasing a proven preservation veto."""
+        return _infer_romanized_resolution_cached(surface)
+
+    def _infer_romanized_resolution_uncached(
+        self,
+        surface: str,
+    ) -> EastAsianNameOrderDecision | EastAsianNameOrderPreservation | None:
         romanized = self._infer_romanized(surface)
         if (
             romanized is not None
@@ -1220,7 +1248,9 @@ class EastAsianNameOrderService:
         # A European-exclusive diacritic (Nordic "Kim Hørslev-Petersen") is not romanized
         # Korean. McCune-Reischauer breve vowels (ŏ/ŭ) stay allowed — they are inside the
         # East-Asian-plausible repertoire, so only ø/å/ö/ü/ñ/… disqualify.
-        if any(_is_european_exclusive_diacritic(character) for token in tokens for character in token):
+        if not all(token.isascii() for token in tokens) and any(
+            _is_european_exclusive_diacritic(character) for token in tokens for character in token
+        ):
             return None
         if not _contains(lexicons.korean_surnames, _fold(tokens[0])):
             return None
@@ -1313,6 +1343,16 @@ class EastAsianNameOrderService:
             source_order=("surname", "given"),
             reason=EastAsianEvidenceReason.JAPANESE_ROMANIZED_DIRECTIONAL_DICTIONARY,
         )
+
+
+_SHARED_EAST_ASIAN_ORDER_SERVICE = EastAsianNameOrderService()
+
+
+@lru_cache(maxsize=65536)
+def _infer_romanized_resolution_cached(
+    surface: str,
+) -> EastAsianNameOrderDecision | EastAsianNameOrderPreservation | None:
+    return _SHARED_EAST_ASIAN_ORDER_SERVICE._infer_romanized_resolution_uncached(surface)  # noqa: SLF001
 
 
 __all__ = ["EastAsianNameOrderDecision", "EastAsianNameOrderService"]

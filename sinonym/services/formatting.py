@@ -15,7 +15,6 @@ compound name splitting, and output standardization to "Given-Name Surname" form
 
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from sinonym.chinese_names_data import ETHNICITY_CHINESE_SURNAME_ROMANIZATION_ALIASES, REVIEWED_ATOMIC_GIVEN_FORMS
@@ -89,17 +88,23 @@ class NameFormattingService:
                     syllabic_single_letter_tokens=syllabic_single_letter_tokens,
                 )
             )
+            middle_name = " ".join(middle_tokens) if middle_tokens else ""
             parsed = ParsedName(
                 surname=surname_str,
                 given_name=given_str,
                 surname_tokens=surname_final,
                 given_tokens=given_final,
-                middle_name=" ".join(middle_tokens) if middle_tokens else "",
+                middle_name=middle_name,
                 middle_tokens=middle_tokens,
                 order=["given", "middle", "surname"],
             )
-            parsed_original_order = replace(
-                parsed,
+            parsed_original_order = ParsedName(
+                surname=surname_str,
+                given_name=given_str,
+                surname_tokens=surname_final,
+                given_tokens=given_final,
+                middle_name=middle_name,
+                middle_tokens=middle_tokens,
                 order=original_component_order(selected_format, given_tokens, middle_tokens),
             )
             return ParseResult.success_with_name(
@@ -142,24 +147,51 @@ class NameFormattingService:
         apostrophe_lineage = {
             token: lineage
             for token in given_tokens
-            if (lineage := self._direct_apostrophe_lineage(token, normalized_cache)) is not None
+            if ("'" in token or "`" in token or not token.isascii())
+            and (lineage := self._direct_apostrophe_lineage(token, normalized_cache)) is not None
         }
         # Validate given name tokens first
-        compact_initial = self._accepts_compact_initial(surname_tokens, given_tokens)
-        expand_compact_initial = compact_initial and not is_reviewed_compact_initial_boundary(given_tokens[0])
-        alias_given_parts = self._reviewed_alias_compact_given_parts(surname_tokens, given_tokens)
-        wade_giles_single_given = self._accepts_wade_giles_single_given(surname_tokens, given_tokens)
-        unbounded_syllabic_prefix = bool(
-            len(given_tokens) == 1 and self._accepts_unbounded_syllabic_prefix(surname_tokens, given_tokens, given_tokens[0]),
-        )
+        if len(given_tokens) == 1:
+            compact_initial = self._accepts_compact_initial(surname_tokens, given_tokens)
+            expand_compact_initial = compact_initial and not is_reviewed_compact_initial_boundary(given_tokens[0])
+            alias_given_parts = self._reviewed_alias_compact_given_parts(surname_tokens, given_tokens)
+            wade_giles_single_given = self._accepts_wade_giles_single_given(surname_tokens, given_tokens)
+            unbounded_syllabic_prefix = self._accepts_unbounded_syllabic_prefix(surname_tokens, given_tokens, given_tokens[0])
+        else:
+            compact_initial = False
+            expand_compact_initial = False
+            alias_given_parts = None
+            wade_giles_single_given = False
+            unbounded_syllabic_prefix = False
+        split_cache: dict[str, list[str] | None] = {}
+
+        def _split_cached(tok: str) -> list[str] | None:
+            if tok not in split_cache:
+                split_cache[tok] = StringManipulationUtils.split_concatenated_name(
+                    tok,
+                    normalized_cache,
+                    self._data,
+                    self._normalizer,
+                    self._config,
+                )
+            return split_cache[tok]
+
+        def _is_valid_given_fast(tok: str) -> bool:
+            if (
+                tok in apostrophe_lineage
+                or self._is_reviewed_atomic_given_form(tok)
+                or tok.casefold() in REVIEWED_EXPLICIT_BOUND_GIVEN_FORMS
+            ):
+                return True
+            norm_tok = normalized_cache[tok] if (normalized_cache and tok in normalized_cache) else self._normalizer.norm(tok)
+            if norm_tok in self._data.given_names_normalized or tok.lower() in self._data.given_names_normalized:
+                return True
+            if _split_cached(tok):
+                return True
+            return self._normalizer.is_valid_given_name_token(tok, normalized_cache)
+
         if (
-            not all(
-                token in apostrophe_lineage
-                or self._is_reviewed_atomic_given_form(token)
-                or token.casefold() in REVIEWED_EXPLICIT_BOUND_GIVEN_FORMS
-                or self._normalizer.is_valid_given_name_token(token, normalized_cache)
-                for token in given_tokens
-            )
+            not all(_is_valid_given_fast(token) for token in given_tokens)
             and not compact_initial
             and not alias_given_parts
             and not wade_giles_single_given
@@ -215,13 +247,7 @@ class NameFormattingService:
                 parts.append(token)
                 continue
 
-            split = StringManipulationUtils.split_concatenated_name(
-                token,
-                normalized_cache,
-                self._data,
-                self._normalizer,
-                self._config,
-            )
+            split = _split_cached(token)
             if not split and allow_surname_like_given_split:
                 split = StringManipulationUtils.split_surname_like_given_name(
                     token,

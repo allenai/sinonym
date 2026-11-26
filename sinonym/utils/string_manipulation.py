@@ -213,6 +213,13 @@ class StringManipulationUtils:
         return False
 
     @staticmethod
+    def _strip_joiners(token: str, normalizer, config) -> str:
+        if token.isascii() and "-" not in token and "'" not in token and "`" not in token:
+            return token
+        table = getattr(normalizer, "_hyphens_apostrophes_tr", config.hyphens_apostrophes_tr)
+        return token.translate(table)
+
+    @staticmethod
     def _high_confidence_given_split(
         token: str,
         normalized_cache: dict[str, str] | None,
@@ -221,7 +228,7 @@ class StringManipulationUtils:
         config,
     ) -> list[str] | None:
         """Return the gold-standard two-part split for a given token, if one exists."""
-        raw = token.translate(config.hyphens_apostrophes_tr)
+        raw = StringManipulationUtils._strip_joiners(token, normalizer, config)
         for i in range(1, len(raw)):
             a, b = raw[:i], raw[i:]
 
@@ -256,9 +263,10 @@ class StringManipulationUtils:
 
         # Get normalized form once - use eager cache for performance
         if normalized_cache and token in normalized_cache:
-            tok_normalized = StringManipulationUtils.remove_spaces(normalized_cache[token])
+            raw_norm = normalized_cache[token]
         else:
-            tok_normalized = StringManipulationUtils.remove_spaces(normalizer.norm(token))
+            raw_norm = normalizer.norm(token)
+        tok_normalized = raw_norm.replace(" ", "") if " " in raw_norm else raw_norm
 
         # Optimized validation chain: combine multiple checks with OR short-circuit
         original_lower = token.lower()
@@ -408,17 +416,18 @@ class StringManipulationUtils:
         # Honor that boundary when both sides are valid instead of deleting it and accepting
         # an unrelated positional split such as `Xian` + `gan`; the formatter retains the
         # authored apostrophe rather than changing it to a hyphen.
-        apostrophes = [index for index, char in enumerate(token) if char in APOSTROPHE_LIKE]
-        if len(apostrophes) == 1:
-            a, b = token[: apostrophes[0]], token[apostrophes[0] + 1 :]
-            if a and b:
-                side = _single_letter_side(a, b)
-                if side != "leading":
-                    norm_a, norm_b = StringManipulationUtils._get_normalized_parts(a, b, normalized_cache, normalizer)
-                    if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
-                        return _joined_given(a, b, side)
-                    if side == "trailing":
-                        return None
+        if not token.isascii() or "'" in token or "`" in token:
+            apostrophes = [index for index, char in enumerate(token) if char in APOSTROPHE_LIKE]
+            if len(apostrophes) == 1:
+                a, b = token[: apostrophes[0]], token[apostrophes[0] + 1 :]
+                if a and b:
+                    side = _single_letter_side(a, b)
+                    if side != "leading":
+                        norm_a, norm_b = StringManipulationUtils._get_normalized_parts(a, b, normalized_cache, normalizer)
+                        if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, a, b):
+                            return _joined_given(a, b, side)
+                        if side == "trailing":
+                            return None
             # An apostrophe can instead be a Wade-Giles aspiration marker (`Ch'inghua`).
             # Preserve the existing transliteration and positional-split path when the
             # author-supplied location is not itself a valid boundary.
@@ -426,7 +435,7 @@ class StringManipulationUtils:
         unsplit_word = has_korean_only_syllable(token) if ignore_unsplit_list else is_unsplit_given_word(token)
 
         # Pattern 1: Repeated syllable patterns (e.g., "huihui" → ["hui", "hui"]) — only when no hyphen present
-        raw = token.translate(config.hyphens_apostrophes_tr)
+        raw = StringManipulationUtils._strip_joiners(token, normalizer, config)
         if not unsplit_word and len(raw) >= 4 and len(raw) % 2 == 0:
             mid = len(raw) // 2
             first_half = raw[:mid]
@@ -439,22 +448,20 @@ class StringManipulationUtils:
                 if norm_syllable in data_context.plausible_components or first_half.lower() in data_context.plausible_components:
                     return [first_half, second_half]
 
-        # Check for forbidden phonetic patterns
-        has_forbidden_patterns = bool(config.forbidden_patterns_regex.search(token.lower()))
-
         # Pattern 3: CamelCase detection (e.g., "MingHua" → ["Ming", "Hua"]) — only when no hyphen present
-        camel = config.camel_case_pattern.findall(raw)
-        camel_side = _single_letter_side(camel[0], camel[1]) if len(camel) == 2 else None
-        # A one-character FIRST part is a regex artifact of an all-caps prefix, not an author
-        # boundary: `LIshan` yields ['L', 'Ishan'] when the real reading is `LI`+`shan`. Skip the
-        # camel boundary and let the positional scan decide; it handles a genuine leading lone
-        # letter (`Ahao`) on its own.
-        if len(camel) == 2 and camel_side != "leading":
-            # Optimized normalization using helper
-            norm_a, norm_b = StringManipulationUtils._get_normalized_parts(camel[0], camel[1], normalized_cache, normalizer)
-            # Inline component validation for performance
-            if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, camel[0], camel[1]):
-                return _joined_given(camel[0], camel[1], camel_side)
+        if len(raw) >= 2 and not raw.islower() and not raw.isupper() and not (raw[0].isupper() and raw[1:].islower()):
+            camel = config.camel_case_pattern.findall(raw)
+            camel_side = _single_letter_side(camel[0], camel[1]) if len(camel) == 2 else None
+            # A one-character FIRST part is a regex artifact of an all-caps prefix, not an author
+            # boundary: `LIshan` yields ['L', 'Ishan'] when the real reading is `LI`+`shan`. Skip the
+            # camel boundary and let the positional scan decide; it handles a genuine leading lone
+            # letter (`Ahao`) on its own.
+            if len(camel) == 2 and camel_side != "leading":
+                # Optimized normalization using helper
+                norm_a, norm_b = StringManipulationUtils._get_normalized_parts(camel[0], camel[1], normalized_cache, normalizer)
+                # Inline component validation for performance
+                if StringManipulationUtils._is_valid_component_pair(norm_a, norm_b, data_context, camel[0], camel[1]):
+                    return _joined_given(camel[0], camel[1], camel_side)
 
         # A reviewed complete regional given name is not evidence for an
         # inferred pinyin boundary. Explicit hyphens, apostrophes, and authored
@@ -467,10 +474,6 @@ class StringManipulationUtils:
         # TIERED CONFIDENCE VALIDATION: Brute-force split with quality ranking
         # ================================================================
 
-        # Cache frequently accessed values for performance
-        from sinonym.chinese_names_data import HIGH_CONFIDENCE_ANCHORS
-
-        plausible_components = data_context.plausible_components
         raw_len = len(raw)
 
         for i in range(1, raw_len):

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NameComponents:
     """Assigned components and token lineage for a person's name.
 
@@ -32,7 +32,7 @@ class NameComponents:
     order: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CanonicalName:
     """Canonical representation of a person's name and its source components.
 
@@ -50,7 +50,7 @@ class CanonicalName:
     normalized: NameComponents
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ParsedName:
     """Parsed name with surname and given name components.
 
@@ -222,7 +222,7 @@ class NameFormat(Enum):
     MIXED = "mixed"  # No clear pattern
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ParseCandidate:
     """Individual parse candidate with scoring details."""
 

@@ -83,7 +83,7 @@ class LazyNormalizationMap:
             yield token, self.get(token)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SpacedCompoundSpan:
     """One occurrence of a space-delimited compound surname.
 
@@ -105,7 +105,7 @@ class SpacedCompoundSpan:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CompoundMetadata:
     """Metadata for compound surname detection and formatting."""
 
@@ -114,7 +114,7 @@ class CompoundMetadata:
     compound_target: str | None = None  # standardized form like "ou yang"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NormalizedInput:
     """Immutable normalized input - Scala case class style."""
 
@@ -151,6 +151,9 @@ class NormalizationService:
             for source, target in config.roman_punctuation_fold_tr.items()
             if source > 0x7F and chr(source) in ROMAN_HYPHEN_LIKE and target == "-"
         }
+        self._roman_punctuation_fold_tr = dict(config.roman_punctuation_fold_tr)
+        self._hyphens_apostrophes_tr = dict(config.hyphens_apostrophes_tr)
+        self._cached_is_valid_chinese_phonetics = lru_cache(maxsize=65536)(self._compute_is_valid_chinese_phonetics)
 
     def set_data_context(self, data) -> None:
         """Inject data context after initialization - breaks circular dependency."""
@@ -186,10 +189,13 @@ class NormalizationService:
 
     def is_vowelless_compact_initial(self, token: str) -> bool:
         """Return whether ``token`` has the reviewed 2-3 letter initial shape."""
+        if not token.isalpha():
+            return False
+        if token.isascii() and not (2 <= len(token) <= 3):
+            return False
         folded = self.norm_light(token)
         return bool(
-            token.isalpha()
-            and 2 <= len(folded) <= 3
+            2 <= len(folded) <= 3
             and not any(character in "aeiou" for character in folded)
             and folded not in _PINYIN_UMLAUT_SPELLINGS
             and not self.is_attested_remapped_given_syllable(token),
@@ -197,6 +203,8 @@ class NormalizationService:
 
     def contains_cjk(self, text: str) -> bool:
         """Return whether text contains any configured CJK character."""
+        if text.isascii():
+            return False
         return bool(self._config.cjk_pattern.search(text))
 
     def get_normalized(self, token: str, norm_cache: dict[str, str]) -> str:
@@ -266,7 +274,7 @@ class NormalizationService:
         is_all_chinese = self._text_preprocessor.is_all_chinese_input(cleaned)
 
         # Phase 4: Preserve authored name joiners before the generic separator pass.
-        cleaned = fold_internal_name_joiners(cleaned, self._config.roman_punctuation_fold_tr)
+        cleaned = fold_internal_name_joiners(cleaned, self._roman_punctuation_fold_tr)
         cleaned = fold_spaced_transliteration_apostrophes(cleaned)
         raw_tokens = self._config.sep_pattern.sub(" ", cleaned).split()
         tokens = tuple(t for t in raw_tokens if t and not all(c in string.punctuation for c in t))
@@ -282,7 +290,7 @@ class NormalizationService:
         else:
             authored_cleaned = fold_internal_name_joiners(
                 authored_cleaned,
-                self._config.roman_punctuation_fold_tr,
+                self._roman_punctuation_fold_tr,
             )
             authored_cleaned = fold_spaced_transliteration_apostrophes(authored_cleaned)
             authored_raw_tokens = self._config.sep_pattern.sub(" ", authored_cleaned).split()
@@ -340,6 +348,22 @@ class NormalizationService:
 
     def _process_mixed_tokens(self, tokens: list[str], is_all_chinese: bool = False) -> list[str]:
         """Extract existing mixed token processing logic with enhanced all-Chinese support."""
+        if not is_all_chinese and not any(
+            not token.isascii() and self._config.cjk_pattern.search(token) is not None for token in tokens
+        ):
+            clean_roman_pattern = self._config.clean_roman_pattern
+            fold_tr = self._roman_punctuation_fold_tr
+            roman_only: list[str] = []
+            for token in tokens:
+                if token.isascii() and "`" not in token:
+                    folded_token = token
+                else:
+                    folded_token = unicodedata.normalize("NFC", token.translate(fold_tr))
+                clean_token = clean_roman_pattern.sub("", folded_token)
+                if clean_token and not all(c in string.punctuation for c in clean_token):
+                    roman_only.append(clean_token)
+            return roman_only
+
         mix = []
         has_compact_mixed_token = False
         # Cache for character-level CJK pattern checks to avoid repeated regex calls
@@ -385,10 +409,11 @@ class NormalizationService:
                 source_order_tokens.extend(pinyin_tokens)
             else:
                 # Clean Roman token
-                clean_token = self._config.clean_roman_pattern.sub(
-                    "",
-                    unicodedata.normalize("NFC", token.translate(self._config.roman_punctuation_fold_tr)),
-                )
+                if token.isascii() and "`" not in token:
+                    folded_token = token
+                else:
+                    folded_token = unicodedata.normalize("NFC", token.translate(self._roman_punctuation_fold_tr))
+                clean_token = self._config.clean_roman_pattern.sub("", folded_token)
                 # Filter out empty tokens and tokens that are only punctuation
                 if clean_token and not all(c in string.punctuation for c in clean_token):
                     roman_tokens_original.append(clean_token)
@@ -453,11 +478,14 @@ class NormalizationService:
         if not is_all_chinese:
             return token
         token = self._config.sep_pattern.sub("", token)
-        return token.translate(self._config.hyphens_apostrophes_tr)
+        return token.translate(self._hyphens_apostrophes_tr)
 
     def classify_script_representation(self, normalized_input: NormalizedInput) -> ScriptRepresentation:
         """Classify script provenance for batch convention voting."""
-        has_han = any(self._config.cjk_pattern.search(char) for token in normalized_input.tokens for char in token)
+        has_han = any(
+            not token.isascii() and self._config.cjk_pattern.search(token) is not None
+            for token in normalized_input.tokens
+        )
         has_roman = any(self._config.ascii_alpha_pattern.search(token) for token in normalized_input.tokens)
 
         if has_han and has_roman:
@@ -527,7 +555,10 @@ class NormalizationService:
 
     def _clean_roman_token(self, token: str) -> str:
         """Clean a Roman token without changing its source capitalization."""
-        folded = unicodedata.normalize("NFC", token.translate(self._config.roman_punctuation_fold_tr))
+        if token.isascii() and "`" not in token:
+            folded = token
+        else:
+            folded = unicodedata.normalize("NFC", token.translate(self._roman_punctuation_fold_tr))
         return self._config.clean_roman_pattern.sub("", folded)
 
     def _roman_matches_han_token(self, roman_token: str, han_pinyin: tuple[str, ...]) -> bool:
@@ -560,6 +591,9 @@ class NormalizationService:
 
     def is_valid_chinese_phonetics(self, token: str) -> bool:
         """Check if a token could plausibly be Chinese based on phonetic structure."""
+        return self._cached_is_valid_chinese_phonetics(token)
+
+    def _compute_is_valid_chinese_phonetics(self, token: str) -> bool:
         if not token:
             return False
 

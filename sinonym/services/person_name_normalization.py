@@ -11,7 +11,8 @@ from __future__ import annotations
 import html
 import re
 import unicodedata
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
+from dataclasses import replace as _dataclass_replace
 from enum import Enum
 from functools import lru_cache
 
@@ -57,7 +58,7 @@ class DropReason(str, Enum):
     DUPLICATE = "duplicate"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DroppedNameToken:
     """One source token omitted from the canonical name."""
 
@@ -66,7 +67,7 @@ class DroppedNameToken:
     reason: DropReason
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PersonNameNormalizationResult:
     """Typed outcome of one canonical name normalization request."""
 
@@ -76,7 +77,7 @@ class PersonNameNormalizationResult:
     dropped_tokens: tuple[DroppedNameToken, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Token:
     text: str
     source_role: str
@@ -84,10 +85,25 @@ class _Token:
     source_text: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _DroppedToken:
     token: _Token
     reason: DropReason
+
+
+_UNSET = object()
+
+
+def replace(obj, /, **changes):  # type: ignore[no-untyped-def]
+    """Fast drop-in for ``dataclasses.replace`` specialized for ``_Token``."""
+    if type(obj) is _Token:
+        return _Token(
+            changes.get("text", obj.text),
+            changes.get("source_role", obj.source_role),
+            changes.get("position", obj.position),
+            changes.get("source_text", obj.source_text),
+        )
+    return _dataclass_replace(obj, **changes)
 
 
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -704,16 +720,60 @@ def reviewed_source_cleanup_pattern(  # noqa: PLR0911 - one return per closed re
     return None
 
 
+_SIMPLE_ASCII_EXCLUDED_KEYS = frozenset(
+    _SIMPLE_TWO_TOKEN_POLICY_KEYS | _FAMILY_PARTICLES | _ORG_PREPOSITION_WORDS | _HYPHEN_ORG_WORDS,
+)
+
+
+def _is_canonical_simple_word(token: str) -> bool:
+    """Return whether ``token`` is a clean Title-cased ASCII word of 2+ letters not in policy sets."""
+    if len(token) < 2 or not token.isalpha() or not token[0].isupper() or not token[1:].islower():  # noqa: PLR2004
+        return False
+    return token.lower() not in _SIMPLE_ASCII_EXCLUDED_KEYS
+
+
+def _is_canonical_simple_hyphenated(token: str) -> bool:
+    """Return whether ``token`` is a clean 2-part hyphenated ASCII word that canonicalizes to itself."""
+    if "-" not in token:
+        return False
+    parts = token.split("-")
+    if len(parts) != 2:  # noqa: PLR2004
+        return False
+    first, second = parts
+    if len(first) < 2 or len(second) < 2 or not first.isalpha() or not second.isalpha():  # noqa: PLR2004
+        return False
+    if not (first[0].isupper() and first[1:].islower()):
+        return False
+    if not (second.islower() or (second[0].isupper() and second[1:].islower())):
+        return False
+    return first.lower() not in _SIMPLE_ASCII_EXCLUDED_KEYS and second.lower() not in _SIMPLE_ASCII_EXCLUDED_KEYS
+
+
+def _is_canonical_simple_initial(token: str) -> bool:
+    """Return whether ``token`` is a single uppercase ASCII dotted initial like ``A.``."""
+    return len(token) == 2 and token[1] == "." and token[0].isupper()  # noqa: PLR2004
+
+
+def _is_canonical_simple_given_or_surname(token: str) -> bool:
+    return _is_canonical_simple_word(token) or _is_canonical_simple_hyphenated(token)
+
+
 class PersonNameNormalizationService:
     """Normalize raw or structured personal names without Chinese routing."""
 
-    def normalize_text(  # noqa: C901, PLR0911, PLR0912, PLR0915
+    def normalize_text(
         self,
         raw_name: str | None,
     ) -> PersonNameNormalizationResult:
         """Normalize one raw name string into semantic canonical components."""
         if not isinstance(raw_name, str):
             return self._invalid("name must be a string")
+        return _normalize_text_cached(raw_name)
+
+    def _normalize_text_uncached(  # noqa: C901, PLR0911, PLR0912, PLR0915
+        self,
+        raw_name: str,
+    ) -> PersonNameNormalizationResult:
         raw_name = attach_detached_diacritics(strip_soft_hyphens(raw_name))
         if reviewed_non_person_text_pattern(raw_name) is not None:
             return self._non_person("reviewed non-person input")
@@ -817,12 +877,100 @@ class PersonNameNormalizationService:
             )
         return self._normalize_regular_name(source_text, segments[0], suffix, suffix_token, dropped)
 
-    def _normalize_simple_two_token_text(self, raw_name: str) -> PersonNameNormalizationResult | None:
-        """Normalize policy-neutral two-token ASCII names without preprocessing."""
+    def _normalize_simple_two_token_text(self, raw_name: str) -> PersonNameNormalizationResult | None:  # noqa: PLR0911
+        """Normalize policy-neutral clean ASCII names without preprocessing."""
         if not raw_name.isascii() or raw_name != raw_name.strip():
             return None
         raw_tokens = raw_name.split(" ")
-        if len(raw_tokens) != _TWO_COMPONENTS or any(not token.isalpha() for token in raw_tokens):
+        n_tokens = len(raw_tokens)
+        if n_tokens < _TWO_COMPONENTS or n_tokens > _FOUR_COMPONENTS:
+            return None
+
+        # Ultra-fast path for already-canonical 2-4 token ASCII names (zero _Token/sort/canonicalize work).
+        last_token = raw_tokens[-1]
+        if _is_canonical_simple_given_or_surname(last_token):
+            first_token = raw_tokens[0]
+            if n_tokens == _TWO_COMPONENTS and (
+                _is_canonical_simple_given_or_surname(first_token) or _is_canonical_simple_initial(first_token)
+            ):
+                components = NameComponents(
+                    given_name=first_token,
+                    middle_name="",
+                    surname=last_token,
+                    suffix="",
+                    given_tokens=(first_token,),
+                    middle_tokens=(),
+                    surname_tokens=(last_token,),
+                    suffix_tokens=(),
+                    order=("given", "surname"),
+                )
+                return PersonNameNormalizationResult(
+                    outcome=PersonNameOutcome.PERSON,
+                    canonical_name=CanonicalName(
+                        source_text=raw_name,
+                        text=raw_name,
+                        source=components,
+                        normalized=components,
+                    ),
+                )
+            if (
+                n_tokens == _THREE_COMPONENTS
+                and (_is_canonical_simple_given_or_surname(first_token) or _is_canonical_simple_initial(first_token))
+                and (
+                    _is_canonical_simple_initial(raw_tokens[1])
+                    or _is_canonical_simple_given_or_surname(raw_tokens[1])
+                )
+            ):
+                mid = raw_tokens[1]
+                components = NameComponents(
+                    given_name=first_token,
+                    middle_name=mid,
+                    surname=last_token,
+                    suffix="",
+                    given_tokens=(first_token,),
+                    middle_tokens=(mid,),
+                    surname_tokens=(last_token,),
+                    suffix_tokens=(),
+                    order=("given", "middle", "surname"),
+                )
+                return PersonNameNormalizationResult(
+                    outcome=PersonNameOutcome.PERSON,
+                    canonical_name=CanonicalName(
+                        source_text=raw_name,
+                        text=raw_name,
+                        source=components,
+                        normalized=components,
+                    ),
+                )
+            if (
+                n_tokens == _FOUR_COMPONENTS
+                and (_is_canonical_simple_given_or_surname(first_token) or _is_canonical_simple_initial(first_token))
+                and _is_canonical_simple_initial(raw_tokens[1])
+                and _is_canonical_simple_initial(raw_tokens[2])
+            ):
+                mid1, mid2 = raw_tokens[1], raw_tokens[2]
+                components = NameComponents(
+                    given_name=first_token,
+                    middle_name=f"{mid1} {mid2}",
+                    surname=last_token,
+                    suffix="",
+                    given_tokens=(first_token,),
+                    middle_tokens=(mid1, mid2),
+                    surname_tokens=(last_token,),
+                    suffix_tokens=(),
+                    order=("given", "middle", "middle", "surname"),
+                )
+                return PersonNameNormalizationResult(
+                    outcome=PersonNameOutcome.PERSON,
+                    canonical_name=CanonicalName(
+                        source_text=raw_name,
+                        text=raw_name,
+                        source=components,
+                        normalized=components,
+                    ),
+                )
+
+        if n_tokens != _TWO_COMPONENTS or any(not token.isalpha() for token in raw_tokens):
             return None
         if any(token.casefold() in _SIMPLE_TWO_TOKEN_POLICY_KEYS for token in raw_tokens):
             return None
@@ -840,7 +988,7 @@ class PersonNameNormalizationService:
         source = self._components(given, [], surname, [])
         return self._person(raw_name, source, given, [], surname, "", [])
 
-    def normalize_components(  # noqa: C901, PLR0911, PLR0912, PLR0915
+    def normalize_components(
         self,
         *,
         first_name: str | None = None,
@@ -849,14 +997,29 @@ class PersonNameNormalizationService:
         suffix: str | None = None,
     ) -> PersonNameNormalizationResult:
         """Normalize already structured first, middle, last, and suffix fields."""
+        if (
+            (first_name is not None and not isinstance(first_name, str))
+            or (middle_name is not None and not isinstance(middle_name, str))
+            or (last_name is not None and not isinstance(last_name, str))
+            or (suffix is not None and not isinstance(suffix, str))
+        ):
+            return self._invalid("name components must be strings or null")
+        return _normalize_components_cached(first_name, middle_name, last_name, suffix)
+
+    def _normalize_components_uncached(  # noqa: C901, PLR0911, PLR0912, PLR0915
+        self,
+        *,
+        first_name: str | None = None,
+        middle_name: str | None = None,
+        last_name: str | None = None,
+        suffix: str | None = None,
+    ) -> PersonNameNormalizationResult:
         values = {
             "given": first_name,
             "middle": middle_name,
             "surname": last_name,
             "suffix": suffix,
         }
-        if any(value is not None and not isinstance(value, str) for value in values.values()):
-            return self._invalid("name components must be strings or null")
         values = {
             role: attach_detached_diacritics(strip_soft_hyphens(value)) if value else value for role, value in values.items()
         }
@@ -2218,13 +2381,25 @@ class PersonNameNormalizationService:
     def _canonical_tokens(self, tokens: list[_Token], role: str, *, capitals_are_initials: bool = False) -> tuple[str, ...]:
         return tuple(self._canonicalize_token(token.text, role, capitals_are_initials=capitals_are_initials) for token in tokens)
 
-    def _canonicalize_token(  # noqa: C901, PLR0911, PLR0912
+    def _canonicalize_token(
         self,
         token: str,
         role: str,
         *,
         capitals_are_initials: bool = False,
     ) -> str:
+        return _canonicalize_token_cached(token, role, capitals_are_initials=capitals_are_initials)
+
+    def _canonicalize_token_uncached(  # noqa: C901, PLR0911, PLR0912
+        self,
+        token: str,
+        role: str,
+        *,
+        capitals_are_initials: bool = False,
+    ) -> str:
+        # Fast path for plain Title-cased ASCII words (e.g. "Smith", "Maren") which never change.
+        if len(token) >= 2 and token.isascii() and token.isalpha() and token[0].isupper() and token[1:].islower():  # noqa: PLR2004
+            return token
         cleaned = self._clean_name_token(token)
         if role in {"middle", "surname"} and cleaned in _LOWERCASE_RELATIONAL_TOKENS:
             return cleaned
@@ -2303,7 +2478,8 @@ class PersonNameNormalizationService:
         # name resolves as NON_PERSON_SOURCE_PASSTHROUGH -- a real author marked a non-person.
         # 24,933 rows of the paper-authors table carry one, and every one of the 11 in the
         # ORCID-bearing sample with a LEADING bidi character resolved that way.
-        token = token.translate(INVISIBLE_MARKUP_DELETE_TRANSLATION)
+        if not token.isascii():
+            token = token.translate(INVISIBLE_MARKUP_DELETE_TRANSLATION)
         if PersonNameNormalizationService._is_parenthesized_name_token(token):
             return token
         if len(token) > _TWO_COMPONENTS and token.startswith("'") and token.endswith("'"):
@@ -2385,32 +2561,59 @@ class PersonNameNormalizationService:
         suffix: list[_Token],
     ) -> NameComponents:
         """Build source components with display order derived from token positions."""
-        by_role = {
-            "given": sorted(given, key=lambda token: token.position),
-            "middle": sorted(middle, key=lambda token: token.position),
-            "surname": sorted(surname, key=lambda token: token.position),
-            "suffix": sorted(suffix, key=lambda token: token.position),
-        }
-        order = tuple(
-            role
-            for role, _token in sorted(
-                ((role, token) for role, tokens in by_role.items() for token in tokens),
-                key=lambda item: item[1].position,
-            )
+        if len(given) > 1:
+            given = sorted(given, key=lambda token: token.position)
+        if len(middle) > 1:
+            middle = sorted(middle, key=lambda token: token.position)
+        if len(surname) > 1:
+            surname = sorted(surname, key=lambda token: token.position)
+        if len(suffix) > 1:
+            suffix = sorted(suffix, key=lambda token: token.position)
+
+        # Fast check if groups are already in ascending position order (the common given-middle-surname-suffix layout).
+        ordered_groups = (
+            ("given", given),
+            ("middle", middle),
+            ("surname", surname),
+            ("suffix", suffix),
         )
+        in_order = True
+        prev_pos = -1
+        for _, grp in ordered_groups:
+            if grp:
+                if grp[0].position < prev_pos:
+                    in_order = False
+                    break
+                prev_pos = grp[-1].position
+        if in_order:
+            order = tuple(
+                ["given"] * len(given)
+                + ["middle"] * len(middle)
+                + ["surname"] * len(surname)
+                + ["suffix"] * len(suffix),
+            )
+        else:
+            order = tuple(
+                role
+                for role, _token in sorted(
+                    ((role, token) for role, tokens in ordered_groups for token in tokens),
+                    key=lambda item: item[1].position,
+                )
+            )
 
-        def source_text(token: _Token) -> str:
-            return token.source_text or token.text
-
+        given_tokens = tuple(token.source_text or token.text for token in given)
+        middle_tokens = tuple(token.source_text or token.text for token in middle)
+        surname_tokens = tuple(token.source_text or token.text for token in surname)
+        suffix_tokens = tuple(token.source_text or token.text for token in suffix)
         return NameComponents(
-            given_name=" ".join(source_text(token) for token in by_role["given"]),
-            middle_name=" ".join(source_text(token) for token in by_role["middle"]),
-            surname=" ".join(source_text(token) for token in by_role["surname"]),
-            suffix=" ".join(source_text(token) for token in by_role["suffix"]),
-            given_tokens=tuple(source_text(token) for token in by_role["given"]),
-            middle_tokens=tuple(source_text(token) for token in by_role["middle"]),
-            surname_tokens=tuple(source_text(token) for token in by_role["surname"]),
-            suffix_tokens=tuple(source_text(token) for token in by_role["suffix"]),
+            given_name=" ".join(given_tokens),
+            middle_name=" ".join(middle_tokens),
+            surname=" ".join(surname_tokens),
+            suffix=" ".join(suffix_tokens),
+            given_tokens=given_tokens,
+            middle_tokens=middle_tokens,
+            surname_tokens=surname_tokens,
+            suffix_tokens=suffix_tokens,
             order=order,
         )
 
@@ -2528,6 +2731,38 @@ class PersonNameNormalizationService:
     @staticmethod
     def _non_person(reason: str) -> PersonNameNormalizationResult:
         return PersonNameNormalizationResult(outcome=PersonNameOutcome.NON_PERSON, reason=reason)
+
+
+_SHARED_PERSON_NORMALIZER = PersonNameNormalizationService()
+
+
+@lru_cache(maxsize=65536)
+def _normalize_text_cached(raw_name: str) -> PersonNameNormalizationResult:
+    return _SHARED_PERSON_NORMALIZER._normalize_text_uncached(raw_name)  # noqa: SLF001
+
+
+@lru_cache(maxsize=65536)
+def _normalize_components_cached(
+    first_name: str | None,
+    middle_name: str | None,
+    last_name: str | None,
+    suffix: str | None,
+) -> PersonNameNormalizationResult:
+    return _SHARED_PERSON_NORMALIZER._normalize_components_uncached(  # noqa: SLF001
+        first_name=first_name,
+        middle_name=middle_name,
+        last_name=last_name,
+        suffix=suffix,
+    )
+
+
+@lru_cache(maxsize=65536)
+def _canonicalize_token_cached(token: str, role: str, *, capitals_are_initials: bool) -> str:
+    return _SHARED_PERSON_NORMALIZER._canonicalize_token_uncached(  # noqa: SLF001
+        token,
+        role,
+        capitals_are_initials=capitals_are_initials,
+    )
 
 
 __all__ = [

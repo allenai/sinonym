@@ -73,13 +73,13 @@ class BatchAnalysisOptions:
     format_threshold: float | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BatchCandidateEntry:
     """Internal batch candidate record with explicit participation state."""
 
     name: str
-    candidates: list[ParseCandidate]
-    best_candidate: ParseCandidate | None
+    candidates: list[ParseCandidate] | tuple[_PreparedCandidate, ...]
+    best_candidate: ParseCandidate | _PreparedCandidate | None
     compound_metadata: dict | None
     representation: str
     vote_eligible: bool = True
@@ -89,6 +89,7 @@ class BatchCandidateEntry:
     individual_result: ParseResult | None = field(default=None, kw_only=True)
     input_failure: ParseResult | None = None
     individual_failure: ParseResult | None = None
+    all_caps_tokens: tuple[str, ...] = field(default=(), kw_only=True)
 
     @property
     def participates(self) -> bool:
@@ -102,7 +103,7 @@ class BatchCandidateEntry:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _PreparedCandidate:
     """Deeply immutable parse candidate shared only inside one request."""
 
@@ -123,7 +124,7 @@ class _PreparedCandidate:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _PreparedName:
     """Name-local work that is independent of a PP or VYS batch policy."""
 
@@ -139,6 +140,10 @@ class _PreparedName:
     individual_result: ParseResult | None = None
     input_failure: ParseResult | None = None
     individual_failure: ParseResult | None = None
+    all_caps_tokens: tuple[str, ...] = ()
+    format_participates: bool = False
+    vote_weight: float = 1.0
+    guarded_promotion_candidate: _PreparedCandidate | None = None
 
 
 @dataclass(frozen=True)
@@ -257,6 +262,8 @@ class BatchAnalysisService:
         formatting_service,
         options: BatchAnalysisOptions | None = None,
         prepared_cache: _PreparedCache | None = None,
+        *,
+        skip_vys_if_no_focal_success: bool = False,
     ) -> RelatedBatchParseResult:
         """Analyze one PP/VYS pair while preparing shared focal names once."""
         options = options or BatchAnalysisOptions()
@@ -274,6 +281,35 @@ class BatchAnalysisService:
         if vys_pool_names[: len(pp_names)] != pp_names:
             message = "VYS pool must start with the PP names"
             raise ValueError(message)
+
+        if skip_vys_if_no_focal_success:
+            pp_prepared = self._prepare_names_deduplicated(pp_names, normalizer, prepared_cache)
+            pp_batch = self._materialize_prepared_batch(
+                pp_names,
+                pp_prepared,
+                normalizer,
+                formatting_service,
+                options=options,
+            )
+            if not any(result.success for result in pp_batch.results):
+                return RelatedBatchParseResult(pp_batch, pp_batch, tuple(vys_pool_names))
+            tail_prepared = self._prepare_names_deduplicated(
+                vys_pool_names[len(pp_names) :],
+                normalizer,
+                prepared_cache,
+                individual_count=0,
+            )
+            pool_prepared = [*pp_prepared, *tail_prepared]
+            vys_batch = self._materialize_prepared_batch(
+                vys_pool_names,
+                pool_prepared,
+                normalizer,
+                formatting_service,
+                options=options,
+                output_count=len(pp_names),
+                reuse_focal_from=pp_batch,
+            )
+            return RelatedBatchParseResult(pp_batch, vys_batch, tuple(vys_pool_names))
 
         pool_prepared = self._prepare_names_deduplicated(
             vys_pool_names,
@@ -295,6 +331,7 @@ class BatchAnalysisService:
             formatting_service,
             options=options,
             output_count=len(pp_names),
+            reuse_focal_from=pp_batch,
         )
         return RelatedBatchParseResult(pp_batch, vys_batch, tuple(vys_pool_names))
 
@@ -312,11 +349,8 @@ class BatchAnalysisService:
             BatchFormatPattern indicating the dominant format and confidence
         """
         prepared = [self._prepare_name(name, normalizer, need_individual=False) for name in names]
-        name_candidates, individual_candidates = self._materialize_candidate_entries(prepared)
-        name_candidates = self._promote_guarded_given_first_batch_votes(name_candidates, individual_candidates)
-
         resolved_threshold = self._resolved_format_threshold(format_threshold)
-        return self._detect_format_pattern(name_candidates, resolved_threshold)
+        return self._detect_format_pattern_from_prepared(prepared, resolved_threshold)
 
     def _prepare_names_deduplicated(
         self,
@@ -371,23 +405,37 @@ class BatchAnalysisService:
         parsed_individual = self._individual_parser(name) if has_authoritative_structure else None
         individual_result = parsed_individual if parsed_individual is not None and parsed_individual.success else None
         authoritative_candidate = self._authoritative_structural_candidate(normalized_input, individual_result)
+        roman_tokens = tuple(normalized_input.roman_tokens)
+        raw_tokens = normalized_input.authored_roman_tokens or roman_tokens
+        all_caps_tokens = tuple(self._all_caps_tokens(raw_tokens))
+        vote_eligible = (
+            not all_caps_tokens if raw_tokens == roman_tokens else self._batch_vote_eligible(normalized_input)
+        )
         common = {
             "name": name,
             "representation": representation,
-            "vote_eligible": self._batch_vote_eligible(normalized_input),
+            "vote_eligible": vote_eligible,
             "batch_format_locked": (
                 normalized_input.surname_first_parenthetical_hint or contextual_taiwan or authoritative_candidate is not None
             ),
             "individual_result": individual_result,
-            "raw_tokens": normalized_input.authored_roman_tokens or tuple(normalized_input.roman_tokens),
+            "raw_tokens": raw_tokens,
             "compound_metadata": tuple(normalized_input.compound_metadata.items()),
             "spaced_compound_spans": normalized_input.spaced_compound_spans,
+            "all_caps_tokens": all_caps_tokens,
         }
         if authoritative_candidate is not None:
             candidates = (authoritative_candidate,)
+            participates = bool(
+                vote_eligible
+                and authoritative_candidate.format is not NameFormat.MIXED
+                and representation == LATIN_ONLY_REPRESENTATION,
+            )
             return _PreparedName(
                 format_candidates=candidates,
                 individual_candidates=candidates,
+                format_participates=participates,
+                vote_weight=1.0,
                 **common,
             )
         if not self._is_batch_format_participant(representation):
@@ -398,10 +446,29 @@ class BatchAnalysisService:
             normalized_input,
             need_individual=need_individual,
         )
+        participates = bool(
+            vote_eligible
+            and format_candidates
+            and format_candidates[0].format is not NameFormat.MIXED
+            and representation == LATIN_ONLY_REPRESENTATION,
+        )
+        vote_weight = self._candidate_vote_weight(format_candidates) if participates else 1.0
+        guarded_promotion: _PreparedCandidate | None = None
+        if (
+            participates
+            and format_candidates[0].format == NameFormat.SURNAME_FIRST
+            and len(raw_tokens) == TWO_TOKEN_NAME_LENGTH
+            and individual_candidates
+            and individual_candidates[0].format == NameFormat.GIVEN_FIRST
+        ):
+            guarded_promotion = self._matching_given_first_candidate(format_candidates, individual_candidates[0])
         return _PreparedName(
             format_candidates=format_candidates,
             individual_candidates=individual_candidates,
             individual_failure=failure,
+            format_participates=participates,
+            vote_weight=vote_weight,
+            guarded_promotion_candidate=guarded_promotion,
             **common,
         )
 
@@ -515,7 +582,9 @@ class BatchAnalysisService:
                     allow_guarded_given_first_bonus=True,
                     surname_first_parenthetical_hint=False,
                 )
-            individual_candidates.append(replace(candidate, score=guarded_score))
+            individual_candidates.append(
+                candidate if guarded_score == candidate.score else replace(candidate, score=guarded_score),
+            )
 
         individual_candidates.sort(key=candidate_rank_key, reverse=True)
         return tuple(format_candidates), tuple(individual_candidates), None
@@ -541,45 +610,59 @@ class BatchAnalysisService:
     @staticmethod
     def _materialize_candidate_entries(
         prepared_names: list[_PreparedName],
+        *,
+        materialize_limit: int | None = None,
     ) -> tuple[list[BatchCandidateEntry], list[BatchCandidateEntry]]:
-        """Create unshared slot-local candidate DTOs from immutable preparations."""
+        """Create slot-local candidate DTOs, cloning public ParseCandidate lists only for materialized focal slots."""
+        limit = len(prepared_names) if materialize_limit is None else materialize_limit
         format_entries: list[BatchCandidateEntry] = []
         individual_entries: list[BatchCandidateEntry] = []
-        for prepared in prepared_names:
-            compound_metadata = dict(prepared.compound_metadata)
-            format_candidates = [candidate.materialize() for candidate in prepared.format_candidates]
-            individual_candidates = [candidate.materialize() for candidate in prepared.individual_candidates]
-            common = {
-                "name": prepared.name,
-                "compound_metadata": compound_metadata,
-                "representation": prepared.representation,
-                "vote_eligible": prepared.vote_eligible,
-                "batch_format_locked": prepared.batch_format_locked,
-                "individual_result": prepared.individual_result,
-                "raw_tokens": prepared.raw_tokens,
-                "spaced_compound_spans": prepared.spaced_compound_spans,
-            }
+        for index, prepared in enumerate(prepared_names):
+            if index < limit:
+                compound_metadata = dict(prepared.compound_metadata) if prepared.compound_metadata else {}
+                format_candidates = [candidate.materialize() for candidate in prepared.format_candidates]
+                individual_candidates = [candidate.materialize() for candidate in prepared.individual_candidates]
+            else:
+                compound_metadata = None
+                format_candidates = prepared.format_candidates
+                individual_candidates = prepared.individual_candidates
             format_entries.append(
                 BatchCandidateEntry(
+                    name=prepared.name,
                     candidates=format_candidates,
                     best_candidate=format_candidates[0] if format_candidates else None,
+                    compound_metadata=compound_metadata,
+                    representation=prepared.representation,
+                    vote_eligible=prepared.vote_eligible,
+                    raw_tokens=prepared.raw_tokens,
+                    spaced_compound_spans=prepared.spaced_compound_spans,
+                    batch_format_locked=prepared.batch_format_locked,
+                    individual_result=prepared.individual_result,
                     input_failure=prepared.input_failure,
                     individual_failure=prepared.individual_failure,
-                    **common,
+                    all_caps_tokens=prepared.all_caps_tokens,
                 ),
             )
             individual_entries.append(
                 BatchCandidateEntry(
+                    name=prepared.name,
                     candidates=individual_candidates,
                     best_candidate=individual_candidates[0] if individual_candidates else None,
+                    compound_metadata=compound_metadata,
+                    representation=prepared.representation,
+                    vote_eligible=prepared.vote_eligible,
+                    raw_tokens=prepared.raw_tokens,
+                    spaced_compound_spans=prepared.spaced_compound_spans,
+                    batch_format_locked=prepared.batch_format_locked,
+                    individual_result=prepared.individual_result,
                     input_failure=prepared.input_failure,
                     individual_failure=prepared.individual_failure,
-                    **common,
+                    all_caps_tokens=prepared.all_caps_tokens,
                 ),
             )
         return format_entries, individual_entries
 
-    def _materialize_prepared_batch(  # noqa: PLR0913
+    def _materialize_prepared_batch(  # noqa: C901, PLR0913
         self,
         names: list[str],
         prepared_names: list[_PreparedName],
@@ -588,6 +671,7 @@ class BatchAnalysisService:
         *,
         options: BatchAnalysisOptions,
         output_count: int | None = None,
+        reuse_focal_from: BatchParseResult | None = None,
     ) -> BatchParseResult:
         """Apply one batch policy and materialize only its requested leading rows."""
         materialized_count = len(names) if output_count is None else output_count
@@ -595,18 +679,85 @@ class BatchAnalysisService:
             message = "prepared names and requested output count must align with the submitted batch"
             raise ValueError(message)
 
-        format_entries, individual_entries = self._materialize_candidate_entries(prepared_names)
-        format_entries = self._promote_guarded_given_first_batch_votes(format_entries, individual_entries)
-        format_pattern = self._detect_format_pattern(
-            format_entries,
+        format_pattern, promoted_indices = self._detect_format_pattern_from_prepared_with_promotions(
+            prepared_names,
             self._resolved_format_threshold(options.format_threshold),
         )
         if len(names) < options.minimum_batch_size:
             format_pattern = replace(format_pattern, threshold_met=False)
 
-        focal_format_entries = format_entries[:materialized_count]
-        focal_individual_entries = individual_entries[:materialized_count]
-        if format_pattern.total_count > 0 and format_pattern.threshold_met:
+        applied = format_pattern.total_count > 0 and format_pattern.threshold_met
+        if reuse_focal_from is not None and len(reuse_focal_from.names) == materialized_count:
+            prev_pattern = reuse_focal_from.format_pattern
+            prev_applied = prev_pattern.total_count > 0 and prev_pattern.threshold_met
+            if prev_applied == applied and (
+                not applied
+                or (
+                    prev_pattern.dominant_format == format_pattern.dominant_format
+                    and format_pattern.dominant_format in (NameFormat.SURNAME_FIRST, NameFormat.GIVEN_FIRST)
+                )
+            ):
+                cloned_analyses = [
+                    IndividualAnalysis(
+                        raw_name=analysis.raw_name,
+                        candidates=(
+                            cloned_candidates := [
+                                ParseCandidate(
+                                    surname_tokens=list(candidate.surname_tokens),
+                                    given_tokens=list(candidate.given_tokens),
+                                    score=candidate.score,
+                                    format=candidate.format,
+                                    original_compound_format=candidate.original_compound_format,
+                                )
+                                for candidate in analysis.candidates
+                            ]
+                        ),
+                        best_candidate=(
+                            cloned_candidates[analysis.candidates.index(analysis.best_candidate)]
+                            if analysis.best_candidate is not None and analysis.best_candidate in analysis.candidates
+                            else (
+                                ParseCandidate(
+                                    surname_tokens=list(analysis.best_candidate.surname_tokens),
+                                    given_tokens=list(analysis.best_candidate.given_tokens),
+                                    score=analysis.best_candidate.score,
+                                    format=analysis.best_candidate.format,
+                                    original_compound_format=analysis.best_candidate.original_compound_format,
+                                )
+                                if analysis.best_candidate is not None
+                                else None
+                            )
+                        ),
+                        confidence=analysis.confidence,
+                    )
+                    for analysis in reuse_focal_from.individual_analyses
+                ]
+                return BatchParseResult(
+                    names=list(reuse_focal_from.names),
+                    results=list(reuse_focal_from.results),
+                    format_pattern=format_pattern,
+                    individual_analyses=cloned_analyses,
+                    improvements=list(reuse_focal_from.improvements),
+                    name_order_evidence=list(reuse_focal_from.name_order_evidence),
+                )
+
+        focal_prepared = prepared_names[:materialized_count]
+        focal_format_entries, focal_individual_entries = self._materialize_candidate_entries(focal_prepared)
+        if promoted_indices:
+            for index in promoted_indices:
+                if index < materialized_count:
+                    promoted_cand = focal_prepared[index].guarded_promotion_candidate
+                    if promoted_cand is not None:
+                        matched = self._matching_given_first_candidate(
+                            focal_format_entries[index].candidates,
+                            promoted_cand,
+                        )
+                        if matched is not None:
+                            focal_format_entries[index] = replace(
+                                focal_format_entries[index],
+                                best_candidate=matched,
+                            )
+
+        if applied:
             results = self._apply_batch_format(
                 focal_format_entries,
                 focal_individual_entries,
@@ -631,6 +782,152 @@ class BatchAnalysisService:
                 format_pattern,
             ),
         )
+
+    def _detect_format_pattern_from_prepared(
+        self,
+        prepared_names: list[_PreparedName],
+        format_threshold: float,
+    ) -> BatchFormatPattern:
+        pattern, _ = self._detect_format_pattern_from_prepared_with_promotions(prepared_names, format_threshold)
+        return pattern
+
+    def _detect_format_pattern_from_prepared_with_promotions(  # noqa: C901, PLR0912, PLR0915
+        self,
+        prepared_names: list[_PreparedName],
+        format_threshold: float,
+    ) -> tuple[BatchFormatPattern, set[int] | None]:
+        """Compute BatchFormatPattern directly on _PreparedName rows without constructing context DTOs."""
+        participant_count = 0
+        given_first_support = 0
+        promoted: list[tuple[int, _PreparedCandidate]] = []
+        first_surname_freqs: list[float] = []
+        given_shape_count = 0
+        surname_resolver: SurnameResolver | None = None
+
+        for index, prepared in enumerate(prepared_names):
+            if not prepared.format_participates:
+                continue
+            participant_count += 1
+            best_format = prepared.format_candidates[0].format
+            if best_format == NameFormat.GIVEN_FIRST:
+                given_first_support += 1
+            elif prepared.guarded_promotion_candidate is not None:
+                if surname_resolver is None:
+                    surname_resolver = self._require_surname_resolver()
+                first_token = prepared.raw_tokens[0]
+                promoted.append((index, prepared.guarded_promotion_candidate))
+                first_surname_freqs.append(surname_resolver.evidence_frequency(first_token))
+                if self._has_given_name_shape(first_token):
+                    given_shape_count += 1
+
+        if participant_count == 0:
+            return (
+                BatchFormatPattern(
+                    dominant_format=NameFormat.MIXED,
+                    confidence=0.0,
+                    surname_first_count=0,
+                    given_first_count=0,
+                    total_count=0,
+                    threshold_met=False,
+                ),
+                None,
+            )
+
+        promoted_indices: set[int] | None = None
+        if promoted and self._should_promote_guarded_given_first_votes(
+            participant_count,
+            promoted,
+            given_first_support,
+            first_surname_freqs,
+            given_shape_count,
+        ):
+            promoted_indices = {index for index, _ in promoted}
+
+        stats = BatchVoteStats()
+        for index, prepared in enumerate(prepared_names):
+            if not prepared.format_participates:
+                continue
+            stats.names_with_candidates += 1
+            weight = prepared.vote_weight
+            stats.total_weight += weight
+            best_format = (
+                NameFormat.GIVEN_FIRST
+                if (promoted_indices is not None and index in promoted_indices)
+                else prepared.format_candidates[0].format
+            )
+            if best_format == NameFormat.SURNAME_FIRST:
+                stats.surname_first_preferences += 1
+                stats.surname_first_weight += weight
+                if len(prepared.format_candidates) == 1:
+                    stats.unopposed_surname_first_preferences += 1
+            elif best_format == NameFormat.GIVEN_FIRST:
+                stats.given_first_preferences += 1
+                stats.given_first_weight += weight
+                if len(prepared.format_candidates) == 1:
+                    stats.unopposed_given_first_preferences += 1
+
+        if stats.surname_first_preferences > stats.given_first_preferences:
+            dominant_format = NameFormat.SURNAME_FIRST
+            decision_confidence = stats.surname_first_preferences / stats.total_preferences
+        elif stats.given_first_preferences > stats.surname_first_preferences:
+            dominant_format = NameFormat.GIVEN_FIRST
+            decision_confidence = stats.given_first_preferences / stats.total_preferences
+        elif stats.total_weight <= 0:
+            dominant_format = self._apply_tie_breaking_heuristics_from_prepared(prepared_names)
+            decision_confidence = 0.5
+        else:
+            surname_first_confidence = stats.surname_first_weight / stats.total_weight
+            given_first_confidence = stats.given_first_weight / stats.total_weight
+            if surname_first_confidence > given_first_confidence:
+                dominant_format = NameFormat.SURNAME_FIRST
+                decision_confidence = surname_first_confidence
+            elif given_first_confidence > surname_first_confidence:
+                dominant_format = NameFormat.GIVEN_FIRST
+                decision_confidence = given_first_confidence
+            else:
+                dominant_format = self._apply_tie_breaking_heuristics_from_prepared(prepared_names)
+                decision_confidence = 0.5
+
+        confidence = self._count_confidence(stats, dominant_format)
+        has_decisive_vote = stats.surname_first_preferences != stats.given_first_preferences
+        has_unopposed_dominant_vote = (
+            dominant_format == NameFormat.SURNAME_FIRST and stats.unopposed_surname_first_preferences > 0
+        ) or (dominant_format == NameFormat.GIVEN_FIRST and stats.unopposed_given_first_preferences > 0)
+        has_confident_direction = decision_confidence > BATCH_FORMAT_DIRECTION_MIN_CONFIDENCE and (
+            has_decisive_vote or has_unopposed_dominant_vote
+        )
+        has_enough_voters = stats.total_preferences >= BATCH_PARTICIPANT_MIN
+        threshold_met = decision_confidence >= format_threshold and has_confident_direction and has_enough_voters
+
+        return (
+            BatchFormatPattern(
+                dominant_format=dominant_format,
+                confidence=confidence,
+                surname_first_count=stats.surname_first_preferences,
+                given_first_count=stats.given_first_preferences,
+                total_count=stats.names_with_candidates,
+                threshold_met=threshold_met,
+                decision_confidence=decision_confidence,
+            ),
+            promoted_indices,
+        )
+
+    def _apply_tie_breaking_heuristics_from_prepared(self, prepared_names: list[_PreparedName]) -> NameFormat:
+        surname_first_strength = 0.0
+        given_first_strength = 0.0
+        surname_resolver = self._require_surname_resolver()
+        for prepared in prepared_names:
+            if not prepared.format_participates or len(prepared.raw_tokens) != TWO_TOKEN_NAME_LENGTH:
+                continue
+            first_token, second_token = prepared.raw_tokens
+            surname_first_strength += self._surname_position_strength(first_token, surname_resolver)
+            given_first_strength += self._surname_position_strength(second_token, surname_resolver)
+        surname_first_strength += 0.5
+        if surname_first_strength > given_first_strength:
+            return NameFormat.SURNAME_FIRST
+        if given_first_strength > surname_first_strength:
+            return NameFormat.GIVEN_FIRST
+        return NameFormat.SURNAME_FIRST
 
     def _materialize_individual_results(
         self,
@@ -1113,46 +1410,52 @@ class BatchAnalysisService:
                 raw_tokens = list(entry.raw_tokens)
                 compound_metadata = entry.compound_metadata or {}
                 spaced_compound_spans = entry.spaced_compound_spans
+                all_caps_tokens = list(entry.all_caps_tokens)
             else:
                 normalized_input = normalizer.apply(entry.name)
                 raw_tokens = list(normalized_input.roman_tokens)
                 compound_metadata = normalized_input.compound_metadata
                 spaced_compound_spans = normalized_input.spaced_compound_spans
+                all_caps_tokens = self._all_caps_tokens(raw_tokens)
 
             if surname_resolver is None:
                 surname_resolver = self._require_surname_resolver()
-            normalized_raw_tokens = [self._surname_lookup_key_for_token(token, surname_resolver) for token in raw_tokens]
-            normalized_span_tokens = normalized_raw_tokens
-            if entry.representation == HAN_ONLY_REPRESENTATION and any(
-                character in _HAN_SURNAME_READING_SOURCE_CHARACTERS for character in entry.name
-            ):
-                source_characters = normalizer.han_roman_source_characters(normalizer.apply(entry.name))
-                normalized_span_tokens = self._han_surname_reading_alignment_keys(
-                    normalized_raw_tokens,
-                    source_characters,
-                )
             first_freq, last_freq = self._endpoint_surname_frequencies(raw_tokens, surname_resolver)
             selected_format = self._format_from_parse_result(result)
-            individual_format = entry.best_candidate.format if entry.best_candidate else self._format_from_parse_result(result)
-            selected_span = self._selected_surname_span(
-                result,
-                raw_tokens,
-                normalized_span_tokens,
-                surname_resolver,
-                compound_metadata,
-                spaced_compound_spans,
-            )
-            selected_position = selected_span.position if selected_span is not None else "unknown"
-            selected_token_count = selected_span.width if selected_span is not None else 0
-            selected_freq, alternate_freq, selected_ratio = self._selected_endpoint_frequency_evidence(
-                selected_span,
-                raw_tokens,
-                normalized_span_tokens,
-                compound_metadata,
-                surname_resolver,
-                spaced_compound_spans,
-            )
-            all_caps_tokens = self._all_caps_tokens(raw_tokens)
+            individual_format = entry.best_candidate.format if entry.best_candidate else selected_format
+            if result.success and result.parsed_original_order is not None:
+                normalized_raw_tokens = [self._surname_lookup_key_for_token(token, surname_resolver) for token in raw_tokens]
+                normalized_span_tokens = normalized_raw_tokens
+                if entry.representation == HAN_ONLY_REPRESENTATION and any(
+                    character in _HAN_SURNAME_READING_SOURCE_CHARACTERS for character in entry.name
+                ):
+                    source_characters = normalizer.han_roman_source_characters(normalizer.apply(entry.name))
+                    normalized_span_tokens = self._han_surname_reading_alignment_keys(
+                        normalized_raw_tokens,
+                        source_characters,
+                    )
+                selected_span = self._selected_surname_span(
+                    result,
+                    raw_tokens,
+                    normalized_span_tokens,
+                    surname_resolver,
+                    compound_metadata,
+                    spaced_compound_spans,
+                )
+                selected_position = selected_span.position if selected_span is not None else "unknown"
+                selected_token_count = selected_span.width if selected_span is not None else 0
+                selected_freq, alternate_freq, selected_ratio = self._selected_endpoint_frequency_evidence(
+                    selected_span,
+                    raw_tokens,
+                    normalized_span_tokens,
+                    compound_metadata,
+                    surname_resolver,
+                    spaced_compound_spans,
+                )
+            else:
+                selected_position = "unknown"
+                selected_token_count = 0
+                selected_freq, alternate_freq, selected_ratio = None, None, None
             batch_participant = self._candidate_entry_participates(entry)
             name_batch_applied = (
                 batch_format_applied
@@ -1476,13 +1779,17 @@ class BatchAnalysisService:
         return normalized_span[0]
 
     @staticmethod
-    def _all_caps_tokens(raw_tokens: list[str]) -> list[str]:
+    def _all_caps_tokens(raw_tokens: collections.abc.Sequence[str]) -> list[str]:
         """Return source tokens that carry an all-caps cue."""
         all_caps = []
         for token in raw_tokens:
-            letters_only = "".join(char for char in token if char.isalpha())
-            if len(letters_only) > 1 and letters_only.isupper():
-                all_caps.append(token)
+            if token.isalpha():
+                if len(token) > 1 and token.isupper():
+                    all_caps.append(token)
+            else:
+                letters_only = "".join(char for char in token if char.isalpha())
+                if len(letters_only) > 1 and letters_only.isupper():
+                    all_caps.append(token)
         return all_caps
 
     def _build_individual_analyses(
