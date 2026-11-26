@@ -640,13 +640,32 @@ _ORCID_LABEL_RE = re.compile(r"(?i)[(\[]?\s*(?<![\w-])(?:id\s*)?orcid®?(?:\s*id
 _EMPTY_BRACKETS_RE = re.compile(r"[(\[]\s*[)\]]")
 
 
-def _junk_free(value: str | None) -> str | None:
+_SPACED_LETTERS = 4
+_NAME_FIELD_WORDS = 6
+
+
+def _running_text(fields: tuple[str | None, ...]) -> bool:
+    """Letter-spaced text (``K U B I C E K * A N D``) or a field longer than a name (a sentence, an author list)."""
+    for value in fields:
+        run = 0
+        words = [word for word in (value or "").split() if word not in _FOOTNOTE_STARS]
+        if len(words) > _NAME_FIELD_WORDS:
+            return True
+        for word in words:
+            run = run + 1 if len(word) == 1 and word.isalpha() else 0
+            if run >= _SPACED_LETTERS:
+                return True
+    return False
+
+
+def _junk_free(value: str | None, *, lone_stars: bool = True) -> str | None:
     if value is None:
         return None
     value = _ESCAPED_ENTITY_RE.sub(lambda m: html.unescape(f"&{m.group(1)};"), value)
     value = _ORCID_URL_RE.sub(" ", _ORCID_ID_RE.sub(" ", value))
     value = _EMPTY_BRACKETS_RE.sub(" ", _ORCID_LABEL_RE.sub(" ", value))
-    kept = (word for word in value.split() if not _ORCID_JUNK_RE.match(word) and word not in _FOOTNOTE_STARS)
+    dropped = _FOOTNOTE_STARS if lone_stars else frozenset()
+    kept = (word for word in value.split() if not _ORCID_JUNK_RE.match(word) and word not in dropped)
     words = [_FOOTNOTE_RE.sub("", word) for word in kept]
     return " ".join(word for word in words if word)
 
@@ -669,6 +688,8 @@ def strip_junk(first: str | None, middle: str | None, last: str | None):
     """``*Emmanuel``, ``Kim∗``, an ORCID link or iD, or an escaped entity (``K^|^ocirc;z^|^ocirc;``) in a name field.
 
     Footnote stars at the edges of a word and ORCID iDs in any form (a link, a bare iD, ``(ORCID: ...)``) are dropped. A
+    star standing alone is dropped too, unless the fields read as running text (``P`` / ``K U B I C E K * A N D``):
+    there the star is what keeps the text from being parsed as a name. A
     surname field that held only an iD takes the last real word of the given fields, as a surname field of only
     credentials does (``Pedro`` / ``César`` / ``https://orcid.org/...`` -> ``("Pedro", None, "César")``). The name is left
     as written when no surname or no given name remains.
@@ -676,7 +697,8 @@ def strip_junk(first: str | None, middle: str | None, last: str | None):
     fields = (first, middle, last)
     if not _JUNK_HINT_RE.search(f"{first or ''} {middle or ''} {last or ''}"):
         return None
-    cleaned = [_junk_free(value) for value in fields]
+    lone_stars = not _running_text(fields)
+    cleaned = [_junk_free(value, lone_stars=lone_stars) for value in fields]
     if any(_ORCID_LABEL_RE.search(value or "") for value in fields):
         cleaned = [None if v is None else " ".join(w for w in v.split() if w not in {"iD", "iDs"}) for v in cleaned]
     if not any(ch.isalpha() for ch in cleaned[2] or "") and _ORCID_ID_RE.search(last or ""):

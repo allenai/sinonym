@@ -285,3 +285,30 @@ def test_ordinal_suffix_drops_its_period(predictor: Predictor, suffix: str, expe
 )
 def test_standalone_footnote_star_is_dropped(predictor: Predictor, source: tuple, expected: tuple) -> None:
     assert _resolve(predictor, source) == expected
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        ("P", None, "K U B I C E K * A N D", None),
+        ("S", "H", "A I L Y M A H E N D R A * A N D L I S A", None),
+        ("Abdul", "j. Jerri ∗ This paper is dedicated to all of them", "to", None),  # noqa: RUF001
+    ],
+)
+def test_star_in_running_text_is_left_alone(predictor: Predictor, source: tuple) -> None:
+    first, middle, last, _ = source
+    assert _resolve(predictor, source) == (first, middle or "", last, None)
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (("Daniel", "Chinonso *", "Ochor", None), ("Daniel", "Chinonso", "Ochor", None)),
+        (("L. F. C.", None, "Rosa *", None), ("L.", "F. C.", "Rosa", None)),
+        (("J. P. R.", "*", "Smith", None), ("J.", "P. R.", "Smith", None)),
+        (("A K M", "*", "Rahman", None), ("A.", "K. M.", "Rahman", None)),
+        (("S M", "A *", "Hossain", None), ("S.", "M. A.", "Hossain", None)),
+    ],
+)
+def test_star_beside_initials_is_still_dropped(predictor: Predictor, source: tuple, expected: tuple) -> None:
+    assert _resolve(predictor, source) == expected
